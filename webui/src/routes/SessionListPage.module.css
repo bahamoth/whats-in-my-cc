@@ -1,0 +1,5 @@
+.page { padding: 24px; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { padding: 8px; border-bottom: 1px solid #e3e6eb; text-align: left; }
+.empty { padding: 32px; background: #fff; border: 1px dashed #b9bfca; border-radius: 8px; }
