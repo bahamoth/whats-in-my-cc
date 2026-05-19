@@ -2,7 +2,7 @@ use serde_json::{json, Value};
 
 use crate::error::{Result, WitmccError};
 use crate::ids::MonotonicUlidGen;
-use crate::ingest::transcript::{LineMeta, ParsedRecord, AssistantRecord, UserRecord};
+use crate::ingest::transcript::{AssistantRecord, LineMeta, ParsedRecord, UserRecord};
 use crate::model::meta::{PARSER_VERSION_TRANSCRIPT, SCHEMA_VERSION};
 use crate::model::observed::{Actor, EventKind, ObservedEvent};
 
@@ -13,25 +13,35 @@ pub fn map_record(
     gen: &mut MonotonicUlidGen,
 ) -> Result<Vec<ObservedEvent>> {
     match rec {
-        ParsedRecord::User(u)        => Ok(map_user(meta, u, raw_event_id, gen)),
-        ParsedRecord::Assistant(a)   => Ok(map_assistant(meta, a, raw_event_id, gen)),
-        ParsedRecord::Attachment(_)  => Ok(vec![attachment_meta(meta, raw_event_id, gen, rec)]),
-        ParsedRecord::SystemMsg(_)   => Ok(vec![system_summary(meta, raw_event_id, gen, rec)]),
-        ParsedRecord::PermissionMode(p) => Ok(vec![session_state(meta, raw_event_id, gen,
-                                            &p.session_id, "permission_mode",
-                                            json!({"permissionMode": p.permission_mode}))]),
-        ParsedRecord::LastPrompt(l)  => Ok(vec![session_state(meta, raw_event_id, gen,
-                                            &l.session_id, "last_prompt",
-                                            json!({"leafUuid": l.leaf_uuid}))]),
+        ParsedRecord::User(u) => Ok(map_user(meta, u, raw_event_id, gen)),
+        ParsedRecord::Assistant(a) => Ok(map_assistant(meta, a, raw_event_id, gen)),
+        ParsedRecord::Attachment(_) => Ok(vec![attachment_meta(meta, raw_event_id, gen, rec)]),
+        ParsedRecord::SystemMsg(_) => Ok(vec![system_summary(meta, raw_event_id, gen, rec)]),
+        ParsedRecord::PermissionMode(p) => Ok(vec![session_state(
+            meta,
+            raw_event_id,
+            gen,
+            &p.session_id,
+            "permission_mode",
+            json!({"permissionMode": p.permission_mode}),
+        )]),
+        ParsedRecord::LastPrompt(l) => Ok(vec![session_state(
+            meta,
+            raw_event_id,
+            gen,
+            &l.session_id,
+            "last_prompt",
+            json!({"leafUuid": l.leaf_uuid}),
+        )]),
         ParsedRecord::FileHistorySnapshot(f) => Ok(vec![file_history(meta, raw_event_id, gen, f)]),
-        ParsedRecord::Unknown(_)     => Err(WitmccError::Invalid("unknown record type".into())),
+        ParsedRecord::Unknown(_) => Err(WitmccError::Invalid("unknown record type".into())),
     }
 }
 
 fn base(meta: &LineMeta, raw_event_id: &str, gen: &mut MonotonicUlidGen) -> ObservedEvent {
     let _ = meta; // reserved for future source_uri / line_no fields on ObservedEvent
     ObservedEvent {
-        event_id: gen.next(),
+        event_id: gen.generate(),
         raw_event_id: raw_event_id.into(),
         schema_version: SCHEMA_VERSION.into(),
         parser_version: PARSER_VERSION_TRANSCRIPT.into(),
@@ -41,9 +51,12 @@ fn base(meta: &LineMeta, raw_event_id: &str, gen: &mut MonotonicUlidGen) -> Obse
     }
 }
 
-fn map_user(meta: &LineMeta, u: &UserRecord, raw_event_id: &str, gen: &mut MonotonicUlidGen)
-    -> Vec<ObservedEvent>
-{
+fn map_user(
+    meta: &LineMeta,
+    u: &UserRecord,
+    raw_event_id: &str,
+    gen: &mut MonotonicUlidGen,
+) -> Vec<ObservedEvent> {
     // tool_result branch: content is array containing {type:"tool_result", tool_use_id:..}
     if let Some(arr) = u.message.get("content").and_then(|c| c.as_array()) {
         let mut out = Vec::new();
@@ -56,7 +69,10 @@ fn map_user(meta: &LineMeta, u: &UserRecord, raw_event_id: &str, gen: &mut Monot
                 e.observed_at = u.timestamp;
                 e.actor = Actor::System;
                 e.kind = EventKind::ToolResult;
-                e.tool_use_id = item.get("tool_use_id").and_then(|x| x.as_str()).map(String::from);
+                e.tool_use_id = item
+                    .get("tool_use_id")
+                    .and_then(|x| x.as_str())
+                    .map(String::from);
                 e.turn_id = u.prompt_id.clone();
                 e.source_tool_assistant_uuid = u.source_tool_assistant_uuid.clone();
                 e.source_tool_use_id = u.source_tool_use_id.clone();
@@ -70,18 +86,36 @@ fn map_user(meta: &LineMeta, u: &UserRecord, raw_event_id: &str, gen: &mut Monot
                 e.payload = json!({"content_ordinal": ord, "tool_result": item});
                 out.push(e);
             } else if item.get("type").and_then(|t| t.as_str()) == Some("text") {
-                out.push(user_message(meta, u, raw_event_id, gen, json!({"content_ordinal": ord, "text": item.get("text")})));
+                out.push(user_message(
+                    meta,
+                    u,
+                    raw_event_id,
+                    gen,
+                    json!({"content_ordinal": ord, "text": item.get("text")}),
+                ));
             }
         }
-        if !out.is_empty() { return out; }
+        if !out.is_empty() {
+            return out;
+        }
     }
     // string content branch
-    vec![user_message(meta, u, raw_event_id, gen, json!({"content": u.message.get("content")}))]
+    vec![user_message(
+        meta,
+        u,
+        raw_event_id,
+        gen,
+        json!({"content": u.message.get("content")}),
+    )]
 }
 
-fn user_message(meta: &LineMeta, u: &UserRecord, raw_event_id: &str, gen: &mut MonotonicUlidGen, payload: Value)
-    -> ObservedEvent
-{
+fn user_message(
+    meta: &LineMeta,
+    u: &UserRecord,
+    raw_event_id: &str,
+    gen: &mut MonotonicUlidGen,
+    payload: Value,
+) -> ObservedEvent {
     let mut e = base(meta, raw_event_id, gen);
     e.session_id = u.session_id.clone();
     e.event_uuid = Some(u.uuid.clone());
@@ -101,12 +135,24 @@ fn user_message(meta: &LineMeta, u: &UserRecord, raw_event_id: &str, gen: &mut M
     e
 }
 
-fn map_assistant(meta: &LineMeta, a: &AssistantRecord, raw_event_id: &str, gen: &mut MonotonicUlidGen)
-    -> Vec<ObservedEvent>
-{
+fn map_assistant(
+    meta: &LineMeta,
+    a: &AssistantRecord,
+    raw_event_id: &str,
+    gen: &mut MonotonicUlidGen,
+) -> Vec<ObservedEvent> {
     let mut out = Vec::new();
-    let arr = a.message.get("content").and_then(|c| c.as_array()).cloned().unwrap_or_default();
-    let message_id = a.message.get("id").and_then(|x| x.as_str()).map(String::from);
+    let arr = a
+        .message
+        .get("content")
+        .and_then(|c| c.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let message_id = a
+        .message
+        .get("id")
+        .and_then(|x| x.as_str())
+        .map(String::from);
     for (ord, item) in arr.iter().enumerate() {
         let ty = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
         let mut e = base(meta, raw_event_id, gen);
@@ -148,9 +194,20 @@ fn map_assistant(meta: &LineMeta, a: &AssistantRecord, raw_event_id: &str, gen: 
     out
 }
 
-fn attachment_meta(meta: &LineMeta, raw_event_id: &str, gen: &mut MonotonicUlidGen, rec: &ParsedRecord) -> ObservedEvent {
-    let ParsedRecord::Attachment(a) = rec else { unreachable!() };
-    let subtype = a.attachment.get("type").and_then(|t| t.as_str()).unwrap_or("");
+fn attachment_meta(
+    meta: &LineMeta,
+    raw_event_id: &str,
+    gen: &mut MonotonicUlidGen,
+    rec: &ParsedRecord,
+) -> ObservedEvent {
+    let ParsedRecord::Attachment(a) = rec else {
+        unreachable!()
+    };
+    let subtype = a
+        .attachment
+        .get("type")
+        .and_then(|t| t.as_str())
+        .unwrap_or("");
     let is_hook = subtype == "hook_success" || subtype == "hook_additional_context";
     let mut e = base(meta, raw_event_id, gen);
     e.session_id = a.session_id.clone();
@@ -167,8 +224,16 @@ fn attachment_meta(meta: &LineMeta, raw_event_id: &str, gen: &mut MonotonicUlidG
     if is_hook {
         e.actor = Actor::Hook;
         e.kind = EventKind::HookEvent;
-        e.tool_use_id = a.attachment.get("toolUseID").and_then(|x| x.as_str()).map(String::from);
-        e.tool_name = a.attachment.get("hookName").and_then(|x| x.as_str()).map(String::from);
+        e.tool_use_id = a
+            .attachment
+            .get("toolUseID")
+            .and_then(|x| x.as_str())
+            .map(String::from);
+        e.tool_name = a
+            .attachment
+            .get("hookName")
+            .and_then(|x| x.as_str())
+            .map(String::from);
     } else {
         e.actor = Actor::System;
         e.kind = EventKind::AttachmentMeta;
@@ -177,8 +242,15 @@ fn attachment_meta(meta: &LineMeta, raw_event_id: &str, gen: &mut MonotonicUlidG
     e
 }
 
-fn system_summary(meta: &LineMeta, raw_event_id: &str, gen: &mut MonotonicUlidGen, rec: &ParsedRecord) -> ObservedEvent {
-    let ParsedRecord::SystemMsg(s) = rec else { unreachable!() };
+fn system_summary(
+    meta: &LineMeta,
+    raw_event_id: &str,
+    gen: &mut MonotonicUlidGen,
+    rec: &ParsedRecord,
+) -> ObservedEvent {
+    let ParsedRecord::SystemMsg(s) = rec else {
+        unreachable!()
+    };
     let mut e = base(meta, raw_event_id, gen);
     e.session_id = s.session_id.clone();
     e.event_uuid = Some(s.uuid.clone());
@@ -192,9 +264,14 @@ fn system_summary(meta: &LineMeta, raw_event_id: &str, gen: &mut MonotonicUlidGe
     e
 }
 
-fn session_state(meta: &LineMeta, raw_event_id: &str, gen: &mut MonotonicUlidGen,
-                 session_id: &str, subkind: &str, payload: Value) -> ObservedEvent
-{
+fn session_state(
+    meta: &LineMeta,
+    raw_event_id: &str,
+    gen: &mut MonotonicUlidGen,
+    session_id: &str,
+    subkind: &str,
+    payload: Value,
+) -> ObservedEvent {
     let _ = meta;
     let mut e = base(meta, raw_event_id, gen);
     e.session_id = session_id.into();
@@ -206,9 +283,12 @@ fn session_state(meta: &LineMeta, raw_event_id: &str, gen: &mut MonotonicUlidGen
     e
 }
 
-fn file_history(meta: &LineMeta, raw_event_id: &str, gen: &mut MonotonicUlidGen,
-                f: &crate::ingest::transcript::FileHistorySnapshotRecord) -> ObservedEvent
-{
+fn file_history(
+    meta: &LineMeta,
+    raw_event_id: &str,
+    gen: &mut MonotonicUlidGen,
+    f: &crate::ingest::transcript::FileHistorySnapshotRecord,
+) -> ObservedEvent {
     let mut e = base(meta, raw_event_id, gen);
     e.observed_at = chrono::Utc::now();
     e.actor = Actor::System;

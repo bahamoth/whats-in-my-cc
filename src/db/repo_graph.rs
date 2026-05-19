@@ -74,12 +74,10 @@ pub async fn load_session(
     .fetch_all(pool)
     .await?;
 
-    let erows = sqlx::query(
-        "SELECT * FROM graph_edge WHERE session_id = ? ORDER BY edge_id ASC",
-    )
-    .bind(session_id)
-    .fetch_all(pool)
-    .await?;
+    let erows = sqlx::query("SELECT * FROM graph_edge WHERE session_id = ? ORDER BY edge_id ASC")
+        .bind(session_id)
+        .fetch_all(pool)
+        .await?;
 
     let nodes = nrows
         .into_iter()
@@ -91,14 +89,11 @@ pub async fn load_session(
             started_at: chrono::DateTime::parse_from_rfc3339(&r.get::<String, _>("started_at"))
                 .unwrap()
                 .with_timezone(&chrono::Utc),
-            ended_at: r
-                .try_get::<String, _>("ended_at")
-                .ok()
-                .and_then(|s| {
-                    chrono::DateTime::parse_from_rfc3339(&s)
-                        .ok()
-                        .map(|t| t.with_timezone(&chrono::Utc))
-                }),
+            ended_at: r.try_get::<String, _>("ended_at").ok().and_then(|s| {
+                chrono::DateTime::parse_from_rfc3339(&s)
+                    .ok()
+                    .map(|t| t.with_timezone(&chrono::Utc))
+            }),
             merge_keys: serde_json::from_str(&r.get::<String, _>("merge_keys"))
                 .unwrap_or(serde_json::Value::Null),
             source_event_ids: serde_json::from_str(&r.get::<String, _>("source_event_ids"))

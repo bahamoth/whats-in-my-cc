@@ -100,11 +100,9 @@ fn row_to_observed(r: sqlx::sqlite::SqliteRow) -> ObservedEvent {
         session_id: r.get("session_id"),
         event_uuid: r.try_get("event_uuid").ok(),
         parent_uuid: r.try_get("parent_uuid").ok(),
-        observed_at: chrono::DateTime::parse_from_rfc3339(
-            &r.get::<String, _>("observed_at"),
-        )
-        .unwrap()
-        .with_timezone(&chrono::Utc),
+        observed_at: chrono::DateTime::parse_from_rfc3339(&r.get::<String, _>("observed_at"))
+            .unwrap()
+            .with_timezone(&chrono::Utc),
         actor: match actor.as_str() {
             "user" => Actor::User,
             "assistant" => Actor::Assistant,

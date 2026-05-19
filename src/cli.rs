@@ -8,7 +8,12 @@ pub struct Cli {
     pub command: Command,
 
     /// Path to the SQLite database file.
-    #[arg(long, global = true, default_value = ".witmcc.sqlite", env = "WITMCC_DB")]
+    #[arg(
+        long,
+        global = true,
+        default_value = ".witmcc.sqlite",
+        env = "WITMCC_DB"
+    )]
     pub db_path: PathBuf,
 
     /// Log output format.

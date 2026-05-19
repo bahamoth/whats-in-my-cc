@@ -1,6 +1,6 @@
-use witmcc::ingest::transcript::{stream_file, ParsedRecord};
 use futures::StreamExt;
 use std::path::Path;
+use witmcc::ingest::transcript::{stream_file, ParsedRecord};
 
 #[tokio::test]
 async fn parses_five_record_types_in_minimal_fixture() {
@@ -10,15 +10,18 @@ async fn parses_five_record_types_in_minimal_fixture() {
     while let Some(item) = stream.next().await {
         let (_meta, rec) = item.unwrap();
         kinds.push(match rec {
-            ParsedRecord::User(_)        => "user",
-            ParsedRecord::Assistant(_)   => "assistant",
-            ParsedRecord::Attachment(_)  => "attachment",
-            ParsedRecord::SystemMsg(_)   => "system",
+            ParsedRecord::User(_) => "user",
+            ParsedRecord::Assistant(_) => "assistant",
+            ParsedRecord::Attachment(_) => "attachment",
+            ParsedRecord::SystemMsg(_) => "system",
             ParsedRecord::PermissionMode(_) => "permission-mode",
-            ParsedRecord::LastPrompt(_)  => "last-prompt",
+            ParsedRecord::LastPrompt(_) => "last-prompt",
             ParsedRecord::FileHistorySnapshot(_) => "file-history-snapshot",
-            ParsedRecord::Unknown(_)     => "unknown",
+            ParsedRecord::Unknown(_) => "unknown",
         });
     }
-    assert_eq!(kinds, vec!["user","assistant","user","assistant","permission-mode"]);
+    assert_eq!(
+        kinds,
+        vec!["user", "assistant", "user", "assistant", "permission-mode"]
+    );
 }

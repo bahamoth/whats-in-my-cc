@@ -10,7 +10,7 @@ pub struct ResponseMeta {
     pub collection_profile: &'static str,
     pub redaction_policy: Option<&'static str>, // always None in slice-1
     pub generated_at: chrono::DateTime<chrono::Utc>,
-    pub next_cursor: Option<String>,            // always None in slice-1
+    pub next_cursor: Option<String>, // always None in slice-1
 }
 
 impl ResponseMeta {

@@ -24,6 +24,6 @@ pub struct GraphEdge {
     pub from_node_id: String,
     pub to_node_id: String,
     pub edge_kind: String,
-    pub origin: String,             // "deterministic"
+    pub origin: String, // "deterministic"
     pub attributes: Value,
 }

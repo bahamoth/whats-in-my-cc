@@ -4,7 +4,11 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum WitmccError {
     #[error("io error at {path}: {source}")]
-    Io { path: PathBuf, #[source] source: std::io::Error },
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
@@ -16,7 +20,11 @@ pub enum WitmccError {
     Invalid(String),
 
     #[error("json parse error at {source_uri}:{line_no}: {message}")]
-    ParseLine { source_uri: String, line_no: u64, message: String },
+    ParseLine {
+        source_uri: String,
+        line_no: u64,
+        message: String,
+    },
 
     #[error("not found: {0}")]
     NotFound(String),

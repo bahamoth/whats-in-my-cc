@@ -48,12 +48,7 @@ async fn sessions_list_contains_sess_a() {
 async fn session_detail_and_graph() {
     let s = setup().await;
     let detail: Value = s.get("/v1/sessions/sess-A").await.json();
-    assert!(
-        detail["data"]["summary"]["event_count"]
-            .as_i64()
-            .unwrap()
-            >= 6
-    );
+    assert!(detail["data"]["summary"]["event_count"].as_i64().unwrap() >= 6);
     let graph: Value = s.get("/v1/sessions/sess-A/graph").await.json();
     let nodes = graph["data"]["nodes"].as_array().unwrap();
     let edges = graph["data"]["edges"].as_array().unwrap();

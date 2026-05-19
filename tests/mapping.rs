@@ -1,7 +1,7 @@
-use witmcc::ingest::transcript::stream_file;
-use witmcc::ingest::mapping::map_record;
-use witmcc::model::observed::{Actor, EventKind};
 use futures::StreamExt;
+use witmcc::ingest::mapping::map_record;
+use witmcc::ingest::transcript::stream_file;
+use witmcc::model::observed::{Actor, EventKind};
 
 #[tokio::test]
 async fn maps_minimal_fixture_to_six_observed_events() {
@@ -11,7 +11,7 @@ async fn maps_minimal_fixture_to_six_observed_events() {
     let mut gen = witmcc::ids::MonotonicUlidGen::new();
     while let Some(item) = stream.next().await {
         let (meta, rec) = item.unwrap();
-        let raw_id = gen.next();
+        let raw_id = gen.generate();
         events.extend(map_record(&meta, &rec, &raw_id, &mut gen).unwrap());
     }
     // Expected breakdown for the 5-line fixture:
@@ -23,19 +23,29 @@ async fn maps_minimal_fixture_to_six_observed_events() {
     //                  total  = 6
     assert_eq!(events.len(), 6, "{events:#?}");
     let kinds: Vec<_> = events.iter().map(|e| e.kind).collect();
-    assert_eq!(kinds, vec![
-        EventKind::UserMessage,
-        EventKind::AssistantMessage, EventKind::ToolCall,
-        EventKind::ToolResult,
-        EventKind::AssistantMessage,
-        EventKind::SessionState,
-    ]);
+    assert_eq!(
+        kinds,
+        vec![
+            EventKind::UserMessage,
+            EventKind::AssistantMessage,
+            EventKind::ToolCall,
+            EventKind::ToolResult,
+            EventKind::AssistantMessage,
+            EventKind::SessionState,
+        ]
+    );
     // Spot-check correlation keys.
-    let tc = events.iter().find(|e| e.kind == EventKind::ToolCall).unwrap();
+    let tc = events
+        .iter()
+        .find(|e| e.kind == EventKind::ToolCall)
+        .unwrap();
     assert_eq!(tc.tool_use_id.as_deref(), Some("toolu_x"));
     assert_eq!(tc.tool_name.as_deref(), Some("Bash"));
     assert_eq!(tc.actor, Actor::Assistant);
-    let tr = events.iter().find(|e| e.kind == EventKind::ToolResult).unwrap();
+    let tr = events
+        .iter()
+        .find(|e| e.kind == EventKind::ToolResult)
+        .unwrap();
     assert_eq!(tr.tool_use_id.as_deref(), Some("toolu_x"));
     assert_eq!(tr.source_tool_assistant_uuid.as_deref(), Some("a1"));
 }

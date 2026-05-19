@@ -170,13 +170,13 @@ pub async fn stream_file(
                     };
                     let value: Result<Value, _> = serde_json::from_str(&line);
                     let result = match value {
-                        Ok(v) => dispatch(v)
-                            .map(|rec| (meta.clone(), rec))
-                            .map_err(|e| WitmccError::ParseLine {
+                        Ok(v) => dispatch(v).map(|rec| (meta.clone(), rec)).map_err(|e| {
+                            WitmccError::ParseLine {
                                 source_uri: src.display().to_string(),
                                 line_no: new_line_no,
                                 message: e,
-                            }),
+                            }
+                        }),
                         Err(e) => Err(WitmccError::ParseLine {
                             source_uri: src.display().to_string(),
                             line_no: new_line_no,
@@ -199,14 +199,9 @@ pub async fn stream_file(
 }
 
 fn dispatch(value: Value) -> Result<ParsedRecord, String> {
-    let tag = value
-        .get("type")
-        .and_then(|t| t.as_str())
-        .unwrap_or("");
+    let tag = value.get("type").and_then(|t| t.as_str()).unwrap_or("");
     let rec = match tag {
-        "user" => {
-            ParsedRecord::User(serde_json::from_value(value).map_err(|e| e.to_string())?)
-        }
+        "user" => ParsedRecord::User(serde_json::from_value(value).map_err(|e| e.to_string())?),
         "assistant" => {
             ParsedRecord::Assistant(serde_json::from_value(value).map_err(|e| e.to_string())?)
         }

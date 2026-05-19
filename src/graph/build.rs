@@ -1,6 +1,6 @@
-use std::collections::{HashMap, HashSet};
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
+use std::collections::{HashMap, HashSet};
 
 use crate::db::{repo_graph, repo_observed};
 use crate::error::Result;
@@ -230,10 +230,7 @@ pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, V
             if let Some(tid) = tid {
                 if let Some(call_node) = nodes.iter().find(|m| {
                     m.node_kind == "tool_call"
-                        && m.merge_keys
-                            .get("tool_use_id")
-                            .and_then(|x| x.as_str())
-                            == Some(&tid)
+                        && m.merge_keys.get("tool_use_id").and_then(|x| x.as_str()) == Some(&tid)
                 }) {
                     edges.push(make_edge(
                         session_id,

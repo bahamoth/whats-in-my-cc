@@ -1,7 +1,7 @@
 use sqlx::sqlite::SqlitePoolOptions;
 use witmcc::db::migrate;
-use witmcc::ingest::store;
 use witmcc::graph::build;
+use witmcc::ingest::store;
 
 async fn ingest_twice(
     path: &str,
@@ -46,8 +46,8 @@ async fn ingest_twice(
 
 #[tokio::test]
 async fn minimal_session_ids_stable_across_databases() {
-    let (na, nb, ea, eb) = ingest_twice("tests/fixtures/transcripts/minimal_session.jsonl", "sess-A")
-        .await;
+    let (na, nb, ea, eb) =
+        ingest_twice("tests/fixtures/transcripts/minimal_session.jsonl", "sess-A").await;
     pretty_assertions::assert_eq!(na, nb);
     pretty_assertions::assert_eq!(ea, eb);
 }

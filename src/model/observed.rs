@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Actor {
     User,
     Assistant,
+    #[default]
     System,
     Hook,
     Tool,
@@ -23,13 +24,7 @@ impl Actor {
     }
 }
 
-impl Default for Actor {
-    fn default() -> Self {
-        Actor::System
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EventKind {
     UserMessage,
@@ -42,6 +37,7 @@ pub enum EventKind {
     SessionState,
     FileHistorySnapshot,
     AttachmentMeta,
+    #[default]
     Unknown,
 }
 
@@ -60,12 +56,6 @@ impl EventKind {
             EventKind::AttachmentMeta => "attachment_meta",
             EventKind::Unknown => "unknown",
         }
-    }
-}
-
-impl Default for EventKind {
-    fn default() -> Self {
-        EventKind::Unknown
     }
 }
 

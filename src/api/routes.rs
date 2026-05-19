@@ -57,7 +57,9 @@ pub async fn session_detail(
     if evs.is_empty() {
         return Err((
             StatusCode::NOT_FOUND,
-            Json(json!({"type":"about:blank","title":"RESOURCE_NOT_FOUND","detail":format!("session {id} not found")})),
+            Json(
+                json!({"type":"about:blank","title":"RESOURCE_NOT_FOUND","detail":format!("session {id} not found")}),
+            ),
         ));
     }
     let mut by_kind = std::collections::BTreeMap::new();
@@ -93,7 +95,9 @@ pub async fn session_graph(
     if nodes.is_empty() {
         return Err((
             StatusCode::NOT_FOUND,
-            Json(json!({"type":"about:blank","title":"RESOURCE_NOT_FOUND","detail":format!("session {id} has no graph")})),
+            Json(
+                json!({"type":"about:blank","title":"RESOURCE_NOT_FOUND","detail":format!("session {id} has no graph")}),
+            ),
         ));
     }
     Ok(Json(Envelope {
