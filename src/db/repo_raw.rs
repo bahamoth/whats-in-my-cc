@@ -25,6 +25,7 @@ pub struct RawForEventRow {
     pub source_line_no: i64,
     pub captured_at: String, // RFC3339 string straight from sqlite
     pub payload: Vec<u8>,
+    pub observed_payload: String,
 }
 
 pub async fn get_for_event_id(pool: &SqlitePool, event_id: &str) -> Result<Option<RawForEventRow>> {
@@ -33,6 +34,7 @@ pub async fn get_for_event_id(pool: &SqlitePool, event_id: &str) -> Result<Optio
         "SELECT o.event_id        AS event_id, \
                 o.session_id      AS session_id, \
                 o.kind            AS kind, \
+                o.payload         AS observed_payload, \
                 r.raw_event_id    AS raw_event_id, \
                 r.source_type     AS source_type, \
                 r.source_uri      AS source_uri, \
@@ -56,6 +58,7 @@ pub async fn get_for_event_id(pool: &SqlitePool, event_id: &str) -> Result<Optio
         source_line_no: r.get("source_line_no"),
         captured_at: r.get("captured_at"),
         payload: r.get("payload"),
+        observed_payload: r.get("observed_payload"),
     }))
 }
 

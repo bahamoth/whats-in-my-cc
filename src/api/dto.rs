@@ -48,4 +48,5 @@ pub struct RawEventResponse {
     pub record: serde_json::Value,
     pub record_type: String,
     pub redaction_state: String,
+    pub telemetry: Option<serde_json::Value>,
 }

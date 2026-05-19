@@ -1,7 +1,7 @@
 use sqlx::{Row, SqlitePool};
 
 use crate::error::Result;
-use crate::model::observed::{Actor, EventKind, ObservedEvent};
+use crate::model::observed::{Actor, EventKind, ObservedEvent, TelemetryFacet};
 
 pub async fn insert(pool: &SqlitePool, e: &ObservedEvent) -> Result<()> {
     sqlx::query(
@@ -10,8 +10,9 @@ pub async fn insert(pool: &SqlitePool, e: &ObservedEvent) -> Result<()> {
             observed_at, actor, kind, subkind, tool_use_id, tool_name, request_id,
             message_id, turn_id, source_tool_assistant_uuid, source_tool_use_id,
             is_sidechain, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
+            trace_id, span_id, parent_span_id, latency_ms,
             payload, parser_version)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     )
     .bind(&e.event_id)
     .bind(&e.raw_event_id)
@@ -37,11 +38,35 @@ pub async fn insert(pool: &SqlitePool, e: &ObservedEvent) -> Result<()> {
     .bind(&e.user_type)
     .bind(&e.entrypoint)
     .bind(&e.cc_version)
-    .bind(e.payload.to_string())
+    .bind(&e.trace_id)
+    .bind(&e.span_id)
+    .bind(&e.parent_span_id)
+    .bind(e.latency_ms)
+    .bind(merge_payload_with_telemetry(&e.payload, e.telemetry.as_ref()).to_string())
     .bind(&e.parser_version)
     .execute(pool)
     .await?;
     Ok(())
+}
+
+fn merge_payload_with_telemetry(
+    payload: &serde_json::Value,
+    telemetry: Option<&TelemetryFacet>,
+) -> serde_json::Value {
+    let mut out = if payload.is_object() {
+        payload.clone()
+    } else {
+        serde_json::json!({ "value": payload })
+    };
+    if let Some(t) = telemetry {
+        if let serde_json::Value::Object(map) = &mut out {
+            map.insert(
+                "telemetry".into(),
+                serde_json::to_value(t).unwrap_or(serde_json::Value::Null),
+            );
+        }
+    }
+    out
 }
 
 pub struct SessionRow {
@@ -91,7 +116,15 @@ pub async fn list_session(
 fn row_to_observed(r: sqlx::sqlite::SqliteRow) -> ObservedEvent {
     let actor: String = r.get("actor");
     let kind: String = r.get("kind");
-    let payload: String = r.get("payload");
+    let payload_str: String = r.get("payload");
+    let mut payload: serde_json::Value =
+        serde_json::from_str(&payload_str).unwrap_or(serde_json::Value::Null);
+    let telemetry = if let serde_json::Value::Object(map) = &mut payload {
+        map.remove("telemetry")
+            .and_then(|v| serde_json::from_value(v).ok())
+    } else {
+        None
+    };
     ObservedEvent {
         event_id: r.get("event_id"),
         raw_event_id: r.get("raw_event_id"),
@@ -121,6 +154,7 @@ fn row_to_observed(r: sqlx::sqlite::SqliteRow) -> ObservedEvent {
             "session_state" => EventKind::SessionState,
             "file_history_snapshot" => EventKind::FileHistorySnapshot,
             "attachment_meta" => EventKind::AttachmentMeta,
+            "otel_span" => EventKind::OtelSpan,
             _ => EventKind::Unknown,
         },
         subkind: r.try_get("subkind").ok(),
@@ -138,6 +172,11 @@ fn row_to_observed(r: sqlx::sqlite::SqliteRow) -> ObservedEvent {
         user_type: r.try_get("user_type").ok(),
         entrypoint: r.try_get("entrypoint").ok(),
         cc_version: r.try_get("cc_version").ok(),
-        payload: serde_json::from_str(&payload).unwrap_or(serde_json::Value::Null),
+        trace_id: r.try_get("trace_id").ok(),
+        span_id: r.try_get("span_id").ok(),
+        parent_span_id: r.try_get("parent_span_id").ok(),
+        latency_ms: r.try_get("latency_ms").ok(),
+        telemetry,
+        payload,
     }
 }

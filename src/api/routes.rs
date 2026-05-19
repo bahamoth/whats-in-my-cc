@@ -144,6 +144,13 @@ pub async fn event_raw(
         None => serde_json::Value::Null,
     };
 
+    let observed_payload_value: serde_json::Value =
+        serde_json::from_str(&row.observed_payload).unwrap_or(serde_json::Value::Null);
+    let telemetry = match &observed_payload_value {
+        serde_json::Value::Object(map) => map.get("telemetry").cloned(),
+        _ => None,
+    };
+
     Ok(Json(Envelope {
         meta: ResponseMeta::now(),
         data: RawEventResponse {
@@ -159,6 +166,7 @@ pub async fn event_raw(
             record,
             record_type: row.kind,
             redaction_state: "none".into(),
+            telemetry,
         },
     }))
 }
@@ -170,6 +178,10 @@ fn clamp_limit(l: Option<i64>) -> i64 {
 
 // Avoid coupling model::observed to serde details by hand-projecting.
 fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Value {
+    let telemetry = e
+        .telemetry
+        .as_ref()
+        .map(|t| serde_json::to_value(t).unwrap_or(serde_json::Value::Null));
     json!({
         "event_id": e.event_id,
         "raw_event_id": e.raw_event_id,
@@ -185,6 +197,11 @@ fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Val
         "turn_id": e.turn_id,
         "is_sidechain": e.is_sidechain,
         "is_meta": e.is_meta,
+        "trace_id": e.trace_id,
+        "span_id": e.span_id,
+        "parent_span_id": e.parent_span_id,
+        "latency_ms": e.latency_ms,
+        "telemetry": telemetry,
         "payload": e.payload,
     })
 }
