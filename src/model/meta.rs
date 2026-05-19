@@ -1,7 +1,8 @@
 use serde::Serialize;
 
-pub const SCHEMA_VERSION: &str = "0.1.0";
+pub const SCHEMA_VERSION: &str = "0.2.0";
 pub const PARSER_VERSION_TRANSCRIPT: &str = "transcript@0.1.0";
+pub const PARSER_VERSION_OTEL: &str = "otel@0.1.0";
 pub const COLLECTION_PROFILE: &str = "local_transcript_slice1";
 
 #[derive(Debug, Serialize)]

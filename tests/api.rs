@@ -48,7 +48,7 @@ async fn health() {
 async fn sessions_list_contains_sess_a() {
     let s = setup().await;
     let v: Value = s.get("/v1/sessions").await.json();
-    assert_eq!(v["meta"]["schema_version"], "0.1.0");
+    assert_eq!(v["meta"]["schema_version"], "0.2.0");
     assert!(v["data"]
         .as_array()
         .unwrap()
