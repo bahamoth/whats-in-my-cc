@@ -70,6 +70,29 @@ The SPA has two pages:
 
 Node 20 is required; see `webui/.nvmrc`.
 
+### OTel Traces Receiver (slice-3)
+
+`POST /otel/v1/traces` accepts OTLP/JSON traces. gzip-encoded request bodies are
+decompressed automatically. Set your exporter to JSON:
+
+```bash
+export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/json
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:7878/otel
+```
+
+Manual smoke test:
+
+```bash
+curl -X POST http://127.0.0.1:7878/otel/v1/traces \
+  -H 'Content-Type: application/json' \
+  --data-binary @tests/fixtures/otel/single_span.json
+```
+
+Notes:
+- traces signal only — metrics/logs are future slices.
+- Spans without `session.id` are stored but excluded from `/v1/sessions`.
+- No redaction yet — do not send spans containing secrets.
+
 ## Reference docs
 
 - Spec (this slice): `docs/superpowers/specs/2026-05-19-witmcc-slice1-transcript-design.md`
