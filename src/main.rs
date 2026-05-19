@@ -9,7 +9,7 @@ fn main() -> error::Result<()> {
         match cli.command {
             cli::Command::InitDb => init_db(&cli.db_path).await,
             cli::Command::Ingest { path, all } => ingest_cmd(&cli.db_path, path, all).await,
-            cli::Command::Serve  { .. } => Ok(()), // Task 17
+            cli::Command::Serve { bind, port, auto_migrate } => serve_cmd(&cli.db_path, bind, port, auto_migrate).await,
         }
     })
 }
@@ -19,6 +19,41 @@ async fn init_db(path: &std::path::Path) -> error::Result<()> {
     let pool = db::connect(&url).await?;
     db::migrate(&pool).await?;
     tracing::info!(?path, "init-db complete");
+    Ok(())
+}
+
+async fn serve_cmd(db_path: &std::path::Path, bind: std::net::IpAddr, port: u16, auto_migrate: bool) -> error::Result<()> {
+    // Loopback-only enforcement: accepts 127.0.0.0/8 and ::1 (is_loopback()).
+    // Strict 127.0.0.1-only would use `bind == IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)`.
+    // Slice-1 uses is_loopback() to also allow ::1 for IPv6 loopback.
+    if !bind.is_loopback() {
+        return Err(error::WitmccError::Invalid(format!(
+            "only loopback addresses are allowed (got {bind})"
+        )));
+    }
+    let url = format!("sqlite://{}?mode=rwc", db_path.display());
+    let pool = db::connect(&url).await?;
+    if auto_migrate {
+        db::migrate(&pool).await?;
+    } else {
+        // Refuse to serve against an unmigrated DB. Cheap probe: does the
+        // primary table exist?
+        let exists: (i64,) = sqlx::query_as(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='observed_event'"
+        )
+        .fetch_one(&pool)
+        .await?;
+        if exists.0 == 0 {
+            return Err(error::WitmccError::Invalid(
+                "DB has not been migrated; run `witmcc init-db` or pass --auto-migrate".into(),
+            ));
+        }
+    }
+    let app = witmcc::api::router(pool);
+    let addr = std::net::SocketAddr::new(bind, port);
+    tracing::info!(%addr, "serving");
+    let listener = tokio::net::TcpListener::bind(addr).await.map_err(anyhow::Error::from)?;
+    axum::serve(listener, app).await.map_err(anyhow::Error::from)?;
     Ok(())
 }
 
