@@ -1,0 +1,33 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "session.id", "value": {"stringValue": "sess-otel-B"}}
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {"name": "witmcc.smoke"},
+          "spans": [
+            {
+              "traceId": "7c8aa5a2d2c872e8321cf37308d69df0",
+              "spanId":  "aaaaaaaaaaaaaaaa",
+              "name":    "session.turn",
+              "startTimeUnixNano": "1734567890000000000",
+              "endTimeUnixNano":   "1734567891000000000"
+            },
+            {
+              "traceId": "7c8aa5a2d2c872e8321cf37308d69df0",
+              "spanId":  "bbbbbbbbbbbbbbbb",
+              "parentSpanId": "aaaaaaaaaaaaaaaa",
+              "name":    "tool.invoke",
+              "startTimeUnixNano": "1734567890100000000",
+              "endTimeUnixNano":   "1734567890900000000"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

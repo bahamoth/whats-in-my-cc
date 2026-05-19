@@ -1,0 +1,14 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {"attributes": []},
+      "scopeSpans": [{"spans": [{
+        "traceId": "not-hex",
+        "spanId":  "0000000000000001",
+        "name":    "broken",
+        "startTimeUnixNano": "1",
+        "endTimeUnixNano":   "2"
+      }]}]
+    }
+  ]
+}
