@@ -17,7 +17,7 @@ path = "src/lib.rs"
 tokio              = { version = "1.40", features = ["macros","rt-multi-thread","fs","io-util","signal"] }
 axum               = { version = "0.7",  features = ["macros","json","tokio"] }
 tower              = "0.5"
-tower-http         = { version = "0.5",  features = ["trace"] }
+tower-http         = { version = "0.5",  features = ["trace", "decompression-gzip"] }
 sqlx               = { version = "0.8",  default-features = false, features = ["runtime-tokio-rustls","sqlite","macros","migrate","json","chrono"] }
 serde              = { version = "1",    features = ["derive"] }
 serde_json         = { version = "1",    features = ["raw_value","preserve_order"] }

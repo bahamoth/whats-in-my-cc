@@ -1,10 +1,16 @@
 pub mod dto;
 pub mod middleware;
+pub mod otel;
 pub mod routes;
 pub mod static_assets;
 
-use axum::{middleware as axum_mw, routing::get, Router};
+use axum::{
+    extract::DefaultBodyLimit, middleware as axum_mw, routing::get, routing::post, Router,
+};
 use sqlx::SqlitePool;
+use tower_http::decompression::RequestDecompressionLayer;
+
+const MAX_REQUEST_BODY: usize = 4 * 1024 * 1024;
 
 pub fn router(pool: SqlitePool) -> Router {
     Router::new()
@@ -13,7 +19,10 @@ pub fn router(pool: SqlitePool) -> Router {
         .route("/v1/sessions/:id", get(routes::session_detail))
         .route("/v1/sessions/:id/graph", get(routes::session_graph))
         .route("/v1/events/:event_id/raw", get(routes::event_raw))
+        .route("/otel/v1/traces", post(otel::ingest_traces))
         .fallback(static_assets::spa_handler)
+        .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY))
+        .layer(RequestDecompressionLayer::new().gzip(true))
         .layer(axum_mw::from_fn(middleware::host_allowlist))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(pool)

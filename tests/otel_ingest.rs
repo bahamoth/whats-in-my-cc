@@ -1,3 +1,4 @@
+use axum_test::TestServer;
 use chrono::Utc;
 use sqlx::sqlite::SqlitePoolOptions;
 use witmcc::db::migrate;
@@ -86,4 +87,48 @@ async fn graph_has_otel_span_node_after_ingest() {
     .await
     .unwrap();
     assert_eq!(row.0, "otel_span");
+}
+
+async fn http_setup() -> TestServer {
+    let pool = make_pool().await;
+    let app = witmcc::api::router(pool);
+    TestServer::new(app).unwrap()
+}
+
+#[tokio::test]
+async fn post_traces_returns_accepted_count() {
+    let s = http_setup().await;
+    let body = fixture("tests/fixtures/otel/single_span.json");
+    let resp = s
+        .post("/otel/v1/traces")
+        .json(&body)
+        .await;
+    resp.assert_status_ok();
+    let v: serde_json::Value = resp.json();
+    assert_eq!(v["meta"]["schema_version"], "0.2.0");
+    assert_eq!(v["data"]["accepted_spans"], 1);
+    assert_eq!(v["data"]["rejected_spans"], 0);
+    assert_eq!(v["data"]["sessions_touched"][0], "sess-otel-A");
+}
+
+#[tokio::test]
+async fn post_traces_with_malformed_trace_id_rejects_span() {
+    let s = http_setup().await;
+    let body = fixture("tests/fixtures/otel/malformed_traceid.json");
+    let resp = s.post("/otel/v1/traces").json(&body).await;
+    resp.assert_status_ok();
+    let v: serde_json::Value = resp.json();
+    assert_eq!(v["data"]["accepted_spans"], 0);
+    assert_eq!(v["data"]["rejected_spans"], 1);
+}
+
+#[tokio::test]
+async fn post_traces_with_non_json_body_is_400() {
+    let s = http_setup().await;
+    let resp = s
+        .post("/otel/v1/traces")
+        .add_header("content-type", "application/json")
+        .text("not json")
+        .await;
+    resp.assert_status(axum::http::StatusCode::BAD_REQUEST);
 }

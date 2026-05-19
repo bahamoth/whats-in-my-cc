@@ -1,6 +1,14 @@
 use serde::Serialize;
 use serde_json::Value;
 
+#[derive(Debug, Serialize)]
+pub struct OtelIngestResponse {
+    pub accepted_spans: u64,
+    pub rejected_spans: u64,
+    pub duplicate_spans: u64,
+    pub sessions_touched: Vec<String>,
+}
+
 #[derive(Serialize)]
 pub struct SessionListItem {
     pub session_id: String,
