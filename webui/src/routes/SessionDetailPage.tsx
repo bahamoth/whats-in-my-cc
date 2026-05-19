@@ -22,8 +22,18 @@ export default function SessionDetailPage() {
   useEffect(() => {
     let cancelled = false;
     setState({ kind: 'loading' });
-    Promise.all([getSession(sessionId), getGraph(sessionId)])
-      .then(([session, graph]) => {
+    getSession(sessionId)
+      .then(async (session) => {
+        let graph: GraphPayload;
+        try {
+          graph = await getGraph(sessionId);
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 404) {
+            graph = { nodes: [], edges: [] };
+          } else {
+            throw e;
+          }
+        }
         if (!cancelled) setState({ kind: 'ok', data: { session, graph } });
       })
       .catch((e: unknown) => {

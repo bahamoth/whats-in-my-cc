@@ -28,8 +28,13 @@ All non-health responses are wrapped in `{meta: {schema_version, collection_prof
 
 ## Tests
 
-```bash
+`cargo test` requires `webui/dist/` to be present at compile time (rust-embed
+embeds it). On a fresh clone, build the SPA once first:
+
+```
+just webui-build
 cargo test
+just webui-test    # frontend unit tests (vitest)
 ```
 
 ## Known limits in slice-1

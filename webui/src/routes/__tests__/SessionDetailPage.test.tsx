@@ -88,4 +88,16 @@ describe('SessionDetailPage', () => {
     rendered('nope');
     await waitFor(() => expect(screen.getByText(/session not found/i)).toBeInTheDocument());
   });
+
+  it('renders empty timeline when getGraph 404s but getSession succeeds', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(env(sessionDetail));
+    f.mockResolvedValueOnce(new Response('{"detail":"no graph"}', { status: 404 }));
+    rendered('s1');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+    // No "Session not found"
+    expect(screen.queryByText(/session not found/i)).not.toBeInTheDocument();
+    // Timeline lane labels still present (Intent/etc.)
+    expect(screen.getByText('Intent')).toBeInTheDocument();
+  });
 });
