@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Model Spec</title><style>
+:root{
+  --bg:#080b12; --bg2:#101521; --panel:#111827; --panel2:#151d2c; --paper:#f9fbff;
+  --ink:#edf3ff; --muted:#9aa8bf; --soft:#6f7d93; --line:rgba(160,180,220,.18);
+  --blue:#73b7ff; --cyan:#6ee7ff; --green:#7ee787; --amber:#ffd166; --red:#ff7b72;
+  --violet:#c9a7ff; --orange:#ffad66; --pink:#ff9ac8;
+  --accent:#6ee7ff; --accent2:#9c7bff; --shadow:0 24px 70px rgba(0,0,0,.36);
+  --radius:22px; --mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR","Apple SD Gothic Neo",Arial,sans-serif;
+  --serif:Georgia,"Times New Roman","Noto Serif KR",serif;
+}
+*{box-sizing:border-box} html{scroll-behavior:smooth}
+body{margin:0;background:
+  radial-gradient(circle at 8% -5%,rgba(110,231,255,.16),transparent 34rem),
+  radial-gradient(circle at 92% 0%,rgba(156,123,255,.16),transparent 38rem),
+  linear-gradient(180deg,var(--bg),#0b0f19 38%,#090d14); color:var(--ink);font-family:var(--sans);line-height:1.68;font-size:16px;}
+a{color:var(--cyan);text-decoration:none}a:hover{text-decoration:underline}.scrollbar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--cyan),var(--violet),var(--pink));width:0;z-index:99;box-shadow:0 0 20px rgba(110,231,255,.55)}
+.layout{max-width:1540px;margin:0 auto;display:grid;grid-template-columns:300px minmax(0,1fr);gap:28px;padding:28px 28px 90px}.side{position:sticky;top:22px;align-self:start;max-height:calc(100vh - 44px);overflow:auto;border:1px solid var(--line);border-radius:var(--radius);background:rgba(12,18,29,.78);backdrop-filter:blur(18px);box-shadow:var(--shadow);padding:18px}.side h2{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--soft);margin:12px 0 8px}.docnav{display:grid;gap:6px}.docnav a{display:block;padding:9px 10px;border:1px solid transparent;border-radius:12px;color:#d6e4ff;font-size:13px}.docnav a.active{border-color:rgba(110,231,255,.42);background:linear-gradient(135deg,rgba(110,231,255,.13),rgba(156,123,255,.09));color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.03)}.localnav{display:grid;gap:1px}.localnav a{display:block;padding:5px 8px;border-left:2px solid transparent;color:var(--muted);font-size:12px}.localnav a:hover{border-left-color:var(--cyan);color:#fff;text-decoration:none}.main{min-width:0}.hero{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:32px;padding:44px;background:linear-gradient(135deg,rgba(18,27,42,.96),rgba(13,18,30,.9));box-shadow:var(--shadow);min-height:300px}.hero:before{content:"";position:absolute;inset:-50%;background:conic-gradient(from 80deg,transparent,rgba(110,231,255,.16),transparent,rgba(156,123,255,.12),transparent);animation:spin 18s linear infinite;opacity:.7}.hero>*{position:relative}.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);margin-bottom:16px}.hero h1{font-size:54px;line-height:1.04;letter-spacing:-.045em;margin:0 0 16px;font-weight:760}.hero p{max-width:900px;color:#c9d5e8;font-size:19px;margin:0 0 24px}.badges{display:flex;gap:8px;flex-wrap:wrap}.badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:rgba(255,255,255,.055);border-radius:999px;padding:6px 10px;font-family:var(--mono);font-size:11px;color:#dce8ff}.badge:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan)}
+section{border:1px solid var(--line);border-radius:var(--radius);background:rgba(15,22,34,.78);box-shadow:0 12px 45px rgba(0,0,0,.16);padding:30px;margin:24px 0;animation:fadeup .6s ease both}section:nth-of-type(2n){background:rgba(17,25,39,.78)}h2{font-size:31px;line-height:1.18;letter-spacing:-.025em;margin:0 0 18px;font-weight:740}.num{font-family:var(--mono);font-size:12px;color:var(--bg);background:linear-gradient(135deg,var(--cyan),var(--violet));border-radius:9px;padding:5px 8px;vertical-align:middle;margin-right:10px;position:relative;top:-4px}h3{font-size:20px;margin:28px 0 10px;color:#f5f8ff}h4{font-size:15px;margin:18px 0 8px;color:#dce8ff}p{margin:0 0 14px}ul,ol{padding-left:21px;margin:0 0 14px}li{margin:5px 0}li::marker{color:var(--cyan)}strong{color:#fff}em{font-style:normal;color:var(--cyan)}code{font-family:var(--mono);font-size:12.5px;border:1px solid rgba(110,231,255,.16);background:rgba(110,231,255,.08);border-radius:6px;padding:2px 6px;color:#d9fbff}pre{background:#05070b;border:1px solid rgba(160,180,220,.18);border-radius:17px;padding:18px 20px;overflow:auto;color:#dce8ff;font-size:13px;line-height:1.58;box-shadow:inset 0 0 0 1px rgba(255,255,255,.02)}pre code{background:none;border:none;padding:0;color:inherit}.callout{border:1px solid rgba(110,231,255,.25);border-left:4px solid var(--cyan);border-radius:16px;background:linear-gradient(135deg,rgba(110,231,255,.1),rgba(156,123,255,.06));padding:16px 18px;margin:18px 0}.callout.warn{border-left-color:var(--amber);background:rgba(255,209,102,.08);border-color:rgba(255,209,102,.23)}.callout.danger{border-left-color:var(--red);background:rgba(255,123,114,.08);border-color:rgba(255,123,114,.23)}.callout.good{border-left-color:var(--green);background:rgba(126,231,135,.08);border-color:rgba(126,231,135,.23)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:16px 0}.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}.card{border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.065),rgba(255,255,255,.035));padding:17px 18px;position:relative;overflow:hidden}.card:after{content:"";position:absolute;inset:auto -20% -45% auto;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,rgba(110,231,255,.14),transparent 70%)}.card h4{margin-top:0}.card p,.muted{color:var(--muted);font-size:14px}.pill{display:inline-block;border:1px solid var(--line);background:rgba(255,255,255,.06);border-radius:999px;padding:4px 9px;font-family:var(--mono);font-size:11px;color:#d4e1f8;margin:2px}.pill.green{border-color:rgba(126,231,135,.3);background:rgba(126,231,135,.08);color:#b8ffc0}.pill.amber{border-color:rgba(255,209,102,.3);background:rgba(255,209,102,.08);color:#ffe4a3}.pill.red{border-color:rgba(255,123,114,.3);background:rgba(255,123,114,.08);color:#ffc2bd}.pill.blue{border-color:rgba(110,231,255,.34);background:rgba(110,231,255,.08);color:#c8fbff}.pill.violet{border-color:rgba(201,167,255,.34);background:rgba(201,167,255,.08);color:#e0ccff}
+table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflow:hidden;border:1px solid var(--line);border-radius:18px;background:rgba(8,11,18,.44)}th,td{padding:12px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line);font-size:14px}th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#c6d8ff;background:rgba(110,231,255,.075)}tr:last-child td{border-bottom:0}.req{border:1px solid var(--line);border-left:4px solid var(--cyan);border-radius:16px;background:rgba(255,255,255,.035);margin:12px 0;overflow:hidden}.req-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.035)}.req-id{font-family:var(--mono);font-size:12px;font-weight:800;color:#031019;background:linear-gradient(135deg,var(--cyan),var(--violet));border-radius:8px;padding:4px 7px}.req-type{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted)}.kv{display:grid;grid-template-columns:140px minmax(0,1fr)}.kv dt{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft);padding:10px 14px;border-top:1px solid var(--line)}.kv dd{margin:0;padding:10px 14px;border-top:1px solid var(--line);font-size:14px}.kv dt:first-child,.kv dt:first-child+dd{border-top:0}.metric{margin:10px 0}.metric .top{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:#c6d8ff;margin-bottom:6px}.bar{height:12px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;border:1px solid var(--line)}.fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--violet));transform-origin:left;animation:grow 1.1s ease both}.fill.green{background:linear-gradient(90deg,var(--green),var(--cyan))}.fill.amber{background:linear-gradient(90deg,var(--amber),var(--orange))}.fill.red{background:linear-gradient(90deg,var(--red),var(--pink))}.diagram{border:1px solid var(--line);border-radius:20px;background:rgba(5,7,11,.45);padding:18px;margin:16px 0;overflow:auto}.flow{display:grid;grid-template-columns:repeat(6,minmax(135px,1fr));gap:12px;align-items:stretch}.step{position:relative;border:1px solid rgba(110,231,255,.25);border-radius:15px;padding:13px;background:rgba(110,231,255,.065);min-height:96px}.step:after{content:"→";position:absolute;right:-15px;top:40%;color:var(--cyan);font-size:24px;animation:pulse 1.6s ease infinite}.step:last-child:after{display:none}.step b{display:block;color:#fff;margin-bottom:6px}.step span{font-size:12px;color:var(--muted)}.swim{display:grid;gap:10px}.lane{display:grid;grid-template-columns:125px 1fr;gap:10px;align-items:center}.lane-name{font-family:var(--mono);font-size:12px;color:var(--cyan)}.lane-track{height:48px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.045);position:relative;overflow:hidden}.dot{position:absolute;top:13px;width:22px;height:22px;border-radius:50%;background:var(--cyan);box-shadow:0 0 20px rgba(110,231,255,.55);animation:blink 2.2s ease infinite}.dot.v{background:var(--violet);box-shadow:0 0 20px rgba(201,167,255,.55)}.dot.g{background:var(--green);box-shadow:0 0 20px rgba(126,231,135,.55)}.dot.a{background:var(--amber);box-shadow:0 0 20px rgba(255,209,102,.55)}.timeline{position:relative;margin:18px 0;padding-left:22px}.timeline:before{content:"";position:absolute;left:7px;top:0;bottom:0;width:2px;background:linear-gradient(var(--cyan),var(--violet),transparent)}.titem{position:relative;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.04);padding:13px 15px;margin:10px 0}.titem:before{content:"";position:absolute;left:-22px;top:18px;width:12px;height:12px;border-radius:50%;background:var(--cyan);box-shadow:0 0 16px var(--cyan)}.gantt{display:grid;gap:10px;margin:16px 0}.gantt-row{display:grid;grid-template-columns:150px 1fr;align-items:center;gap:12px}.gantt-label{font-family:var(--mono);font-size:12px;color:#dbe8ff}.gantt-track{height:26px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.045);position:relative;overflow:hidden}.gantt-bar{position:absolute;top:3px;height:18px;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--violet));animation:grow 1.1s ease both}.gantt-bar.green{background:linear-gradient(90deg,var(--green),var(--cyan))}.gantt-bar.amber{background:linear-gradient(90deg,var(--amber),var(--orange))}.gantt-bar.red{background:linear-gradient(90deg,var(--red),var(--pink))}.kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;background:rgba(255,255,255,.06);border-radius:7px;padding:2px 6px;color:#e6f0ff}.copybtn{float:right;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.06);color:#dbe8ff;padding:5px 8px;font-family:var(--mono);font-size:11px;cursor:pointer}.copybtn:hover{border-color:var(--cyan)}.svgtext{font-family:var(--mono);font-size:12px;fill:#dce8ff}.edge{stroke:rgba(110,231,255,.56);stroke-width:2;fill:none;stroke-dasharray:7 7;animation:dash 6s linear infinite}.nodebox{fill:rgba(110,231,255,.08);stroke:rgba(110,231,255,.45);rx:14}.nodebox2{fill:rgba(156,123,255,.10);stroke:rgba(201,167,255,.45);rx:14}.nodebox3{fill:rgba(126,231,135,.08);stroke:rgba(126,231,135,.42);rx:14}.footer{color:var(--soft);font-family:var(--mono);font-size:12px;text-align:center;margin:30px 0 0}.tocnote{font-size:12px;color:var(--soft);margin-top:8px}
+@keyframes spin{to{transform:rotate(360deg)}}@keyframes fadeup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}@keyframes pulse{0%,100%{opacity:.45;transform:translateX(0)}50%{opacity:1;transform:translateX(4px)}}@keyframes blink{0%,100%{transform:scale(.92);opacity:.68}50%{transform:scale(1.08);opacity:1}}@keyframes dash{to{stroke-dashoffset:-120}}
+@media(max-width:1080px){.layout{grid-template-columns:1fr;padding:18px}.side{position:relative;top:0;max-height:none}.hero h1{font-size:39px}.grid,.grid.three,.grid.four{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.step:after{display:none}.kv{grid-template-columns:1fr}.kv dt{padding-bottom:0}.kv dd{padding-top:3px}.req-type{margin-left:0}.lane{grid-template-columns:1fr}.gantt-row{grid-template-columns:1fr}}@media print{body{background:#fff;color:#111}.layout{display:block;max-width:none}.side{display:none}.hero,section{background:#fff;color:#111;box-shadow:none;break-inside:avoid}.badge,.pill,code{color:#111}.hero p,.muted,.card p{color:#333}}
+</style></head><body><div class="scrollbar"></div><div class="layout"><aside class="side"><h2>Document Set</h2><nav class="docnav"><a class="" href="index.html">문서 포털</a>
+<a class="" href="00_prd_revised.html">Revised PRD</a>
+<a class="" href="01_product_design_spec.html">Product Design Spec</a>
+<a class="" href="02_technical_architecture_spec.html">Technical Architecture Spec</a>
+<a class="active" href="03_data_model_spec.html">Data Model Spec</a>
+<a class="" href="04_api_mcp_spec.html">Pull API & MCP Spec</a>
+<a class="" href="05_security_governance_spec.html">Security & Governance Spec</a>
+<a class="" href="06_mvp_execution_plan.html">MVP Execution Plan</a></nav><h2>On this page</h2><nav class="localnav"><a href="#principles">Principles</a>
+<a href="#erd">ERD</a>
+<a href="#raw">RawEvent</a>
+<a href="#observed">ObservedEvent</a>
+<a href="#graph">Graph</a>
+<a href="#episode">Episode</a>
+<a href="#lineage">Lineage</a>
+<a href="#insight">Insight</a>
+<a href="#resource">Resource</a>
+<a href="#indexes">Indexes</a>
+<a href="#migration">Migration</a>
+<a href="#questions">Feedback</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set · 2026-05-19</div><h1>Data Model Spec</h1><p>ObservedEvent, telemetry facet, graph, lineage, finding, resource, export bundle schema를 정의한다.</p><div class="badges"><span class="badge">Schemas</span><span class="badge">Graph</span><span class="badge">Evidence</span></div></header>
+<section id="principles"><h2><span class="num">01</span>Data Model Principles</h2>
+<ol><li><strong>OTel-first:</strong> trace_id/span_id/metric/log reference는 나중에 붙이는 optional metadata가 아니라 correlation_keys와 telemetry facet의 핵심 field다.</li><li><strong>Source-preserving:</strong> normalized object는 항상 raw source reference를 갖는다.</li><li><strong>Evidence-linked:</strong> finding, hypothesis, quality summary는 evidence_refs 없이 존재할 수 없다.</li><li><strong>No annotation model:</strong> 사용자/외부 서비스가 finding에 correction, label, status를 쓰는 domain object는 정의하지 않는다.</li><li><strong>Schema versioning:</strong> 모든 top-level object는 schema_version과 provenance를 가진다.</li></ol>
+</section>
+<section id="erd"><h2><span class="num">02</span>Entity Relationship Map</h2>
+<div class="diagram"><svg viewBox="0 0 1080 540" width="100%" height="540"><defs><marker id="arrd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#6ee7ff"/></marker></defs>
+<rect x="40" y="40" width="180" height="62" class="nodebox"/><text x="130" y="77" text-anchor="middle" class="svgtext">RawEvent</text>
+<rect x="300" y="40" width="200" height="62" class="nodebox"/><text x="400" y="77" text-anchor="middle" class="svgtext">ObservedEvent</text>
+<rect x="580" y="40" width="180" height="62" class="nodebox2"/><text x="670" y="77" text-anchor="middle" class="svgtext">GraphNode</text>
+<rect x="840" y="40" width="180" height="62" class="nodebox2"/><text x="930" y="77" text-anchor="middle" class="svgtext">GraphEdge</text>
+<rect x="160" y="180" width="180" height="62" class="nodebox3"/><text x="250" y="217" text-anchor="middle" class="svgtext">Episode</text>
+<rect x="420" y="180" width="210" height="62" class="nodebox3"/><text x="525" y="217" text-anchor="middle" class="svgtext">ContextArtifact</text>
+<rect x="710" y="180" width="190" height="62" class="nodebox3"/><text x="805" y="217" text-anchor="middle" class="svgtext">DiffHunk</text>
+<rect x="120" y="320" width="220" height="62" class="nodebox2"/><text x="230" y="357" text-anchor="middle" class="svgtext">VerificationRun</text>
+<rect x="430" y="320" width="180" height="62" class="nodebox"/><text x="520" y="357" text-anchor="middle" class="svgtext">Finding</text>
+<rect x="700" y="320" width="220" height="62" class="nodebox"/><text x="810" y="357" text-anchor="middle" class="svgtext">FeedbackResource</text>
+<rect x="430" y="448" width="180" height="62" class="nodebox2"/><text x="520" y="485" text-anchor="middle" class="svgtext">ExportBundle</text>
+<path d="M220 71 L300 71" class="edge" marker-end="url(#arrd)"/><path d="M500 71 L580 71" class="edge" marker-end="url(#arrd)"/><path d="M760 71 L840 71" class="edge" marker-end="url(#arrd)"/><path d="M670 102 C590 140 330 140 250 180" class="edge" marker-end="url(#arrd)"/><path d="M670 102 C640 140 560 150 525 180" class="edge" marker-end="url(#arrd)"/><path d="M670 102 C720 138 780 148 805 180" class="edge" marker-end="url(#arrd)"/><path d="M805 242 C730 286 600 296 520 320" class="edge" marker-end="url(#arrd)"/><path d="M230 382 C330 420 450 400 520 382" class="edge" marker-end="url(#arrd)"/><path d="M520 382 L700 351" class="edge" marker-end="url(#arrd)"/><path d="M810 382 C720 430 620 438 520 448" class="edge" marker-end="url(#arrd)"/></svg></div>
+</section>
+<section id="raw"><h2><span class="num">03</span>RawEvent</h2>
+<pre><code>{
+  "raw_event_id": "raw_evt_01J...",
+  "schema_version": "raw_event.v1",
+  "source_type": "otel_trace",
+  "source_uri": "otlp://localhost:4318/v1/traces",
+  "source_offset": { "batch": 44, "record": 7 },
+  "captured_at": "2026-05-19T09:12:00+09:00",
+  "collection_profile": "local_full_evidence",
+  "raw_payload_ref": "payload_01J...",
+  "redaction_state": "redacted",
+  "integrity": { "payload_hash": "sha256:..." }
+}</code></pre>
+<table><thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead><tbody><tr><td>source_type</td><td>yes</td><td>transcript, otel_metric, otel_log, otel_trace, hook, file_git</td></tr><tr><td>raw_payload_ref</td><td>yes</td><td>payload itself may be redacted or encrypted</td></tr><tr><td>redaction_state</td><td>yes</td><td>not_scanned, redacted, clean, blocked</td></tr></tbody></table>
+</section>
+<section id="observed"><h2><span class="num">04</span>ObservedEvent</h2>
+<pre><code>{
+  "event_id": "evt_01J...",
+  "schema_version": "observed_event.v1",
+  "source_ref": { "raw_event_id": "raw_evt_01J...", "source_type": "otel_trace" },
+  "session": { "session_id": "sess_123", "project_id": "proj_abc" },
+  "time": { "observed_at": "2026-05-19T09:12:00+09:00", "timestamp_confidence": "high" },
+  "event_type": "tool_call",
+  "actor": { "actor_type": "assistant", "actor_id": "claude_code" },
+  "subject": { "type": "tool", "name": "Edit", "id": "tool_use_789" },
+  "attributes": { "file_path": "src/service.ts", "operation": "edit", "status": "completed" },
+  "correlation_keys": {
+    "tool_use_id": "tool_use_789",
+    "trace_id": "trace_abc",
+    "span_id": "span_def",
+    "prompt_id": "prompt_001"
+  },
+  "telemetry": {
+    "span_kind": "client",
+    "parent_span_id": "span_parent",
+    "latency_ms": 1842,
+    "metric_refs": ["metric_tokens_001"],
+    "log_event_refs": ["otel_log_001"]
+  },
+  "provenance": { "parser_version": "otel_parser.v1" }
+}</code></pre>
+</section>
+<section id="graph"><h2><span class="num">05</span>GraphNode and GraphEdge</h2>
+<div class="grid"><div class="card"><h4>GraphNode</h4><pre><code>{
+  "node_id": "node_01J...",
+  "schema_version": "graph_node.v1",
+  "node_type": "tool_call",
+  "logical_subject": { "type": "tool", "name": "Edit", "id": "tool_use_789" },
+  "time_range": { "started_at": "...", "ended_at": "..." },
+  "source_refs": ["evt_transcript_001", "evt_otel_span_009", "evt_hook_003"],
+  "merge": { "merge_confidence": 0.98, "merge_keys": ["tool_use_id", "trace_id"] }
+}</code></pre></div><div class="card"><h4>GraphEdge</h4><pre><code>{
+  "edge_id": "edge_01J...",
+  "schema_version": "graph_edge.v1",
+  "from_node_id": "node_error_001",
+  "to_node_id": "node_repair_002",
+  "edge_type": "recovers",
+  "edge_origin": "inferred",
+  "confidence": 0.74,
+  "evidence_refs": ["node_error_001", "node_repair_002"],
+  "inference_rule": "error_followed_by_repair_action.v1",
+  "limitations": ["No explicit assistant statement observed."]
+}</code></pre></div></div>
+<table><thead><tr><th>Edge type</th><th>Meaning</th><th>Origin</th></tr></thead><tbody><tr><td>same_logical_event</td><td>multiple source events merged</td><td>deterministic</td></tr><tr><td>parent_child</td><td>trace/span or task/subtask relation</td><td>deterministic</td></tr><tr><td>mutates</td><td>tool/file event changed state</td><td>deterministic/inferred</td></tr><tr><td>verifies</td><td>command/test verified diff or state</td><td>deterministic/inferred</td></tr><tr><td>causes</td><td>observed event likely influenced later action</td><td>inferred</td></tr><tr><td>blocks/allows</td><td>permission/hook impacted action</td><td>deterministic</td></tr></tbody></table>
+</section>
+<section id="episode"><h2><span class="num">06</span>Episode and ContextArtifact</h2>
+<pre><code>{
+  "episode_id": "ep_01J...",
+  "schema_version": "episode.v1",
+  "session_id": "sess_123",
+  "phase": "diagnosis",
+  "start_node_id": "node_001",
+  "end_node_id": "node_018",
+  "summary": "Assistant inspected failing test output and searched related files.",
+  "evidence_nodes": ["node_001", "node_007", "node_018"],
+  "confidence": 0.81,
+  "classification_basis": ["read/search actions", "error output referenced", "no mutation"]
+}</code></pre>
+<table><thead><tr><th>Episode phase</th><th>Observed basis</th></tr></thead><tbody><tr><td>intake</td><td>user request, requirement clarification</td></tr><tr><td>exploration</td><td>read/search/list actions</td></tr><tr><td>diagnosis</td><td>error interpretation, related file inspection</td></tr><tr><td>action</td><td>edit/write/bash mutation</td></tr><tr><td>verification</td><td>test/build/lint/diff inspection</td></tr><tr><td>repair</td><td>failure followed by corrective action</td></tr><tr><td>drift/stall</td><td>goal divergence or repeated non-progressive loop</td></tr></tbody></table>
+<pre><code>{
+  "artifact_id": "ctx_01J...",
+  "schema_version": "context_artifact.v1",
+  "artifact_type": "tool_output",
+  "source_node_id": "node_bash_result_001",
+  "used_by_node_ids": ["node_edit_002"],
+  "size": { "bytes": 18432, "tokens_estimate": 4200 },
+  "signals": { "large_output": true, "possibly_stale": false }
+}</code></pre>
+</section>
+<section id="lineage"><h2><span class="num">07</span>File Lineage and VerificationRun</h2>
+<div class="grid"><div class="card"><h4>DiffHunk</h4><pre><code>{
+  "diff_hunk_id": "hunk_01J...",
+  "schema_version": "diff_hunk.v1",
+  "file_path": "src/service.ts",
+  "change_type": "modify",
+  "line_range_after": { "start": 42, "end": 57 },
+  "introduced_by_node_id": "node_edit_002",
+  "related_episode_id": "ep_action_001",
+  "verification_refs": [{ "verification_run_id": "verify_001", "status": "passed" }]
+}</code></pre></div><div class="card"><h4>VerificationRun</h4><pre><code>{
+  "verification_run_id": "verify_001",
+  "schema_version": "verification_run.v1",
+  "command": "npm test",
+  "trigger_node_id": "node_bash_001",
+  "status": "failed",
+  "started_at": "...",
+  "ended_at": "...",
+  "covered_diff_hunk_ids": ["hunk_01J..."],
+  "failure_summary": "Test failed due to missing mock setup."
+}</code></pre></div></div>
+</section>
+<section id="insight"><h2><span class="num">08</span>Finding, Hypothesis, QualitySummary</h2>
+<pre><code>{
+  "finding_id": "find_01J...",
+  "schema_version": "finding.v1",
+  "category": "missing_verification",
+  "severity": "medium",
+  "claim": "File changes were made but no successful verification run was observed.",
+  "evidence_refs": [
+    { "node_id": "node_edit_001", "role": "supporting" },
+    { "node_id": "node_final_001", "role": "supporting" }
+  ],
+  "counter_evidence_refs": [],
+  "confidence": 0.86,
+  "limitations": ["Verification may have occurred outside the observed session."],
+  "downstream_topics": ["verification_policy"]
+}</code></pre>
+<table><thead><tr><th>Finding category</th><th>Evidence requirement</th></tr></thead><tbody><tr><td>missing_verification</td><td>mutation node + finalization node + no successful verification edge</td></tr><tr><td>context_bloat</td><td>large/repeated context artifact + token/cost signal</td></tr><tr><td>tool_failure</td><td>failed tool result or OTel error event</td></tr><tr><td>risky_action</td><td>permission event, destructive command, sensitive file/path</td></tr><tr><td>final_state_mismatch</td><td>final answer claim conflicts with file/git/verification state</td></tr></tbody></table>
+</section>
+<section id="resource"><h2><span class="num">09</span>FeedbackResource and ExportBundle</h2>
+<pre><code>{
+  "resource_id": "fbr_01J...",
+  "schema_version": "feedback_resource.v1",
+  "resource_type": "finding",
+  "subject": { "type": "finding", "id": "find_01J..." },
+  "title": "Missing verification after file mutation",
+  "claims": [{ "claim_id": "claim_001", "text": "File changes were made but no successful verification run was observed.", "confidence": 0.86, "evidence_refs": ["node_edit_001", "node_final_001"] }],
+  "redaction_state": "redacted",
+  "collection_profile_required": "local_full_evidence",
+  "api_uri": "/v1/resources/fbr_01J...",
+  "mcp_uri": "whats-in-my-cc://resources/fbr_01J..."
+}</code></pre>
+<pre><code>{
+  "bundle_id": "bundle_01J...",
+  "schema_version": "export_bundle.v1",
+  "subject": { "type": "resource", "id": "fbr_01J..." },
+  "included_evidence": { "nodes": ["node_edit_001"], "edges": ["edge_001"], "raw_events": ["raw_evt_001"] },
+  "redaction_manifest": { "redaction_state": "redacted", "rules_applied": ["secret_pattern.v1"], "items_redacted_count": 3 },
+  "integrity": { "manifest_hash": "sha256:..." },
+  "does_not_include": ["patch", "hook_install_script", "settings_change", "memory_write"]
+}</code></pre>
+</section>
+<section id="indexes"><h2><span class="num">10</span>Indexes and Query Keys</h2>
+<table><thead><tr><th>Index</th><th>Fields</th><th>Used by</th></tr></thead><tbody><tr><td>session_time_idx</td><td>session_id, observed_at</td><td>timeline, replay</td></tr><tr><td>otel_trace_idx</td><td>trace_id, span_id, parent_span_id</td><td>span graph, latency attribution</td></tr><tr><td>tool_idx</td><td>tool_use_id, session_id</td><td>logical merge</td></tr><tr><td>file_lineage_idx</td><td>file_path, diff_hunk_id, verification_run_id</td><td>file lineage</td></tr><tr><td>finding_idx</td><td>category, severity, confidence, session_id</td><td>dashboard, API/MCP search</td></tr><tr><td>resource_idx</td><td>resource_id, resource_type, subject</td><td>Pull API, MCP resources</td></tr></tbody></table>
+</section>
+<section id="migration"><h2><span class="num">11</span>Schema Migration Policy</h2>
+<ul><li>Minor schema changes must preserve existing fields or provide derived compatibility view.</li><li>Parser version changes must be recorded on every ObservedEvent.</li><li>Export bundles must remain interpretable using the schema version embedded in the bundle.</li><li>OTel schema drift must not break raw event preservation; unknown telemetry fields are stored under <code>attributes.extra</code>.</li></ul>
+</section>
+<section id="questions"><h2><span class="num">12</span>피드백 필요 사항</h2><ol><li><code>FeedbackResource</code>라는 이름을 유지할지, 로컬 insight 중심성을 반영해 <code>InsightResource</code>로 바꿀지 결정 필요.</li><li>confidence score를 0~1 float로 둘지, low/medium/high enum을 병행할지 결정 필요.</li><li>raw payload hash를 redaction 전 기준으로 할지, redaction 후 기준을 기본으로 할지 결정 필요.</li></ol></section>
+<div class="footer">What's in My Claude Code HTML Documentation Set · local-first · evidence-linked · OTel-first</div></main></div>
+<script>
+const bar=document.querySelector('.scrollbar');
+window.addEventListener('scroll',()=>{const h=document.documentElement; const p=h.scrollTop/(h.scrollHeight-h.clientHeight); bar.style.width=(p*100)+'%';});
+for(const pre of document.querySelectorAll('pre')){const btn=document.createElement('button');btn.className='copybtn';btn.textContent='copy';btn.onclick=()=>{navigator.clipboard.writeText(pre.innerText);btn.textContent='copied';setTimeout(()=>btn.textContent='copy',900)};pre.prepend(btn)}
+</script>
+</body></html>

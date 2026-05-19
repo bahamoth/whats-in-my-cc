@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security & Governance Spec</title><style>
+:root{
+  --bg:#080b12; --bg2:#101521; --panel:#111827; --panel2:#151d2c; --paper:#f9fbff;
+  --ink:#edf3ff; --muted:#9aa8bf; --soft:#6f7d93; --line:rgba(160,180,220,.18);
+  --blue:#73b7ff; --cyan:#6ee7ff; --green:#7ee787; --amber:#ffd166; --red:#ff7b72;
+  --violet:#c9a7ff; --orange:#ffad66; --pink:#ff9ac8;
+  --accent:#6ee7ff; --accent2:#9c7bff; --shadow:0 24px 70px rgba(0,0,0,.36);
+  --radius:22px; --mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR","Apple SD Gothic Neo",Arial,sans-serif;
+  --serif:Georgia,"Times New Roman","Noto Serif KR",serif;
+}
+*{box-sizing:border-box} html{scroll-behavior:smooth}
+body{margin:0;background:
+  radial-gradient(circle at 8% -5%,rgba(110,231,255,.16),transparent 34rem),
+  radial-gradient(circle at 92% 0%,rgba(156,123,255,.16),transparent 38rem),
+  linear-gradient(180deg,var(--bg),#0b0f19 38%,#090d14); color:var(--ink);font-family:var(--sans);line-height:1.68;font-size:16px;}
+a{color:var(--cyan);text-decoration:none}a:hover{text-decoration:underline}.scrollbar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--cyan),var(--violet),var(--pink));width:0;z-index:99;box-shadow:0 0 20px rgba(110,231,255,.55)}
+.layout{max-width:1540px;margin:0 auto;display:grid;grid-template-columns:300px minmax(0,1fr);gap:28px;padding:28px 28px 90px}.side{position:sticky;top:22px;align-self:start;max-height:calc(100vh - 44px);overflow:auto;border:1px solid var(--line);border-radius:var(--radius);background:rgba(12,18,29,.78);backdrop-filter:blur(18px);box-shadow:var(--shadow);padding:18px}.side h2{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--soft);margin:12px 0 8px}.docnav{display:grid;gap:6px}.docnav a{display:block;padding:9px 10px;border:1px solid transparent;border-radius:12px;color:#d6e4ff;font-size:13px}.docnav a.active{border-color:rgba(110,231,255,.42);background:linear-gradient(135deg,rgba(110,231,255,.13),rgba(156,123,255,.09));color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.03)}.localnav{display:grid;gap:1px}.localnav a{display:block;padding:5px 8px;border-left:2px solid transparent;color:var(--muted);font-size:12px}.localnav a:hover{border-left-color:var(--cyan);color:#fff;text-decoration:none}.main{min-width:0}.hero{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:32px;padding:44px;background:linear-gradient(135deg,rgba(18,27,42,.96),rgba(13,18,30,.9));box-shadow:var(--shadow);min-height:300px}.hero:before{content:"";position:absolute;inset:-50%;background:conic-gradient(from 80deg,transparent,rgba(110,231,255,.16),transparent,rgba(156,123,255,.12),transparent);animation:spin 18s linear infinite;opacity:.7}.hero>*{position:relative}.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);margin-bottom:16px}.hero h1{font-size:54px;line-height:1.04;letter-spacing:-.045em;margin:0 0 16px;font-weight:760}.hero p{max-width:900px;color:#c9d5e8;font-size:19px;margin:0 0 24px}.badges{display:flex;gap:8px;flex-wrap:wrap}.badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:rgba(255,255,255,.055);border-radius:999px;padding:6px 10px;font-family:var(--mono);font-size:11px;color:#dce8ff}.badge:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan)}
+section{border:1px solid var(--line);border-radius:var(--radius);background:rgba(15,22,34,.78);box-shadow:0 12px 45px rgba(0,0,0,.16);padding:30px;margin:24px 0;animation:fadeup .6s ease both}section:nth-of-type(2n){background:rgba(17,25,39,.78)}h2{font-size:31px;line-height:1.18;letter-spacing:-.025em;margin:0 0 18px;font-weight:740}.num{font-family:var(--mono);font-size:12px;color:var(--bg);background:linear-gradient(135deg,var(--cyan),var(--violet));border-radius:9px;padding:5px 8px;vertical-align:middle;margin-right:10px;position:relative;top:-4px}h3{font-size:20px;margin:28px 0 10px;color:#f5f8ff}h4{font-size:15px;margin:18px 0 8px;color:#dce8ff}p{margin:0 0 14px}ul,ol{padding-left:21px;margin:0 0 14px}li{margin:5px 0}li::marker{color:var(--cyan)}strong{color:#fff}em{font-style:normal;color:var(--cyan)}code{font-family:var(--mono);font-size:12.5px;border:1px solid rgba(110,231,255,.16);background:rgba(110,231,255,.08);border-radius:6px;padding:2px 6px;color:#d9fbff}pre{background:#05070b;border:1px solid rgba(160,180,220,.18);border-radius:17px;padding:18px 20px;overflow:auto;color:#dce8ff;font-size:13px;line-height:1.58;box-shadow:inset 0 0 0 1px rgba(255,255,255,.02)}pre code{background:none;border:none;padding:0;color:inherit}.callout{border:1px solid rgba(110,231,255,.25);border-left:4px solid var(--cyan);border-radius:16px;background:linear-gradient(135deg,rgba(110,231,255,.1),rgba(156,123,255,.06));padding:16px 18px;margin:18px 0}.callout.warn{border-left-color:var(--amber);background:rgba(255,209,102,.08);border-color:rgba(255,209,102,.23)}.callout.danger{border-left-color:var(--red);background:rgba(255,123,114,.08);border-color:rgba(255,123,114,.23)}.callout.good{border-left-color:var(--green);background:rgba(126,231,135,.08);border-color:rgba(126,231,135,.23)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:16px 0}.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}.card{border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.065),rgba(255,255,255,.035));padding:17px 18px;position:relative;overflow:hidden}.card:after{content:"";position:absolute;inset:auto -20% -45% auto;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,rgba(110,231,255,.14),transparent 70%)}.card h4{margin-top:0}.card p,.muted{color:var(--muted);font-size:14px}.pill{display:inline-block;border:1px solid var(--line);background:rgba(255,255,255,.06);border-radius:999px;padding:4px 9px;font-family:var(--mono);font-size:11px;color:#d4e1f8;margin:2px}.pill.green{border-color:rgba(126,231,135,.3);background:rgba(126,231,135,.08);color:#b8ffc0}.pill.amber{border-color:rgba(255,209,102,.3);background:rgba(255,209,102,.08);color:#ffe4a3}.pill.red{border-color:rgba(255,123,114,.3);background:rgba(255,123,114,.08);color:#ffc2bd}.pill.blue{border-color:rgba(110,231,255,.34);background:rgba(110,231,255,.08);color:#c8fbff}.pill.violet{border-color:rgba(201,167,255,.34);background:rgba(201,167,255,.08);color:#e0ccff}
+table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflow:hidden;border:1px solid var(--line);border-radius:18px;background:rgba(8,11,18,.44)}th,td{padding:12px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line);font-size:14px}th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#c6d8ff;background:rgba(110,231,255,.075)}tr:last-child td{border-bottom:0}.req{border:1px solid var(--line);border-left:4px solid var(--cyan);border-radius:16px;background:rgba(255,255,255,.035);margin:12px 0;overflow:hidden}.req-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.035)}.req-id{font-family:var(--mono);font-size:12px;font-weight:800;color:#031019;background:linear-gradient(135deg,var(--cyan),var(--violet));border-radius:8px;padding:4px 7px}.req-type{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted)}.kv{display:grid;grid-template-columns:140px minmax(0,1fr)}.kv dt{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft);padding:10px 14px;border-top:1px solid var(--line)}.kv dd{margin:0;padding:10px 14px;border-top:1px solid var(--line);font-size:14px}.kv dt:first-child,.kv dt:first-child+dd{border-top:0}.metric{margin:10px 0}.metric .top{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:#c6d8ff;margin-bottom:6px}.bar{height:12px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;border:1px solid var(--line)}.fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--violet));transform-origin:left;animation:grow 1.1s ease both}.fill.green{background:linear-gradient(90deg,var(--green),var(--cyan))}.fill.amber{background:linear-gradient(90deg,var(--amber),var(--orange))}.fill.red{background:linear-gradient(90deg,var(--red),var(--pink))}.diagram{border:1px solid var(--line);border-radius:20px;background:rgba(5,7,11,.45);padding:18px;margin:16px 0;overflow:auto}.flow{display:grid;grid-template-columns:repeat(6,minmax(135px,1fr));gap:12px;align-items:stretch}.step{position:relative;border:1px solid rgba(110,231,255,.25);border-radius:15px;padding:13px;background:rgba(110,231,255,.065);min-height:96px}.step:after{content:"→";position:absolute;right:-15px;top:40%;color:var(--cyan);font-size:24px;animation:pulse 1.6s ease infinite}.step:last-child:after{display:none}.step b{display:block;color:#fff;margin-bottom:6px}.step span{font-size:12px;color:var(--muted)}.swim{display:grid;gap:10px}.lane{display:grid;grid-template-columns:125px 1fr;gap:10px;align-items:center}.lane-name{font-family:var(--mono);font-size:12px;color:var(--cyan)}.lane-track{height:48px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.045);position:relative;overflow:hidden}.dot{position:absolute;top:13px;width:22px;height:22px;border-radius:50%;background:var(--cyan);box-shadow:0 0 20px rgba(110,231,255,.55);animation:blink 2.2s ease infinite}.dot.v{background:var(--violet);box-shadow:0 0 20px rgba(201,167,255,.55)}.dot.g{background:var(--green);box-shadow:0 0 20px rgba(126,231,135,.55)}.dot.a{background:var(--amber);box-shadow:0 0 20px rgba(255,209,102,.55)}.timeline{position:relative;margin:18px 0;padding-left:22px}.timeline:before{content:"";position:absolute;left:7px;top:0;bottom:0;width:2px;background:linear-gradient(var(--cyan),var(--violet),transparent)}.titem{position:relative;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.04);padding:13px 15px;margin:10px 0}.titem:before{content:"";position:absolute;left:-22px;top:18px;width:12px;height:12px;border-radius:50%;background:var(--cyan);box-shadow:0 0 16px var(--cyan)}.gantt{display:grid;gap:10px;margin:16px 0}.gantt-row{display:grid;grid-template-columns:150px 1fr;align-items:center;gap:12px}.gantt-label{font-family:var(--mono);font-size:12px;color:#dbe8ff}.gantt-track{height:26px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.045);position:relative;overflow:hidden}.gantt-bar{position:absolute;top:3px;height:18px;border-radius:999px;background:linear-gradient(90deg,var(--cyan),var(--violet));animation:grow 1.1s ease both}.gantt-bar.green{background:linear-gradient(90deg,var(--green),var(--cyan))}.gantt-bar.amber{background:linear-gradient(90deg,var(--amber),var(--orange))}.gantt-bar.red{background:linear-gradient(90deg,var(--red),var(--pink))}.kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;background:rgba(255,255,255,.06);border-radius:7px;padding:2px 6px;color:#e6f0ff}.copybtn{float:right;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.06);color:#dbe8ff;padding:5px 8px;font-family:var(--mono);font-size:11px;cursor:pointer}.copybtn:hover{border-color:var(--cyan)}.svgtext{font-family:var(--mono);font-size:12px;fill:#dce8ff}.edge{stroke:rgba(110,231,255,.56);stroke-width:2;fill:none;stroke-dasharray:7 7;animation:dash 6s linear infinite}.nodebox{fill:rgba(110,231,255,.08);stroke:rgba(110,231,255,.45);rx:14}.nodebox2{fill:rgba(156,123,255,.10);stroke:rgba(201,167,255,.45);rx:14}.nodebox3{fill:rgba(126,231,135,.08);stroke:rgba(126,231,135,.42);rx:14}.footer{color:var(--soft);font-family:var(--mono);font-size:12px;text-align:center;margin:30px 0 0}.tocnote{font-size:12px;color:var(--soft);margin-top:8px}
+@keyframes spin{to{transform:rotate(360deg)}}@keyframes fadeup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}@keyframes pulse{0%,100%{opacity:.45;transform:translateX(0)}50%{opacity:1;transform:translateX(4px)}}@keyframes blink{0%,100%{transform:scale(.92);opacity:.68}50%{transform:scale(1.08);opacity:1}}@keyframes dash{to{stroke-dashoffset:-120}}
+@media(max-width:1080px){.layout{grid-template-columns:1fr;padding:18px}.side{position:relative;top:0;max-height:none}.hero h1{font-size:39px}.grid,.grid.three,.grid.four{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.step:after{display:none}.kv{grid-template-columns:1fr}.kv dt{padding-bottom:0}.kv dd{padding-top:3px}.req-type{margin-left:0}.lane{grid-template-columns:1fr}.gantt-row{grid-template-columns:1fr}}@media print{body{background:#fff;color:#111}.layout{display:block;max-width:none}.side{display:none}.hero,section{background:#fff;color:#111;box-shadow:none;break-inside:avoid}.badge,.pill,code{color:#111}.hero p,.muted,.card p{color:#333}}
+</style></head><body><div class="scrollbar"></div><div class="layout"><aside class="side"><h2>Document Set</h2><nav class="docnav"><a class="" href="index.html">문서 포털</a>
+<a class="" href="00_prd_revised.html">Revised PRD</a>
+<a class="" href="01_product_design_spec.html">Product Design Spec</a>
+<a class="" href="02_technical_architecture_spec.html">Technical Architecture Spec</a>
+<a class="" href="03_data_model_spec.html">Data Model Spec</a>
+<a class="" href="04_api_mcp_spec.html">Pull API & MCP Spec</a>
+<a class="active" href="05_security_governance_spec.html">Security & Governance Spec</a>
+<a class="" href="06_mvp_execution_plan.html">MVP Execution Plan</a></nav><h2>On this page</h2><nav class="localnav"><a href="#stance">Stance</a>
+<a href="#profiles">Profiles</a>
+<a href="#local">Local</a>
+<a href="#redaction">Redaction</a>
+<a href="#retention">Retention</a>
+<a href="#export">Export</a>
+<a href="#audit">Audit</a>
+<a href="#provenance">Provenance</a>
+<a href="#threats">Threats</a>
+<a href="#questions">Feedback</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set · 2026-05-19</div><h1>Security & Governance Spec</h1><p>로컬 고신뢰 수집을 안전하게 운영하기 위한 collection profile, redaction, retention, export governance를 정의한다.</p><div class="badges"><span class="badge">Security</span><span class="badge">Redaction</span><span class="badge">Local-first</span></div></header>
+<section id="stance"><h2><span class="num">01</span>Security Stance</h2>
+<p>이 서비스는 개인 로컬 환경에서 고신뢰 데이터를 수집한다. collection level은 높아도 되지만, 수집된 데이터에는 source code, command output, token, private path, secrets가 포함될 수 있으므로 local binding, redaction, retention, export control은 제품 핵심 요구사항이다.</p>
+<div class="callout danger"><strong>기본 방침:</strong> 높은 수집 수준은 허용하되, 네트워크 노출과 raw export는 보수적으로 제한한다. 로컬 insight를 위한 수집과 외부 전송 가능성을 엄격히 분리한다.</div>
+</section>
+<section id="profiles"><h2><span class="num">02</span>Collection Profiles</h2>
+<table><thead><tr><th>Profile</th><th>Includes</th><th>Default</th><th>Risk</th></tr></thead><tbody>
+<tr><td><code>metadata_only</code></td><td>timestamps, source type, ids, status only</td><td>No</td><td>Low</td></tr>
+<tr><td><code>local_transcript</code></td><td>transcript messages, tool call/result metadata</td><td>No</td><td>Medium</td></tr>
+<tr><td><code>local_full_evidence</code></td><td>transcript, tool input/output, OTel metrics/logs/traces, hook payloads, file/git diff hunks, verification output</td><td><span class="pill green">Yes</span></td><td>High but local</td></tr>
+<tr><td><code>raw_api_body</code></td><td>raw model/API request and response bodies</td><td><span class="pill amber">Explicit opt-in proposed</span></td><td>Very high</td></tr>
+</tbody></table>
+<div class="grid"><div class="card"><h4>Default recommendation</h4><p><code>local_full_evidence</code>를 기본으로 둔다. 단, <code>raw_api_body</code>는 별도 explicit opt-in으로 둔다.</p></div><div class="card"><h4>Reason</h4><p>로컬 insight 품질을 위해 tool I/O, OTel trace, diff hunk가 필요하다. raw API body는 replay 이상의 민감도를 가진다.</p></div></div>
+</section>
+<section id="local"><h2><span class="num">03</span>Local Access Boundary</h2>
+<div class="grid three"><div class="card"><h4>Bind</h4><p>기본 <code>127.0.0.1</code>. <code>0.0.0.0</code> 금지, unless explicit advanced setting.</p></div><div class="card"><h4>Origin validation</h4><p>HTTP/MCP endpoint는 Origin header allowlist를 검증한다.</p></div><div class="card"><h4>Local token</h4><p>Pull API와 MCP endpoint 모두 local auth token을 요구한다.</p></div></div>
+<div class="metric"><div class="top"><span>network exposure default</span><span>localhost only</span></div><div class="bar"><div class="fill green" style="width:92%"></div></div></div>
+</section>
+<section id="redaction"><h2><span class="num">04</span>Redaction Policy</h2>
+<table><thead><tr><th>Category</th><th>Examples</th><th>Action</th></tr></thead><tbody>
+<tr><td>Secrets</td><td>API key, bearer token, password</td><td>mask value, keep type and location</td></tr>
+<tr><td>Credentials</td><td>private key, SSH key, cloud credential</td><td>block raw preview by default</td></tr>
+<tr><td>PII</td><td>email, phone, address</td><td>mask or hash depending context</td></tr>
+<tr><td>Sensitive paths</td><td>home path, private repo path</td><td>path prefix redaction</td></tr>
+<tr><td>Command output</td><td>env dump, config, logs</td><td>scan before source preview/export</td></tr>
+<tr><td>Proprietary code</td><td>source files, diffs</td><td>local display allowed; export requires manifest</td></tr>
+</tbody></table>
+<pre><code>{
+  "redaction_manifest": {
+    "schema_version": "redaction_manifest.v1",
+    "redaction_state": "redacted",
+    "rules_applied": ["api_key_pattern.v1", "private_key_pattern.v1"],
+    "items_redacted_count": 5,
+    "has_unredacted_sensitive_payload": false,
+    "review_required_before_export": false
+  }
+}</code></pre>
+</section>
+<section id="retention"><h2><span class="num">05</span>Retention and Deletion</h2>
+<div class="gantt"><div class="gantt-row"><div class="gantt-label">raw evidence</div><div class="gantt-track"><span class="gantt-bar red" style="left:0;width:45%"></span></div></div><div class="gantt-row"><div class="gantt-label">normalized events</div><div class="gantt-track"><span class="gantt-bar amber" style="left:0;width:70%"></span></div></div><div class="gantt-row"><div class="gantt-label">aggregated insights</div><div class="gantt-track"><span class="gantt-bar green" style="left:0;width:92%"></span></div></div></div>
+<table><thead><tr><th>Data class</th><th>Default retention proposal</th><th>Deletion behavior</th></tr></thead><tbody>
+<tr><td>Raw payload</td><td>30 days</td><td>Delete payload, keep tombstone and aggregate stats</td></tr>
+<tr><td>Redacted normalized event</td><td>180 days</td><td>Delete by session/project</td></tr>
+<tr><td>Graph and insight</td><td>180 days</td><td>Delete with evidence integrity note</td></tr>
+<tr><td>Export bundle</td><td>User-controlled</td><td>Delete file and manifest entry</td></tr>
+<tr><td>Audit log</td><td>90 days</td><td>Keep minimal security-relevant event</td></tr>
+</tbody></table>
+</section>
+<section id="export"><h2><span class="num">06</span>Export Governance</h2>
+<p>Export는 로컬 owner action이다. 외부 service가 domain object에 쓰기 작업을 하는 방식이 아니다.</p>
+<div class="flow"><div class="step"><b>Select resource</b><span>finding/session/lineage</span></div><div class="step"><b>Preview evidence</b><span>nodes · raw refs</span></div><div class="step"><b>Apply redaction</b><span>manifest required</span></div><div class="step"><b>Review warning</b><span>sensitive payload check</span></div><div class="step"><b>Create bundle</b><span>local file + hash</span></div><div class="step"><b>Consume externally</b><span>outside responsibility</span></div></div>
+<div class="callout warn"><strong>Export bundle must not include:</strong> patch, hook installation script, Claude settings change, memory write, skill scaffold, command that mutates project state.</div>
+</section>
+<section id="audit"><h2><span class="num">07</span>Audit Events</h2>
+<table><thead><tr><th>Audit event</th><th>When</th><th>Fields</th></tr></thead><tbody><tr><td><code>source.enabled</code></td><td>collector enabled</td><td>source_type, profile, actor, time</td></tr><tr><td><code>raw.previewed</code></td><td>raw evidence opened</td><td>resource_id, redaction_state</td></tr><tr><td><code>export.created</code></td><td>bundle generated</td><td>bundle_id, subject, manifest_hash</td></tr><tr><td><code>api.accessed</code></td><td>Pull API request</td><td>path, actor, redaction_level</td></tr><tr><td><code>mcp.connected</code></td><td>MCP client connection</td><td>origin, client name, auth mode</td></tr><tr><td><code>retention.deleted</code></td><td>retention cleanup</td><td>data class, count, reason</td></tr></tbody></table>
+</section>
+<section id="provenance"><h2><span class="num">08</span>Provenance and Integrity</h2>
+<pre><code>{
+  "provenance": {
+    "schema_version": "provenance.v1",
+    "source_version": "claude_code_source_unknown",
+    "parser_version": "otel_parser.v1",
+    "pipeline_version": "whats-in-my-cc_pipeline.v1",
+    "created_at": "2026-05-19T09:12:00+09:00",
+    "evidence_refs": ["raw_evt_001", "evt_002", "node_003"]
+  },
+  "integrity": {
+    "content_hash": "sha256:...",
+    "manifest_hash": "sha256:..."
+  }
+}</code></pre>
+</section>
+<section id="threats"><h2><span class="num">09</span>Threat Model</h2>
+<table><thead><tr><th>Threat</th><th>Control</th><th>MVP requirement</th></tr></thead><tbody>
+<tr><td>Malicious website accesses local MCP server</td><td>Origin validation, localhost bind, token</td><td>Required</td></tr>
+<tr><td>Secret leaks through raw source preview</td><td>redaction gate, preview warning</td><td>Required</td></tr>
+<tr><td>External client requests raw code export</td><td>owner-only export action, auth, redaction manifest</td><td>Required</td></tr>
+<tr><td>Schema drift causes wrong interpretation</td><td>schema version, raw preservation, parser error events</td><td>Required</td></tr>
+<tr><td>False causal explanation misleads user</td><td>confidence, deterministic/inferred distinction, limitations</td><td>Required</td></tr>
+</tbody></table>
+</section>
+<section id="questions"><h2><span class="num">10</span>피드백 필요 사항</h2><ol><li>raw API body를 default off로 두는 제안을 확정할지 결정 필요.</li><li>retention 기본값을 30/180/90일로 둘지, 무기한 로컬 보존 옵션을 기본으로 둘지 결정 필요.</li><li>LAN 접근을 MVP에서 완전히 제외할지, advanced setting으로 열어둘지 결정 필요.</li></ol></section>
+<div class="footer">What's in My Claude Code HTML Documentation Set · local-first · evidence-linked · OTel-first</div></main></div>
+<script>
+const bar=document.querySelector('.scrollbar');
+window.addEventListener('scroll',()=>{const h=document.documentElement; const p=h.scrollTop/(h.scrollHeight-h.clientHeight); bar.style.width=(p*100)+'%';});
+for(const pre of document.querySelectorAll('pre')){const btn=document.createElement('button');btn.className='copybtn';btn.textContent='copy';btn.onclick=()=>{navigator.clipboard.writeText(pre.innerText);btn.textContent='copied';setTimeout(()=>btn.textContent='copy',900)};pre.prepend(btn)}
+</script>
+</body></html>
