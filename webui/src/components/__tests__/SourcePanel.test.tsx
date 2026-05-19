@@ -41,4 +41,35 @@ describe('SourcePanel', () => {
     render(<SourcePanel eventId="nope" />);
     await waitFor(() => expect(screen.getByText(/raw record not available/i)).toBeInTheDocument());
   });
+
+  it('renders Attributes section when record_type is otel_span', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(envelope({
+      schema_version: '0.2.0',
+      event_id: 'ev_o',
+      session_id: 'sess-otel-A',
+      source: {
+        kind: 'otel',
+        file_path: 'otel://traces/abc/spans/def',
+        line_no: 0,
+        ingested_at: '2026-05-19T00:00:00Z',
+      },
+      record: {
+        traceId: '5b8aa5a2d2c872e8321cf37308d69df2',
+        spanId: '051581bf3cb55c13',
+        name: 'tool.invoke',
+      },
+      record_type: 'otel_span',
+      redaction_state: 'none',
+      telemetry: {
+        span_name: 'tool.invoke',
+        span_kind: 'client',
+        status_code: 'ok',
+        attributes: { 'tool.name': 'Bash', 'session.id': 'sess-otel-A' },
+      },
+    }));
+    render(<SourcePanel eventId="ev_o" />);
+    await waitFor(() => expect(screen.getByText('Attributes')).toBeInTheDocument());
+    expect(screen.getByText('tool.name')).toBeInTheDocument();
+    expect(screen.getByText('Bash')).toBeInTheDocument();
+  });
 });

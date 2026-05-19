@@ -76,4 +76,12 @@ export type RawEventResponse = {
   record: unknown;
   record_type: string;
   redaction_state: 'none' | 'partial' | 'redacted' | string;
+  telemetry?: {
+    span_name?: string;
+    span_kind?: string | null;
+    status_code?: string | null;
+    status_message?: string | null;
+    attributes?: Record<string, unknown>;
+    resource?: Record<string, unknown>;
+  } | null;
 };
