@@ -31,7 +31,7 @@ pub struct GraphPayload {
     pub edges: Vec<Value>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Serialize)]
 pub struct RawSource {
     pub kind: String,
     pub file_path: String,
@@ -39,7 +39,7 @@ pub struct RawSource {
     pub ingested_at: String,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Serialize)]
 pub struct RawEventResponse {
     pub schema_version: String,
     pub event_id: String,
