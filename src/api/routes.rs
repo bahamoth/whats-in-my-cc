@@ -10,7 +10,7 @@ use sqlx::SqlitePool;
 
 use crate::api::dto::*;
 use crate::db::{repo_graph, repo_observed, repo_raw};
-use crate::model::meta::{Envelope, ResponseMeta};
+use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
 
 #[derive(Deserialize)]
 pub struct ListQuery {
@@ -147,7 +147,7 @@ pub async fn event_raw(
     Ok(Json(Envelope {
         meta: ResponseMeta::now(),
         data: RawEventResponse {
-            schema_version: crate::model::meta::SCHEMA_VERSION.into(),
+            schema_version: SCHEMA_VERSION.into(),
             event_id: row.event_id,
             session_id: row.session_id,
             source: RawSource {
