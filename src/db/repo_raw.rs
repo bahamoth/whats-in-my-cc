@@ -15,6 +15,53 @@ pub struct NewRaw {
     pub captured_at: DateTime<Utc>,
 }
 
+pub struct RawForEventRow {
+    pub event_id: String,
+    pub session_id: String,
+    pub kind: String,
+    pub raw_event_id: String,
+    pub source_type: String,
+    pub source_uri: String,
+    pub source_line_no: i64,
+    pub captured_at: String, // RFC3339 string straight from sqlite
+    pub payload: Vec<u8>,
+}
+
+pub async fn get_for_event_id(
+    pool: &SqlitePool,
+    event_id: &str,
+) -> Result<Option<RawForEventRow>> {
+    use sqlx::Row;
+    let row = sqlx::query(
+        "SELECT o.event_id        AS event_id, \
+                o.session_id      AS session_id, \
+                o.kind            AS kind, \
+                r.raw_event_id    AS raw_event_id, \
+                r.source_type     AS source_type, \
+                r.source_uri      AS source_uri, \
+                r.source_line_no  AS source_line_no, \
+                r.captured_at     AS captured_at, \
+                r.payload         AS payload \
+         FROM observed_event o \
+         JOIN raw_event r ON r.raw_event_id = o.raw_event_id \
+         WHERE o.event_id = ?",
+    )
+    .bind(event_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| RawForEventRow {
+        event_id: r.get("event_id"),
+        session_id: r.get("session_id"),
+        kind: r.get("kind"),
+        raw_event_id: r.get("raw_event_id"),
+        source_type: r.get("source_type"),
+        source_uri: r.get("source_uri"),
+        source_line_no: r.get("source_line_no"),
+        captured_at: r.get("captured_at"),
+        payload: r.get("payload"),
+    }))
+}
+
 /// Returns true if a new row was inserted; false if the
 /// `(source_uri, source_line_no, payload_sha256)` triple already existed.
 pub async fn insert_dedup(pool: &SqlitePool, r: &NewRaw) -> Result<bool> {
