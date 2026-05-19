@@ -102,3 +102,16 @@ async fn raw_endpoint_404_for_unknown_event() {
     let resp = server.get("/v1/events/no_such_event/raw").await;
     resp.assert_status_not_found();
 }
+
+#[tokio::test]
+async fn telemetry_index_exists() {
+    let pool = make_pool().await;
+    let row: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM sqlite_master \
+         WHERE type='index' AND name='idx_obs_trace_span'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, 1);
+}
