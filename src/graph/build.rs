@@ -74,7 +74,9 @@ pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, V
         // violation on insert).  The first event's payload is kept; additional
         // content is recoverable via observed_event lookup by source_event_ids.
         if let Some(&existing_idx) = node_index_by_id.get(&node_id) {
-            nodes[existing_idx].source_event_ids.push(e.event_id.clone());
+            nodes[existing_idx]
+                .source_event_ids
+                .push(e.event_id.clone());
             // Still update by_event_uuid so edge resolution stays correct.
             if let Some(uuid) = &e.event_uuid {
                 by_event_uuid.insert(uuid.clone(), node_id.clone());
