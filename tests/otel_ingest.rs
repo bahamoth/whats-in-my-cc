@@ -1,6 +1,7 @@
 use chrono::Utc;
 use sqlx::sqlite::SqlitePoolOptions;
 use witmcc::db::migrate;
+use witmcc::graph::build;
 use witmcc::ingest::otel;
 
 async fn make_pool() -> sqlx::SqlitePool {
@@ -64,4 +65,25 @@ async fn store_is_idempotent() {
             .await
             .unwrap();
     assert_eq!(count.0, 1);
+}
+
+#[tokio::test]
+async fn graph_has_otel_span_node_after_ingest() {
+    let pool = make_pool().await;
+    let body = fixture("tests/fixtures/otel/parent_child.json");
+    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now())
+        .await
+        .unwrap();
+    let (n, e) = build::rebuild_session(&pool, "sess-otel-B").await.unwrap();
+    assert_eq!(n, 2, "two otel_span nodes from parent_child fixture");
+    assert_eq!(e, 0, "no edges emitted in slice-3");
+
+    let row: (String,) = sqlx::query_as(
+        "SELECT node_kind FROM graph_node WHERE session_id = ? ORDER BY started_at LIMIT 1",
+    )
+    .bind("sess-otel-B")
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, "otel_span");
 }
