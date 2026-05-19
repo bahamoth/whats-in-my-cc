@@ -5,6 +5,14 @@ edition = "2021"
 rust-version = "1.88"
 description = "What's in My Claude Code — local execution inspection (slice-1: transcript)"
 
+[[bin]]
+name = "witmcc"
+path = "src/main.rs"
+
+[lib]
+name = "witmcc"
+path = "src/lib.rs"
+
 [dependencies]
 tokio              = { version = "1.40", features = ["macros","rt-multi-thread","fs","io-util","signal"] }
 axum               = { version = "0.7",  features = ["macros","json","tokio"] }
