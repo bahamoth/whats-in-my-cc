@@ -1,0 +1,1 @@
+{"type":"user","uuid":"u1","parentUuid":null,"sessionId":"sess-M","timestamp":"2026-05-19T03:00:00Z","cwd":"/","gitBranch":"main","entrypoint":"cli","userType":"external","version":"2.1.144","isSidechain":false,"promptId":"p1","message":{"role":"user","content":[{"type":"text","text":"first"},{"type":"text","text":"second"}]}}

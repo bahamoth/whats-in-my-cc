@@ -102,3 +102,42 @@ async fn sidechain_edge_is_marked() {
         "expected a message_reply edge flagged crosses_sidechain"
     );
 }
+
+#[tokio::test]
+async fn multi_text_user_message_dedupes_node() {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    witmcc::db::migrate(&pool).await.unwrap();
+    witmcc::ingest::store::ingest_file(
+        &pool,
+        std::path::Path::new("tests/fixtures/transcripts/multi_text_user.jsonl"),
+    )
+    .await
+    .expect("ingest should not crash on multi-text user message");
+    witmcc::graph::build::rebuild_session(&pool, "sess-M")
+        .await
+        .unwrap();
+    let (nodes, _edges) = witmcc::db::repo_graph::load_session(&pool, "sess-M")
+        .await
+        .unwrap();
+    let user_nodes: Vec<_> = nodes
+        .iter()
+        .filter(|n| n.node_kind == "user_message")
+        .collect();
+    assert_eq!(
+        user_nodes.len(),
+        1,
+        "expected exactly 1 user_message node, got {}",
+        user_nodes.len()
+    );
+    assert_eq!(
+        user_nodes[0].source_event_ids.len(),
+        2,
+        "expected 2 source_event_ids, got {}: {:?}",
+        user_nodes[0].source_event_ids.len(),
+        user_nodes[0].source_event_ids
+    );
+}

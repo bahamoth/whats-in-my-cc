@@ -21,6 +21,8 @@ pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usi
 
 pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, Vec<GraphEdge>) {
     let mut nodes: Vec<GraphNode> = Vec::new();
+    // node_id -> index in `nodes` for deduplication
+    let mut node_index_by_id: HashMap<String, usize> = HashMap::new();
     // event_uuid -> node_id (last writer wins; see below for merge fix-up)
     let mut by_event_uuid: HashMap<String, String> = HashMap::new();
     // tool_use_id -> index in `nodes` for tool_call nodes
@@ -65,6 +67,21 @@ pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, V
                 .collect::<Vec<_>>(),
         );
 
+        // Deduplicate: if a node with this node_id already exists (e.g., multiple
+        // text content elements in the same JSONL message share the same event_uuid),
+        // accumulate the event_id onto the existing node instead of pushing a second
+        // node with an identical node_id (which would cause a UNIQUE constraint
+        // violation on insert).  The first event's payload is kept; additional
+        // content is recoverable via observed_event lookup by source_event_ids.
+        if let Some(&existing_idx) = node_index_by_id.get(&node_id) {
+            nodes[existing_idx].source_event_ids.push(e.event_id.clone());
+            // Still update by_event_uuid so edge resolution stays correct.
+            if let Some(uuid) = &e.event_uuid {
+                by_event_uuid.insert(uuid.clone(), node_id.clone());
+            }
+            continue;
+        }
+
         // Track event_uuid → node_id; tool_call takes priority over assistant_message
         // for the same uuid so that parent_uuid lookups land on the call node when
         // the reply is a tool_result.  We overwrite unconditionally here and fix up
@@ -84,6 +101,7 @@ pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, V
             }
         }
 
+        node_index_by_id.insert(node_id.clone(), nodes.len());
         nodes.push(GraphNode {
             node_id,
             schema_version: SCHEMA_VERSION.into(),
