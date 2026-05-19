@@ -1,0 +1,9 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #1a1d23;
+  background: #f7f8fa;
+}
+* { box-sizing: border-box; }
+body, html, #root { height: 100%; margin: 0; }
+a { color: #2c5cc5; text-decoration: none; }
+a:hover { text-decoration: underline; }
