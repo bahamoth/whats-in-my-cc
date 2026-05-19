@@ -11,6 +11,7 @@ pub fn router(pool: SqlitePool) -> Router {
         .route("/v1/sessions", get(routes::list_sessions))
         .route("/v1/sessions/:id", get(routes::session_detail))
         .route("/v1/sessions/:id/graph", get(routes::session_graph))
+        .route("/v1/events/:event_id/raw", get(routes::event_raw))
         .layer(axum_mw::from_fn(middleware::host_allowlist))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(pool)

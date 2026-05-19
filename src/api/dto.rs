@@ -30,3 +30,22 @@ pub struct GraphPayload {
     pub nodes: Vec<Value>,
     pub edges: Vec<Value>,
 }
+
+#[derive(serde::Serialize)]
+pub struct RawSource {
+    pub kind: String,
+    pub file_path: String,
+    pub line_no: i64,
+    pub ingested_at: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct RawEventResponse {
+    pub schema_version: String,
+    pub event_id: String,
+    pub session_id: String,
+    pub source: RawSource,
+    pub record: serde_json::Value,
+    pub record_type: String,
+    pub redaction_state: String,
+}
