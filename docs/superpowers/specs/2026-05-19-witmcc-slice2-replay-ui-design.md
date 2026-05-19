@@ -14,7 +14,7 @@ slice-1은 main에 머지 완료(MERGE bb85204). 결과:
 
 - transcript JSONL → ObservedEvent → deterministic graph 파이프라인 동작.
 - Pull API 4 endpoints (`/v1/health`, `/v1/sessions`, `/v1/sessions/{id}`,
-  `/v1/graph/{id}`).
+  `/v1/sessions/{id}/graph`).
 - 22 Rust tests green. host allowlist + loopback bind.
 
 알려진 gap 중 slice-2 범위에 해당하는 것: 시각화 부재. AC-1
@@ -61,8 +61,9 @@ Browser (http://127.0.0.1:8787)
         │
         ▼ fetch /v1/...
 axum (witmcc serve)
-  ├─ /v1/health, /v1/sessions, /v1/sessions/:id, /v1/graph/:id   (slice-1 그대로)
-  ├─ /v1/events/:event_uuid/raw                                  (NEW)
+  ├─ /v1/health, /v1/sessions, /v1/sessions/:id,
+  │  /v1/sessions/:id/graph                                      (slice-1 그대로)
+  ├─ /v1/events/:event_id/raw                                    (NEW)
   └─ catch-all  → embedded SPA (rust-embed)
 ```
 
@@ -115,16 +116,21 @@ README와 justfile에 `webui-build`를 cargo build 전에 실행하라고 명시
 
 ## 3. API contract — new endpoint
 
-### `GET /v1/events/{event_uuid}/raw`
+### `GET /v1/events/{event_id}/raw`
 
-`observed_event.raw_id` → `raw_record(id)`로 조인해 raw JSONL record를 그대로 반환.
+`event_id`는 `observed_event.event_id` (ULID, 모든 ObservedEvent에 존재하는 PK).
+`observed_event.raw_event_id` → `raw_event(raw_event_id)`로 조인해 raw JSONL
+record를 그대로 반환. `event_uuid`는 transcript record 자체의 uuid이며 일부
+record(예: `file-history-snapshot`)에는 없거나 빈 값이므로 lookup 키로는
+부적합 — `event_id`를 쓴다. 클라이언트는 `graph_node.source_event_ids[0]`을
+바로 이 키로 사용한다.
 
 200 OK
 
 ```json
 {
   "schema_version": "1.0",
-  "event_uuid": "01HZ...",
+  "event_id": "01HZ...",
   "session_id": "...",
   "source": {
     "kind": "transcript",
@@ -135,15 +141,26 @@ README와 justfile에 `webui-build`를 cargo build 전에 실행하라고 명시
   "record": { /* raw JSONL parsed object (verbatim) */ },
   "record_type":
       "user_message" | "assistant_message" | "tool_call" | "tool_result"
-    | "file_history_snapshot" | "system" | "summary" | "unknown",
+    | "hook_event" | "attachment_meta" | "session_state"
+    | "file_history_snapshot" | "thinking" | "system_summary" | "unknown",
   "redaction_state": "none"
 }
 ```
 
+`record_type`은 `observed_event.kind` 값에서 1:1로 매핑한다(`EventKind`
+enum과 동일).
+
+`source.kind`/`file_path`/`line_no`/`ingested_at`은 각각 `raw_event.source_type`
+/ `source_uri` / `source_line_no` / `captured_at`에서 가져온다.
+
+`record`는 `raw_event.payload` (BLOB) → UTF-8 디코드 → `serde_json::Value`로
+파싱한 결과. unknown 필드 손실 없음.
+
 오류:
 
-- `404 { "error": "event_not_found" }` — event_uuid가 observed_event에 없음
-  또는 해당 raw_record가 없음.
+- `404 { "error": "event_not_found" }` — event_id가 observed_event에 없음.
+- `404 { "error": "raw_record_not_found" }` — observed_event는 있으나
+  raw_event 조인 결과 없음(현재 스키마상 FK로 거의 발생 X).
 - `410 { "error": "raw_pruned" }` — 자리만 둠. slice-2 데이터에서는 발생하지
   않음. M7 retention 도입 시 분기.
 
@@ -157,7 +174,7 @@ README와 justfile에 `webui-build`를 cargo build 전에 실행하라고 명시
 | `/v1/health` | 변경 없음 |
 | `/v1/sessions` | 변경 없음 |
 | `/v1/sessions/{id}` | 변경 없음 |
-| `/v1/graph/{id}` | 변경 없음 |
+| `/v1/sessions/{id}/graph` | 변경 없음 |
 
 UI는 위 4개 + 신규 1개 = 5개 호출만 사용한다.
 
@@ -175,9 +192,10 @@ UI는 위 4개 + 신규 1개 = 5개 호출만 사용한다.
 - SessionListPage 마운트: `GET /v1/sessions` → 카드/표 리스트.
 - SessionDetailPage 마운트(병렬):
   - `GET /v1/sessions/:id`
-  - `GET /v1/graph/:id`
+  - `GET /v1/sessions/:id/graph`
   - 두 응답 도착 후 timeline 렌더.
-- timeline 노드 클릭(lazy): `GET /v1/events/:event_uuid/raw` → SourcePanel.
+- timeline 노드 클릭(lazy): `GET /v1/events/:event_id/raw` → SourcePanel.
+  `event_id`는 클릭된 graph node의 `source_event_ids[0]`을 사용한다.
 
 ### Lane 매핑
 
@@ -251,7 +269,7 @@ SessionDetailPage
 | `/v1/sessions` 빈 배열 | "No sessions yet. Run `witmcc ingest --all`" 안내 + CLI 힌트 |
 | `/v1/sessions` 5xx | full-page error + "Retry" |
 | `/v1/sessions/:id` 404 | "Session not found" + 목록으로 돌아가기 |
-| `/v1/graph/:id` empty nodes | 6 lane은 그리되 "no observable nodes in this session" overlay |
+| `/v1/sessions/:id/graph` empty nodes | 6 lane은 그리되 "no observable nodes in this session" overlay |
 | raw fetch 404 | SourcePanel에 "raw record not available for this event" |
 | raw fetch 410 | "raw record pruned by retention" |
 | `event_uuid`가 graph nodes에 없음 | timeline에 표시되지 않음 (현재 graph 모델 한계) |
@@ -293,7 +311,7 @@ build-release: webui-build
 
 - `tests/api.rs`에 raw endpoint 케이스 추가:
   - 200 OK 정상
-  - 404 (없는 event_uuid)
+  - 404 (없는 event_id)
   - record_type별 1건씩(user/assistant/tool_call/tool_result/file_history/system/unknown)
 - `tests/static_serve.rs` (신규):
   - `GET /` → 200 html, `<div id="root">` 포함
@@ -331,8 +349,8 @@ CLAUDE.md "UI 변경 시 브라우저에서 직접 검증"에 따라:
   그려진다.
 - 임의 노드를 클릭하면 1초 이내 raw transcript record가 우측 패널에
   표시된다.
-- `/v1/*` 호출은 slice-1 응답 계약과 동일하며, 추가된 `/v1/events/:uuid/raw`는
-  본 문서 §3의 스펙을 따른다.
+- `/v1/*` 호출은 slice-1 응답 계약과 동일하며, 추가된
+  `/v1/events/:event_id/raw`는 본 문서 §3의 스펙을 따른다.
 - Rust + Frontend 테스트가 모두 green.
 - 새로고침으로 deep link(`/sessions/:id`)에 진입해도 정상 렌더.
 
