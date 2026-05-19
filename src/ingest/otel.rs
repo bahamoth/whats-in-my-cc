@@ -5,7 +5,17 @@
 //! original span JSON is stored verbatim in `raw_event.payload`; we only extract
 //! the fields the graph and UI care about.
 
+use crate::db::{repo_observed, repo_raw, repo_runs};
+use crate::error::Result;
+use crate::ids::MonotonicUlidGen;
+use crate::model::meta::{PARSER_VERSION_OTEL, SCHEMA_VERSION};
+use crate::model::observed::{Actor, EventKind, ObservedEvent, TelemetryFacet};
+use chrono::{DateTime, Utc};
+use serde::Serialize;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
+use sqlx::SqlitePool;
+use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 pub struct SpanRecord {
@@ -93,7 +103,7 @@ fn extract_span(
     resource_session: Option<&str>,
     scope_name: Option<String>,
     scope_version: Option<String>,
-) -> Result<SpanRecord, String> {
+) -> std::result::Result<SpanRecord, String> {
     let trace_id = span
         .get("traceId")
         .and_then(|v| v.as_str())
@@ -226,7 +236,7 @@ fn normalize_status(s: &str) -> &str {
     }
 }
 
-fn parse_unix_nano(v: Option<&Value>) -> Result<i64, String> {
+fn parse_unix_nano(v: Option<&Value>) -> std::result::Result<i64, String> {
     match v {
         Some(Value::String(s)) => s.parse::<i64>().map_err(|_| "bad unix_nano".into()),
         Some(Value::Number(n)) => n.as_i64().ok_or_else(|| "bad unix_nano".into()),
@@ -235,172 +245,150 @@ fn parse_unix_nano(v: Option<&Value>) -> Result<i64, String> {
     }
 }
 
-mod store_impl {
-    use super::{ParseResult, SpanRecord};
-    use crate::db::{repo_observed, repo_raw, repo_runs};
-    use crate::error::Result;
-    use crate::ids::MonotonicUlidGen;
-    use crate::model::meta::{PARSER_VERSION_OTEL, SCHEMA_VERSION};
-    use crate::model::observed::{Actor, EventKind, ObservedEvent, TelemetryFacet};
-    use chrono::{DateTime, Utc};
-    use serde::Serialize;
-    use serde_json::Value;
-    use sha2::{Digest, Sha256};
-    use sqlx::SqlitePool;
-    use std::collections::BTreeSet;
-
-    #[derive(Debug, Default, Serialize)]
-    pub struct IngestResult {
-        pub accepted_spans: u64,
-        pub rejected_spans: u64,
-        pub duplicate_spans: u64,
-        pub sessions_touched: Vec<String>,
-    }
-
-    pub async fn store(
-        pool: &SqlitePool,
-        parsed: ParseResult,
-        received_at: DateTime<Utc>,
-    ) -> Result<IngestResult> {
-        let mut gen = MonotonicUlidGen::new();
-        let run_id = repo_runs::start(pool).await?;
-        let mut result = IngestResult {
-            rejected_spans: parsed.rejected.len() as u64,
-            ..Default::default()
-        };
-        let mut touched: BTreeSet<String> = BTreeSet::new();
-
-        for span in parsed.spans {
-            // Canonical JSON for hashing (sort keys so re-POST is byte-stable).
-            let canonical = canonical_json(&span.raw);
-            let canonical_bytes = canonical.as_bytes().to_vec();
-            let payload_sha = hex::encode(Sha256::digest(&canonical_bytes));
-            let source_uri =
-                format!("otel://traces/{}/spans/{}", span.trace_id, span.span_id);
-            let raw_id = gen.generate();
-
-            let inserted = repo_raw::insert_dedup(
-                pool,
-                &repo_raw::NewRaw {
-                    raw_event_id: raw_id.clone(),
-                    ingest_run_id: run_id.clone(),
-                    source_type: "otel".into(),
-                    source_uri,
-                    source_line_no: 0,
-                    source_byte_offset: 0,
-                    payload_sha256: payload_sha,
-                    payload: canonical_bytes,
-                    parse_error: None,
-                    captured_at: received_at,
-                },
-            )
-            .await?;
-            if !inserted {
-                result.duplicate_spans += 1;
-                continue;
-            }
-
-            let observed_at = unix_nano_to_utc(span.start_unix_nano).unwrap_or(received_at);
-            let latency_ms = if span.end_unix_nano >= span.start_unix_nano {
-                Some((span.end_unix_nano - span.start_unix_nano) / 1_000_000)
-            } else {
-                Some(0)
-            };
-            let actor = match span.kind.as_deref() {
-                Some("client") => Actor::Tool,
-                _ => Actor::System,
-            };
-            let session_id = span.session_id.clone().unwrap_or_default();
-            let telemetry = TelemetryFacet {
-                span_name: span.name.clone(),
-                span_kind: span.kind.clone(),
-                status_code: span.status_code.clone(),
-                status_message: span.status_message.clone(),
-                start_unix_nano: span.start_unix_nano,
-                end_unix_nano: span.end_unix_nano,
-                attributes: span.attributes.clone(),
-                resource: span.resource.clone(),
-                scope_name: span.scope_name.clone(),
-                scope_version: span.scope_version.clone(),
-            };
-
-            let event = ObservedEvent {
-                event_id: gen.generate(),
-                raw_event_id: raw_id,
-                schema_version: SCHEMA_VERSION.into(),
-                session_id: session_id.clone(),
-                observed_at,
-                actor,
-                kind: EventKind::OtelSpan,
-                tool_name: span
-                    .attributes
-                    .get("tool.name")
-                    .and_then(|v| v.as_str())
-                    .map(String::from),
-                trace_id: Some(span.trace_id.clone()),
-                span_id: Some(span.span_id.clone()),
-                parent_span_id: span.parent_span_id.clone(),
-                latency_ms,
-                telemetry: Some(telemetry),
-                payload: serde_json::json!({"raw_span": span.raw}),
-                parser_version: PARSER_VERSION_OTEL.into(),
-                ..Default::default()
-            };
-            repo_observed::insert(pool, &event).await?;
-
-            result.accepted_spans += 1;
-            if !session_id.is_empty() {
-                touched.insert(session_id);
-            }
-        }
-
-        repo_runs::finish(
-            pool,
-            &run_id,
-            "ok",
-            serde_json::to_value(&result).unwrap_or(serde_json::Value::Null),
-        )
-        .await?;
-
-        result.sessions_touched = touched.into_iter().collect();
-        Ok(result)
-    }
-
-    fn canonical_json(value: &Value) -> String {
-        // Recursively sort object keys so byte representation is stable.
-        fn norm(v: &Value) -> Value {
-            match v {
-                Value::Object(map) => {
-                    let mut keys: Vec<&String> = map.keys().collect();
-                    keys.sort();
-                    let mut out = serde_json::Map::new();
-                    for k in keys {
-                        out.insert(k.clone(), norm(&map[k]));
-                    }
-                    Value::Object(out)
-                }
-                Value::Array(arr) => Value::Array(arr.iter().map(norm).collect()),
-                _ => v.clone(),
-            }
-        }
-        norm(value).to_string()
-    }
-
-    fn unix_nano_to_utc(nano: i64) -> Option<DateTime<Utc>> {
-        if nano <= 0 {
-            return None;
-        }
-        let secs = nano / 1_000_000_000;
-        let nsec = (nano % 1_000_000_000) as u32;
-        chrono::DateTime::<Utc>::from_timestamp(secs, nsec)
-    }
-
-    // Suppress dead_code warning for SpanRecord — it's used via super::
-    #[allow(dead_code)]
-    fn _uses_span_record(_: &SpanRecord) {}
+#[derive(Debug, Default, Serialize)]
+pub struct IngestResult {
+    pub accepted_spans: u64,
+    pub rejected_spans: u64,
+    pub duplicate_spans: u64,
+    pub sessions_touched: Vec<String>,
 }
 
-pub use store_impl::{store, IngestResult};
+pub async fn store(
+    pool: &SqlitePool,
+    parsed: ParseResult,
+    received_at: DateTime<Utc>,
+) -> Result<IngestResult> {
+    let mut gen = MonotonicUlidGen::new();
+    let run_id = repo_runs::start(pool).await?;
+    let mut result = IngestResult {
+        rejected_spans: parsed.rejected.len() as u64,
+        ..Default::default()
+    };
+    let mut touched: BTreeSet<String> = BTreeSet::new();
+
+    for span in parsed.spans {
+        // Canonical JSON for hashing (sort keys so re-POST is byte-stable).
+        let canonical = canonical_json(&span.raw);
+        let canonical_bytes = canonical.as_bytes().to_vec();
+        let payload_sha = hex::encode(Sha256::digest(&canonical_bytes));
+        let source_uri = format!("otel://traces/{}/spans/{}", span.trace_id, span.span_id);
+        let raw_id = gen.generate();
+
+        let inserted = repo_raw::insert_dedup(
+            pool,
+            &repo_raw::NewRaw {
+                raw_event_id: raw_id.clone(),
+                ingest_run_id: run_id.clone(),
+                source_type: "otel".into(),
+                source_uri,
+                source_line_no: 0,
+                source_byte_offset: 0,
+                payload_sha256: payload_sha,
+                payload: canonical_bytes,
+                parse_error: None,
+                captured_at: received_at,
+            },
+        )
+        .await?;
+        if !inserted {
+            result.duplicate_spans += 1;
+            continue;
+        }
+
+        let observed_at = unix_nano_to_utc(span.start_unix_nano).unwrap_or(received_at);
+        let latency_ms = if span.end_unix_nano >= span.start_unix_nano {
+            Some((span.end_unix_nano - span.start_unix_nano) / 1_000_000)
+        } else {
+            Some(0)
+        };
+        let actor = match span.kind.as_deref() {
+            Some("client") => Actor::Tool,
+            _ => Actor::System,
+        };
+        let session_id = span.session_id.clone().unwrap_or_default();
+        let telemetry = TelemetryFacet {
+            span_name: span.name.clone(),
+            span_kind: span.kind.clone(),
+            status_code: span.status_code.clone(),
+            status_message: span.status_message.clone(),
+            start_unix_nano: span.start_unix_nano,
+            end_unix_nano: span.end_unix_nano,
+            attributes: span.attributes.clone(),
+            resource: span.resource.clone(),
+            scope_name: span.scope_name.clone(),
+            scope_version: span.scope_version.clone(),
+        };
+
+        let event = ObservedEvent {
+            event_id: gen.generate(),
+            raw_event_id: raw_id,
+            schema_version: SCHEMA_VERSION.into(),
+            session_id: session_id.clone(),
+            observed_at,
+            actor,
+            kind: EventKind::OtelSpan,
+            tool_name: span
+                .attributes
+                .get("tool.name")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            trace_id: Some(span.trace_id.clone()),
+            span_id: Some(span.span_id.clone()),
+            parent_span_id: span.parent_span_id.clone(),
+            latency_ms,
+            telemetry: Some(telemetry),
+            payload: serde_json::json!({"raw_span": span.raw}),
+            parser_version: PARSER_VERSION_OTEL.into(),
+            ..Default::default()
+        };
+        repo_observed::insert(pool, &event).await?;
+
+        result.accepted_spans += 1;
+        if !session_id.is_empty() {
+            touched.insert(session_id);
+        }
+    }
+
+    repo_runs::finish(
+        pool,
+        &run_id,
+        "ok",
+        serde_json::to_value(&result).unwrap_or(serde_json::Value::Null),
+    )
+    .await?;
+
+    result.sessions_touched = touched.into_iter().collect();
+    Ok(result)
+}
+
+fn canonical_json(value: &Value) -> String {
+    // Recursively sort object keys so byte representation is stable.
+    fn norm(v: &Value) -> Value {
+        match v {
+            Value::Object(map) => {
+                let mut keys: Vec<&String> = map.keys().collect();
+                keys.sort();
+                let mut out = serde_json::Map::new();
+                for k in keys {
+                    out.insert(k.clone(), norm(&map[k]));
+                }
+                Value::Object(out)
+            }
+            Value::Array(arr) => Value::Array(arr.iter().map(norm).collect()),
+            _ => v.clone(),
+        }
+    }
+    norm(value).to_string()
+}
+
+fn unix_nano_to_utc(nano: i64) -> Option<DateTime<Utc>> {
+    if nano <= 0 {
+        return None;
+    }
+    let secs = nano / 1_000_000_000;
+    let nsec = (nano % 1_000_000_000) as u32;
+    chrono::DateTime::<Utc>::from_timestamp(secs, nsec)
+}
 
 #[cfg(test)]
 mod tests {
