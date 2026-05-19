@@ -72,7 +72,55 @@ pub async fn ingest_file(pool: &SqlitePool, path: &Path) -> Result<IngestStats> 
         }
     }
 
+    for session_id in &stats.sessions_touched {
+        backfill_turn_ids(pool, session_id).await?;
+    }
+
     repo_runs::finish(pool, &run_id, "ok",
         serde_json::to_value(&stats).unwrap_or(serde_json::Value::Null)).await?;
     Ok(stats)
+}
+
+pub async fn backfill_turn_ids(pool: &SqlitePool, session_id: &str) -> Result<u64> {
+    // Walk parent_uuid chains in memory; cheap enough for slice-1 single-session sizes.
+    let rows: Vec<(String, Option<String>, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT event_uuid, parent_uuid, turn_id, event_id
+         FROM observed_event WHERE session_id = ? AND event_uuid IS NOT NULL")
+        .bind(session_id).fetch_all(pool).await?;
+    use std::collections::HashMap;
+    let parent_of: HashMap<String, Option<String>> =
+        rows.iter().map(|(uuid, parent, _t, _eid)| (uuid.clone(), parent.clone())).collect();
+    let prompt_of: HashMap<String, String> = {
+        let r: Vec<(String, Option<String>)> = sqlx::query_as(
+            "SELECT event_uuid, turn_id FROM observed_event
+             WHERE session_id = ? AND event_uuid IS NOT NULL AND turn_id IS NOT NULL AND turn_id != ''")
+            .bind(session_id).fetch_all(pool).await?;
+        r.into_iter().filter_map(|(u, p)| p.map(|p| (u, p))).collect()
+    };
+
+    let mut updates: Vec<(String, String)> = Vec::new(); // (event_id, turn_id)
+    for (uuid, _parent, turn_id, event_id) in &rows {
+        // Skip rows that already have a non-empty turn_id.
+        if turn_id.as_deref().map(|s| !s.is_empty()).unwrap_or(false) { continue; }
+        let mut cur = parent_of.get(uuid).cloned().flatten();
+        let mut found: Option<String> = None;
+        let mut hops = 0usize;
+        while let Some(p) = cur {
+            if let Some(pid) = prompt_of.get(&p) { found = Some(pid.clone()); break; }
+            cur = parent_of.get(&p).cloned().flatten();
+            hops += 1;
+            if hops > 256 { break; } // cycle guard
+        }
+        if let Some(tid) = found { updates.push((event_id.clone().unwrap_or_default(), tid)); }
+    }
+
+    let mut tx = pool.begin().await?;
+    let mut applied = 0u64;
+    for (event_id, turn_id) in updates {
+        sqlx::query("UPDATE observed_event SET turn_id = ? WHERE event_id = ?")
+            .bind(&turn_id).bind(&event_id).execute(&mut *tx).await?;
+        applied += 1;
+    }
+    tx.commit().await?;
+    Ok(applied)
 }
