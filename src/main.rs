@@ -1,5 +1,6 @@
 mod cli;
 mod error;
+mod ids;
 mod telemetry;
 
 use clap::Parser;
