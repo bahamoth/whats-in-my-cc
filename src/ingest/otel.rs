@@ -332,4 +332,22 @@ mod tests {
         let res = parse_otlp_json(&fx);
         assert_eq!(res.spans[0].session_id, None);
     }
+
+    #[test]
+    fn fixtures_parse_with_expected_counts() {
+        let cases = &[
+            ("tests/fixtures/otel/single_span.json", 1usize, 0usize),
+            ("tests/fixtures/otel/parent_child.json", 2, 0),
+            ("tests/fixtures/otel/multi_resource.json", 2, 0),
+            ("tests/fixtures/otel/missing_session_id.json", 1, 0),
+            ("tests/fixtures/otel/malformed_traceid.json", 0, 1),
+        ];
+        for (path, ok, rej) in cases {
+            let body: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+            let res = parse_otlp_json(&body);
+            assert_eq!(res.spans.len(), *ok, "{path} accepted");
+            assert_eq!(res.rejected.len(), *rej, "{path} rejected");
+        }
+    }
 }

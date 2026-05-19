@@ -1,0 +1,28 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {"attributes": [
+        {"key": "session.id", "value": {"stringValue": "sess-multi-1"}}
+      ]},
+      "scopeSpans": [{"spans": [{
+        "traceId": "11111111111111111111111111111111",
+        "spanId":  "1111111111111111",
+        "name":    "first",
+        "startTimeUnixNano": "1",
+        "endTimeUnixNano":   "2"
+      }]}]
+    },
+    {
+      "resource": {"attributes": [
+        {"key": "session.id", "value": {"stringValue": "sess-multi-2"}}
+      ]},
+      "scopeSpans": [{"spans": [{
+        "traceId": "22222222222222222222222222222222",
+        "spanId":  "2222222222222222",
+        "name":    "second",
+        "startTimeUnixNano": "1",
+        "endTimeUnixNano":   "2"
+      }]}]
+    }
+  ]
+}

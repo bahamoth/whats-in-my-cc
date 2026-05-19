@@ -1,0 +1,16 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {"attributes": [
+        {"key": "service.name", "value": {"stringValue": "claude-code"}}
+      ]},
+      "scopeSpans": [{"spans": [{
+        "traceId": "99999999999999999999999999999999",
+        "spanId":  "9999999999999999",
+        "name":    "orphan",
+        "startTimeUnixNano": "1",
+        "endTimeUnixNano":   "2"
+      }]}]
+    }
+  ]
+}
