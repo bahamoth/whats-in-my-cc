@@ -27,10 +27,7 @@ pub struct RawForEventRow {
     pub payload: Vec<u8>,
 }
 
-pub async fn get_for_event_id(
-    pool: &SqlitePool,
-    event_id: &str,
-) -> Result<Option<RawForEventRow>> {
+pub async fn get_for_event_id(pool: &SqlitePool, event_id: &str) -> Result<Option<RawForEventRow>> {
     use sqlx::Row;
     let row = sqlx::query(
         "SELECT o.event_id        AS event_id, \

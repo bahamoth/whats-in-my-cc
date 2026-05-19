@@ -62,7 +62,9 @@ async fn get_for_event_id_returns_joined_row() {
     )
     .bind(run_id)
     .bind("2026-05-19T00:00:00Z")
-    .execute(&pool).await.unwrap();
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let raw = witmcc::db::repo_raw::NewRaw {
         raw_event_id: "raw_x_001".into(),
@@ -76,7 +78,9 @@ async fn get_for_event_id_returns_joined_row() {
         parse_error: None,
         captured_at: chrono::Utc::now(),
     };
-    witmcc::db::repo_raw::insert_dedup(&pool, &raw).await.unwrap();
+    witmcc::db::repo_raw::insert_dedup(&pool, &raw)
+        .await
+        .unwrap();
 
     // synthesize an observed_event referencing the raw row
     sqlx::query(
@@ -86,10 +90,14 @@ async fn get_for_event_id_returns_joined_row() {
          VALUES ('ev_x_001','raw_x_001','1.0','sess_x','uuid-1',\
                  '2026-05-19T00:00:00Z','user','user_message',0,0,'{}','0.1')",
     )
-    .execute(&pool).await.unwrap();
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let row = witmcc::db::repo_raw::get_for_event_id(&pool, "ev_x_001")
-        .await.unwrap().expect("row");
+        .await
+        .unwrap()
+        .expect("row");
     assert_eq!(row.event_id, "ev_x_001");
     assert_eq!(row.session_id, "sess_x");
     assert_eq!(row.source_uri, "/tmp/sample.jsonl");
@@ -103,6 +111,7 @@ async fn get_for_event_id_returns_joined_row() {
 async fn get_for_event_id_returns_none_when_missing() {
     let (pool, _tmp) = test_pool().await;
     let row = witmcc::db::repo_raw::get_for_event_id(&pool, "no_such_event")
-        .await.unwrap();
+        .await
+        .unwrap();
     assert!(row.is_none());
 }
