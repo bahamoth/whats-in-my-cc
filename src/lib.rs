@@ -5,4 +5,5 @@ pub mod graph;
 pub mod ids;
 pub mod ingest;
 pub mod model;
+pub mod paths;
 pub mod telemetry;
