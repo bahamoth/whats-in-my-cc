@@ -1,3 +1,4 @@
+pub mod repo_graph;
 pub mod repo_observed;
 pub mod repo_raw;
 pub mod repo_runs;
