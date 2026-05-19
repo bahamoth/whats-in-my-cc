@@ -1,0 +1,134 @@
+use clap::Parser;
+use witmcc::{cli, db, error, paths, telemetry};
+
+fn main() -> error::Result<()> {
+    let cli = cli::Cli::parse();
+    telemetry::init(&cli.log_format, cli.verbose);
+    let rt = tokio::runtime::Runtime::new().map_err(anyhow::Error::from)?;
+    rt.block_on(async move {
+        match cli.command {
+            cli::Command::InitDb => init_db(&cli.db_path).await,
+            cli::Command::Ingest { path, all } => ingest_cmd(&cli.db_path, path, all).await,
+            cli::Command::Serve {
+                bind,
+                port,
+                auto_migrate,
+            } => serve_cmd(&cli.db_path, bind, port, auto_migrate).await,
+        }
+    })
+}
+
+async fn init_db(path: &std::path::Path) -> error::Result<()> {
+    let url = format!("sqlite://{}?mode=rwc", path.display());
+    let pool = db::connect(&url).await?;
+    db::migrate(&pool).await?;
+    tracing::info!(?path, "init-db complete");
+    Ok(())
+}
+
+async fn serve_cmd(
+    db_path: &std::path::Path,
+    bind: std::net::IpAddr,
+    port: u16,
+    auto_migrate: bool,
+) -> error::Result<()> {
+    // Loopback-only enforcement: accepts 127.0.0.0/8 and ::1 (is_loopback()).
+    // Strict 127.0.0.1-only would use `bind == IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)`.
+    // Slice-1 uses is_loopback() to also allow ::1 for IPv6 loopback.
+    if !bind.is_loopback() {
+        return Err(error::WitmccError::Invalid(format!(
+            "only loopback addresses are allowed (got {bind})"
+        )));
+    }
+    let url = format!("sqlite://{}?mode=rwc", db_path.display());
+    let pool = db::connect(&url).await?;
+    if auto_migrate {
+        db::migrate(&pool).await?;
+    } else {
+        // Refuse to serve against an unmigrated DB. Cheap probe: does the
+        // primary table exist?
+        let exists: (i64,) = sqlx::query_as(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='observed_event'",
+        )
+        .fetch_one(&pool)
+        .await?;
+        if exists.0 == 0 {
+            return Err(error::WitmccError::Invalid(
+                "DB has not been migrated; run `witmcc init-db` or pass --auto-migrate".into(),
+            ));
+        }
+    }
+    let app = witmcc::api::router(pool);
+    let addr = std::net::SocketAddr::new(bind, port);
+    tracing::info!(%addr, "serving");
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(anyhow::Error::from)?;
+    axum::serve(listener, app)
+        .await
+        .map_err(anyhow::Error::from)?;
+    Ok(())
+}
+
+async fn ingest_cmd(
+    db_path: &std::path::Path,
+    path: Option<std::path::PathBuf>,
+    all: bool,
+) -> error::Result<()> {
+    let url = format!("sqlite://{}?mode=rwc", db_path.display());
+    let pool = db::connect(&url).await?;
+    db::migrate(&pool).await?;
+    let files = collect_files(path, all)?;
+    if files.is_empty() {
+        tracing::warn!("no JSONL files to ingest");
+        return Ok(());
+    }
+    for f in files {
+        tracing::info!(?f, "ingesting");
+        let stats = witmcc::ingest::store::ingest_file(&pool, &f).await?;
+        tracing::info!(?stats, "ingest done");
+        for sid in &stats.sessions_touched {
+            let g = witmcc::graph::build::rebuild_session(&pool, sid).await?;
+            tracing::info!(session_id=%sid, nodes=g.0, edges=g.1, "graph rebuilt");
+        }
+    }
+    Ok(())
+}
+
+fn collect_files(
+    path: Option<std::path::PathBuf>,
+    all: bool,
+) -> error::Result<Vec<std::path::PathBuf>> {
+    if let Some(p) = path {
+        if p.is_file() {
+            Ok(vec![p])
+        } else if p.is_dir() {
+            Ok(walk_jsonl(&p))
+        } else {
+            Err(error::WitmccError::Invalid(format!(
+                "not found: {}",
+                p.display()
+            )))
+        }
+    } else if all {
+        let root = paths::default_transcripts_root()
+            .ok_or_else(|| error::WitmccError::Invalid("HOME not set".into()))?;
+        Ok(walk_jsonl(&root))
+    } else {
+        Err(error::WitmccError::Invalid(
+            "provide --path or --all".into(),
+        ))
+    }
+}
+
+fn walk_jsonl(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    walkdir::WalkDir::new(root)
+        .into_iter()
+        .filter_map(|r| r.ok())
+        .filter(|e| {
+            e.file_type().is_file()
+                && e.path().extension().and_then(|x| x.to_str()) == Some("jsonl")
+        })
+        .map(|e| e.into_path())
+        .collect()
+}

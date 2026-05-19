@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Implementation Notes — slice-1</title><style>
+:root{
+  --bg:#080b12; --bg2:#101521; --panel:#111827; --panel2:#151d2c; --paper:#f9fbff;
+  --ink:#edf3ff; --muted:#9aa8bf; --soft:#6f7d93; --line:rgba(160,180,220,.18);
+  --blue:#73b7ff; --cyan:#6ee7ff; --green:#7ee787; --amber:#ffd166; --red:#ff7b72;
+  --violet:#c9a7ff; --orange:#ffad66; --pink:#ff9ac8;
+  --accent:#6ee7ff; --accent2:#9c7bff; --shadow:0 24px 70px rgba(0,0,0,.36);
+  --radius:22px; --mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR","Apple SD Gothic Neo",Arial,sans-serif;
+  --serif:Georgia,"Times New Roman","Noto Serif KR",serif;
+}
+*{box-sizing:border-box} html{scroll-behavior:smooth}
+body{margin:0;background:
+  radial-gradient(circle at 8% -5%,rgba(110,231,255,.16),transparent 34rem),
+  radial-gradient(circle at 92% 0%,rgba(156,123,255,.16),transparent 38rem),
+  linear-gradient(180deg,var(--bg),#0b0f19 38%,#090d14); color:var(--ink);font-family:var(--sans);line-height:1.68;font-size:16px;}
+a{color:var(--cyan);text-decoration:none}a:hover{text-decoration:underline}.scrollbar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--cyan),var(--violet),var(--pink));width:0;z-index:99;box-shadow:0 0 20px rgba(110,231,255,.55)}
+.layout{max-width:1540px;margin:0 auto;display:grid;grid-template-columns:300px minmax(0,1fr);gap:28px;padding:28px 28px 90px}.side{position:sticky;top:22px;align-self:start;max-height:calc(100vh - 44px);overflow:auto;border:1px solid var(--line);border-radius:var(--radius);background:rgba(12,18,29,.78);backdrop-filter:blur(18px);box-shadow:var(--shadow);padding:18px}.side h2{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--soft);margin:12px 0 8px}.docnav{display:grid;gap:6px}.docnav a{display:block;padding:9px 10px;border:1px solid transparent;border-radius:12px;color:#d6e4ff;font-size:13px}.docnav a.active{border-color:rgba(110,231,255,.42);background:linear-gradient(135deg,rgba(110,231,255,.13),rgba(156,123,255,.09));color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.03)}.localnav{display:grid;gap:1px}.localnav a{display:block;padding:5px 8px;border-left:2px solid transparent;color:var(--muted);font-size:12px}.localnav a:hover{border-left-color:var(--cyan);color:#fff;text-decoration:none}.main{min-width:0}.hero{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:32px;padding:44px;background:linear-gradient(135deg,rgba(18,27,42,.96),rgba(13,18,30,.9));box-shadow:var(--shadow);min-height:260px}.hero:before{content:"";position:absolute;inset:-50%;background:conic-gradient(from 80deg,transparent,rgba(110,231,255,.16),transparent,rgba(156,123,255,.12),transparent);animation:spin 18s linear infinite;opacity:.7}.hero>*{position:relative}.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan);margin-bottom:16px}.hero h1{font-size:48px;line-height:1.04;letter-spacing:-.045em;margin:0 0 16px;font-weight:760}.hero p{max-width:900px;color:#c9d5e8;font-size:18px;margin:0 0 24px}.badges{display:flex;gap:8px;flex-wrap:wrap}.badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:rgba(255,255,255,.055);border-radius:999px;padding:6px 10px;font-family:var(--mono);font-size:11px;color:#dce8ff}.badge:before{content:"";width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan)}
+section{border:1px solid var(--line);border-radius:var(--radius);background:rgba(15,22,34,.78);box-shadow:0 12px 45px rgba(0,0,0,.16);padding:30px;margin:24px 0;animation:fadeup .6s ease both}section:nth-of-type(2n){background:rgba(17,25,39,.78)}h2{font-size:28px;line-height:1.18;letter-spacing:-.025em;margin:0 0 18px;font-weight:740}.num{font-family:var(--mono);font-size:12px;color:var(--bg);background:linear-gradient(135deg,var(--cyan),var(--violet));border-radius:9px;padding:5px 8px;vertical-align:middle;margin-right:10px;position:relative;top:-4px}h3{font-size:20px;margin:28px 0 10px;color:#f5f8ff}h4{font-size:15px;margin:18px 0 8px;color:#dce8ff}p{margin:0 0 14px}ul,ol{padding-left:21px;margin:0 0 14px}li{margin:5px 0}li::marker{color:var(--cyan)}strong{color:#fff}em{font-style:normal;color:var(--cyan)}code{font-family:var(--mono);font-size:12.5px;border:1px solid rgba(110,231,255,.16);background:rgba(110,231,255,.08);border-radius:6px;padding:2px 6px;color:#d9fbff}pre{background:#05070b;border:1px solid rgba(160,180,220,.18);border-radius:17px;padding:18px 20px;overflow:auto;color:#dce8ff;font-size:13px;line-height:1.58;box-shadow:inset 0 0 0 1px rgba(255,255,255,.02)}pre code{background:none;border:none;padding:0;color:inherit}.callout{border:1px solid rgba(110,231,255,.25);border-left:4px solid var(--cyan);border-radius:16px;background:linear-gradient(135deg,rgba(110,231,255,.1),rgba(156,123,255,.06));padding:16px 18px;margin:18px 0}.callout.warn{border-left-color:var(--amber);background:rgba(255,209,102,.08);border-color:rgba(255,209,102,.23)}.callout.danger{border-left-color:var(--red);background:rgba(255,123,114,.08);border-color:rgba(255,123,114,.23)}.callout.good{border-left-color:var(--green);background:rgba(126,231,135,.08);border-color:rgba(126,231,135,.23)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:16px 0}.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.card{border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.065),rgba(255,255,255,.035));padding:17px 18px;position:relative;overflow:hidden}.card h4{margin-top:0}.card p,.muted{color:var(--muted);font-size:14px}.pill{display:inline-block;border:1px solid var(--line);background:rgba(255,255,255,.06);border-radius:999px;padding:4px 9px;font-family:var(--mono);font-size:11px;color:#d4e1f8;margin:2px}.pill.green{border-color:rgba(126,231,135,.3);background:rgba(126,231,135,.08);color:#b8ffc0}.pill.amber{border-color:rgba(255,209,102,.3);background:rgba(255,209,102,.08);color:#ffe4a3}.pill.red{border-color:rgba(255,123,114,.3);background:rgba(255,123,114,.08);color:#ffc2bd}.pill.blue{border-color:rgba(110,231,255,.34);background:rgba(110,231,255,.08);color:#c8fbff}.pill.violet{border-color:rgba(201,167,255,.34);background:rgba(201,167,255,.08);color:#e0ccff}
+table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflow:hidden;border:1px solid var(--line);border-radius:18px;background:rgba(8,11,18,.44)}th,td{padding:12px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line);font-size:14px}th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#c6d8ff;background:rgba(110,231,255,.075)}tr:last-child td{border-bottom:0}.dev-item{border:1px solid var(--line);border-left:4px solid var(--amber);border-radius:16px;background:rgba(255,209,102,.04);margin:16px 0;overflow:hidden}.dev-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.025)}.dev-id{font-family:var(--mono);font-size:12px;font-weight:800;color:#031019;background:linear-gradient(135deg,var(--amber),var(--orange));border-radius:8px;padding:4px 7px}.dev-body{padding:14px 16px}.footer{color:var(--soft);font-family:var(--mono);font-size:12px;text-align:center;margin:30px 0 0}.tocnote{font-size:12px;color:var(--soft);margin-top:8px}
+@keyframes spin{to{transform:rotate(360deg)}}@keyframes fadeup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:1080px){.layout{grid-template-columns:1fr;padding:18px}.side{position:relative;top:0;max-height:none}.hero h1{font-size:36px}.grid,.grid.three{grid-template-columns:1fr}}
+</style></head>
+<body>
+<div class="layout">
+<aside class="side">
+  <h2>Document Set</h2>
+  <nav class="docnav">
+    <a href="index.html">문서 포털</a>
+    <a href="00_prd_revised.html">Revised PRD</a>
+    <a href="01_product_design_spec.html">Product Design Spec</a>
+    <a href="02_technical_architecture_spec.html">Technical Architecture Spec</a>
+    <a href="03_data_model_spec.html">Data Model Spec</a>
+    <a href="04_api_mcp_spec.html">Pull API &amp; MCP Spec</a>
+    <a href="05_security_governance_spec.html">Security &amp; Governance Spec</a>
+    <a href="06_mvp_execution_plan.html">MVP Execution Plan</a>
+    <a class="active" href="implementation-notes.html">Implementation Notes</a>
+  </nav>
+  <h2>On this page</h2>
+  <nav class="localnav">
+    <a href="#overview">Overview</a>
+    <a href="#deviations">Intentional Deviations</a>
+    <a href="#gaps">Known Gaps</a>
+    <a href="#commits">Commit Reference</a>
+  </nav>
+  <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
+</aside>
+<main class="main">
+  <header class="hero">
+    <div class="kicker">What's in My Claude Code · Implementation Notes · 2026-05-19</div>
+    <h1>Implementation Notes</h1>
+    <p>slice-1 구현 중 사양에서 벗어났거나 해석이 필요했던 결정들을 기록한다. branch: <code>slice1-transcript</code></p>
+    <div class="badges">
+      <span class="badge">slice-1</span>
+      <span class="badge">transcript-ingest</span>
+      <span class="badge">deviations</span>
+    </div>
+  </header>
+
+  <section id="overview">
+    <h2><span class="num">00</span>Overview</h2>
+    <p>이 문서는 <code>docs/superpowers/specs/2026-05-19-witmcc-slice1-transcript-design.md</code> 및
+    <code>docs/superpowers/plans/2026-05-19-witmcc-slice1-transcript.md</code> 대비 실제 구현의 차이를 기록한다.
+    CLAUDE.md 지침에 따라 설계 결정, 편차, 트레이드오프, 열린 질문을 모두 포함한다.</p>
+    <div class="callout good">
+      <strong>전체 상태:</strong> slice-1 완료. 22개 테스트 통과. Pull API 4 endpoint 정상 동작.
+    </div>
+    <p>아래 각 항목은 의도적 편차(Intentional Deviation)로 분류하며, 사양 위반이 아닌
+    구현 과정에서 내린 유효한 해석 또는 확장이다.</p>
+  </section>
+
+  <section id="deviations">
+    <h2><span class="num">01</span>Intentional Deviations</h2>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-01</span>
+        <strong>Rust toolchain: 1.78 → 1.88</strong>
+        <span class="pill amber">toolchain</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> plan의 Cargo.toml bootstrap에서 MSRV <code>1.78</code>로 명시.</p>
+        <p><strong>실제 구현:</strong> <code>Cargo.toml</code>의 <code>rust-version = "1.88"</code>.
+        <code>axum</code> / <code>sqlx</code> 등 transitive dependency가 1.78로 컴파일되지 않아 최신 stable(1.88)로 상향.</p>
+        <p><strong>영향:</strong> 로컬 개발 환경 요구사항 상승. 1.78 환경에서는 빌드 불가.</p>
+        <p><strong>관련 커밋:</strong> <a href="#commit-2288329"><code>2288329</code></a></p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-02</span>
+        <strong><code>cli.bind</code> 타입: <code>String</code> → <code>std::net::IpAddr</code></strong>
+        <span class="pill blue">cli</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> <code>bind</code>를 문자열로 처리.</p>
+        <p><strong>실제 구현:</strong> clap 인수 파싱 단계에서 <code>IpAddr</code>로 직접 파싱하여
+        잘못된 IP 주소 입력을 CLI 레벨에서 즉시 거부한다.</p>
+        <p><strong>트레이드오프:</strong> 검증이 런타임보다 이르게 발생. hostname 형식은 허용하지 않음.
+        loopback enforcement가 <code>is_loopback()</code> 체크로 단순화됨.</p>
+        <p><strong>관련 커밋:</strong> <a href="#commit-944ca53"><code>944ca53</code></a></p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-03</span>
+        <strong>loopback 범위: <code>127.0.0.1</code> 단일 → <code>is_loopback()</code> (<code>127.0.0.0/8</code> + <code>::1</code>)</strong>
+        <span class="pill blue">serve</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> <code>127.0.0.1</code> 엄격 바인딩 명시.</p>
+        <p><strong>실제 구현:</strong> <code>IpAddr::is_loopback()</code>을 사용하므로
+        <code>127.x.x.x</code> 전체 및 IPv6 <code>::1</code>도 허용.</p>
+        <p><strong>보안 영향:</strong> <code>127.0.0.0/8</code> 전체는 모두 loopback이므로
+        실제 LAN/WAN 노출 없음. 일반 HTTP/1.1 브라우저 트래픽 기준으로는 동등.</p>
+        <p><strong>관련 커밋:</strong> <a href="#commit-944ca53"><code>944ca53</code></a></p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-04</span>
+        <strong><code>tool_call_to_result</code> 엣지: dangling-only → matched self-loop 추가</strong>
+        <span class="pill violet">graph</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양/plan 원문:</strong> dangling tool_result에 대해서만 <code>tool_call_to_result</code>
+        엣지를 emit한다.</p>
+        <p><strong>실제 구현:</strong> matched call (tool_result payload가 tool_call 노드에 병합된 경우)도
+        self-loop 엣지를 emit하되 <code>attributes.merged = true</code>를 설정한다.
+        (<code>from == to == tool_call node id</code>)</p>
+        <p><strong>이유:</strong> graph 소비자가 결과 존재 여부를 엣지로 쿼리할 수 있어야 하며,
+        단순 노드 payload lookup보다 그래프 traversal이 일관됨. 결정론 테스트에서 이 동작을 검증.</p>
+        <p><strong>관련 커밋:</strong> <a href="#commit-2673333"><code>2673333</code></a>, <a href="#commit-5fdc9ff"><code>5fdc9ff</code></a></p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-05</span>
+        <strong><code>by_event_uuid</code> 병합 후 result UUID 재매핑</strong>
+        <span class="pill violet">graph</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> 명시 없음 (구현 세부사항).</p>
+        <p><strong>실제 구현:</strong> <code>graph::compute</code>에서 tool_result payload를
+        tool_call 노드에 병합한 뒤, <code>by_event_uuid[result_uuid]</code>를
+        surviving call 노드를 가리키도록 갱신한다.</p>
+        <p><strong>이유:</strong> <code>message_reply</code> 엣지가 result uuid를 참조할 때
+        dangling edge가 되는 것을 방지. UUID 재매핑 없이는 "sidechain" 시나리오 테스트가 실패함.</p>
+        <p><strong>관련 커밋:</strong> <a href="#commit-2673333"><code>2673333</code></a>, <a href="#commit-5fdc9ff"><code>5fdc9ff</code></a></p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-06</span>
+        <strong><code>host_allowlist</code> 미들웨어: <code>Host</code> 헤더 부재 시 <code>uri.authority()</code> fallback</strong>
+        <span class="pill blue">api</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> Host 헤더 기반 allowlist 검사 명시.</p>
+        <p><strong>실제 구현:</strong> <code>Host</code> 헤더가 없으면 <code>uri.authority()</code>를
+        대신 사용해 allowlist를 검사한다. 헤더도 authority도 없으면 통과.</p>
+        <p><strong>이유:</strong> <code>axum-test</code>의 in-process HTTP 테스트 클라이언트가
+        Host 헤더를 포함하지 않음. 실제 HTTP/1.1 브라우저는 항상 Host를 전송하므로
+        프로덕션 보안 등가.</p>
+        <p><strong>관련 커밋:</strong> <a href="#commit-cd6398f"><code>cd6398f</code></a></p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-07</span>
+        <strong><code>FileHistorySnapshotRecord</code>: <code>sessionId</code> 미파싱</strong>
+        <span class="pill amber">ingest</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> 모든 JSONL record 타입에서 session_id 추출 기대.</p>
+        <p><strong>실제 구현:</strong> 실제 JSONL <code>file-history-snapshot</code> 레코드에
+        <code>sessionId</code> 필드가 없음. 파싱 시 빈 session_id로 저장되며
+        세션 범위 쿼리에서 제외됨.</p>
+        <p><strong>영향:</strong> <code>file-history-snapshot</code> ObservedEvent는 DB에 저장되지만
+        <code>/v1/sessions/{id}</code> 응답에 포함되지 않음.</p>
+        <p><strong>후속 작업:</strong> 인접 레코드의 session_id를 역방향으로 전파하는 로직이 필요
+        (future slice).</p>
+        <p><strong>관련 커밋:</strong> <a href="#commit-38b6439"><code>38b6439</code></a>, <a href="#commit-b077ca5"><code>b077ca5</code></a></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="gaps">
+    <h2><span class="num">02</span>Known Gaps / Follow-ups</h2>
+    <div class="callout warn">
+      아래 항목은 사양에서 정의되었으나 slice-1 범위에서 구현되지 않은 기능 및
+      추후 슬라이스에서 해결해야 할 사항이다.
+    </div>
+    <ul>
+      <li><strong>No live tail / file watcher.</strong> <code>ingest</code>를 재실행해야 새 JSONL 라인을 수집한다. 멱등(idempotent).</li>
+      <li><strong>No redaction.</strong> <code>--all</code> 인제스트는 raw JSONL에서 secrets를 그대로 수집할 수 있다. 사용 전 주의 필요.</li>
+      <li><strong>Pagination hard limit only.</strong> <code>next_cursor</code>는 항상 <code>null</code>. 커서 기반 페이지네이션 미구현.</li>
+      <li><strong>No MCP server.</strong> MCP Streamable HTTP endpoint는 later slice.</li>
+      <li><strong>No UI.</strong> causal replay, why panel, finding 등 UX는 later slice.</li>
+      <li><strong>No findings engine.</strong> <code>Finding</code> / <code>RootCauseHypothesis</code> / <code>QualitySummary</code> 생성 미구현.</li>
+      <li><strong><code>SystemRecord</code> fixture 없음.</strong> 실제 JSONL에 type=<code>system</code> 레코드 2건이 존재하나 테스트 fixture 미포함.</li>
+      <li><strong><code>_sqlx_migrations</code> bin version 검증 미구현.</strong> <code>serve</code> 명령은 <code>observed_event</code> 테이블 존재 여부만 확인하고 migration 버전을 검증하지 않는다.</li>
+      <li><strong>OTel / Hook / File-Git 수집기 없음.</strong> transcript JSONL만 지원. 나머지 source layer는 later slice.</li>
+    </ul>
+  </section>
+
+  <section id="commits">
+    <h2><span class="num">03</span>Commit Reference</h2>
+    <p>각 편차와 관련된 커밋 SHA (slice-1 branch <code>slice1-transcript</code>).</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Deviation</th>
+          <th>Short SHA</th>
+          <th>Full SHA</th>
+          <th>Subject</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>DEV-01 (MSRV bump)</td>
+          <td><code id="commit-2288329">2288329</code></td>
+          <td><code>22883292ed9e0709b79520d615157f0439d91021</code></td>
+          <td>chore: cargo bootstrap (witmcc slice-1)</td>
+        </tr>
+        <tr>
+          <td>DEV-02, DEV-03 (IpAddr, loopback)</td>
+          <td><code id="commit-944ca53">944ca53</code></td>
+          <td><code>944ca53aff3ffba429e47eaa0492f84013cf0699</code></td>
+          <td>feat(cli): wire serve subcommand (loopback-only, --auto-migrate)</td>
+        </tr>
+        <tr>
+          <td>DEV-06 (host allowlist fallback)</td>
+          <td><code id="commit-cd6398f">cd6398f</code></td>
+          <td><code>cd6398f15a160f7f6c2d32c809f3128db41a6fe6</code></td>
+          <td>feat(api): GET /v1/health|sessions|sessions/:id|graph + host allowlist</td>
+        </tr>
+        <tr>
+          <td>DEV-04, DEV-05 (graph edge rules)</td>
+          <td><code id="commit-2673333">2673333</code></td>
+          <td><code>2673333e2abcac1bd4d9942f921aee01957ccbc1</code></td>
+          <td>feat(graph): deterministic rebuild_session (3 edge kinds, hash-derived ids)</td>
+        </tr>
+        <tr>
+          <td>DEV-07 (FileHistorySnapshot sessionId)</td>
+          <td><code id="commit-38b6439">38b6439</code></td>
+          <td><code>38b6439c99b49b1cf4d4485003f7d15bc6671aad</code></td>
+          <td>feat(ingest): JSONL streaming parser + ParsedRecord taxonomy</td>
+        </tr>
+        <tr>
+          <td>DEV-07 (ObservedEvent mapping)</td>
+          <td><code id="commit-b077ca5">b077ca5</code></td>
+          <td><code>b077ca5d354cd7906bbfdd8b47c6c7bfae33033c</code></td>
+          <td>feat(ingest): ParsedRecord -&gt; ObservedEvent mapping (content split, hook node)</td>
+        </tr>
+        <tr>
+          <td>DEV-04, DEV-05 (regression tests)</td>
+          <td><code id="commit-5fdc9ff">5fdc9ff</code></td>
+          <td><code>5fdc9ffea2e4c8807965f839bc08734a234b5e60</code></td>
+          <td>test(graph): determinism + dangling + sidechain regression suite</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer class="footer">
+    <p>What's in My Claude Code · Implementation Notes · slice-1 · 2026-05-19 · branch: slice1-transcript</p>
+    <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
+  </footer>
+</main>
+</div>
+</body></html>
