@@ -176,3 +176,33 @@ async fn post_traces_without_session_id_skips_session_listing() {
     let arr = listed["data"].as_array().unwrap();
     assert!(arr.iter().all(|s| s["session_id"] != ""));
 }
+
+#[tokio::test]
+async fn session_detail_returns_otel_span_with_telemetry() {
+    let pool = make_pool().await;
+    let body = fixture("tests/fixtures/otel/single_span.json");
+    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now())
+        .await
+        .unwrap();
+
+    let app = witmcc::api::router(pool);
+    let server = TestServer::new(app).unwrap();
+
+    let resp = server.get("/v1/sessions/sess-otel-A").await;
+    resp.assert_status_ok();
+    let v: serde_json::Value = resp.json();
+
+    let events = v["data"]["events"].as_array().expect("events array");
+    let otel_event = events
+        .iter()
+        .find(|e| e["kind"] == "otel_span")
+        .expect("otel_span event present in session detail");
+    assert_eq!(otel_event["kind"], "otel_span");
+    assert!(
+        !otel_event["telemetry"].is_null(),
+        "telemetry facet must be populated on the wire"
+    );
+    assert_eq!(otel_event["telemetry"]["span_name"], "tool.invoke");
+    assert_eq!(otel_event["trace_id"], "5b8aa5a2d2c872e8321cf37308d69df2");
+    assert_eq!(otel_event["span_id"], "051581bf3cb55c13");
+}
