@@ -3482,6 +3482,7 @@ dependencies = [
  "chrono",
  "clap",
  "dirs",
+ "flate2",
  "futures",
  "hex",
  "http-body-util",
