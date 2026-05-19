@@ -64,4 +64,29 @@ describe('Timeline', () => {
     );
     expect(container.querySelectorAll('[data-testid="edge-path"]').length).toBe(1);
   });
+
+  it('renders an otel_span node marker (regression for slice-3)', () => {
+    const graph: GraphPayload = {
+      nodes: [
+        {
+          node_id: 'nd_o_1',
+          schema_version: '0.2.0',
+          session_id: 's',
+          node_kind: 'otel_span',
+          started_at: '2026-05-19T00:00:00Z',
+          ended_at: '2026-05-19T00:00:01Z',
+          merge_keys: { trace_id: 't', span_id: 's' },
+          source_event_ids: ['ev_o_1'],
+          source_uris: [],
+          payload: {},
+        },
+      ],
+      edges: [],
+    };
+    render(<Timeline graph={graph} selectedNodeId={null} onSelect={() => {}} />);
+    const marker = document.querySelector('[data-node-id="nd_o_1"]');
+    expect(marker).not.toBeNull();
+    expect(screen.getByText('OTel')).toBeInTheDocument();
+    expect(screen.queryByText(/no OTel observed/i)).toBeNull();
+  });
 });
