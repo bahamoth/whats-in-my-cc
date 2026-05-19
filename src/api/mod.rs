@@ -1,6 +1,7 @@
 pub mod dto;
 pub mod middleware;
 pub mod routes;
+pub mod static_assets;
 
 use axum::{middleware as axum_mw, routing::get, Router};
 use sqlx::SqlitePool;
@@ -12,6 +13,7 @@ pub fn router(pool: SqlitePool) -> Router {
         .route("/v1/sessions/:id", get(routes::session_detail))
         .route("/v1/sessions/:id/graph", get(routes::session_graph))
         .route("/v1/events/:event_id/raw", get(routes::event_raw))
+        .fallback(static_assets::spa_handler)
         .layer(axum_mw::from_fn(middleware::host_allowlist))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(pool)
