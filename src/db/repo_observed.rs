@@ -82,7 +82,8 @@ pub async fn list_sessions(pool: &SqlitePool, limit: i64) -> Result<Vec<SessionR
                 MIN(observed_at) AS first_observed_at,
                 MAX(observed_at) AS last_observed_at,
                 COUNT(*)         AS event_count
-         FROM observed_event GROUP BY session_id ORDER BY last_observed_at DESC LIMIT ?",
+         FROM observed_event WHERE session_id != ''
+         GROUP BY session_id ORDER BY last_observed_at DESC LIMIT ?",
     )
     .bind(limit)
     .fetch_all(pool)

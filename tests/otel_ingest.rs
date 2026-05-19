@@ -132,3 +132,47 @@ async fn post_traces_with_non_json_body_is_400() {
         .await;
     resp.assert_status(axum::http::StatusCode::BAD_REQUEST);
 }
+
+use std::io::Write;
+
+fn gzip(bytes: &[u8]) -> Vec<u8> {
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    let mut enc = GzEncoder::new(Vec::new(), Compression::default());
+    enc.write_all(bytes).unwrap();
+    enc.finish().unwrap()
+}
+
+#[tokio::test]
+async fn post_traces_gzip_body_is_decompressed() {
+    let s = http_setup().await;
+    let body = fixture("tests/fixtures/otel/parent_child.json");
+    let bytes = serde_json::to_vec(&body).unwrap();
+    let gz = gzip(&bytes);
+    let resp = s
+        .post("/otel/v1/traces")
+        .add_header("content-type", "application/json")
+        .add_header("content-encoding", "gzip")
+        .bytes(gz.into())
+        .await;
+    resp.assert_status_ok();
+    let v: serde_json::Value = resp.json();
+    assert_eq!(v["data"]["accepted_spans"], 2);
+}
+
+#[tokio::test]
+async fn post_traces_without_session_id_skips_session_listing() {
+    let s = http_setup().await;
+    let body = fixture("tests/fixtures/otel/missing_session_id.json");
+    let resp = s.post("/otel/v1/traces").json(&body).await;
+    resp.assert_status_ok();
+    let v: serde_json::Value = resp.json();
+    assert_eq!(v["data"]["accepted_spans"], 1);
+    assert!(
+        v["data"]["sessions_touched"].as_array().unwrap().is_empty(),
+        "no session.id means no session listed"
+    );
+    let listed: serde_json::Value = s.get("/v1/sessions").await.json();
+    let arr = listed["data"].as_array().unwrap();
+    assert!(arr.iter().all(|s| s["session_id"] != ""));
+}
