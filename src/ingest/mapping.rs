@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-use crate::error::{Result, WitmccError};
+use crate::error::Result;
 use crate::ids::MonotonicUlidGen;
 use crate::ingest::transcript::{AssistantRecord, LineMeta, ParsedRecord, UserRecord};
 use crate::model::meta::{PARSER_VERSION_TRANSCRIPT, SCHEMA_VERSION};
@@ -34,7 +34,10 @@ pub fn map_record(
             json!({"leafUuid": l.leaf_uuid}),
         )]),
         ParsedRecord::FileHistorySnapshot(f) => Ok(vec![file_history(meta, raw_event_id, gen, f)]),
-        ParsedRecord::Unknown(_) => Err(WitmccError::Invalid("unknown record type".into())),
+        // Unknown record types are preserved in raw_event but produce no ObservedEvent.
+        // Returning an error here would abort the entire ingest run for benign unknown types
+        // like hook_success, hook_additional_context, etc.
+        ParsedRecord::Unknown(_) => Ok(vec![]),
     }
 }
 
