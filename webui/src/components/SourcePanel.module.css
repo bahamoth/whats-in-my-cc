@@ -1,0 +1,6 @@
+.panel { background: #fff; border: 1px solid #e3e6eb; border-radius: 8px; padding: 16px; min-height: 480px; overflow: auto; }
+.hint { color: #6b7280; font-style: italic; }
+.header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+.type { font-weight: 600; }
+.source { font: 12px ui-monospace, SFMono-Regular, monospace; color: #6b7280; }
+.body { font: 12px ui-monospace, SFMono-Regular, monospace; }
