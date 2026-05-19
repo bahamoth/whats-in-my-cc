@@ -9,7 +9,7 @@ use serde_json::json;
 use sqlx::SqlitePool;
 
 use crate::api::dto::*;
-use crate::db::{repo_graph, repo_observed};
+use crate::db::{repo_graph, repo_observed, repo_raw};
 use crate::model::meta::{Envelope, ResponseMeta};
 
 #[derive(Deserialize)]
@@ -111,6 +111,54 @@ pub async fn session_graph(
                 .iter()
                 .map(|e| serde_json::to_value(e).unwrap())
                 .collect(),
+        },
+    }))
+}
+
+pub async fn event_raw(
+    State(pool): State<SqlitePool>,
+    Path(event_id): Path<String>,
+) -> Result<Json<Envelope<RawEventResponse>>, (StatusCode, Json<serde_json::Value>)> {
+    let row = repo_raw::get_for_event_id(&pool, &event_id)
+        .await
+        .expect("db");
+    let row = match row {
+        Some(r) => r,
+        None => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "RESOURCE_NOT_FOUND",
+                    "detail": format!("event {event_id} not found")
+                })),
+            ));
+        }
+    };
+
+    let record = match std::str::from_utf8(&row.payload)
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+    {
+        Some(v) => v,
+        None => serde_json::Value::Null,
+    };
+
+    Ok(Json(Envelope {
+        meta: ResponseMeta::now(),
+        data: RawEventResponse {
+            schema_version: crate::model::meta::SCHEMA_VERSION.into(),
+            event_id: row.event_id,
+            session_id: row.session_id,
+            source: RawSource {
+                kind: row.source_type,
+                file_path: row.source_uri,
+                line_no: row.source_line_no,
+                ingested_at: row.captured_at,
+            },
+            record,
+            record_type: row.kind,
+            redaction_state: "none".into(),
         },
     }))
 }

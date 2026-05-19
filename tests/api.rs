@@ -5,7 +5,7 @@ use witmcc::db::migrate;
 use witmcc::graph::build;
 use witmcc::ingest::store;
 
-async fn setup() -> TestServer {
+async fn make_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(2)
         .connect("sqlite::memory:")
@@ -19,8 +19,20 @@ async fn setup() -> TestServer {
     .await
     .unwrap();
     build::rebuild_session(&pool, "sess-A").await.unwrap();
+    pool
+}
+
+async fn setup() -> TestServer {
+    let pool = make_pool().await;
     let app = witmcc::api::router(pool);
     TestServer::new(app).unwrap()
+}
+
+async fn setup_with_pool() -> (sqlx::SqlitePool, TestServer) {
+    let pool = make_pool().await;
+    let app = witmcc::api::router(pool.clone());
+    let server = TestServer::new(app).unwrap();
+    (pool, server)
 }
 
 #[tokio::test]
@@ -62,4 +74,31 @@ async fn missing_session_is_404() {
     s.get("/v1/sessions/missing/graph")
         .await
         .assert_status(axum::http::StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn raw_endpoint_returns_record() {
+    let (pool, server) = setup_with_pool().await;
+    let event_id: String = sqlx::query_scalar("SELECT event_id FROM observed_event LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let resp = server.get(&format!("/v1/events/{event_id}/raw")).await;
+    resp.assert_status_ok();
+    let body: serde_json::Value = resp.json();
+    assert_eq!(body["data"]["event_id"], event_id);
+    assert!(body["data"]["source"]["file_path"].is_string());
+    assert_eq!(body["data"]["source"]["kind"], "claude_transcript");
+    assert!(body["data"]["record"].is_object());
+    assert!(body["data"]["record_type"].is_string());
+    assert_eq!(body["data"]["redaction_state"], "none");
+}
+
+#[tokio::test]
+async fn raw_endpoint_404_for_unknown_event() {
+    let (pool, server) = setup_with_pool().await;
+    drop(pool);
+    let resp = server.get("/v1/events/no_such_event/raw").await;
+    resp.assert_status_not_found();
 }
