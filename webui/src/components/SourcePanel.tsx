@@ -51,6 +51,21 @@ export function SourcePanel({ eventId }: Props) {
               <span>:{state.data.source.line_no}</span>
             </span>
           </header>
+          {state.data.record_type === 'otel_span' && state.data.telemetry?.attributes && (
+            <section className={styles.attributes} aria-labelledby="otel-attrs-heading">
+              <h4 id="otel-attrs-heading">Attributes</h4>
+              <table>
+                <tbody>
+                  {Object.entries(state.data.telemetry.attributes).map(([k, v]) => (
+                    <tr key={k}>
+                      <td className={styles.attrKey}>{k}</td>
+                      <td className={styles.attrValue}>{String(v)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
           <div className={styles.body}>
             <JsonView data={state.data.record} />
           </div>
