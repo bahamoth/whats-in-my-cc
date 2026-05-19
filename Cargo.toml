@@ -35,6 +35,8 @@ tokio-stream       = { version = "0.1", features = ["io-util"] }
 sha2               = "0.10"
 hex                = "0.4"
 once_cell          = "1"
+rust-embed         = { version = "8", features = ["interpolate-folder-path"] }
+mime_guess         = "2"
 
 [dev-dependencies]
 assert-json-diff   = "2"
