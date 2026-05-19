@@ -39,6 +39,32 @@ cargo test
 - `tool_call_to_result` edges appear as a self-loop (`from == to == tool_call`) with `attributes.merged = true` for matched calls; dangling tool_results get a regular call→result edge.
 - `last-prompt`, `permission-mode`, `file-history-snapshot`, `thinking`, and non-hook `attachment` events are preserved as ObservedEvents but do not get their own graph nodes.
 
+## Web UI (slice-2)
+
+The `witmcc` binary embeds a small React SPA at runtime. Build it once before
+`cargo build`:
+
+```
+just webui-build      # cd webui && npm install && npm run build
+just build-release    # cargo build --release
+./target/release/witmcc serve --auto-migrate
+# then open http://127.0.0.1:7878/
+```
+
+For frontend-only iteration:
+
+```
+just serve-dev        # axum on 127.0.0.1:7878
+just webui-dev        # vite on 127.0.0.1:5173, proxies /v1 → 7878
+```
+
+The SPA has two pages:
+
+- `/sessions` — session list
+- `/sessions/:id` — six-lane timeline + raw source panel
+
+Node 20 is required; see `webui/.nvmrc`.
+
 ## Reference docs
 
 - Spec (this slice): `docs/superpowers/specs/2026-05-19-witmcc-slice1-transcript-design.md`

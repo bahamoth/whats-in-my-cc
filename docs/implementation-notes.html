@@ -41,10 +41,13 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   </nav>
   <h2>On this page</h2>
   <nav class="localnav">
-    <a href="#overview">Overview</a>
-    <a href="#deviations">Intentional Deviations</a>
-    <a href="#gaps">Known Gaps</a>
-    <a href="#commits">Commit Reference</a>
+    <a href="#overview">Overview (slice-1)</a>
+    <a href="#deviations">Intentional Deviations (slice-1)</a>
+    <a href="#gaps">Known Gaps (slice-1)</a>
+    <a href="#commits">Commit Reference (slice-1)</a>
+    <a href="#slice2-overview">Overview (slice-2)</a>
+    <a href="#slice2-deviations">Intentional Deviations (slice-2)</a>
+    <a href="#slice2-commits">Commit Reference (slice-2)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
 </aside>
@@ -272,8 +275,172 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </table>
   </section>
 
+  <section id="slice2-overview">
+    <h2><span class="num">04</span>Slice-2 Overview</h2>
+    <p>이 섹션은 <code>slice2-replay-ui</code> branch에서 구현된 Web UI(React SPA + rust-embed)와
+    관련 API 확장의 편차 및 결정을 기록한다.</p>
+    <div class="callout good">
+      <strong>전체 상태:</strong> slice-2 완료. SPA 임베드, six-lane Timeline, SourcePanel, GET /v1/events/:id/raw 정상 동작.
+    </div>
+    <p>아래 각 항목은 의도적 편차(Intentional Deviation)로 분류하며, 사양 위반이 아닌
+    구현 과정에서 내린 유효한 해석 또는 확장이다.</p>
+  </section>
+
+  <section id="slice2-deviations">
+    <h2><span class="num">05</span>Slice-2 Intentional Deviations</h2>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S2-01</span>
+        <strong><code>event_id</code> lookup key instead of <code>event_uuid</code></strong>
+        <span class="pill violet">api</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> <code>event_uuid</code>를 raw record lookup key로 명시.</p>
+        <p><strong>실제 구현:</strong> <code>observed_event</code> PK인 <code>event_id</code> (ULID)를 사용.
+        일부 레코드 타입(<code>file-history-snapshot</code>)은 <code>event_uuid</code>를 포함하지 않아
+        <code>event_uuid</code>만으로는 모든 이벤트를 식별할 수 없음.
+        클라이언트는 <code>graph_node.source_event_ids[0]</code>를 사용해 <code>event_id</code>를 참조한다.</p>
+        <p><strong>영향:</strong> API path는 <code>/v1/events/:event_id/raw</code>. 기존 <code>event_uuid</code>
+        기반 참조가 있다면 <code>event_id</code>로 전환 필요.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S2-02</span>
+        <strong>SPA fallback returns 200 for unknown routes</strong>
+        <span class="pill blue">serve</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> 명시 없음 (SPA routing 세부사항).</p>
+        <p><strong>실제 구현:</strong> axum <code>.fallback(spa_handler)</code>는 non-asset path에 대해
+        <code>index.html</code>을 status <code>200</code>으로 반환한다. SPA의 <code>*</code> 라우트가
+        클라이언트 측에서 "not found"를 표시한다.</p>
+        <p><strong>이유:</strong> deep-link refresh가 정상 동작해야 하므로 의도적. <code>/random-path</code>로
+        접근해도 200이 반환되며 SPA가 라우팅을 처리한다.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S2-03</span>
+        <strong><code>webui/dist/</code> is build-required, not committed</strong>
+        <span class="pill amber">toolchain</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> 명시 없음 (빌드 아티팩트 관리 세부사항).</p>
+        <p><strong>실제 구현:</strong> <code>webui/dist/</code>는 완전히 gitignore 처리됨.
+        README 및 justfile에서 <code>just webui-build</code>를 <code>cargo build</code> 전에 실행하도록 안내.
+        <code>build.rs</code> 자동화를 통한 통합은 cargo-only 소비자에게 Node 툴체인을 강제하게 되므로 채택하지 않음.</p>
+        <p><strong>트레이드오프:</strong> 빌드 단계가 명시적이고 분리됨. rust-embed가 dist 파일을
+        컴파일 시점에 포함하므로 <code>webui-build</code> 없이 <code>cargo build</code>하면 embedded SPA가
+        없는 바이너리가 생성됨 (static_serve 테스트 실패 포함).</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S2-04</span>
+        <strong>Lane mapping is client-side</strong>
+        <span class="pill blue">webui</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> 명시 없음 (lane 분류 책임 소재).</p>
+        <p><strong>실제 구현:</strong> <code>node_kind → lane</code> 매핑은 TypeScript 상수
+        (<code>webui/src/api/laneMapping.ts</code>)에 정의됨. 서버 응답에는 포함되지 않음.</p>
+        <p><strong>트레이드오프:</strong> 새로운 <code>node_kind</code>가 추가되면 webui 변경이 필요하지만,
+        서버 응답 스키마는 안정적으로 유지됨. 서버 사이드 lane 매핑은 API 계약 변경 없이
+        클라이언트 독립적 진화를 방해함.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S2-05</span>
+        <strong><code>source.kind</code> passes raw DB value</strong>
+        <span class="pill amber">api</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> <code>source.kind</code>를 정규화된 값(예: <code>"transcript"</code>)으로 반환.</p>
+        <p><strong>실제 구현:</strong> endpoint는 raw <code>raw_event.source_type</code> 값
+        (<code>"claude_transcript"</code>)을 그대로 반환함. ingest layer의 식별자와 직접 추적 가능하며
+        정규화 레이어 없이 provenance를 보존함.</p>
+        <p><strong>영향:</strong> 클라이언트가 <code>"transcript"</code>가 아닌 <code>"claude_transcript"</code>를
+        기대해야 함. 추후 정규화 레이어 추가 시 breaking change 가능.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="slice2-commits">
+    <h2><span class="num">06</span>Slice-2 Commit Reference</h2>
+    <p>각 편차와 관련된 커밋 SHA (slice-2 branch <code>slice2-replay-ui</code>).</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Short SHA</th>
+          <th>Subject</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>15f6821</code></td>
+          <td>chore(slice-2): add rust-embed + mime_guess deps, webui/dist placeholder</td>
+        </tr>
+        <tr>
+          <td><code>b35fcb2</code></td>
+          <td>feat(db): repo_raw::get_for_event_id (observed↔raw join for raw endpoint)</td>
+        </tr>
+        <tr>
+          <td><code>8f8c071</code></td>
+          <td>style: cargo fmt for repo_raw::get_for_event_id</td>
+        </tr>
+        <tr>
+          <td><code>40856b3</code></td>
+          <td>feat(api): GET /v1/events/:event_id/raw — raw transcript record for evidence panel</td>
+        </tr>
+        <tr>
+          <td><code>2c5f78e</code></td>
+          <td>style(api): consolidate SCHEMA_VERSION import + derive style consistency</td>
+        </tr>
+        <tr>
+          <td><code>30ddd52</code></td>
+          <td>feat(api): rust-embed SPA fallback handler + placeholder dist/index.html</td>
+        </tr>
+        <tr>
+          <td><code>48e92ee</code></td>
+          <td>feat(webui): Vite + React + TS scaffold with router skeleton</td>
+        </tr>
+        <tr>
+          <td><code>519f975</code></td>
+          <td>chore(slice-2): commit webui lockfile + justfile for build/dev orchestration</td>
+        </tr>
+        <tr>
+          <td><code>de1b172</code></td>
+          <td>feat(webui): typed API client + lane mapping + unit tests</td>
+        </tr>
+        <tr>
+          <td><code>e5a9571</code></td>
+          <td>feat(webui): SessionListPage with empty/error/loading states + sort by last_observed_at</td>
+        </tr>
+        <tr>
+          <td><code>c849585</code></td>
+          <td>feat(webui): Timeline component — six lanes, node markers, edges, click handler</td>
+        </tr>
+        <tr>
+          <td><code>39bee2b</code></td>
+          <td>feat(webui): SourcePanel — lazy raw fetch + JsonView + 404/410 states</td>
+        </tr>
+        <tr>
+          <td><code>1363e8e</code></td>
+          <td>feat(webui): SessionDetailPage — parallel fetch + timeline + SourcePanel wiring</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 · 2026-05-19 · branch: slice1-transcript</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 · 2026-05-19 · branch: slice2-replay-ui</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
