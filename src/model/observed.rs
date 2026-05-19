@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -37,6 +38,7 @@ pub enum EventKind {
     SessionState,
     FileHistorySnapshot,
     AttachmentMeta,
+    OtelSpan,
     #[default]
     Unknown,
 }
@@ -54,9 +56,26 @@ impl EventKind {
             EventKind::SessionState => "session_state",
             EventKind::FileHistorySnapshot => "file_history_snapshot",
             EventKind::AttachmentMeta => "attachment_meta",
+            EventKind::OtelSpan => "otel_span",
             EventKind::Unknown => "unknown",
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TelemetryFacet {
+    pub span_name: String,
+    pub span_kind: Option<String>,
+    pub status_code: Option<String>,
+    pub status_message: Option<String>,
+    pub start_unix_nano: i64,
+    pub end_unix_nano: i64,
+    #[serde(default)]
+    pub attributes: Value,
+    #[serde(default)]
+    pub resource: Value,
+    pub scope_name: Option<String>,
+    pub scope_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -85,6 +104,11 @@ pub struct ObservedEvent {
     pub user_type: Option<String>,
     pub entrypoint: Option<String>,
     pub cc_version: Option<String>,
-    pub payload: serde_json::Value,
+    pub trace_id: Option<String>,
+    pub span_id: Option<String>,
+    pub parent_span_id: Option<String>,
+    pub latency_ms: Option<i64>,
+    pub telemetry: Option<TelemetryFacet>,
+    pub payload: Value,
     pub parser_version: String,
 }

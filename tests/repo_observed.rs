@@ -1,6 +1,7 @@
+use chrono::Utc;
 use witmcc::db::{migrate, repo_observed, repo_raw, repo_runs};
 use witmcc::model::meta::{PARSER_VERSION_TRANSCRIPT, SCHEMA_VERSION};
-use witmcc::model::observed::{Actor, EventKind, ObservedEvent};
+use witmcc::model::observed::{Actor, EventKind, ObservedEvent, TelemetryFacet};
 
 use sqlx::sqlite::SqlitePoolOptions;
 
@@ -46,4 +47,79 @@ async fn insert_and_list_session_events() {
         .unwrap();
     assert_eq!(evs.len(), 1);
     assert_eq!(evs[0].event_id, "ev1");
+}
+
+#[tokio::test]
+async fn round_trip_preserves_telemetry_facet() {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    migrate(&pool).await.unwrap();
+
+    // Need a raw_event referenced by FK first.
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    repo_raw::insert_dedup(
+        &pool,
+        &repo_raw::NewRaw {
+            raw_event_id: "raw_test".into(),
+            ingest_run_id: run_id,
+            source_type: "otel".into(),
+            source_uri: "otel://traces/abc/spans/def".into(),
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: "deadbeef".into(),
+            payload: b"{}".to_vec(),
+            parse_error: None,
+            captured_at: Utc::now(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let event = ObservedEvent {
+        event_id: "ev_test".into(),
+        raw_event_id: "raw_test".into(),
+        schema_version: "0.2.0".into(),
+        session_id: "sess-otel".into(),
+        observed_at: Utc::now(),
+        actor: Actor::Tool,
+        kind: EventKind::OtelSpan,
+        trace_id: Some("5b8aa5a2d2c872e8321cf37308d69df2".into()),
+        span_id: Some("051581bf3cb55c13".into()),
+        parent_span_id: Some("0000000000000001".into()),
+        latency_ms: Some(123),
+        telemetry: Some(TelemetryFacet {
+            span_name: "tool.invoke".into(),
+            span_kind: Some("client".into()),
+            status_code: Some("ok".into()),
+            status_message: None,
+            start_unix_nano: 1_734_567_890_000_000_000,
+            end_unix_nano: 1_734_567_890_123_000_000,
+            attributes: serde_json::json!({"tool.name": "Bash"}),
+            resource: serde_json::json!({"service.name": "claude-code"}),
+            scope_name: Some("witmcc.test".into()),
+            scope_version: Some("0.1.0".into()),
+        }),
+        payload: serde_json::json!({"raw_span": {"name": "tool.invoke"}}),
+        parser_version: "otel@0.1.0".into(),
+        ..Default::default()
+    };
+
+    repo_observed::insert(&pool, &event).await.unwrap();
+    let rows = repo_observed::list_session(&pool, "sess-otel", 10)
+        .await
+        .unwrap();
+
+    assert_eq!(rows.len(), 1);
+    let got = &rows[0];
+    assert_eq!(got.kind, EventKind::OtelSpan);
+    assert_eq!(got.trace_id.as_deref(), Some("5b8aa5a2d2c872e8321cf37308d69df2"));
+    assert_eq!(got.span_id.as_deref(), Some("051581bf3cb55c13"));
+    assert_eq!(got.parent_span_id.as_deref(), Some("0000000000000001"));
+    assert_eq!(got.latency_ms, Some(123));
+    let tel = got.telemetry.as_ref().expect("telemetry facet round-trips");
+    assert_eq!(tel.span_name, "tool.invoke");
+    assert_eq!(tel.span_kind.as_deref(), Some("client"));
+    assert_eq!(tel.scope_name.as_deref(), Some("witmcc.test"));
 }
