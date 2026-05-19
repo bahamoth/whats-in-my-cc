@@ -48,6 +48,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice2-overview">Overview (slice-2)</a>
     <a href="#slice2-deviations">Intentional Deviations (slice-2)</a>
     <a href="#slice2-commits">Commit Reference (slice-2)</a>
+    <a href="#slice3-overview">Overview (slice-3)</a>
+    <a href="#slice3-deviations">Intentional Deviations (slice-3)</a>
+    <a href="#slice3-commits">Commit Reference (slice-3)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
 </aside>
@@ -437,6 +440,117 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
         </tr>
       </tbody>
     </table>
+  </section>
+
+  <section id="slice3-overview">
+    <h2><span class="num">07</span>Slice-3 Overview</h2>
+    <p><code>slice3-otel-receiver</code> branch — OTLP/JSON traces receiver
+    + <code>telemetry</code> facet on ObservedEvent. CLAUDE.md "OTel-first" 원칙을
+    schema에 박는 작업.</p>
+    <div class="callout good">
+      <strong>전체 상태:</strong> slice-3 완료. POST /otel/v1/traces 정상 동작.
+      SCHEMA_VERSION 0.1.0 → 0.2.0.
+    </div>
+  </section>
+
+  <section id="slice3-deviations">
+    <h2><span class="num">08</span>Slice-3 Intentional Deviations</h2>
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S3-01</span>
+        <strong>OTLP/JSON only (no protobuf)</strong>
+        <span class="pill blue">api</span>
+      </div>
+      <div class="dev-body">
+        <p>OTLP/HTTP은 protobuf와 JSON 둘 다 지원하지만 slice-3는 JSON만 받는다.
+        SDK 측에서 <code>OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/json</code> 설정 필요.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S3-02</span>
+        <strong>Traces only — no metrics/logs</strong>
+        <span class="pill blue">api</span>
+      </div>
+      <div class="dev-body">
+        <p>metrics는 time-series 모델이라 ObservedEvent에 직접 매핑되지 않고,
+        logs는 traces가 가진 인과 정보 없이 양만 늘린다. 두 signal은 후속 슬라이스.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S3-03</span>
+        <strong>Telemetry facet stored inside <code>payload</code> JSON</strong>
+        <span class="pill violet">model</span>
+      </div>
+      <div class="dev-body">
+        <p>DB schema 변경 회피를 위해 facet은 <code>payload.telemetry</code> 키 아래
+        포함된다. <code>trace_id</code>/<code>span_id</code>/<code>parent_span_id</code>/
+        <code>latency_ms</code>는 top-level 컬럼 사용 — 인덱스 가능.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S3-04</span>
+        <strong>No transcript ↔ OTel merge in slice-3</strong>
+        <span class="pill amber">graph</span>
+      </div>
+      <div class="dev-body">
+        <p>Transcript producer가 아직 <code>trace_id</code>를 emit하지 않으므로
+        merge가 자동 발생하지 않는다. graph_node의 merge_keys에
+        <code>trace_id+span_id</code>는 깔려 있어 producer 추가 시 자동 동작.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S3-05</span>
+        <strong>No span_parent edges; otel_span nodes excluded from turn_order</strong>
+        <span class="pill amber">graph</span>
+      </div>
+      <div class="dev-body">
+        <p><code>parent_span_id</code>는 column에 저장되지만 <code>span_parent</code>
+        edge kind는 아직 emit하지 않는다. <code>turn_order</code> edge는 conversation
+        turn 의미라 otel_span 노드는 명시적으로 필터한다. 데이터 경로 우선 검증 후
+        후속 슬라이스에서 cross-kind correlation을 추가.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S3-06</span>
+        <strong><code>list_sessions</code> filters out empty session_id</strong>
+        <span class="pill amber">api</span>
+      </div>
+      <div class="dev-body">
+        <p>OTel span이 <code>session.id</code> attribute 없이 들어오면 DB에 빈 문자열로
+        저장된다. <code>GET /v1/sessions</code>는 <code>WHERE session_id != ''</code>로
+        이런 행을 응답에서 제외 — spec §6.3 에 정의된 동작.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="slice3-commits">
+    <h2><span class="num">09</span>Slice-3 Commit Reference</h2>
+    <p>커밋 SHA 목록 (slice-3 branch <code>slice3-otel-receiver</code>). PR 머지 시 squash 여부에 따라 SHA가 달라질 수 있다.</p>
+    <ul>
+      <li><code>ad9ca6d</code> — chore(meta): bump SCHEMA_VERSION 0.1.0 -&gt; 0.2.0; add PARSER_VERSION_OTEL</li>
+      <li><code>b637184</code> — feat(db): migration 0002 — trace_id/span_id partial index</li>
+      <li><code>a749243</code> — feat(model): TelemetryFacet + EventKind::OtelSpan + repo round-trip + raw endpoint telemetry</li>
+      <li><code>eedb996</code> — feat(ingest): OTLP/JSON parser — extract spans + flatten attributes</li>
+      <li><code>9805f18</code> — test(otel): JSON fixtures (single, parent/child, multi, missing-sid, malformed)</li>
+      <li><code>69c3291</code> — feat(ingest): otel::store — insert raw + observed with telemetry facet</li>
+      <li><code>e72098c</code> — refactor(ingest): flatten otel::store back to file scope</li>
+      <li><code>084db81</code> — feat(graph): materialize otel_span node with (trace_id, span_id) merge_keys</li>
+      <li><code>1807eb6</code> — feat(api): POST /otel/v1/traces — receive OTLP/JSON spans (gzip-aware)</li>
+      <li><code>6c8552d</code> — test(otel): gzip body decompression + missing session.id behaviour</li>
+      <li><code>d2af07b</code> — feat(webui): laneMapping otel_span -&gt; OTel</li>
+      <li><code>6ac4f96</code> — feat(webui): SourcePanel renders OTel Attributes section for otel_span records</li>
+      <li><code>482b46e</code> — test(webui): regression — otel_span node renders on OTel lane</li>
+    </ul>
   </section>
 
   <footer class="footer">
