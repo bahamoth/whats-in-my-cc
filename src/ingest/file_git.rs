@@ -26,7 +26,7 @@ pub const MAX_HUNKS_PER_COMMIT: usize = 2000;
 /// Hunk `patch_preview` is truncated to this many bytes (UTF-8 safe boundary).
 pub const PATCH_PREVIEW_MAX_BYTES: usize = 4 * 1024;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FileChange {
     Created,
