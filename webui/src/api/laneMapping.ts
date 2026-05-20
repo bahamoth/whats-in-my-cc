@@ -3,6 +3,7 @@ export const LANES = [
   'Context',
   'Action',
   'State',
+  'Hook',
   'OTel',
   'Quality',
 ] as const;
@@ -15,6 +16,7 @@ export function laneForNodeKind(kind: string): Lane | null {
     case 'tool_call':               return 'Action';
     case 'tool_result':             return 'Action'; // merged into tool_call, but defensive
     case 'file_history_snapshot':   return 'State';
+    case 'hook_event':              return 'Hook';
     case 'otel_span':               return 'OTel';
     default:                        return null;
   }

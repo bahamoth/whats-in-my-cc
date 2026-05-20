@@ -26,9 +26,9 @@ const fixture: GraphPayload = {
 describe('Timeline', () => {
   afterEach(() => { cleanup(); });
 
-  it('renders all six lanes', () => {
+  it('renders all seven lanes', () => {
     render(<Timeline graph={fixture} selectedNodeId={null} onSelect={vi.fn()} />);
-    for (const lane of ['Intent','Context','Action','State','OTel','Quality']) {
+    for (const lane of ['Intent','Context','Action','State','Hook','OTel','Quality']) {
       expect(screen.getByText(lane)).toBeInTheDocument();
     }
   });

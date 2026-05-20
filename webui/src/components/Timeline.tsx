@@ -14,6 +14,7 @@ const HEADER_WIDTH = 96;
 const NODE_RADIUS = 6;
 
 const PLACEHOLDERS: Partial<Record<(typeof LANES)[number], string>> = {
+  Hook: 'no hook events observed in this session',
   OTel: 'no OTel observed in this session',
   Quality: 'no findings yet',
 };
@@ -101,7 +102,7 @@ type Layout = {
 
 function buildLayout(graph: GraphPayload): { layout: Layout; width: number; height: number } {
   const byLane = {
-    Intent: [], Context: [], Action: [], State: [], OTel: [], Quality: [],
+    Intent: [], Context: [], Action: [], State: [], Hook: [], OTel: [], Quality: [],
   } as Layout['byLane'];
   for (const n of graph.nodes) {
     const lane = laneForNodeKind(n.node_kind);
