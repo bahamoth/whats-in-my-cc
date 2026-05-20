@@ -16,6 +16,140 @@ type HookRecord = {
   source?: string;
 };
 
+type FileEventRecord = {
+  file?: {
+    path?: string;
+    change_type?: string;
+    old_path?: string;
+    size_bytes?: number;
+    observed_at?: string;
+  };
+};
+
+type GitCommitRecord = {
+  git?: {
+    repo?: string;
+    sha?: string;
+    parents?: string[];
+    author?: { name?: string; email?: string; time?: string };
+    committer?: { name?: string; email?: string; time?: string };
+    message?: string;
+    branch?: string;
+    files_changed?: string[];
+  };
+};
+
+type DiffHunkRecord = {
+  hunk?: {
+    diff_hunk_id?: string;
+    file_path?: string;
+    change_type?: string;
+    line_range_after?: { start?: number; end?: number } | null;
+    introduced_by_commit_sha?: string;
+    patch_preview?: string;
+    lines_added?: number;
+    lines_removed?: number;
+  };
+};
+
+function FileEventSection({ record }: { record: unknown }) {
+  if (typeof record !== 'object' || record === null) return null;
+  const r = record as FileEventRecord;
+  const f = r.file;
+  if (!f) return null;
+  return (
+    <section className={styles.attributes} aria-labelledby="file-section-heading">
+      <h4 id="file-section-heading">{f.change_type ?? 'file_event'}</h4>
+      <table>
+        <tbody>
+          {f.path && (
+            <tr><td className={styles.attrKey}>path</td><td className={styles.attrValue}>{f.path}</td></tr>
+          )}
+          {f.old_path && (
+            <tr><td className={styles.attrKey}>old_path</td><td className={styles.attrValue}>{f.old_path}</td></tr>
+          )}
+          {typeof f.size_bytes === 'number' && (
+            <tr><td className={styles.attrKey}>size_bytes</td><td className={styles.attrValue}>{f.size_bytes}</td></tr>
+          )}
+          {f.observed_at && (
+            <tr><td className={styles.attrKey}>observed_at</td><td className={styles.attrValue}>{f.observed_at}</td></tr>
+          )}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function GitCommitSection({ record }: { record: unknown }) {
+  if (typeof record !== 'object' || record === null) return null;
+  const r = record as GitCommitRecord;
+  const g = r.git;
+  if (!g) return null;
+  const shortSha = g.sha?.slice(0, 7);
+  const subject = (g.message ?? '').split('\n')[0].slice(0, 80);
+  return (
+    <section className={styles.attributes} aria-labelledby="git-section-heading">
+      <h4 id="git-section-heading">{shortSha ?? 'git_commit'}{g.branch ? ` @ ${g.branch}` : ''}</h4>
+      {subject && <p>{subject}</p>}
+      <table>
+        <tbody>
+          {g.author?.name && (
+            <tr><td className={styles.attrKey}>author</td><td className={styles.attrValue}>{g.author.name}</td></tr>
+          )}
+          {g.committer?.time && (
+            <tr><td className={styles.attrKey}>committed_at</td><td className={styles.attrValue}>{g.committer.time}</td></tr>
+          )}
+          {g.repo && (
+            <tr><td className={styles.attrKey}>repo</td><td className={styles.attrValue}>{g.repo}</td></tr>
+          )}
+        </tbody>
+      </table>
+      {g.files_changed && g.files_changed.length > 0 && (
+        <details>
+          <summary>files_changed ({g.files_changed.length})</summary>
+          <ul>
+            {g.files_changed.map((f) => <li key={f}>{f}</li>)}
+          </ul>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function DiffHunkSection({ record }: { record: unknown }) {
+  if (typeof record !== 'object' || record === null) return null;
+  const r = record as DiffHunkRecord;
+  const h = r.hunk;
+  if (!h) return null;
+  const range = h.line_range_after
+    ? `${h.line_range_after.start}-${h.line_range_after.end}`
+    : 'binary';
+  return (
+    <section className={styles.attributes} aria-labelledby="hunk-section-heading">
+      <h4 id="hunk-section-heading">{h.file_path ?? 'diff_hunk'} L{range}</h4>
+      <table>
+        <tbody>
+          {h.change_type && (
+            <tr><td className={styles.attrKey}>change_type</td><td className={styles.attrValue}>{h.change_type}</td></tr>
+          )}
+          {typeof h.lines_added === 'number' && (
+            <tr><td className={styles.attrKey}>+ lines</td><td className={styles.attrValue}>{h.lines_added}</td></tr>
+          )}
+          {typeof h.lines_removed === 'number' && (
+            <tr><td className={styles.attrKey}>- lines</td><td className={styles.attrValue}>{h.lines_removed}</td></tr>
+          )}
+          {h.introduced_by_commit_sha && (
+            <tr><td className={styles.attrKey}>commit</td><td className={styles.attrValue}>{h.introduced_by_commit_sha.slice(0, 7)}</td></tr>
+          )}
+        </tbody>
+      </table>
+      {h.patch_preview && (
+        <pre>{h.patch_preview}</pre>
+      )}
+    </section>
+  );
+}
+
 function HookSection({ record }: { record: unknown }) {
   if (typeof record !== 'object' || record === null) return null;
   const r = record as HookRecord;
@@ -121,6 +255,15 @@ export function SourcePanel({ eventId }: Props) {
           )}
           {state.data.record_type === 'hook_event' && (
             <HookSection record={state.data.record} />
+          )}
+          {state.data.record_type === 'file_event' && (
+            <FileEventSection record={state.data.record} />
+          )}
+          {state.data.record_type === 'git_commit' && (
+            <GitCommitSection record={state.data.record} />
+          )}
+          {state.data.record_type === 'diff_hunk' && (
+            <DiffHunkSection record={state.data.record} />
           )}
           <div className={styles.body}>
             <JsonView data={state.data.record} />

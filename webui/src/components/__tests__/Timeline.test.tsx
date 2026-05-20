@@ -26,9 +26,9 @@ const fixture: GraphPayload = {
 describe('Timeline', () => {
   afterEach(() => { cleanup(); });
 
-  it('renders all seven lanes', () => {
+  it('renders all eight lanes', () => {
     render(<Timeline graph={fixture} selectedNodeId={null} onSelect={vi.fn()} />);
-    for (const lane of ['Intent','Context','Action','State','Hook','OTel','Quality']) {
+    for (const lane of ['Intent','Context','Action','State','Files','Hook','OTel','Quality']) {
       expect(screen.getByText(lane)).toBeInTheDocument();
     }
   });
@@ -63,6 +63,56 @@ describe('Timeline', () => {
       <Timeline graph={fixture} selectedNodeId={null} onSelect={vi.fn()} />
     );
     expect(container.querySelectorAll('[data-testid="edge-path"]').length).toBe(1);
+  });
+
+  it('renders file_event / git_commit / diff_hunk markers on the Files lane (slice-5)', () => {
+    const graph: GraphPayload = {
+      nodes: [
+        {
+          node_id: 'nd_f_1',
+          schema_version: '0.4.0',
+          session_id: 'filesystem',
+          node_kind: 'file_event',
+          started_at: '2026-05-20T00:00:00Z',
+          ended_at: null,
+          merge_keys: { file_path: '/tmp/a.rs', change_type: 'modified' },
+          source_event_ids: ['ev_f_1'],
+          source_uris: [],
+          payload: {},
+        },
+        {
+          node_id: 'nd_g_1',
+          schema_version: '0.4.0',
+          session_id: 'filesystem',
+          node_kind: 'git_commit',
+          started_at: '2026-05-20T00:00:01Z',
+          ended_at: null,
+          merge_keys: { sha: 'abc1234' },
+          source_event_ids: ['ev_g_1'],
+          source_uris: [],
+          payload: {},
+        },
+        {
+          node_id: 'nd_h_2',
+          schema_version: '0.4.0',
+          session_id: 'filesystem',
+          node_kind: 'diff_hunk',
+          started_at: '2026-05-20T00:00:02Z',
+          ended_at: null,
+          merge_keys: { diff_hunk_id: 'hunk_1' },
+          source_event_ids: ['ev_h_2'],
+          source_uris: [],
+          payload: {},
+        },
+      ],
+      edges: [],
+    };
+    render(<Timeline graph={graph} selectedNodeId={null} onSelect={() => {}} />);
+    expect(document.querySelector('[data-node-id="nd_f_1"]')).not.toBeNull();
+    expect(document.querySelector('[data-node-id="nd_g_1"]')).not.toBeNull();
+    expect(document.querySelector('[data-node-id="nd_h_2"]')).not.toBeNull();
+    expect(screen.getByText('Files')).toBeInTheDocument();
+    expect(screen.queryByText(/no file\/git observations/i)).toBeNull();
   });
 
   it('renders a hook_event node marker on the Hook lane (slice-4)', () => {
