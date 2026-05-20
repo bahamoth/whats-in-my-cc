@@ -424,6 +424,181 @@ pub async fn store_commit(
     Ok(result)
 }
 
+/// Extract a [`CommitRecord`] and one [`HunkRecord`] per hunk for `commit`.
+///
+/// `diff_hunk_id` is deterministic across re-runs (`hunk_{sha}_{idx}`) so that
+/// re-ingesting the same commit dedupes both at the raw-event layer (via
+/// canonical-JSON sha256) and at the `diff_hunk` side-table (via PRIMARY KEY).
+pub fn extract_commit_records(
+    repo: &git2::Repository,
+    commit: &git2::Commit,
+) -> Result<(CommitRecord, Vec<HunkRecord>)> {
+    use chrono::TimeZone;
+
+    let sha = commit.id().to_string();
+    let parents: Vec<String> = commit
+        .parent_ids()
+        .map(|oid| oid.to_string())
+        .collect();
+
+    fn sig_to_record(sig: &git2::Signature) -> CommitSignature {
+        let secs = sig.when().seconds();
+        let time = chrono::Utc.timestamp_opt(secs, 0).single().unwrap_or_else(Utc::now);
+        CommitSignature {
+            name: sig.name().unwrap_or("").into(),
+            email: sig.email().unwrap_or("").into(),
+            time,
+        }
+    }
+    let author = sig_to_record(&commit.author());
+    let committer = sig_to_record(&commit.committer());
+    let message = commit.message().unwrap_or("").to_string();
+
+    let branch = repo
+        .head()
+        .ok()
+        .and_then(|h| h.shorthand().map(|s| s.to_string()));
+
+    let new_tree = commit.tree().map_err(|e| crate::error::WitmccError::Other(anyhow::Error::from(e)))?;
+    let parent_tree = if commit.parent_count() > 0 {
+        Some(
+            commit
+                .parent(0)
+                .and_then(|p| p.tree())
+                .map_err(|e| crate::error::WitmccError::Other(anyhow::Error::from(e)))?,
+        )
+    } else {
+        None
+    };
+
+    let mut diff_opts = git2::DiffOptions::new();
+    diff_opts.include_typechange(true);
+    let diff = repo
+        .diff_tree_to_tree(parent_tree.as_ref(), Some(&new_tree), Some(&mut diff_opts))
+        .map_err(|e| crate::error::WitmccError::Other(anyhow::Error::from(e)))?;
+
+    let mut files_changed: Vec<String> = Vec::new();
+    let mut hunks: Vec<HunkRecord> = Vec::new();
+
+    let num_deltas = diff.deltas().len();
+    for delta_idx in 0..num_deltas {
+        let delta = match diff.get_delta(delta_idx) {
+            Some(d) => d,
+            None => continue,
+        };
+        let file_path = delta
+            .new_file()
+            .path()
+            .or_else(|| delta.old_file().path())
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        if !file_path.is_empty() {
+            files_changed.push(file_path.clone());
+        }
+        let change_type: &str = match delta.status() {
+            git2::Delta::Added => "added",
+            git2::Delta::Deleted => "deleted",
+            git2::Delta::Renamed | git2::Delta::Copied => "renamed",
+            _ => "modified",
+        };
+
+        let patch_opt =
+            git2::Patch::from_diff(&diff, delta_idx).map_err(|e| crate::error::WitmccError::Other(anyhow::Error::from(e)))?;
+
+        // Binary: emit a single hunk with null line range + "<binary>".
+        let is_binary =
+            delta.new_file().is_binary() || delta.old_file().is_binary() || patch_opt.is_none();
+        if is_binary {
+            hunks.push(HunkRecord {
+                diff_hunk_id: format!("hunk_{}_b{}", sha, delta_idx),
+                session_id: FILESYSTEM_SESSION_ID.into(),
+                file_path: file_path.clone(),
+                change_type: change_type.into(),
+                line_range_after: None,
+                introduced_by_commit_sha: sha.clone(),
+                patch_preview: "<binary>".into(),
+                lines_added: 0,
+                lines_removed: 0,
+            });
+            continue;
+        }
+
+        let patch = patch_opt.unwrap();
+        let nh = patch.num_hunks();
+        for hidx in 0..nh {
+            let (hunk_meta, line_count) = patch
+                .hunk(hidx)
+                .map_err(|e| crate::error::WitmccError::Other(anyhow::Error::from(e)))?;
+            let header = std::str::from_utf8(hunk_meta.header()).unwrap_or("").to_string();
+            let new_start = hunk_meta.new_start();
+            let new_lines = hunk_meta.new_lines();
+            let line_range_after = if new_lines == 0 {
+                None
+            } else {
+                Some((new_start, new_start + new_lines - 1))
+            };
+
+            let mut preview = String::new();
+            preview.push_str(&header);
+            let mut added: u32 = 0;
+            let mut removed: u32 = 0;
+            for lidx in 0..line_count {
+                let line = patch
+                    .line_in_hunk(hidx, lidx)
+                    .map_err(|e| crate::error::WitmccError::Other(anyhow::Error::from(e)))?;
+                let origin = line.origin();
+                let content = std::str::from_utf8(line.content()).unwrap_or("");
+                match origin {
+                    '+' => {
+                        added += 1;
+                        preview.push('+');
+                        preview.push_str(content);
+                    }
+                    '-' => {
+                        removed += 1;
+                        preview.push('-');
+                        preview.push_str(content);
+                    }
+                    ' ' => {
+                        preview.push(' ');
+                        preview.push_str(content);
+                    }
+                    _ => {}
+                }
+            }
+
+            hunks.push(HunkRecord {
+                diff_hunk_id: format!("hunk_{}_{}", sha, hunks.len()),
+                session_id: FILESYSTEM_SESSION_ID.into(),
+                file_path: file_path.clone(),
+                change_type: change_type.into(),
+                line_range_after,
+                introduced_by_commit_sha: sha.clone(),
+                patch_preview: truncate_patch_preview(&preview),
+                lines_added: added,
+                lines_removed: removed,
+            });
+        }
+    }
+
+    let commit_record = CommitRecord {
+        session_id: FILESYSTEM_SESSION_ID.into(),
+        repo: repo
+            .workdir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| repo.path().to_string_lossy().to_string()),
+        sha,
+        parents,
+        author,
+        committer,
+        message,
+        branch,
+        files_changed,
+    };
+
+    Ok((commit_record, hunks))
+}
+
 pub fn canonical_json(value: &Value) -> String {
     fn norm(v: &Value) -> Value {
         match v {
