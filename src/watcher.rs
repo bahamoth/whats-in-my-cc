@@ -132,21 +132,72 @@ fn classify(event: &notify::Event, root: &Path) -> Vec<RawFsEvent> {
     out
 }
 
+/// System-default ignore patterns for the filesystem watcher.
+///
+/// Kept as a discrete inner module because the list is expected to grow as we
+/// learn about new noise sources. These are **system defaults** and are not
+/// configurable via environment / CLI; a future slice may introduce a
+/// service-specific `.witmccignore` mechanism layered on top.
+mod default_ignore {
+    /// Directory component names — match anywhere in the path's components
+    /// (so both `/repo/.git/HEAD` and `/repo/sub/.git/refs` match).
+    pub const COMPONENTS: &[&str] = &[
+        // VCS metadata
+        ".git", ".hg", ".svn", ".bzr",
+        // Rust build dir
+        "target",
+        // macOS system metadata
+        ".Spotlight-V100", ".Trashes", ".fseventsd", ".TemporaryItems",
+    ];
+
+    /// Exact basename match.
+    pub const EXACT: &[&str] = &[
+        // OS metadata
+        ".DS_Store", "Thumbs.db", "desktop.ini",
+        // vim atomic-save sentinel (created and unlinked on every write)
+        "4913",
+    ];
+
+    /// Basename suffix match (`name.ends_with(p)`).
+    pub const SUFFIX: &[&str] = &[
+        // SQLite primary file (sidecars are matched via CONTAINS).
+        ".sqlite",
+        // Vim swap files.
+        ".swp", ".swo",
+        // Emacs / editor backup files (`foo.txt~`).
+        "~",
+    ];
+
+    /// Basename prefix match (`name.starts_with(p)`).
+    pub const PREFIX: &[&str] = &[
+        // Emacs lock files (`.#foo.txt`).
+        ".#",
+    ];
+
+    /// Basename substring match (`name.contains(p)`). Used for SQLite sidecar
+    /// families (`-wal`, `-shm`, `-journal`, `-tmp`, `-mj<rand>`).
+    pub const CONTAINS: &[&str] = &[".sqlite-"];
+}
+
 fn should_ignore(path: &Path, _root: &Path) -> bool {
-    // Match `.git` / `target` anywhere in the path components — `strip_prefix`
-    // does not handle macOS `/tmp -> /private/tmp` symlink rewriting, so the
-    // root-relative check would otherwise miss events on macOS temp paths.
+    // Component match. We can't use root-relative strip_prefix because macOS
+    // rewrites `/tmp -> /private/tmp` — watcher events arrive canonicalised
+    // even when the user passed `/tmp/...` as the root.
     for comp in path.components() {
         if let std::path::Component::Normal(name) = comp {
-            if name == std::ffi::OsStr::new(".git") || name == std::ffi::OsStr::new("target") {
+            if default_ignore::COMPONENTS
+                .iter()
+                .any(|c| name == std::ffi::OsStr::new(*c))
+            {
                 return true;
             }
         }
     }
     if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-        if name.ends_with(".sqlite")
-            || name.ends_with(".sqlite-wal")
-            || name.ends_with(".sqlite-shm")
+        if default_ignore::EXACT.iter().any(|e| name == *e)
+            || default_ignore::SUFFIX.iter().any(|s| name.ends_with(*s))
+            || default_ignore::PREFIX.iter().any(|p| name.starts_with(*p))
+            || default_ignore::CONTAINS.iter().any(|c| name.contains(*c))
         {
             return true;
         }
@@ -159,14 +210,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ignore_lists_sqlite_wal_and_git() {
+    fn ignore_vcs_and_build_components() {
         let root = Path::new("/tmp/r");
         assert!(should_ignore(Path::new("/tmp/r/.git/HEAD"), root));
         assert!(should_ignore(Path::new("/tmp/r/sub/.git/refs"), root));
+        assert!(should_ignore(Path::new("/tmp/r/.hg/store/data"), root));
+        assert!(should_ignore(Path::new("/tmp/r/.svn/wc.db"), root));
+        assert!(should_ignore(Path::new("/tmp/r/.bzr/branch"), root));
         assert!(should_ignore(Path::new("/tmp/r/target/debug/x"), root));
+        assert!(!should_ignore(Path::new("/tmp/r/src/main.rs"), root));
+    }
+
+    #[test]
+    fn ignore_all_sqlite_sidecars() {
+        let root = Path::new("/tmp/r");
         assert!(should_ignore(Path::new("/tmp/r/foo.sqlite"), root));
         assert!(should_ignore(Path::new("/tmp/r/foo.sqlite-wal"), root));
-        assert!(!should_ignore(Path::new("/tmp/r/src/main.rs"), root));
+        assert!(should_ignore(Path::new("/tmp/r/foo.sqlite-shm"), root));
+        assert!(should_ignore(Path::new("/tmp/r/foo.sqlite-journal"), root));
+        assert!(should_ignore(Path::new("/tmp/r/foo.sqlite-tmp"), root));
+        // SQLite master journal: `<db>-mj<hex>`
+        assert!(should_ignore(Path::new("/tmp/r/foo.sqlite-mjABCDEF12"), root));
+        // User-named files merely *containing* "sqlite" but no "-" sidecar
+        // suffix are NOT covered by the substring rule.
+        assert!(!should_ignore(Path::new("/tmp/r/notes_about_sqlite.md"), root));
+    }
+
+    #[test]
+    fn ignore_os_metadata_and_editor_temp_files() {
+        let root = Path::new("/tmp/r");
+        // macOS / Windows
+        assert!(should_ignore(Path::new("/tmp/r/.DS_Store"), root));
+        assert!(should_ignore(Path::new("/tmp/r/Thumbs.db"), root));
+        assert!(should_ignore(Path::new("/tmp/r/desktop.ini"), root));
+        assert!(should_ignore(Path::new("/tmp/r/.Spotlight-V100/index"), root));
+        assert!(should_ignore(Path::new("/tmp/r/.fseventsd/x"), root));
+        // vim
+        assert!(should_ignore(Path::new("/tmp/r/main.rs.swp"), root));
+        assert!(should_ignore(Path::new("/tmp/r/main.rs.swo"), root));
+        assert!(should_ignore(Path::new("/tmp/r/4913"), root));
+        // emacs
+        assert!(should_ignore(Path::new("/tmp/r/.#main.rs"), root));
+        assert!(should_ignore(Path::new("/tmp/r/main.rs~"), root));
     }
 
     #[test]
