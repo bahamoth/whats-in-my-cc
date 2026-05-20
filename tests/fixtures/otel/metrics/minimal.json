@@ -1,0 +1,35 @@
+{
+  "resourceMetrics": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "claude-code"}},
+          {"key": "session.id",   "value": {"stringValue": "sess-metrics-A"}}
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "scope": {"name": "witmcc.smoke", "version": "0.1.0"},
+          "metrics": [
+            {
+              "name": "claude_code.session.count",
+              "unit": "1",
+              "sum": {
+                "isMonotonic": true,
+                "aggregationTemporality": 1,
+                "dataPoints": [
+                  {
+                    "timeUnixNano":  "1734567890000000000",
+                    "startTimeUnixNano": "1734567880000000000",
+                    "asInt": "1",
+                    "attributes": []
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

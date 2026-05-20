@@ -21,6 +21,8 @@ pub fn router(pool: SqlitePool) -> Router {
         .route("/v1/sessions/:id/graph", get(routes::session_graph))
         .route("/v1/events/:event_id/raw", get(routes::event_raw))
         .route("/otel/v1/traces", post(otel::ingest_traces))
+        .route("/otel/v1/metrics", post(otel::ingest_metrics))
+        .route("/otel/v1/logs", post(otel::ingest_logs))
         .route("/hooks/v1/events", post(hook::ingest_events))
         .fallback(static_assets::spa_handler)
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY))
