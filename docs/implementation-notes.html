@@ -54,6 +54,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice4-overview">Overview (slice-4)</a>
     <a href="#slice4-deviations">Intentional Deviations (slice-4)</a>
     <a href="#slice4-commits">Commit Reference (slice-4)</a>
+    <a href="#slice5-overview">Overview (slice-5)</a>
+    <a href="#slice5-deviations">Intentional Deviations (slice-5)</a>
+    <a href="#slice5-commits">Commit Reference (slice-5)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
 </aside>
@@ -762,8 +765,206 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </ul>
   </section>
 
+  <section id="slice5-overview">
+    <h2><span class="num">13</span>Slice-5 Overview</h2>
+    <p><code>slice5-file-git</code> branch — live filesystem watcher + git poller
+    spawned by <code>serve --watch &lt;path&gt;</code>. Each watcher event becomes a
+    <code>file_event</code> ObservedEvent; each new commit becomes one
+    <code>git_commit</code> ObservedEvent plus one <code>diff_hunk</code> per hunk
+    (also persisted in the new <code>diff_hunk</code> side-table for spec-defined
+    <code>file_lineage_idx</code>). SCHEMA_VERSION 0.3.0 → 0.4.0.</p>
+    <div class="callout good">
+      <strong>전체 상태:</strong> slice-5 완료. <code>notify</code> 기반 watcher
+      (250 ms debounce, <code>.git</code>/sqlite/target glob 제외) + <code>git2</code>
+      기반 poller (default 5 s, <code>spawn_blocking</code>로 !Send 격리),
+      8번째 lane "Files" 추가 (Timeline / SourcePanel 모두 file_event ·
+      git_commit · diff_hunk 마커 렌더). Backend tests 27건 신규, WebUI tests 6건 신규.
+      All file/git events live on synthetic <code>session_id = "filesystem"</code>.
+    </div>
+  </section>
+
+  <section id="slice5-deviations">
+    <h2><span class="num">14</span>Slice-5 Intentional Deviations</h2>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S5-01</span>
+        <strong>Synthetic <code>session_id = "filesystem"</code></strong>
+        <span class="pill blue">model</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> spec §4 (CLI Surface) — file/git 이벤트는
+        Claude Code session에 자동 귀속되지 않으며, 합성 well-known id
+        <code>"filesystem"</code>로 emit한다고 명시.</p>
+        <p><strong>실제 구현:</strong> <code>FILESYSTEM_SESSION_ID</code> 상수.
+        모든 <code>store_file_event</code> / <code>store_commit</code>가 이 id를 사용.
+        <code>GET /v1/sessions</code>에 일반 세션처럼 표시되며,
+        <code>/v1/sessions/filesystem/graph</code>로 file_event / git_commit /
+        diff_hunk 노드를 보여준다.</p>
+        <p><strong>후속:</strong> 시간 윈도우 + cwd overlap 휴리스틱으로 실제
+        Claude session에 re-key 하는 작업은 별도 slice.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S5-02</span>
+        <strong>Git poller startup: HEAD 이전 commit replay 생략</strong>
+        <span class="pill amber">collector</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> spec §9.3 — "on startup, replay any commits
+        since the last <code>git_commit</code> row in DB".</p>
+        <p><strong>실제 구현:</strong> <code>run_git_poller</code> 시작 시
+        <code>last_seen = HEAD OID</code>로 초기화. DB의 마지막 git_commit row를
+        조회하지 않는다. 이후 tick부터 새 commit만 ingest.</p>
+        <p><strong>이유:</strong> 큰 repo에서 처음 시작 시 수십만 commit replay는
+        startup 비용이 과도하다. dedup으로 무결성은 보장되나 시간이 길어진다.
+        slice-5 범위에서는 startup 이후 새 commit observability가 핵심 가치이며,
+        과거 commit ingest는 별도 backfill 서브커맨드로 분리 가능.</p>
+        <p><strong>영향:</strong> serve 재시작 사이의 commit은 놓칠 수 있음.
+        watcher와 poller가 항상 떠 있는 사용 패턴이면 무관.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S5-03</span>
+        <strong><code>git2</code> 객체는 <code>spawn_blocking</code>으로 격리</strong>
+        <span class="pill violet">runtime</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>현황:</strong> <code>git2::Repository</code>와 그 파생 객체
+        (<code>Commit</code>, <code>Revwalk</code>, <code>Patch</code>)는
+        raw FFI pointer를 보유하며 <code>!Send</code>다. <code>tokio::spawn</code>
+        future 안에서 직접 사용하면 컴파일 에러.</p>
+        <p><strong>실제 구현:</strong> <code>git_poller::extract_new</code>가 모든
+        git2 작업을 동기 함수로 캡슐화한 뒤 <code>tokio::task::spawn_blocking</code>로
+        실행. 추출된 <code>Vec&lt;(CommitRecord, Vec&lt;HunkRecord&gt;)&gt;</code>는
+        plain data여서 await 가능.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S5-04</span>
+        <strong>Deterministic <code>diff_hunk_id = "hunk_{sha}_{idx}"</code></strong>
+        <span class="pill blue">id</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> §5.7 hunk payload에 ULID 권고.</p>
+        <p><strong>실제 구현:</strong> commit SHA + 추출 순서 index로
+        deterministic id 생성. 동일 commit을 두 번 ingest하면 같은 id이므로
+        <code>diff_hunk</code> 테이블의 PRIMARY KEY로 dedup되고
+        canonical-JSON sha256으로 raw_event dedup된다.</p>
+        <p><strong>이유:</strong> ULID 사용 시 동일 commit re-ingest가
+        새 행을 만든다 (raw dedup은 막지만 diff_hunk 테이블은 별도 ID).
+        Deterministic id면 두 단계 모두 idempotent.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S5-05</span>
+        <strong>250 ms in-memory debounce (no <code>notify-debouncer-full</code>)</strong>
+        <span class="pill amber">collector</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> §8 — "250 ms debounce coalesces them".</p>
+        <p><strong>실제 구현:</strong> <code>HashMap&lt;(PathBuf, FileChange), Instant&gt;</code>
+        + 100 ms ticker. Editor의 unlink+create+chmod 시퀀스가 단일
+        <code>file_event</code> 한 건으로 flush됨.</p>
+        <p><strong>후속:</strong> 부하 환경에서 이벤트 누락이 관측되면
+        <code>notify-debouncer-full</code>로 교체. 슬라이스 5 범위에서는
+        수동 dependency 최소화.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S5-06</span>
+        <strong><code>vendored-libgit2</code> 기본 활성화</strong>
+        <span class="pill blue">build</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>실제 구현:</strong> <code>Cargo.toml</code>에서
+        <code>git2 = { version = "0.19", default-features = false, features = ["vendored-libgit2"] }</code>.
+        시스템 libgit2 의존성 없이 <code>cargo build</code>만으로 빌드 성공.</p>
+        <p><strong>트레이드오프:</strong> 빌드 시간이 처음에 한 번 늘어남 (~30 s),
+        결과 바이너리 크기 +1 MB. 대신 호스트 OS 호환성 문제 제거.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S5-07</span>
+        <strong>Patch preview 4 KB 절단, hunk 2000건 cap</strong>
+        <span class="pill amber">storage</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> §5.7 — "truncated to 4 KB",
+        §8 — "<code>MAX_HUNKS_PER_COMMIT = 2000</code>".</p>
+        <p><strong>실제 구현:</strong> <code>truncate_patch_preview</code>는
+        UTF-8 char boundary에서 자르고 <code>"\n…[truncated]"</code> 추가.
+        <code>store_commit</code>은 입력 hunk가 cap을 초과하면 잉여를
+        <code>CommitIngestResult::dropped_hunks_over_limit</code>로 카운트.</p>
+        <p><strong>후속:</strong> 큰 commit이 자주 발생하는 환경이면 cap을
+        config로 노출 검토.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S5-08</span>
+        <strong>Files lane 위치: State와 Hook 사이 (5번째)</strong>
+        <span class="pill blue">ui</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> §7.1 — Files lane을 State와 Hook 사이에 배치.</p>
+        <p><strong>실제 구현:</strong> <code>LANES = ['Intent','Context','Action','State','Files','Hook','OTel','Quality']</code>
+        총 8 lane. <code>laneForNodeKind</code>가 <code>file_event</code> /
+        <code>git_commit</code> / <code>diff_hunk</code>를 모두 <code>'Files'</code>로 매핑.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S5-09</span>
+        <strong>Lineage edges (<code>mutates</code>, <code>verifies</code>) 보류</strong>
+        <span class="pill amber">graph</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> §2 (Out of Scope) — slice-5는 노드만 만들고
+        <code>tool_call → file_event</code> 등 lineage edge는 후속 slice.</p>
+        <p><strong>실제 구현:</strong> <code>graph::build::compute</code>는 file/git
+        세 EventKind에 대해 노드만 생성하고 <code>turn_order</code> edge에서도
+        제외한다 (대화 turn이 아니므로). 새 edge_kind은 추가하지 않음.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="slice5-commits">
+    <h2><span class="num">15</span>Slice-5 Commit Reference</h2>
+    <p>커밋 SHA 목록 (slice-5 branch <code>slice5-file-git</code>).
+    PR 머지 시 squash 여부에 따라 SHA가 달라질 수 있다.</p>
+    <ul>
+      <li><code>b91f89e</code> — docs(slice-5): design spec for File/Git observer + DiffHunk schema</li>
+      <li><code>19bdf03</code> — docs(slice-5): TDD implementation plan — 13 tasks (file/git observer + diff_hunk)</li>
+      <li><code>78e3deb</code> — chore(meta): bump SCHEMA_VERSION 0.3.0 -&gt; 0.4.0; add file_git EventKinds + deps</li>
+      <li><code>6608ae3</code> — feat(db): migration 0003 + repo_diff_hunk side-table (file_lineage_idx)</li>
+      <li><code>fe48503</code> — feat(ingest): file_git records + payload shapes + canonical_json</li>
+      <li><code>849a4e2</code> — feat(ingest): store_file_event + store_commit with self-heal rebuild + diff_hunk side-table</li>
+      <li><code>eb0eb00</code> — feat(graph): file_event / git_commit / diff_hunk nodes; exclude from turn_order</li>
+      <li><code>e5ee7cb</code> — feat(cli): serve --watch / --git-poll-secs / --shutdown-after-ms (with watcher+poller stubs)</li>
+      <li><code>5c8fef0</code> — feat(watcher): notify-based file watcher with debounce + cancellation</li>
+      <li><code>afde87c</code> — feat(git): poller task — extract_commit_records + spawn_blocking + cancellation</li>
+      <li><code>dcd6d71</code> — test(file_git): commit + hunks + dedup + binary + graph end-to-end</li>
+      <li><code>d499edb</code> — feat(webui): Files lane (8th); file_event/git_commit/diff_hunk markers + SourcePanel</li>
+    </ul>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 · 2026-05-20 · branch: slice4-hook-collector</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 · 2026-05-20 · branch: slice5-file-git</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
