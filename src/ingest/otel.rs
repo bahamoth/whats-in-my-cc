@@ -290,6 +290,18 @@ pub async fn store(
             },
         )
         .await?;
+
+        // Self-heal: even when the raw row is a duplicate, mark the session
+        // as touched so a follow-up graph rebuild can recover from prior
+        // inconsistent state (e.g. observed_event rows present but graph_node
+        // empty after a binary upgrade). Without this, re-POSTing the same
+        // span on an out-of-sync DB is a no-op and the graph stays empty.
+        if let Some(sid) = span.session_id.as_deref() {
+            if !sid.is_empty() {
+                touched.insert(sid.to_string());
+            }
+        }
+
         if !inserted {
             result.duplicate_spans += 1;
             continue;
@@ -344,9 +356,6 @@ pub async fn store(
         repo_observed::insert(pool, &event).await?;
 
         result.accepted_spans += 1;
-        if !session_id.is_empty() {
-            touched.insert(session_id);
-        }
     }
 
     // Rebuild graph for each session we touched so HTTP consumers see fresh
