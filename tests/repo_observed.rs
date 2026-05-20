@@ -80,7 +80,7 @@ async fn round_trip_preserves_telemetry_facet() {
     let event = ObservedEvent {
         event_id: "ev_test".into(),
         raw_event_id: "raw_test".into(),
-        schema_version: "0.3.0".into(),
+        schema_version: "0.4.0".into(),
         session_id: "sess-otel".into(),
         observed_at: Utc::now(),
         actor: Actor::Tool,

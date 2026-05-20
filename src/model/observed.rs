@@ -39,6 +39,9 @@ pub enum EventKind {
     FileHistorySnapshot,
     AttachmentMeta,
     OtelSpan,
+    FileEvent,
+    GitCommit,
+    DiffHunk,
     #[default]
     Unknown,
 }
@@ -57,6 +60,9 @@ impl EventKind {
             EventKind::FileHistorySnapshot => "file_history_snapshot",
             EventKind::AttachmentMeta => "attachment_meta",
             EventKind::OtelSpan => "otel_span",
+            EventKind::FileEvent => "file_event",
+            EventKind::GitCommit => "git_commit",
+            EventKind::DiffHunk => "diff_hunk",
             EventKind::Unknown => "unknown",
         }
     }
