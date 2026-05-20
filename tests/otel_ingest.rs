@@ -223,3 +223,33 @@ async fn post_traces_makes_graph_visible_to_http_consumers() {
     assert_eq!(nodes.len(), 1);
     assert_eq!(nodes[0]["node_kind"], "otel_span");
 }
+
+#[tokio::test]
+async fn re_post_self_heals_graph_when_raw_dedup_skips_insert() {
+    // Simulates the upgrade scenario: a pre-fix run left observed_event rows
+    // present but graph_node empty, then the user re-POSTs the same fixture
+    // hoping to recover. raw_event dedup blocks the insert path, but the
+    // affected session must still get its graph rebuilt.
+    let pool = make_pool().await;
+    let body = fixture("tests/fixtures/otel/single_span.json");
+
+    // First store — observed inserted + graph built normally.
+    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now()).await.unwrap();
+
+    // Simulate stale state: wipe graph_node, leave observed_event alone.
+    sqlx::query("DELETE FROM graph_node").execute(&pool).await.unwrap();
+    sqlx::query("DELETE FROM graph_edge").execute(&pool).await.unwrap();
+    let pre: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM graph_node")
+        .fetch_one(&pool).await.unwrap();
+    assert_eq!(pre.0, 0);
+
+    // Re-POST — raw is duplicate, but session must still get rebuilt.
+    let res = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now()).await.unwrap();
+    assert_eq!(res.duplicate_spans, 1);
+    assert_eq!(res.accepted_spans, 0);
+    assert_eq!(res.sessions_touched, vec!["sess-otel-A".to_string()]);
+
+    let post: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM graph_node")
+        .fetch_one(&pool).await.unwrap();
+    assert_eq!(post.0, 1, "duplicate POST must self-heal the graph");
+}
