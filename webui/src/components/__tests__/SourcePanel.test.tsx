@@ -96,6 +96,97 @@ describe('SourcePanel', () => {
     expect(screen.getByText('msg-text-xyz')).toBeInTheDocument();
   });
 
+  it('renders file_event header with path + change_type (slice-5)', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(envelope({
+      schema_version: '0.4.0',
+      event_id: 'ev_f1',
+      session_id: 'filesystem',
+      source: {
+        kind: 'file_git',
+        file_path: 'file:///tmp/a.rs',
+        line_no: 0,
+        ingested_at: '2026-05-20T00:00:00Z',
+      },
+      record: {
+        file: {
+          path: '/tmp/a.rs',
+          change_type: 'modified',
+          size_bytes: 42,
+          observed_at: '2026-05-20T00:00:00Z',
+        },
+      },
+      record_type: 'file_event',
+      redaction_state: 'none',
+    }));
+    render(<SourcePanel eventId="ev_f1" />);
+    await waitFor(() => expect(screen.getByText('modified')).toBeInTheDocument());
+    expect(screen.getByText('/tmp/a.rs')).toBeInTheDocument();
+  });
+
+  it('renders git_commit header with short sha + branch + subject (slice-5)', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(envelope({
+      schema_version: '0.4.0',
+      event_id: 'ev_g1',
+      session_id: 'filesystem',
+      source: {
+        kind: 'file_git',
+        file_path: 'git:///tmp/r/commit/abc1234def',
+        line_no: 0,
+        ingested_at: '2026-05-20T00:00:00Z',
+      },
+      record: {
+        git: {
+          repo: '/tmp/r',
+          sha: 'abc1234def56789',
+          branch: 'main',
+          message: 'fix: bump version\n\nbody',
+          author: { name: 'al', email: 'a@x', time: '2026-05-20T00:00:00Z' },
+          committer: { name: 'al', email: 'a@x', time: '2026-05-20T00:00:00Z' },
+          files_changed: ['a.rs', 'b.rs'],
+        },
+      },
+      record_type: 'git_commit',
+      redaction_state: 'none',
+    }));
+    render(<SourcePanel eventId="ev_g1" />);
+    await waitFor(() => expect(screen.getByText(/abc1234 @ main/)).toBeInTheDocument());
+    expect(screen.getByText('fix: bump version')).toBeInTheDocument();
+    expect(screen.getByText(/files_changed \(2\)/)).toBeInTheDocument();
+  });
+
+  it('renders diff_hunk header with file_path + line range + patch preview (slice-5)', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(envelope({
+      schema_version: '0.4.0',
+      event_id: 'ev_h1',
+      session_id: 'filesystem',
+      source: {
+        kind: 'file_git',
+        file_path: 'git:///tmp/r/commit/abc/hunk/a.rs:42-57',
+        line_no: 0,
+        ingested_at: '2026-05-20T00:00:00Z',
+      },
+      record: {
+        hunk: {
+          diff_hunk_id: 'hunk_1',
+          file_path: 'a.rs',
+          change_type: 'modified',
+          line_range_after: { start: 42, end: 57 },
+          introduced_by_commit_sha: 'abc1234def',
+          patch_preview: '@@ -40,3 +42,15 @@\n+added line\n',
+          lines_added: 1,
+          lines_removed: 0,
+        },
+      },
+      record_type: 'diff_hunk',
+      redaction_state: 'none',
+    }));
+    const { container } = render(<SourcePanel eventId="ev_h1" />);
+    await waitFor(() =>
+      expect(screen.getByText('a.rs L42-57')).toBeInTheDocument()
+    );
+    expect(container.querySelector('pre')?.textContent).toContain('@@ -40,3 +42,15 @@');
+  });
+
   it('renders Attributes section when record_type is otel_span', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(envelope({
       schema_version: '0.2.0',

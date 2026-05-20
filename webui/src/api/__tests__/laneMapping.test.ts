@@ -14,15 +14,29 @@ describe('laneForNodeKind', () => {
     expect(laneForNodeKind('hook_event')).toBe('Hook');
   });
 
+  it('maps file_event / git_commit / diff_hunk to Files (slice-5)', () => {
+    expect(laneForNodeKind('file_event')).toBe('Files');
+    expect(laneForNodeKind('git_commit')).toBe('Files');
+    expect(laneForNodeKind('diff_hunk')).toBe('Files');
+  });
+
   it('returns null for unknown kinds', () => {
     expect(laneForNodeKind('unknown_kind')).toBeNull();
   });
 });
 
 describe('LANES constant', () => {
-  it('exposes Hook as the 5th lane (after State, before OTel)', () => {
-    expect(LANES).toContain('Hook');
-    expect(LANES.length).toBe(7);
-    expect(LANES.indexOf('Hook')).toBe(LANES.indexOf('State') + 1);
+  it('exposes 8 lanes with Files between State and Hook (slice-5)', () => {
+    expect(LANES.length).toBe(8);
+    expect(LANES).toEqual([
+      'Intent',
+      'Context',
+      'Action',
+      'State',
+      'Files',
+      'Hook',
+      'OTel',
+      'Quality',
+    ]);
   });
 });
