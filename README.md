@@ -192,7 +192,13 @@ Known limits in slice-5:
 - `MAX_HUNKS_PER_COMMIT = 2000`; surplus hunks are dropped (and counted in the ingest result).
 - No redaction (M7). Hunks may carry secrets.
 - `session_id="filesystem"` is reserved.
-- Watcher excludes `.git/**`, `**/target/**`, `*.sqlite{,-wal,-shm}` by default; the glob list is hard-coded for slice-5.
+- Watcher applies a hardcoded system-default ignore list (`src/watcher.rs` →
+  `default_ignore` module): VCS metadata (`.git`, `.hg`, `.svn`, `.bzr`),
+  `target/`, macOS metadata (`.DS_Store`, `.Spotlight-V100/`, `.fseventsd/`,
+  `.Trashes/`, `.TemporaryItems/`), Windows metadata (`Thumbs.db`, `desktop.ini`),
+  all SQLite sidecars (`*.sqlite`, `*.sqlite-*`), and common editor temp/swap
+  files (`*.swp`, `*.swo`, `4913`, `.#*`, `*~`). The list is NOT user-configurable
+  in slice-5; service-specific `.witmccignore` is a follow-up.
 - The git poller on startup uses the current `HEAD` as `last_seen` — commits made before `serve` started are not back-filled.
 
 ## Reference docs
