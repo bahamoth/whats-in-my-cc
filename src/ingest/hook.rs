@@ -4,8 +4,17 @@
 //! `raw_event.payload`; only known fields are extracted to populate the typed
 //! `HookRecord` used by the store layer.
 
+use crate::db::{repo_observed, repo_raw, repo_runs};
+use crate::error::Result;
+use crate::ids::MonotonicUlidGen;
+use crate::model::meta::{PARSER_VERSION_HOOK, SCHEMA_VERSION};
+use crate::model::observed::{Actor, EventKind, ObservedEvent};
 use chrono::{DateTime, Utc};
+use serde::Serialize;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
+use sqlx::SqlitePool;
+use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 pub struct HookRecord {
@@ -99,6 +108,122 @@ fn parse_one(item: &Value, out: &mut ParseResult) {
     });
 }
 
+#[derive(Debug, Default, Serialize)]
+pub struct IngestResult {
+    pub accepted_events: u64,
+    pub rejected_events: u64,
+    pub duplicate_events: u64,
+    pub sessions_touched: Vec<String>,
+}
+
+pub async fn store(
+    pool: &SqlitePool,
+    parsed: ParseResult,
+    received_at: DateTime<Utc>,
+) -> Result<IngestResult> {
+    let mut gen = MonotonicUlidGen::new();
+    let run_id = repo_runs::start(pool).await?;
+    let mut result = IngestResult {
+        rejected_events: parsed.rejected.len() as u64,
+        ..Default::default()
+    };
+    let mut touched: BTreeSet<String> = BTreeSet::new();
+
+    for ev in parsed.events {
+        let canonical = canonical_json(&ev.raw);
+        let canonical_bytes = canonical.as_bytes().to_vec();
+        let payload_sha = hex::encode(Sha256::digest(&canonical_bytes));
+        let source_uri = format!(
+            "hook://{}/{}/{}",
+            ev.session_id,
+            ev.hook_event_name,
+            ev.tool_use_id.as_deref().unwrap_or("")
+        );
+        let raw_id = gen.generate();
+
+        let inserted = repo_raw::insert_dedup(
+            pool,
+            &repo_raw::NewRaw {
+                raw_event_id: raw_id.clone(),
+                ingest_run_id: run_id.clone(),
+                source_type: "hook".into(),
+                source_uri,
+                source_line_no: 0,
+                source_byte_offset: 0,
+                payload_sha256: payload_sha,
+                payload: canonical_bytes,
+                parse_error: None,
+                captured_at: received_at,
+            },
+        )
+        .await?;
+
+        // Self-heal (DEV-S3-07): mark session touched BEFORE the dedup check so a
+        // re-POST after stale graph state still triggers rebuild.
+        touched.insert(ev.session_id.clone());
+
+        if !inserted {
+            result.duplicate_events += 1;
+            continue;
+        }
+
+        let observed_at = ev.timestamp.unwrap_or(received_at);
+        let event = ObservedEvent {
+            event_id: gen.generate(),
+            raw_event_id: raw_id,
+            schema_version: SCHEMA_VERSION.into(),
+            session_id: ev.session_id.clone(),
+            observed_at,
+            actor: Actor::Hook,
+            kind: EventKind::HookEvent,
+            subkind: Some(ev.subkind.clone()),
+            tool_use_id: ev.tool_use_id.clone(),
+            tool_name: ev.tool_name.clone(),
+            cwd: ev.cwd.clone(),
+            payload: serde_json::json!({"hook": ev.raw}),
+            parser_version: PARSER_VERSION_HOOK.into(),
+            ..Default::default()
+        };
+        repo_observed::insert(pool, &event).await?;
+
+        result.accepted_events += 1;
+    }
+
+    for session_id in &touched {
+        crate::graph::build::rebuild_session(pool, session_id).await?;
+    }
+
+    repo_runs::finish(
+        pool,
+        &run_id,
+        "ok",
+        serde_json::to_value(&result).unwrap_or(serde_json::Value::Null),
+    )
+    .await?;
+
+    result.sessions_touched = touched.into_iter().collect();
+    Ok(result)
+}
+
+fn canonical_json(value: &Value) -> String {
+    fn norm(v: &Value) -> Value {
+        match v {
+            Value::Object(map) => {
+                let mut keys: Vec<&String> = map.keys().collect();
+                keys.sort();
+                let mut out = serde_json::Map::new();
+                for k in keys {
+                    out.insert(k.clone(), norm(&map[k]));
+                }
+                Value::Object(out)
+            }
+            Value::Array(arr) => Value::Array(arr.iter().map(norm).collect()),
+            _ => v.clone(),
+        }
+    }
+    norm(value).to_string()
+}
+
 fn subkind_from_name(name: &str) -> &'static str {
     match name {
         "PreToolUse" => "pre_tool_use",
@@ -182,6 +307,48 @@ mod tests {
         let res = parse_body(&json!("nope"));
         assert!(res.events.is_empty());
         assert_eq!(res.rejected.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn store_persists_event_and_dedupes_on_replay() {
+        use crate::db::{migrate, repo_observed};
+        use chrono::Utc;
+        use sqlx::sqlite::SqlitePoolOptions;
+
+        let pool = SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        migrate(&pool).await.unwrap();
+
+        let body = pre_tool_use_fixture();
+        let parsed = parse_body(&body);
+        let first = store(&pool, parsed, Utc::now()).await.unwrap();
+        assert_eq!(first.accepted_events, 1);
+        assert_eq!(first.duplicate_events, 0);
+        assert_eq!(first.sessions_touched, vec!["sess_A".to_string()]);
+
+        let parsed2 = parse_body(&body);
+        let second = store(&pool, parsed2, Utc::now()).await.unwrap();
+        assert_eq!(second.accepted_events, 0);
+        assert_eq!(second.duplicate_events, 1);
+        // Self-heal (DEV-S3-07): even on full duplicate, session is still touched.
+        assert_eq!(second.sessions_touched, vec!["sess_A".to_string()]);
+
+        let rows = repo_observed::list_session(&pool, "sess_A", 100)
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        let r = &rows[0];
+        assert!(matches!(
+            r.kind,
+            crate::model::observed::EventKind::HookEvent
+        ));
+        assert_eq!(r.subkind.as_deref(), Some("pre_tool_use"));
+        assert_eq!(r.tool_use_id.as_deref(), Some("toolu_01"));
+        assert_eq!(r.tool_name.as_deref(), Some("Bash"));
+        assert!(matches!(r.actor, crate::model::observed::Actor::Hook));
+        assert_eq!(r.parser_version, "hook@0.1.0");
     }
 
     #[test]
