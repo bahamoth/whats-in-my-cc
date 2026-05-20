@@ -352,6 +352,31 @@ mod tests {
     }
 
     #[test]
+    fn fixtures_parse_with_expected_counts() {
+        let cases = &[
+            ("tests/fixtures/hook/pre_tool_use.json", 1usize, 0usize),
+            ("tests/fixtures/hook/post_tool_use.json", 1, 0),
+            ("tests/fixtures/hook/user_prompt_submit.json", 1, 0),
+            ("tests/fixtures/hook/notification.json", 1, 0),
+            ("tests/fixtures/hook/pre_compact.json", 1, 0),
+            ("tests/fixtures/hook/session_start.json", 1, 0),
+            ("tests/fixtures/hook/session_end.json", 1, 0),
+            ("tests/fixtures/hook/stop.json", 1, 0),
+            ("tests/fixtures/hook/subagent_stop.json", 1, 0),
+            ("tests/fixtures/hook/batch_three.json", 3, 0),
+            ("tests/fixtures/hook/missing_session_id.json", 0, 1),
+            ("tests/fixtures/hook/unknown_event.json", 1, 0),
+        ];
+        for (path, ok, rej) in cases {
+            let body: Value =
+                serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+            let res = parse_body(&body);
+            assert_eq!(res.events.len(), *ok, "{path} accepted");
+            assert_eq!(res.rejected.len(), *rej, "{path} rejected");
+        }
+    }
+
+    #[test]
     fn maps_all_nine_known_names_to_snake_case() {
         for (name, expected) in [
             ("PreToolUse", "pre_tool_use"),
