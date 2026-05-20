@@ -115,3 +115,43 @@ async fn telemetry_index_exists() {
     .unwrap();
     assert_eq!(row.0, 1);
 }
+
+#[tokio::test]
+async fn hook_post_accepts_single_pretooluse() {
+    let s = setup().await;
+    let body = serde_json::json!({
+        "session_id":      "sess_HK1",
+        "hook_event_name": "PreToolUse",
+        "tool_name":       "Bash",
+        "tool_input":      {"command": "ls"},
+        "tool_use_id":     "toolu_HK1"
+    });
+    let resp = s.post("/hooks/v1/events").json(&body).await;
+    resp.assert_status_ok();
+    let v: Value = resp.json();
+    assert_eq!(v["data"]["accepted_events"], 1);
+    assert_eq!(v["data"]["rejected_events"], 0);
+    assert_eq!(v["data"]["duplicate_events"], 0);
+    assert_eq!(v["data"]["sessions_touched"][0], "sess_HK1");
+
+    let detail = s.get("/v1/sessions/sess_HK1").await;
+    detail.assert_status_ok();
+    let dv: Value = detail.json();
+    let has_hook = dv["data"]["events"].as_array().unwrap().iter().any(|e| {
+        e["kind"] == "hook_event" && e["subkind"] == "pre_tool_use"
+    });
+    assert!(has_hook, "hook_event with subkind=pre_tool_use missing");
+}
+
+#[tokio::test]
+async fn hook_post_rejects_missing_session_id() {
+    let s = setup().await;
+    let body = serde_json::json!({
+        "hook_event_name": "PreToolUse"
+    });
+    let resp = s.post("/hooks/v1/events").json(&body).await;
+    resp.assert_status_ok();
+    let v: Value = resp.json();
+    assert_eq!(v["data"]["accepted_events"], 0);
+    assert_eq!(v["data"]["rejected_events"], 1);
+}
