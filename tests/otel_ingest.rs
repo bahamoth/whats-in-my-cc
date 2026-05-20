@@ -206,3 +206,20 @@ async fn session_detail_returns_otel_span_with_telemetry() {
     assert_eq!(otel_event["trace_id"], "5b8aa5a2d2c872e8321cf37308d69df2");
     assert_eq!(otel_event["span_id"], "051581bf3cb55c13");
 }
+
+#[tokio::test]
+async fn post_traces_makes_graph_visible_to_http_consumers() {
+    // Regression: previously otel::store inserted observed_event rows but did
+    // not rebuild the graph, so GET /v1/sessions/:id/graph returned 404 for
+    // OTel-only sessions even after a successful POST /otel/v1/traces.
+    let s = http_setup().await;
+    let body = fixture("tests/fixtures/otel/single_span.json");
+    s.post("/otel/v1/traces").json(&body).await.assert_status_ok();
+
+    let resp = s.get("/v1/sessions/sess-otel-A/graph").await;
+    resp.assert_status_ok();
+    let v: serde_json::Value = resp.json();
+    let nodes = v["data"]["nodes"].as_array().expect("nodes array");
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0]["node_kind"], "otel_span");
+}
