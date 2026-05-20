@@ -13,7 +13,21 @@ fn main() -> error::Result<()> {
                 bind,
                 port,
                 auto_migrate,
-            } => serve_cmd(&cli.db_path, bind, port, auto_migrate).await,
+                watch,
+                git_poll_secs,
+                shutdown_after_ms,
+            } => {
+                serve_cmd(
+                    &cli.db_path,
+                    bind,
+                    port,
+                    auto_migrate,
+                    watch,
+                    git_poll_secs,
+                    shutdown_after_ms,
+                )
+                .await
+            }
         }
     })
 }
@@ -31,6 +45,9 @@ async fn serve_cmd(
     bind: std::net::IpAddr,
     port: u16,
     auto_migrate: bool,
+    watch: Option<std::path::PathBuf>,
+    git_poll_secs: u64,
+    shutdown_after_ms: Option<u64>,
 ) -> error::Result<()> {
     // Loopback-only enforcement: accepts 127.0.0.0/8 and ::1 (is_loopback()).
     // Strict 127.0.0.1-only would use `bind == IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)`.
@@ -58,15 +75,73 @@ async fn serve_cmd(
             ));
         }
     }
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let mut bg_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+
+    if let Some(root) = watch.as_ref() {
+        if root.exists() {
+            tracing::info!(?root, "file watcher started");
+            let pool_cl = pool.clone();
+            let root_cl = root.clone();
+            let tok = cancel.clone();
+            bg_handles.push(tokio::spawn(async move {
+                if let Err(e) = witmcc::watcher::run_file_watcher(pool_cl, root_cl, tok).await {
+                    tracing::error!(error=?e, "file watcher exited with error");
+                }
+            }));
+            let git_dir = root.join(".git");
+            if git_dir.exists() {
+                let secs = git_poll_secs.max(1);
+                tracing::info!(?root, secs, "git poller started");
+                let pool_cl = pool.clone();
+                let root_cl = root.clone();
+                let tok = cancel.clone();
+                bg_handles.push(tokio::spawn(async move {
+                    if let Err(e) =
+                        witmcc::git_poller::run_git_poller(pool_cl, root_cl, secs, tok).await
+                    {
+                        tracing::error!(error=?e, "git poller exited with error");
+                    }
+                }));
+            } else {
+                tracing::info!(?git_dir, "no .git directory; git poller skipped");
+            }
+        } else {
+            tracing::warn!(?root, "--watch path does not exist; collectors disabled");
+        }
+    }
+
+    if let Some(ms) = shutdown_after_ms {
+        let tok = cancel.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+            tok.cancel();
+        });
+    }
+
     let app = witmcc::api::router(pool);
     let addr = std::net::SocketAddr::new(bind, port);
     tracing::info!(%addr, "serving");
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .map_err(anyhow::Error::from)?;
+    let shutdown_signal = {
+        let tok = cancel.clone();
+        async move {
+            tokio::select! {
+                _ = tok.cancelled() => {}
+                _ = tokio::signal::ctrl_c() => {}
+            }
+        }
+    };
     axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal)
         .await
         .map_err(anyhow::Error::from)?;
+    cancel.cancel();
+    for h in bg_handles {
+        let _ = h.await;
+    }
     Ok(())
 }
 
