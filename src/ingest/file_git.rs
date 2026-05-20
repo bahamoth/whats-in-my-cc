@@ -4,9 +4,17 @@
 //! persisted as one `RawEvent` (`source_type="file_git"`) + one `ObservedEvent`
 //! and surfaces on the synthetic session [`FILESYSTEM_SESSION_ID`].
 
+use crate::db::{repo_diff_hunk, repo_observed, repo_raw, repo_runs};
+use crate::error::Result;
+use crate::ids::MonotonicUlidGen;
+use crate::model::meta::{PARSER_VERSION_FILE_GIT, SCHEMA_VERSION};
+use crate::model::observed::{Actor, EventKind, ObservedEvent};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use sqlx::SqlitePool;
+use std::collections::BTreeSet;
 
 pub const FILESYSTEM_SESSION_ID: &str = "filesystem";
 
@@ -155,6 +163,265 @@ pub fn truncate_patch_preview(s: &str) -> String {
     out.push_str(&s[..end]);
     out.push_str("\n…[truncated]");
     out
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct FileIngestResult {
+    pub accepted_events: u64,
+    pub duplicate_events: u64,
+    pub sessions_touched: Vec<String>,
+}
+
+/// Persist a single filesystem mutation as `raw_event` + `observed_event`.
+///
+/// Honours the slice-3/4 self-heal pattern: the session is marked touched and
+/// re-built even when the raw row deduplicates, so a stale graph recovers on
+/// the next event.
+pub async fn store_file_event(
+    pool: &SqlitePool,
+    record: FileRecord,
+    received_at: DateTime<Utc>,
+) -> Result<FileIngestResult> {
+    let mut gen = MonotonicUlidGen::new();
+    let run_id = repo_runs::start(pool).await?;
+    let mut result = FileIngestResult::default();
+    let mut touched: BTreeSet<String> = BTreeSet::new();
+
+    let payload = file_record_to_payload(&record);
+    let canonical = canonical_json(&payload);
+    let canonical_bytes = canonical.as_bytes().to_vec();
+    let payload_sha = hex::encode(Sha256::digest(&canonical_bytes));
+    let source_uri = format!("file://{}", record.path);
+    let raw_id = gen.generate();
+
+    let inserted = repo_raw::insert_dedup(
+        pool,
+        &repo_raw::NewRaw {
+            raw_event_id: raw_id.clone(),
+            ingest_run_id: run_id.clone(),
+            source_type: "file_git".into(),
+            source_uri,
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: payload_sha,
+            payload: canonical_bytes,
+            parse_error: None,
+            captured_at: received_at,
+        },
+    )
+    .await?;
+
+    // Self-heal (DEV-S3-07): touched is recorded BEFORE the dedup-skip so a
+    // re-emit against a stale graph still rebuilds.
+    touched.insert(record.session_id.clone());
+
+    if !inserted {
+        result.duplicate_events += 1;
+    } else {
+        let event = ObservedEvent {
+            event_id: gen.generate(),
+            raw_event_id: raw_id,
+            schema_version: SCHEMA_VERSION.into(),
+            session_id: record.session_id.clone(),
+            observed_at: record.observed_at,
+            actor: Actor::System,
+            kind: EventKind::FileEvent,
+            subkind: Some(record.change_type.as_str().into()),
+            payload,
+            parser_version: PARSER_VERSION_FILE_GIT.into(),
+            ..Default::default()
+        };
+        repo_observed::insert(pool, &event).await?;
+        result.accepted_events += 1;
+    }
+
+    for session_id in &touched {
+        crate::graph::build::rebuild_session(pool, session_id).await?;
+    }
+
+    repo_runs::finish(
+        pool,
+        &run_id,
+        "ok",
+        serde_json::to_value(&result).unwrap_or(Value::Null),
+    )
+    .await?;
+
+    result.sessions_touched = touched.into_iter().collect();
+    Ok(result)
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct CommitIngestResult {
+    pub accepted_commits: u64,
+    pub duplicate_commits: u64,
+    pub accepted_hunks: u64,
+    pub duplicate_hunks: u64,
+    pub dropped_hunks_over_limit: u64,
+    pub sessions_touched: Vec<String>,
+}
+
+/// Persist a commit (one `git_commit` `ObservedEvent`) and its hunks (one
+/// `diff_hunk` `ObservedEvent` per hunk + one row in the `diff_hunk` table).
+///
+/// `hunks` SHOULD already be capped at [`MAX_HUNKS_PER_COMMIT`] by the caller
+/// via [`extract_commit_records`]; if `hunks.len()` exceeds that, the surplus
+/// is dropped and counted.
+pub async fn store_commit(
+    pool: &SqlitePool,
+    commit: CommitRecord,
+    hunks: Vec<HunkRecord>,
+    received_at: DateTime<Utc>,
+) -> Result<CommitIngestResult> {
+    let mut gen = MonotonicUlidGen::new();
+    let run_id = repo_runs::start(pool).await?;
+    let mut result = CommitIngestResult::default();
+    let mut touched: BTreeSet<String> = BTreeSet::new();
+
+    // ---- commit row ----
+    let commit_payload = commit_record_to_payload(&commit);
+    let commit_canon = canonical_json(&commit_payload);
+    let commit_bytes = commit_canon.as_bytes().to_vec();
+    let commit_sha = hex::encode(Sha256::digest(&commit_bytes));
+    let commit_uri = format!("git://{}/commit/{}", commit.repo, commit.sha);
+    let commit_raw_id = gen.generate();
+
+    let commit_inserted = repo_raw::insert_dedup(
+        pool,
+        &repo_raw::NewRaw {
+            raw_event_id: commit_raw_id.clone(),
+            ingest_run_id: run_id.clone(),
+            source_type: "file_git".into(),
+            source_uri: commit_uri,
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: commit_sha,
+            payload: commit_bytes,
+            parse_error: None,
+            captured_at: received_at,
+        },
+    )
+    .await?;
+
+    touched.insert(commit.session_id.clone());
+
+    if commit_inserted {
+        let ev = ObservedEvent {
+            event_id: gen.generate(),
+            raw_event_id: commit_raw_id,
+            schema_version: SCHEMA_VERSION.into(),
+            session_id: commit.session_id.clone(),
+            observed_at: commit.committer.time,
+            actor: Actor::System,
+            kind: EventKind::GitCommit,
+            subkind: Some("commit".into()),
+            payload: commit_payload,
+            parser_version: PARSER_VERSION_FILE_GIT.into(),
+            ..Default::default()
+        };
+        repo_observed::insert(pool, &ev).await?;
+        result.accepted_commits += 1;
+    } else {
+        result.duplicate_commits += 1;
+    }
+
+    // ---- hunks ----
+    let (kept, dropped) = if hunks.len() > MAX_HUNKS_PER_COMMIT {
+        let drop_count = (hunks.len() - MAX_HUNKS_PER_COMMIT) as u64;
+        let mut v = hunks;
+        v.truncate(MAX_HUNKS_PER_COMMIT);
+        (v, drop_count)
+    } else {
+        (hunks, 0u64)
+    };
+    result.dropped_hunks_over_limit = dropped;
+
+    for hunk in kept {
+        let hunk_payload = hunk_record_to_payload(&hunk);
+        let hunk_canon = canonical_json(&hunk_payload);
+        let hunk_bytes = hunk_canon.as_bytes().to_vec();
+        let hunk_sha = hex::encode(Sha256::digest(&hunk_bytes));
+        let line_repr = match hunk.line_range_after {
+            Some((a, b)) => format!("{a}-{b}"),
+            None => "binary".into(),
+        };
+        let hunk_uri = format!(
+            "git://{}/commit/{}/hunk/{}:{}",
+            commit.repo, commit.sha, hunk.file_path, line_repr
+        );
+        let hunk_raw_id = gen.generate();
+
+        let inserted = repo_raw::insert_dedup(
+            pool,
+            &repo_raw::NewRaw {
+                raw_event_id: hunk_raw_id.clone(),
+                ingest_run_id: run_id.clone(),
+                source_type: "file_git".into(),
+                source_uri: hunk_uri,
+                source_line_no: 0,
+                source_byte_offset: 0,
+                payload_sha256: hunk_sha,
+                payload: hunk_bytes,
+                parse_error: None,
+                captured_at: received_at,
+            },
+        )
+        .await?;
+
+        if !inserted {
+            result.duplicate_hunks += 1;
+            continue;
+        }
+
+        let event_id = gen.generate();
+        let ev = ObservedEvent {
+            event_id: event_id.clone(),
+            raw_event_id: hunk_raw_id,
+            schema_version: SCHEMA_VERSION.into(),
+            session_id: hunk.session_id.clone(),
+            observed_at: commit.committer.time,
+            actor: Actor::System,
+            kind: EventKind::DiffHunk,
+            subkind: Some(hunk.change_type.clone()),
+            payload: hunk_payload,
+            parser_version: PARSER_VERSION_FILE_GIT.into(),
+            ..Default::default()
+        };
+        repo_observed::insert(pool, &ev).await?;
+
+        repo_diff_hunk::insert(
+            pool,
+            &repo_diff_hunk::NewDiffHunk {
+                diff_hunk_id: hunk.diff_hunk_id.clone(),
+                schema_version: SCHEMA_VERSION.into(),
+                session_id: hunk.session_id.clone(),
+                file_path: hunk.file_path.clone(),
+                change_type: hunk.change_type.clone(),
+                line_start_after: hunk.line_range_after.map(|(a, _)| a as i64),
+                line_end_after: hunk.line_range_after.map(|(_, b)| b as i64),
+                introduced_by_node_id: None,
+                related_observed_event_id: Some(event_id),
+            },
+        )
+        .await?;
+
+        result.accepted_hunks += 1;
+    }
+
+    for session_id in &touched {
+        crate::graph::build::rebuild_session(pool, session_id).await?;
+    }
+
+    repo_runs::finish(
+        pool,
+        &run_id,
+        "ok",
+        serde_json::to_value(&result).unwrap_or(Value::Null),
+    )
+    .await?;
+
+    result.sessions_touched = touched.into_iter().collect();
+    Ok(result)
 }
 
 pub fn canonical_json(value: &Value) -> String {
@@ -310,5 +577,125 @@ mod tests {
         assert_eq!(FileChange::Modified.as_str(), "modified");
         assert_eq!(FileChange::Deleted.as_str(), "deleted");
         assert_eq!(FileChange::Renamed.as_str(), "renamed");
+    }
+
+    async fn fresh_pool() -> sqlx::SqlitePool {
+        use crate::db::migrate;
+        use sqlx::sqlite::SqlitePoolOptions;
+        let pool = SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        migrate(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn store_file_event_persists_and_dedupes() {
+        let pool = fresh_pool().await;
+        let r = sample_file_record();
+        let first = store_file_event(&pool, r.clone(), Utc::now()).await.unwrap();
+        assert_eq!(first.accepted_events, 1);
+        assert_eq!(first.duplicate_events, 0);
+        assert_eq!(first.sessions_touched, vec![FILESYSTEM_SESSION_ID.to_string()]);
+
+        let second = store_file_event(&pool, r, Utc::now()).await.unwrap();
+        assert_eq!(second.accepted_events, 0);
+        assert_eq!(second.duplicate_events, 1);
+        // Self-heal: touched even on duplicate.
+        assert_eq!(second.sessions_touched, vec![FILESYSTEM_SESSION_ID.to_string()]);
+
+        let rows =
+            crate::db::repo_observed::list_session(&pool, FILESYSTEM_SESSION_ID, 100)
+                .await
+                .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(matches!(rows[0].kind, EventKind::FileEvent));
+        assert_eq!(rows[0].subkind.as_deref(), Some("modified"));
+        assert!(matches!(rows[0].actor, Actor::System));
+        assert_eq!(rows[0].parser_version, "file_git@0.1.0");
+    }
+
+    #[tokio::test]
+    async fn store_commit_persists_commit_plus_hunks_and_side_table() {
+        let pool = fresh_pool().await;
+        let c = sample_commit_record();
+        let hunks = vec![sample_hunk_record()];
+        let r = store_commit(&pool, c, hunks, Utc::now()).await.unwrap();
+        assert_eq!(r.accepted_commits, 1);
+        assert_eq!(r.accepted_hunks, 1);
+        assert_eq!(r.duplicate_commits, 0);
+        assert_eq!(r.duplicate_hunks, 0);
+        assert_eq!(r.dropped_hunks_over_limit, 0);
+
+        let rows =
+            crate::db::repo_observed::list_session(&pool, FILESYSTEM_SESSION_ID, 100)
+                .await
+                .unwrap();
+        assert_eq!(rows.len(), 2);
+
+        let dh = crate::db::repo_diff_hunk::list_session(&pool, FILESYSTEM_SESSION_ID)
+            .await
+            .unwrap();
+        assert_eq!(dh.len(), 1);
+        assert_eq!(dh[0].diff_hunk_id, "hunk_1");
+        assert_eq!(dh[0].file_path, "a.rs");
+        assert_eq!(dh[0].line_start_after, Some(42));
+        assert!(dh[0].related_observed_event_id.is_some());
+    }
+
+    #[tokio::test]
+    async fn store_commit_dedupes_on_replay() {
+        let pool = fresh_pool().await;
+        let c = sample_commit_record();
+        let hunks = vec![sample_hunk_record()];
+        store_commit(&pool, c.clone(), hunks.clone(), Utc::now())
+            .await
+            .unwrap();
+        let r = store_commit(&pool, c, hunks, Utc::now()).await.unwrap();
+        assert_eq!(r.accepted_commits, 0);
+        assert_eq!(r.duplicate_commits, 1);
+        assert_eq!(r.accepted_hunks, 0);
+        assert_eq!(r.duplicate_hunks, 1);
+        // observed_event still only has 2 rows
+        let rows =
+            crate::db::repo_observed::list_session(&pool, FILESYSTEM_SESSION_ID, 100)
+                .await
+                .unwrap();
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn store_commit_drops_surplus_hunks_over_cap() {
+        let pool = fresh_pool().await;
+        let c = sample_commit_record();
+        // Build MAX + 5 unique hunks.
+        let mut hunks: Vec<HunkRecord> = Vec::with_capacity(MAX_HUNKS_PER_COMMIT + 5);
+        for i in 0..(MAX_HUNKS_PER_COMMIT + 5) {
+            let mut h = sample_hunk_record();
+            h.diff_hunk_id = format!("hunk_{i}");
+            h.file_path = format!("f{i}.rs");
+            hunks.push(h);
+        }
+        let r = store_commit(&pool, c, hunks, Utc::now()).await.unwrap();
+        assert_eq!(r.accepted_hunks as usize, MAX_HUNKS_PER_COMMIT);
+        assert_eq!(r.dropped_hunks_over_limit, 5);
+    }
+
+    #[tokio::test]
+    async fn store_commit_binary_hunk_persists_null_line_range() {
+        let pool = fresh_pool().await;
+        let c = sample_commit_record();
+        let mut h = sample_hunk_record();
+        h.line_range_after = None;
+        h.patch_preview = "<binary>".into();
+        let r = store_commit(&pool, c, vec![h], Utc::now()).await.unwrap();
+        assert_eq!(r.accepted_hunks, 1);
+        let dh = crate::db::repo_diff_hunk::list_session(&pool, FILESYSTEM_SESSION_ID)
+            .await
+            .unwrap();
+        assert_eq!(dh.len(), 1);
+        assert!(dh[0].line_start_after.is_none());
+        assert!(dh[0].line_end_after.is_none());
     }
 }
