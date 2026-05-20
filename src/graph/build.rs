@@ -49,10 +49,28 @@ pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, V
                 "tool_result",
                 json!({"session_id": session_id, "tool_use_id": e.tool_use_id}),
             ),
-            EventKind::HookEvent => (
-                "hook_event",
-                json!({"session_id": session_id, "event_uuid": e.event_uuid}),
-            ),
+            EventKind::HookEvent => {
+                // External hooks (slice-4, parser_version starts with "hook@") carry
+                // hook_event_name as their subkind and an optional tool_use_id.  These
+                // are the correlation keys for cross-session dedup.  Transcript-internal
+                // hook attachments (slice-1) instead key by event_uuid because they
+                // arrive with no hook_event_name distinction.
+                if e.parser_version.starts_with("hook@") {
+                    (
+                        "hook_event",
+                        json!({
+                            "session_id":      session_id,
+                            "hook_event_name": e.subkind,
+                            "tool_use_id":     e.tool_use_id,
+                        }),
+                    )
+                } else {
+                    (
+                        "hook_event",
+                        json!({"session_id": session_id, "event_uuid": e.event_uuid}),
+                    )
+                }
+            }
             EventKind::OtelSpan => (
                 "otel_span",
                 json!({
