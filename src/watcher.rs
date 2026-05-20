@@ -132,13 +132,15 @@ fn classify(event: &notify::Event, root: &Path) -> Vec<RawFsEvent> {
     out
 }
 
-fn should_ignore(path: &Path, root: &Path) -> bool {
-    if let Ok(rel) = path.strip_prefix(root) {
-        let rel_str = rel.to_string_lossy();
-        if rel_str.starts_with(".git") || rel_str.contains("/.git/") || rel_str.contains("/target/")
-            || rel_str.starts_with("target/")
-        {
-            return true;
+fn should_ignore(path: &Path, _root: &Path) -> bool {
+    // Match `.git` / `target` anywhere in the path components — `strip_prefix`
+    // does not handle macOS `/tmp -> /private/tmp` symlink rewriting, so the
+    // root-relative check would otherwise miss events on macOS temp paths.
+    for comp in path.components() {
+        if let std::path::Component::Normal(name) = comp {
+            if name == std::ffi::OsStr::new(".git") || name == std::ffi::OsStr::new("target") {
+                return true;
+            }
         }
     }
     if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
@@ -165,5 +167,15 @@ mod tests {
         assert!(should_ignore(Path::new("/tmp/r/foo.sqlite"), root));
         assert!(should_ignore(Path::new("/tmp/r/foo.sqlite-wal"), root));
         assert!(!should_ignore(Path::new("/tmp/r/src/main.rs"), root));
+    }
+
+    #[test]
+    fn ignore_handles_canonical_macos_private_prefix() {
+        // macOS resolves /tmp -> /private/tmp, so watcher events arrive with
+        // /private/tmp/... even if the user passed /tmp/... as the root.
+        let root = Path::new("/tmp/r");
+        assert!(should_ignore(Path::new("/private/tmp/r/.git/HEAD"), root));
+        assert!(should_ignore(Path::new("/private/tmp/r/target/x"), root));
+        assert!(!should_ignore(Path::new("/private/tmp/r/src/main.rs"), root));
     }
 }
