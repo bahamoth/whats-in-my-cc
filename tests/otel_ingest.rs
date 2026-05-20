@@ -105,7 +105,7 @@ async fn post_traces_returns_accepted_count() {
         .await;
     resp.assert_status_ok();
     let v: serde_json::Value = resp.json();
-    assert_eq!(v["meta"]["schema_version"], "0.4.0");
+    assert_eq!(v["meta"]["schema_version"], "0.5.0");
     assert_eq!(v["data"]["accepted_spans"], 1);
     assert_eq!(v["data"]["rejected_spans"], 0);
     assert_eq!(v["data"]["sessions_touched"][0], "sess-otel-A");
