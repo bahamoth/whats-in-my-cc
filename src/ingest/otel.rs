@@ -349,6 +349,14 @@ pub async fn store(
         }
     }
 
+    // Rebuild graph for each session we touched so HTTP consumers see fresh
+    // graph_node rows immediately. Without this the /v1/sessions/:id/graph
+    // endpoint returns 404 for OTel-only sessions even though observed_event
+    // rows are present.
+    for session_id in &touched {
+        crate::graph::build::rebuild_session(pool, session_id).await?;
+    }
+
     repo_runs::finish(
         pool,
         &run_id,
