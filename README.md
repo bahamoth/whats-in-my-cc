@@ -148,6 +148,53 @@ Notes:
   redaction is M7. Only enable forwarding in trusted contexts until then.
 - External hook events appear on the new `Hook` lane in the UI.
 
+### File/Git observer (slice-5)
+
+`witmcc serve --watch <path>` spawns two background tokio tasks alongside the
+HTTP server. A filesystem watcher (`notify` 7.x) emits debounced `file_event`
+records on create / modify / delete / rename. If `<path>/.git` exists, a git
+poller (default 5 s) emits one `git_commit` + one `diff_hunk` per hunk on every
+new commit. Hunks are also persisted in a dedicated `diff_hunk` side-table for
+the spec-defined `file_lineage_idx` (migration `0003`).
+
+All file/git events live on a synthetic `session_id = "filesystem"` — they
+surface through the same `/v1/sessions` endpoint as transcript / OTel / hook
+sessions, and the SPA's new `Files` lane (8th) renders the three new node kinds.
+
+Smoke:
+
+```bash
+mkdir -p /tmp/witmcc-smoke && (cd /tmp/witmcc-smoke && git init && touch a.txt && \
+  git -c user.email=t@t -c user.name=t commit --allow-empty -m init)
+./target/release/witmcc serve --bind 127.0.0.1 --port 7878 \
+  --watch /tmp/witmcc-smoke --git-poll-secs 1 --auto-migrate &
+sleep 1
+echo hello > /tmp/witmcc-smoke/a.txt
+(cd /tmp/witmcc-smoke && git add . && git -c user.email=t@t -c user.name=t commit -m bump)
+sleep 3
+curl -sS http://127.0.0.1:7878/v1/sessions/filesystem/graph | \
+  jq '.data.nodes[].node_kind' | sort -u
+# expect: diff_hunk, file_event, git_commit
+```
+
+Flags:
+
+- `--watch <path>` — directory to observe; both collectors disabled if the path is missing.
+- `--git-poll-secs N` — polling interval (default `5`, minimum `1`).
+- `--shutdown-after-ms N` — test/smoke convenience: auto-shutdown after `N` ms.
+
+Known limits in slice-5:
+
+- File mutations between commits surface as `file_event` only — there is no
+  per-file content diff. Hunks come from `git commit` diffs only.
+- Hunk text is truncated to 4 KB per hunk. Binary diffs surface with
+  `line_range_after = null` and `patch_preview = "<binary>"`.
+- `MAX_HUNKS_PER_COMMIT = 2000`; surplus hunks are dropped (and counted in the ingest result).
+- No redaction (M7). Hunks may carry secrets.
+- `session_id="filesystem"` is reserved.
+- Watcher excludes `.git/**`, `**/target/**`, `*.sqlite{,-wal,-shm}` by default; the glob list is hard-coded for slice-5.
+- The git poller on startup uses the current `HEAD` as `last_seen` — commits made before `serve` started are not back-filled.
+
 ## Reference docs
 
 - Spec (this slice): `docs/superpowers/specs/2026-05-19-witmcc-slice1-transcript-design.md`
