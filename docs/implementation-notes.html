@@ -531,6 +531,63 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
         이런 행을 응답에서 제외 — spec §6.3 에 정의된 동작.</p>
       </div>
     </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S3-07</span>
+        <strong><code>otel::store</code>: rebuild graph on every POST, including duplicate-raw POSTs</strong>
+        <span class="pill violet">graph</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> 명시 없음 (graph staging policy 세부사항).</p>
+        <p><strong>최초 구현 (post-merge에서 발견된 갭):</strong> <code>otel::store</code>는
+        <code>observed_event</code> 행만 삽입하고 <code>rebuild_session</code>을 호출하지 않았다.
+        결과적으로 HTTP 경로(<code>POST /otel/v1/traces</code>)에서 ingest 직후
+        <code>GET /v1/sessions/:id/graph</code>가 404를 반환했다. 테스트는 <code>build::rebuild_session</code>을
+        명시 호출해서 통과했기에 회귀 검출이 안 됐다. fix는 <code>store</code> 내부에서 touched 세션마다
+        자동 rebuild를 호출 (커밋 <code>21527b9</code>).</p>
+
+        <p><strong>두 번째 갭 (self-heal):</strong> raw dedup이 발동하면 <code>continue</code>로
+        루프를 빠져 나가 <code>touched</code>에 session_id가 들어가지 않는다 → rebuild도 skip.
+        결과적으로 이전 버그 바이너리가 만든 stale state(observed_event row 있음,
+        graph_node 없음)는 새 바이너리에서 같은 fixture를 재POST해도 자가복구되지 않는다.
+        fix는 <code>touched.insert</code>를 dedup 체크보다 먼저 실행 (커밋 <code>78b2f30</code>).</p>
+
+        <p><strong>채택한 정책:</strong> "ingest event는 항상 affected session의 graph rebuild를 유발한다.
+        raw row 중복 여부와 무관." <code>graph_node</code>는 <code>observed_event</code>로부터 결정론적으로
+        파생되는 view이므로 DELETE + 재INSERT는 idempotent. 데이터(<code>raw_event</code>,
+        <code>observed_event</code>)는 절대 교체되지 않는다 — graph view만 source-of-truth 기준으로
+        다시 빌드된다.</p>
+
+        <p><strong>트레이드오프:</strong></p>
+        <ul>
+          <li><em>장점:</em> self-heal (바이너리 업그레이드/crash 후 재POST로 복구), end-state idempotency,
+          단일 세션 rebuild 비용은 SQLite 로컬에서 sub-ms.</li>
+          <li><em>단점:</em> 고volume retry 환경(예: OTel SDK가 같은 batch를 초당 수십 번 쏘는 시나리오)에서
+          데이터 변화 없는 rebuild가 누적될 수 있음. slice-3 단일 사용자 scale에선 무시 가능.</li>
+        </ul>
+
+        <p><strong>재검토 트리거:</strong> 다음 중 하나라도 발생하면 정책 변경 후보:</p>
+        <ul>
+          <li>고volume OTel ingestion (retry 폭주 패턴 관측)</li>
+          <li>multi-source ingest 추가(Hook/File-Git)로 session-level rebuild 비용 증가</li>
+          <li>graph_node에 idempotent하지 않은 side-effect 추가(예: ext index, notification)</li>
+        </ul>
+
+        <p><strong>대안 옵션 (현재 미채택):</strong></p>
+        <ul>
+          <li><strong>Option D — recovery-only rebuild:</strong>
+          <code>if !inserted &amp;&amp; graph_node_count(session) == 0 { rebuild }</code>.
+          duplicate인데 graph가 이미 있으면 skip. 단점: stale graph가 일부만 비어 있는 경우 감지 불가.</li>
+          <li><strong>Option E — dirty flag:</strong> 세션별 <code>graph_dirty</code> 비트.
+          새 observed_event 삽입 시 set, rebuild 후 clear. 시작 시 dirty 세션 스캔.
+          가장 정교하지만 추가 schema + lifecycle 필요.</li>
+        </ul>
+
+        <p><strong>관련 커밋:</strong> <code>21527b9</code> (initial fix),
+        <code>78b2f30</code> (self-heal extension).</p>
+      </div>
+    </div>
   </section>
 
   <section id="slice3-commits">
@@ -550,6 +607,10 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       <li><code>d2af07b</code> — feat(webui): laneMapping otel_span -&gt; OTel</li>
       <li><code>6ac4f96</code> — feat(webui): SourcePanel renders OTel Attributes section for otel_span records</li>
       <li><code>482b46e</code> — test(webui): regression — otel_span node renders on OTel lane</li>
+      <li><code>b05fcd4</code> — docs(slice-3): README OTel section + implementation notes deviations</li>
+      <li><code>511c39b</code> — test(otel): session detail round-trip returns otel_span + telemetry (AC3)</li>
+      <li><code>21527b9</code> — fix(ingest): otel::store rebuilds graph after observed_event inserts</li>
+      <li><code>78b2f30</code> — fix(ingest): otel::store rebuilds graph even when raw_event is duplicate</li>
     </ul>
   </section>
 
