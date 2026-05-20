@@ -93,6 +93,61 @@ Notes:
 - Spans without `session.id` are stored but excluded from `/v1/sessions`.
 - No redaction yet — do not send spans containing secrets.
 
+### Hook Collector (slice-4)
+
+`POST /hooks/v1/events` accepts Claude Code hook lifecycle events directly. The
+body is a single hook JSON object **or** a JSON array of hook objects (≤ 1 MB).
+Nine `hook_event_name` values are recognised (`PreToolUse`, `PostToolUse`,
+`UserPromptSubmit`, `Stop`, `SubagentStop`, `Notification`, `PreCompact`,
+`SessionStart`, `SessionEnd`); unknown names ingest with `subkind="unknown"`.
+
+Wire it up via a forward script registered in `~/.claude/settings.json`:
+
+```jsonc
+{
+  "hooks": {
+    "PreToolUse":  [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
+    "PreCompact":   [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
+    "SessionEnd":   [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
+    "Stop":         [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }]
+  }
+}
+```
+
+`/usr/local/bin/witmcc-forward.sh`:
+
+```bash
+#!/bin/bash
+exec curl -sS -m 2 -X POST \
+  -H 'content-type: application/json' \
+  --data-binary @- \
+  http://127.0.0.1:7878/hooks/v1/events > /dev/null 2>&1 || true
+```
+
+`-m 2` (2 second timeout) combined with `|| true` implements **fail-soft degrade
+semantics** (PRD OBS-3): if the witmcc receiver is down, slow, or unreachable,
+your Claude Code session is never blocked.
+
+Manual smoke test:
+
+```bash
+curl -X POST http://127.0.0.1:7878/hooks/v1/events \
+  -H 'content-type: application/json' \
+  --data-binary @tests/fixtures/hook/pre_tool_use.json
+```
+
+Notes:
+- witmcc does **not** install the forward script automatically (CLAUDE.md
+  non-goal: "Claude Code 설정 / hook / command / skill / memory 변경").
+- Hook payloads can carry secrets (prompt text, command output, `tool_input`);
+  redaction is M7. Only enable forwarding in trusted contexts until then.
+- External hook events appear on the new `Hook` lane in the UI.
+
 ## Reference docs
 
 - Spec (this slice): `docs/superpowers/specs/2026-05-19-witmcc-slice1-transcript-design.md`
