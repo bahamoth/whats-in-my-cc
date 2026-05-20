@@ -4,6 +4,59 @@ import type { RawEventResponse } from '../api/types';
 import { JsonView } from './JsonView';
 import styles from './SourcePanel.module.css';
 
+type HookRecord = {
+  hook_event_name?: string;
+  tool_name?: string;
+  tool_use_id?: string;
+  tool_input?: unknown;
+  tool_response?: unknown;
+  prompt?: string;
+  message?: string;
+  trigger?: string;
+  source?: string;
+};
+
+function HookSection({ record }: { record: unknown }) {
+  if (typeof record !== 'object' || record === null) return null;
+  const r = record as HookRecord;
+  if (!r.hook_event_name) return null;
+  return (
+    <section className={styles.attributes} aria-labelledby="hook-section-heading">
+      <h4 id="hook-section-heading">{r.hook_event_name}</h4>
+      <table>
+        <tbody>
+          {r.tool_name && (
+            <tr><td className={styles.attrKey}>tool_name</td><td className={styles.attrValue}>{r.tool_name}</td></tr>
+          )}
+          {r.tool_use_id && (
+            <tr><td className={styles.attrKey}>tool_use_id</td><td className={styles.attrValue}>{r.tool_use_id}</td></tr>
+          )}
+          {r.trigger && (
+            <tr><td className={styles.attrKey}>trigger</td><td className={styles.attrValue}>{r.trigger}</td></tr>
+          )}
+          {r.source && (
+            <tr><td className={styles.attrKey}>source</td><td className={styles.attrValue}>{r.source}</td></tr>
+          )}
+        </tbody>
+      </table>
+      {r.tool_input !== undefined && (
+        <details open>
+          <summary>tool_input</summary>
+          <JsonView data={r.tool_input} />
+        </details>
+      )}
+      {r.tool_response !== undefined && (
+        <details>
+          <summary>tool_response</summary>
+          <JsonView data={r.tool_response} />
+        </details>
+      )}
+      {r.prompt && <pre>{r.prompt}</pre>}
+      {r.message && <p>{r.message}</p>}
+    </section>
+  );
+}
+
 type Props = { eventId: string | null };
 
 type State =
@@ -65,6 +118,9 @@ export function SourcePanel({ eventId }: Props) {
                 </tbody>
               </table>
             </section>
+          )}
+          {state.data.record_type === 'hook_event' && (
+            <HookSection record={state.data.record} />
           )}
           <div className={styles.body}>
             <JsonView data={state.data.record} />
