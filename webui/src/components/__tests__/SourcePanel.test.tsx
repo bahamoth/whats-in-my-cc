@@ -42,6 +42,60 @@ describe('SourcePanel', () => {
     await waitFor(() => expect(screen.getByText(/raw record not available/i)).toBeInTheDocument());
   });
 
+  it('renders hook header + tool_input section for pre_tool_use', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(envelope({
+      schema_version: '0.3.0',
+      event_id: 'ev_hk1',
+      session_id: 'sess_HK',
+      source: {
+        kind: 'hook',
+        file_path: 'hook://sess_HK/PreToolUse/toolu_01',
+        line_no: 0,
+        ingested_at: '2026-05-19T00:00:00Z',
+      },
+      record: {
+        session_id: 'sess_HK',
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'ls' },
+        tool_use_id: 'toolu_01',
+      },
+      record_type: 'hook_event',
+      redaction_state: 'none',
+    }));
+    const { container } = render(<SourcePanel eventId="ev_hk1" />);
+    await waitFor(() => expect(screen.getByText('PreToolUse')).toBeInTheDocument());
+    // tool_name appears in the hook section
+    expect(screen.getByText('Bash')).toBeInTheDocument();
+    // tool_input <summary> is rendered (use container query to disambiguate from JsonView)
+    const summaries = Array.from(container.querySelectorAll('summary'));
+    expect(summaries.some((s) => s.textContent === 'tool_input')).toBe(true);
+  });
+
+  it('renders hook header + message text for notification', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(envelope({
+      schema_version: '0.3.0',
+      event_id: 'ev_hk2',
+      session_id: 'sess_HK',
+      source: {
+        kind: 'hook',
+        file_path: 'hook://sess_HK/Notification/',
+        line_no: 0,
+        ingested_at: '2026-05-19T00:00:00Z',
+      },
+      record: {
+        session_id: 'sess_HK',
+        hook_event_name: 'Notification',
+        message: 'msg-text-xyz',
+      },
+      record_type: 'hook_event',
+      redaction_state: 'none',
+    }));
+    render(<SourcePanel eventId="ev_hk2" />);
+    await waitFor(() => expect(screen.getByText('Notification')).toBeInTheDocument());
+    expect(screen.getByText('msg-text-xyz')).toBeInTheDocument();
+  });
+
   it('renders Attributes section when record_type is otel_span', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(envelope({
       schema_version: '0.2.0',
