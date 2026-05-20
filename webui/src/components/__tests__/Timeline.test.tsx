@@ -65,6 +65,31 @@ describe('Timeline', () => {
     expect(container.querySelectorAll('[data-testid="edge-path"]').length).toBe(1);
   });
 
+  it('renders a hook_event node marker on the Hook lane (slice-4)', () => {
+    const graph: GraphPayload = {
+      nodes: [
+        {
+          node_id: 'nd_h_1',
+          schema_version: '0.3.0',
+          session_id: 's',
+          node_kind: 'hook_event',
+          started_at: '2026-05-19T00:00:00Z',
+          ended_at: null,
+          merge_keys: { hook_event_name: 'pre_tool_use', tool_use_id: 'toolu_01' },
+          source_event_ids: ['ev_h_1'],
+          source_uris: [],
+          payload: {},
+        },
+      ],
+      edges: [],
+    };
+    render(<Timeline graph={graph} selectedNodeId={null} onSelect={() => {}} />);
+    const marker = document.querySelector('[data-node-id="nd_h_1"]');
+    expect(marker).not.toBeNull();
+    expect(screen.getByText('Hook')).toBeInTheDocument();
+    expect(screen.queryByText(/no hook events observed/i)).toBeNull();
+  });
+
   it('renders an otel_span node marker (regression for slice-3)', () => {
     const graph: GraphPayload = {
       nodes: [
