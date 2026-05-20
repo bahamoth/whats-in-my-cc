@@ -51,6 +51,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice3-overview">Overview (slice-3)</a>
     <a href="#slice3-deviations">Intentional Deviations (slice-3)</a>
     <a href="#slice3-commits">Commit Reference (slice-3)</a>
+    <a href="#slice4-overview">Overview (slice-4)</a>
+    <a href="#slice4-deviations">Intentional Deviations (slice-4)</a>
+    <a href="#slice4-commits">Commit Reference (slice-4)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
 </aside>
@@ -614,8 +617,153 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </ul>
   </section>
 
+  <section id="slice4-overview">
+    <h2><span class="num">10</span>Slice-4 Overview</h2>
+    <p><code>slice4-hook-collector</code> branch — <code>POST /hooks/v1/events</code>
+    receiver for live Claude Code hook lifecycle events
+    (PreToolUse / PostToolUse / UserPromptSubmit / Stop / SubagentStop /
+    Notification / PreCompact / SessionStart / SessionEnd).
+    SCHEMA_VERSION 0.2.0 → 0.3.0.</p>
+    <div class="callout good">
+      <strong>전체 상태:</strong> slice-4 완료. 9개 known hook event 모두 ingest,
+      dedup self-heal 동작 (slice-3 DEV-S3-07 패턴 재사용), Hook lane(7번째)에
+      timeline 마커 표시. Backend tests 65개 + WebUI tests 28개 통과.
+    </div>
+  </section>
+
+  <section id="slice4-deviations">
+    <h2><span class="num">11</span>Slice-4 Intentional Deviations</h2>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S4-01</span>
+        <strong>External hook vs transcript-internal hook merge_keys split via <code>parser_version</code></strong>
+        <span class="pill violet">graph</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> 명시 없음 (graph merge_keys 세부사항).</p>
+        <p><strong>실제 구현:</strong> <code>graph::build::compute</code>의
+        <code>EventKind::HookEvent</code> branch가 <code>e.parser_version.starts_with("hook@")</code>로
+        분기한다. 외부 hook (slice-4)은 <code>(session_id, hook_event_name, tool_use_id)</code>로
+        merge하고, transcript-내부 hook attachment (slice-1)는 기존 <code>event_uuid</code>
+        merge_keys를 유지한다.</p>
+        <p><strong>이유:</strong> 두 source의 식별 키가 본질적으로 다르다. 외부 hook은
+        <code>hook_event_name</code> + <code>tool_use_id</code>로 의미적 동일성을 가지지만
+        <code>event_uuid</code>는 없다. 반대로 transcript-내부 hook은 부모 message의
+        <code>event_uuid</code>로만 식별 가능. 둘을 같은 merge_keys 스키마로 강제하면
+        한 쪽이 항상 dangling이 된다.</p>
+        <p><strong>후속:</strong> <code>tool_use_id</code> 기반 cross-source dedup은 별도 slice.
+        현재는 외부/내부가 별도 노드로 공존한다.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S4-02</span>
+        <strong>Pass-through body shape (no wrapper envelope)</strong>
+        <span class="pill blue">api</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> 명시 없음.</p>
+        <p><strong>실제 구현:</strong> Claude Code의 stdin JSON을 그대로 받는다.
+        wrapping object (<code>{"events": [...]}</code>) 없이 단일 hook object 또는
+        JSON array 직접. 전체 JSON 본문이 그대로 <code>raw_event.payload</code>에 저장됨.</p>
+        <p><strong>이유:</strong> 사용자 forward script가 <code>cat | curl --data-binary @-</code>로
+        단순해진다. wrapping을 추가하면 user-side script가 jq 등으로 변환해야 하며,
+        그 변환은 hook 페이로드 보존성을 해친다.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S4-03</span>
+        <strong>1 MB body limit (vs OTel's 4 MB)</strong>
+        <span class="pill amber">api</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>실제 구현:</strong> <code>MAX_HOOK_BODY = 1 * 1024 * 1024</code>.
+        OTel receiver는 4 MB.</p>
+        <p><strong>이유:</strong> 단일 hook event는 대부분 수 KB. 1 MB는 batch 50~100건
+        수준이며 hook의 high-frequency 특성과 fail-soft 요구를 고려하면 적절.
+        OTel은 batch span 수가 더 많아 4 MB가 필요했음.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S4-04</span>
+        <strong>Forward script not auto-installed</strong>
+        <span class="pill amber">ops</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> CLAUDE.md 명시적 non-goal —
+        "Claude Code 설정 / hook / command / skill / memory 변경".</p>
+        <p><strong>실제 구현:</strong> README에 forward script 예제와 settings.json
+        스니펫만 제공. <code>witmcc init-hooks</code> 같은 자동 설치 서브커맨드는 없음.</p>
+        <p><strong>이유:</strong> Claude Code 설정에 대한 write는 product principle 위반.
+        사용자가 명시적으로 hook을 등록해야 데이터가 들어온다.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S4-05</span>
+        <strong>Hook ↔ transcript-internal hook 중복 미해결 (known gap)</strong>
+        <span class="pill amber">model</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>현황:</strong> Claude Code가 PreToolUse hook을 트리거하면 외부 hook
+        (이 slice의 forward script로 들어옴)과 transcript-내부 hook attachment 두 경로로
+        동일 사건이 기록될 수 있다. <code>graph_node</code>는 각각 별도 노드로 보존된다.</p>
+        <p><strong>이유:</strong> transcript-내부 hook attachment는 <code>hook_event_name</code>을
+        명시적으로 carry하지 않으며, 외부 hook은 <code>event_uuid</code>를 갖지 않는다.
+        cross-source dedup은 시간 윈도우 + <code>tool_use_id</code> 휴리스틱이 필요하며 별도 slice.</p>
+        <p><strong>영향:</strong> tool 사용 횟수가 두 source 모두 활성일 때 부풀려 보일 수 있음.
+        <code>by_kind.hook_event</code> count 해석 시 주의.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head">
+        <span class="dev-id">DEV-S4-06</span>
+        <strong>No DDL migration (raw_event/observed_event schema 그대로 재사용)</strong>
+        <span class="pill amber">db</span>
+      </div>
+      <div class="dev-body">
+        <p><strong>사양 원문:</strong> 명시 없음.</p>
+        <p><strong>실제 구현:</strong> migration 추가 없음. <code>source_type</code>이 TEXT
+        column이라 <code>"hook"</code> 값 추가에 schema 변경 불필요. 기존 OTel slice의
+        <code>0002_telemetry.sql</code> 인덱스도 그대로 적용된다.</p>
+        <p><strong>후속:</strong> hook 전용 인덱스 <code>(source_type='hook', session_id)</code>
+        는 hook-only 세션이 큰 규모로 증가할 때 추가 검토.</p>
+      </div>
+    </div>
+
+  </section>
+
+  <section id="slice4-commits">
+    <h2><span class="num">12</span>Slice-4 Commit Reference</h2>
+    <p>커밋 SHA 목록 (slice-4 branch <code>slice4-hook-collector</code>).
+    PR 머지 시 squash 여부에 따라 SHA가 달라질 수 있다.</p>
+    <ul>
+      <li><code>2662196</code> — docs(slice-4): design spec for hook collector (POST /hooks/v1/events)</li>
+      <li><code>489e226</code> — docs(slice-4): TDD implementation plan — 12 bite-sized tasks</li>
+      <li><code>3a24ea6</code> — chore(meta): bump SCHEMA_VERSION 0.2.0 -&gt; 0.3.0; add PARSER_VERSION_HOOK</li>
+      <li><code>2281894</code> — feat(ingest): hook parser — single + array body, 9 known event names</li>
+      <li><code>81c3aa4</code> — feat(ingest): hook::store — raw + observed + self-heal graph rebuild</li>
+      <li><code>b590c9e</code> — feat(graph): external hook nodes merge by (session, hook_event_name, tool_use_id)</li>
+      <li><code>035d377</code> — feat(api): POST /hooks/v1/events — Claude Code hook receiver (single + batch)</li>
+      <li><code>aa9ee76</code> — test(hook): JSON fixtures for 9 known events + batch + reject + unknown</li>
+      <li><code>790845d</code> — test(hook): end-to-end ingest, dedup, unknown subkind, raw endpoint</li>
+      <li><code>c9dec31</code> — feat(webui): add Hook lane (7th); map hook_event -&gt; Hook</li>
+      <li><code>cfcfd23</code> — feat(webui): SourcePanel renders hook record header + subkind-specific section</li>
+      <li><code>0f47714</code> — test(webui): regression — hook_event marker renders on Hook lane</li>
+      <li><code>35e19cc</code> — docs(slice-4): README hook collector section + forward script</li>
+    </ul>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 · 2026-05-19 · branch: slice2-replay-ui</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 · 2026-05-20 · branch: slice4-hook-collector</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
