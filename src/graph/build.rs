@@ -79,6 +79,28 @@ pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, V
                     "span_id":    e.span_id,
                 }),
             ),
+            EventKind::FileEvent => (
+                "file_event",
+                json!({
+                    "session_id":  session_id,
+                    "file_path":   e.payload.pointer("/file/path"),
+                    "change_type": e.payload.pointer("/file/change_type"),
+                }),
+            ),
+            EventKind::GitCommit => (
+                "git_commit",
+                json!({
+                    "session_id": session_id,
+                    "sha":        e.payload.pointer("/git/sha"),
+                }),
+            ),
+            EventKind::DiffHunk => (
+                "diff_hunk",
+                json!({
+                    "session_id":   session_id,
+                    "diff_hunk_id": e.payload.pointer("/hunk/diff_hunk_id"),
+                }),
+            ),
             // attachment_meta, session_state, file_history_snapshot, thinking,
             // system_summary, unknown — not promoted to graph nodes
             _ => continue,
@@ -308,7 +330,12 @@ pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, V
     //     transcript ↔ span correlation is established.
     let mut ordered: Vec<&GraphNode> = nodes
         .iter()
-        .filter(|n| n.node_kind != "otel_span")
+        .filter(|n| {
+            !matches!(
+                n.node_kind.as_str(),
+                "otel_span" | "file_event" | "git_commit" | "diff_hunk"
+            )
+        })
         .collect();
     ordered.sort_by(|a, b| (a.started_at, &a.node_id).cmp(&(b.started_at, &b.node_id)));
     for w in ordered.windows(2) {
