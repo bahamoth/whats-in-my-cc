@@ -9,6 +9,14 @@ pub struct OtelIngestResponse {
     pub sessions_touched: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct HookIngestResponse {
+    pub accepted_events: u64,
+    pub rejected_events: u64,
+    pub duplicate_events: u64,
+    pub sessions_touched: Vec<String>,
+}
+
 #[derive(Serialize)]
 pub struct SessionListItem {
     pub session_id: String,
