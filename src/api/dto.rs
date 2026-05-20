@@ -9,6 +9,22 @@ pub struct OtelIngestResponse {
     pub sessions_touched: Vec<String>,
 }
 
+/// slice-6 Stage 1 — raw-only receiver response for `/otel/v1/metrics`.
+#[derive(Debug, Serialize)]
+pub struct OtelMetricsRawResponse {
+    pub accepted_resource_metrics: u64,
+    pub stored_raw_rows: u64,
+    pub duplicate_raw_rows: u64,
+}
+
+/// slice-6 Stage 1 — raw-only receiver response for `/otel/v1/logs`.
+#[derive(Debug, Serialize)]
+pub struct OtelLogsRawResponse {
+    pub accepted_resource_logs: u64,
+    pub stored_raw_rows: u64,
+    pub duplicate_raw_rows: u64,
+}
+
 #[derive(Debug, Serialize)]
 pub struct HookIngestResponse {
     pub accepted_events: u64,

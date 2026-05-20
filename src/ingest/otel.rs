@@ -378,7 +378,52 @@ pub async fn store(
     Ok(result)
 }
 
-fn canonical_json(value: &Value) -> String {
+/// Slice-6 Stage 1 — persist an OTLP/JSON metrics or logs body verbatim into `raw_event`.
+///
+/// Returns `(inserted, raw_event_id, payload_sha256)`. `inserted = false` means the
+/// `(source_uri, source_line_no, payload_sha256)` triple already existed (idempotent
+/// re-POST). The receiver only stores raw bytes; normalisation into `MetricSample` /
+/// `LogRecord` `ObservedEvent` rows is Stage 2 (separate slice-6 task).
+pub async fn store_raw(
+    pool: &SqlitePool,
+    source_type: &str,
+    source_uri_prefix: &str,
+    body_json: &Value,
+    received_at: DateTime<Utc>,
+) -> Result<(bool, String, String)> {
+    let canonical = canonical_json(body_json);
+    let canonical_bytes = canonical.into_bytes();
+    let payload_sha = hex::encode(Sha256::digest(&canonical_bytes));
+    let source_uri = format!("{}://post/{}", source_uri_prefix, &payload_sha[..16]);
+    let run_id = repo_runs::start(pool).await?;
+    let raw_id = MonotonicUlidGen::new().generate();
+    let inserted = repo_raw::insert_dedup(
+        pool,
+        &repo_raw::NewRaw {
+            raw_event_id: raw_id.clone(),
+            ingest_run_id: run_id.clone(),
+            source_type: source_type.to_string(),
+            source_uri,
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: payload_sha.clone(),
+            payload: canonical_bytes,
+            parse_error: None,
+            captured_at: received_at,
+        },
+    )
+    .await?;
+    repo_runs::finish(
+        pool,
+        &run_id,
+        "ok",
+        serde_json::json!({"inserted": inserted, "source_type": source_type}),
+    )
+    .await?;
+    Ok((inserted, raw_id, payload_sha))
+}
+
+pub(crate) fn canonical_json(value: &Value) -> String {
     // Recursively sort object keys so byte representation is stable.
     fn norm(v: &Value) -> Value {
         match v {
