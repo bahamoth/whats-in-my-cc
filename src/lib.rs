@@ -10,4 +10,5 @@ pub mod ingest;
 pub mod model;
 pub mod paths;
 pub mod telemetry;
+pub mod transcript_tail;
 pub mod watcher;

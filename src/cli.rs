@@ -73,5 +73,14 @@ pub enum Command {
         /// Test-only: auto-shutdown after N ms (used by smoke + cli tests).
         #[arg(long)]
         shutdown_after_ms: Option<u64>,
+        /// Disable the transcript live tail (slice-7). Use this if you only
+        /// want the OTel / hook receivers and prefer to backfill transcripts
+        /// later with `witmcc ingest --all`.
+        #[arg(long)]
+        no_watch_transcripts: bool,
+        /// Override the transcripts root that the live tail watches.
+        /// Default: `~/.claude/projects` (autodetected).
+        #[arg(long)]
+        transcripts_root: Option<PathBuf>,
     },
 }

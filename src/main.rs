@@ -22,6 +22,8 @@ fn main() -> error::Result<()> {
                 watch,
                 git_poll_secs,
                 shutdown_after_ms,
+                no_watch_transcripts,
+                transcripts_root,
             } => {
                 serve_cmd(
                     &cli.db_path,
@@ -31,6 +33,8 @@ fn main() -> error::Result<()> {
                     watch,
                     git_poll_secs,
                     shutdown_after_ms,
+                    no_watch_transcripts,
+                    transcripts_root,
                 )
                 .await
             }
@@ -46,6 +50,7 @@ async fn init_db(path: &std::path::Path) -> error::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn serve_cmd(
     db_path: &std::path::Path,
     bind: std::net::IpAddr,
@@ -54,6 +59,8 @@ async fn serve_cmd(
     watch: Option<std::path::PathBuf>,
     git_poll_secs: u64,
     shutdown_after_ms: Option<u64>,
+    no_watch_transcripts: bool,
+    transcripts_root: Option<std::path::PathBuf>,
 ) -> error::Result<()> {
     // Loopback-only enforcement: accepts 127.0.0.0/8 and ::1 (is_loopback()).
     // Strict 127.0.0.1-only would use `bind == IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)`.
@@ -114,6 +121,29 @@ async fn serve_cmd(
             }
         } else {
             tracing::warn!(?root, "--watch path does not exist; collectors disabled");
+        }
+    }
+
+    if !no_watch_transcripts {
+        let root = transcripts_root
+            .clone()
+            .or_else(paths::default_transcripts_root);
+        match root {
+            Some(r) => {
+                tracing::info!(root = ?r, "transcript live tail enabled");
+                let pool_cl = pool.clone();
+                let tok = cancel.clone();
+                bg_handles.push(tokio::spawn(async move {
+                    if let Err(e) = witmcc::transcript_tail::run(pool_cl, r, tok).await {
+                        tracing::error!(error=?e, "transcript tail exited with error");
+                    }
+                }));
+            }
+            None => {
+                tracing::warn!(
+                    "no transcripts root found; pass --transcripts-root or disable with --no-watch-transcripts"
+                );
+            }
         }
     }
 
