@@ -135,34 +135,40 @@ async fn load_backfill(
     cursor: Option<&str>,
     session: Option<&str>,
 ) -> Result<(Vec<LiveEvent>, bool), sqlx::Error> {
-    let cursor_exists = if let Some(c) = cursor {
+    // Spec §5 row 1: "No `Last-Event-ID` header, no `?last_event_id=` → Backfill = nothing."
+    // Without this short-circuit the client receives the entire history (capped at 10k)
+    // before the live stream catches up, which buries any recent envelope behind weeks
+    // of old data. The baseline is already loaded via the existing GET endpoints.
+    if cursor.is_none() {
+        return Ok((Vec::new(), false));
+    }
+
+    let cursor_str = cursor.unwrap();
+    let cursor_exists = {
         let n: i64 = sqlx::query_scalar("SELECT COUNT(1) FROM observed_event WHERE event_id = ?")
-            .bind(c)
+            .bind(cursor_str)
             .fetch_one(pool)
             .await?;
         n > 0
-    } else {
-        false
     };
-    let resync_needed = cursor.is_some() && !cursor_exists;
+    let resync_needed = !cursor_exists;
+    if resync_needed {
+        return Ok((Vec::new(), true));
+    }
 
-    // Build query string conditionally. Limit prevents catastrophic backfills.
+    // Cursor exists — emit only newer events. Limit guards against multi-day
+    // disconnects + LIMIT 10000 catastrophes; clients past the cap should
+    // detect the gap and refetch baseline.
     let mut q = String::from(
         "SELECT event_id, session_id, kind, observed_at \
-         FROM observed_event WHERE 1=1",
+         FROM observed_event WHERE event_id > ?",
     );
-    if cursor_exists {
-        q.push_str(" AND event_id > ?");
-    }
     if session.is_some() {
         q.push_str(" AND session_id = ?");
     }
     q.push_str(" ORDER BY event_id ASC LIMIT 10000");
 
-    let mut query = sqlx::query(&q);
-    if cursor_exists {
-        query = query.bind(cursor.unwrap());
-    }
+    let mut query = sqlx::query(&q).bind(cursor_str);
     if let Some(s) = session {
         query = query.bind(s);
     }
