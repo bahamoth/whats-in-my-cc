@@ -28,6 +28,8 @@ export type ObservedEventDto = {
   payload: unknown;
 };
 
+/** Slice-9 — `events` removed. Use `GET /v1/sessions/:id/events?...` for the
+ *  cursor-paged window. See {@link SessionEventsResponse}. */
 export type SessionDetail = {
   session_id: string;
   summary: {
@@ -36,7 +38,14 @@ export type SessionDetail = {
     first_observed_at: string;
     last_observed_at: string;
   };
+};
+
+/** Slice-9 — windowed events response. `next_cursor: null` means the window
+ *  reaches the session's live tip; SSE supersedes further appends. */
+export type SessionEventsResponse = {
   events: ObservedEventDto[];
+  prev_cursor: string | null;
+  next_cursor: string | null;
 };
 
 export type GraphNodeDto = {
