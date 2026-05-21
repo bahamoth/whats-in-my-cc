@@ -44,6 +44,16 @@ pub enum Command {
         #[arg(long, conflicts_with = "path")]
         all: bool,
     },
+    /// Diagnose collector wiring — read-only env / hook settings / server probe.
+    /// No file mutation (CLAUDE.md non-goal).
+    Doctor {
+        /// Emit structured JSON instead of the pretty table.
+        #[arg(long)]
+        json: bool,
+        /// witmcc server to probe. Defaults to WITMCC_SERVER or http://127.0.0.1:7878.
+        #[arg(long, env = "WITMCC_SERVER", default_value = "http://127.0.0.1:7878")]
+        server: String,
+    },
     /// Start the read-only Pull API HTTP server.
     Serve {
         #[arg(long, default_value = "127.0.0.1")]

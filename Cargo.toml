@@ -40,6 +40,7 @@ mime_guess         = "2"
 notify             = "7"
 git2               = { version = "0.19", default-features = false, features = ["vendored-libgit2"] }
 tokio-util         = { version = "0.7",  features = ["rt"] }
+reqwest            = { version = "0.12", default-features = false, features = ["json","rustls-tls"] }
 
 [dev-dependencies]
 assert-json-diff   = "2"
@@ -50,7 +51,6 @@ axum-test          = "16"
 pretty_assertions  = "1"
 assert_cmd         = "2"
 portpicker         = "0.1"
-reqwest            = { version = "0.12", default-features = false, features = ["json","rustls-tls"] }
 flate2             = "1"
 
 [profile.release]
