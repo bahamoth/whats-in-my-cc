@@ -68,7 +68,14 @@ export default function SessionDetailPage() {
           prev.kind === 'ok' &&
           prev.data.graph.nodes.length === graph.nodes.length &&
           prev.data.graph.edges.length === graph.edges.length &&
-          prev.data.session.summary.event_count === session.summary.event_count
+          prev.data.session.summary.event_count === session.summary.event_count &&
+          // Also compare the latest event_id in the events window — when the
+          // session has more events than the 5000-cap, event_count keeps
+          // advancing on the server but the page's window count stays the
+          // same; without this extra check we would skip re-render and the
+          // newest envelope would never reach the Timeline.
+          prev.data.session.events[prev.data.session.events.length - 1]?.event_id ===
+            session.events[session.events.length - 1]?.event_id
         ) {
           return prev;
         }

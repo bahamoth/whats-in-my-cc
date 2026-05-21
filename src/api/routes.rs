@@ -107,23 +107,33 @@ pub async fn session_detail(
     Query(q): Query<ListQuery>,
 ) -> Result<Json<Envelope<SessionDetail>>, (StatusCode, Json<serde_json::Value>)> {
     let limit = clamp_limit(q.limit);
-    let evs = repo_observed::list_session(&pool, &id, limit)
+
+    // Summary first — accurate count + first/last across the WHOLE session,
+    // independent of the `latest <limit>` events window we ship to the WebUI.
+    // A `None` here means no rows for this session_id → 404.
+    let Some((event_count, first_obs, last_obs)) = repo_observed::session_summary(&pool, &id)
         .await
-        .expect("db");
-    if evs.is_empty() {
+        .expect("db")
+    else {
         return Err((
             StatusCode::NOT_FOUND,
             Json(
                 json!({"type":"about:blank","title":"RESOURCE_NOT_FOUND","detail":format!("session {id} not found")}),
             ),
         ));
-    }
+    };
+
+    // Newest `limit` events, then reverse so the wire order is chronological
+    // (the WebUI Timeline component still expects ASC).
+    let mut evs = repo_observed::list_session_latest(&pool, &id, limit)
+        .await
+        .expect("db");
+    evs.reverse();
+
     let mut by_kind = std::collections::BTreeMap::new();
     for e in &evs {
         *by_kind.entry(e.kind.as_str().to_string()).or_insert(0) += 1;
     }
-    let first = evs.first().unwrap().observed_at.to_rfc3339();
-    let last = evs.last().unwrap().observed_at.to_rfc3339();
     let events: Vec<serde_json::Value> = evs
         .iter()
         .map(|e| serde_json::to_value(observed_to_dto(e)).unwrap())
@@ -133,10 +143,10 @@ pub async fn session_detail(
         data: SessionDetail {
             session_id: id,
             summary: SessionSummary {
-                event_count: events.len() as i64,
+                event_count,
                 by_kind,
-                first_observed_at: first,
-                last_observed_at: last,
+                first_observed_at: first_obs,
+                last_observed_at: last_obs,
             },
             events,
         },
