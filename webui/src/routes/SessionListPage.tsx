@@ -56,6 +56,19 @@ function sourceMix(byKind?: Record<string, number>): SourceMix {
   return mix;
 }
 
+const LIVE_THRESHOLD_MS = 60_000;
+
+function isLive(lastObservedAt: string, nowMs: number): boolean {
+  // slice-7 — flag sessions whose last_observed_at is within the live-tail
+  // freshness window (~60s). Claude Code writes a transcript line on every
+  // turn; the live tail ingests it within ~100ms, so a 60s window covers
+  // typical pauses (user thinking) without flagging long-idle sessions.
+  // Falls back to false if last_observed_at cannot be parsed.
+  const t = Date.parse(lastObservedAt);
+  if (Number.isNaN(t)) return false;
+  return nowMs - t <= LIVE_THRESHOLD_MS;
+}
+
 function compare(a: SessionListItem, b: SessionListItem, key: SortKey): number {
   switch (key) {
     case 'event_count':
@@ -79,6 +92,12 @@ export default function SessionListPage() {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [sortKey, setSortKey] = useState<SortKey>('last_observed_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  // ticks every 5s so the live badge does not get stuck after mount.
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNowMs(Date.now()), 5_000);
+    return () => window.clearInterval(t);
+  }, []);
 
   const load = useCallback(async () => {
     setState({ kind: 'loading' });
@@ -159,9 +178,21 @@ export default function SessionListPage() {
                 const mix = sourceMix(r.by_kind);
                 const otelOnly =
                   mix.transcript === 0 && mix.hook === 0 && mix.file_git === 0 && mix.otel > 0;
+                const live = isLive(r.last_observed_at, nowMs);
                 return (
                   <tr key={r.session_id} className={otelOnly ? styles.otelOnly : undefined}>
-                    <td><Link to={`/sessions/${r.session_id}`}>{r.session_id}</Link></td>
+                    <td>
+                      <Link to={`/sessions/${r.session_id}`}>{r.session_id}</Link>
+                      {live && (
+                        <span
+                          className={styles.liveBadge}
+                          data-testid="live-badge"
+                          title="last_observed_at within 60s — claude is likely still active"
+                        >
+                          {' '}LIVE
+                        </span>
+                      )}
+                    </td>
                     <td>{r.first_observed_at}</td>
                     <td>{r.last_observed_at}</td>
                     <td>{r.event_count}</td>

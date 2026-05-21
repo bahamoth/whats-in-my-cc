@@ -31,6 +31,25 @@
  * conversation UUID (verified against ~/.claude/projects + session-env), so
  * this is NOT a correlation gap. The row is tinted subtly so users can
  * recognise "empty conversation" sessions at a glance. */
+.liveBadge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  letter-spacing: 0.05em;
+  color: #fff;
+  background: #1aa37a;
+  border-radius: 4px;
+  vertical-align: middle;
+  animation: livePulse 1.5s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
 .otelOnly { background: #fcfbf6; }
 .otelOnly td { color: #6b7280; }
 .otelOnly td a { color: #5d4eab; }
