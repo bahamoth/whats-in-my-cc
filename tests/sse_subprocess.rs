@@ -134,6 +134,48 @@ fn http_post_json(host: &str, path: &str, body: &str) {
     let _ = s.read_to_end(&mut sink);
 }
 
+/// Spec §5 row 1 regression — connecting without a cursor must NOT receive
+/// any backfill frames. Earlier impl flooded clients with the oldest 10k
+/// rows, burying any recent envelope behind weeks of old data and breaking
+/// SessionListPage live update on populated DBs.
+#[test]
+fn no_cursor_means_no_backfill() {
+    let (mut child, host, _db) = spawn_serve_with(&[]);
+
+    // Seed the DB with one hook BEFORE the SSE client connects.
+    let body = serde_json::json!({
+        "session_id":      "seeded_session",
+        "hook_event_name": "PreToolUse",
+        "tool_name":       "Bash",
+        "tool_input":      {"command": "x"},
+        "tool_use_id":     "toolu_seed"
+    })
+    .to_string();
+    http_post_json(&host, "/hooks/v1/events", &body);
+    std::thread::sleep(Duration::from_millis(200));
+
+    // Connect SSE without cursor. Expect zero `data:` frames within a short
+    // window (only headers + keepalive comments allowed).
+    let mut s = open_sse(&host, "");
+    let start = Instant::now();
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 512];
+    while start.elapsed() < Duration::from_millis(1500) {
+        match s.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            Err(_) => break,
+        }
+    }
+    let body = String::from_utf8_lossy(&buf).into_owned();
+    let _ = child.kill();
+
+    assert!(
+        !body.contains("\ndata:") && !body.starts_with("data:"),
+        "no-cursor connect must not emit backfill data frames, got: {body:?}"
+    );
+}
+
 /// E-5 — hook POST emits SSE frame. Hooks are the cheapest ingest path to
 /// drive in a subprocess test: synchronous POST, immediate response, single
 /// row inserted.
