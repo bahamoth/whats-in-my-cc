@@ -69,12 +69,27 @@ async fn session_detail_and_graph() {
     assert!(!edges.is_empty());
 }
 
+/// Slice-8 — session_graph now always returns 200 (empty graph is a valid
+/// transient state during ingest's rebuild_session race). Use session_detail
+/// for the "session not found" path instead — that handler still 404s when
+/// no observed_event rows exist for the id.
 #[tokio::test]
-async fn missing_session_is_404() {
+async fn missing_session_detail_is_404() {
     let s = setup().await;
-    s.get("/v1/sessions/missing/graph")
+    s.get("/v1/sessions/missing")
         .await
         .assert_status(axum::http::StatusCode::NOT_FOUND);
+}
+
+/// session_graph returns 200 + empty graph for unknown sessions (slice-8).
+#[tokio::test]
+async fn missing_session_graph_is_200_empty() {
+    let s = setup().await;
+    let resp = s.get("/v1/sessions/missing/graph").await;
+    resp.assert_status_ok();
+    let v: Value = resp.json();
+    assert!(v["data"]["nodes"].as_array().unwrap().is_empty());
+    assert!(v["data"]["edges"].as_array().unwrap().is_empty());
 }
 
 #[tokio::test]

@@ -172,6 +172,52 @@ pub async fn list_session(
     Ok(rows.into_iter().map(row_to_observed).collect())
 }
 
+/// Slice-8 — newest `limit` events of a session, ordered DESC so we don't have
+/// to scan from the start. Used by the WebUI live timeline: sessions with more
+/// than `limit` rows would otherwise show only the oldest window with the
+/// ASC variant above, and the live tail's newest envelopes would never appear
+/// in the rendered page. The handler reverses before serialising so the wire
+/// order remains ASC (consumers expect a chronological timeline).
+///
+/// Long-term, this is replaced by windowed range queries (slice-9 follow-up):
+/// `?from=&to=&limit=` with a client-side LRU chunk cache + virtualisation,
+/// matching the video-streaming buffer pattern.
+pub async fn list_session_latest(
+    pool: &SqlitePool,
+    session_id: &str,
+    limit: i64,
+) -> Result<Vec<ObservedEvent>> {
+    let rows = sqlx::query(
+        "SELECT * FROM observed_event WHERE session_id = ? ORDER BY observed_at DESC LIMIT ?",
+    )
+    .bind(session_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(row_to_observed).collect())
+}
+
+/// Slice-8 — accurate per-session summary (count + first/last observed_at)
+/// independent of the `list_session_latest` window. Without this the WebUI
+/// MetaStrip would show the first/last of the 5000-event window instead of
+/// the true session boundaries.
+pub async fn session_summary(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<Option<(i64, String, String)>> {
+    let row: Option<(i64, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT COUNT(*), MIN(observed_at), MAX(observed_at) \
+         FROM observed_event WHERE session_id = ?",
+    )
+    .bind(session_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|(c, f, l)| match (f, l) {
+        (Some(f), Some(l)) if c > 0 => Some((c, f, l)),
+        _ => None,
+    }))
+}
+
 fn row_to_observed(r: sqlx::sqlite::SqliteRow) -> ObservedEvent {
     let actor: String = r.get("actor");
     let kind: String = r.get("kind");
