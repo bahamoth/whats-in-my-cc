@@ -60,6 +60,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice6-overview">Overview (slice-6)</a>
     <a href="#slice6-deviations">Intentional Deviations (slice-6)</a>
     <a href="#slice6-commits">Commit Reference (slice-6)</a>
+    <a href="#slice7-overview">Overview (slice-7)</a>
+    <a href="#slice7-deviations">Intentional Deviations (slice-7)</a>
+    <a href="#slice7-commits">Commit Reference (slice-7)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
 </aside>
@@ -1107,8 +1110,150 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </ul>
   </section>
 
+  <section id="slice7-overview">
+    <h2><span class="num">19</span>Slice-7 Overview</h2>
+    <p><code>slice7-live-tail-doctor</code> branch — finishes M1 by making
+      every Claude Code source land in real-time without a second command,
+      and rebuilds <code>witmcc doctor</code> to walk the actual settings
+      hierarchy instead of just <code>~/.claude/settings.json</code>.</p>
+    <p><strong>Trigger:</strong> user observed after slice-6 merge that
+      "OTel 만 수집되고 채팅이나 훅은 인입이 안되는데" — transcripts still required
+      <code>witmcc ingest --all</code>, hooks required user-side registration, and
+      doctor v0.1 falsely reported <code>OTEL_*</code> as <code>unset</code> when
+      they actually lived in <code>~/.claude/settings.json</code>'s <code>env</code>
+      block (which Claude Code injects into its own child process but doesn't
+      export back to the parent shell).</p>
+    <p><strong>전체 상태:</strong> slice-7 완료. 6 commits, +1.7k LOC,
+      136 cargo + 36 vitest tests (slice-6 대비 +13 cargo).
+      Live tail verified end-to-end on bahamoth's real
+      <code>~/.claude/projects</code> — 5 seconds → 9,284 transcript raw rows
+      ingested, including the current conversation's 1,751 events.
+      Doctor v0.2 verified end-to-end on bahamoth's <code>~/.claude/settings.json</code>
+      — all 14 OTel keys correctly attributed to <code>user</code> scope,
+      shell divergence flagged, hook-only-not-witmcc PreToolUse entry shown
+      under "other hooks observed".</p>
+  </section>
+
+  <section id="slice7-deviations">
+    <h2><span class="num">20</span>Slice-7 Intentional Deviations</h2>
+
+    <div class="dev">
+      <h3>DEV-S7-01 Cursor strategy: rehash whole file instead of byte-offset map</h3>
+      <p><strong>사양 원문:</strong> design spec §6.1 proposed an in-memory
+        <code>HashMap&lt;PathBuf, u64 byte_offset&gt;</code> seeded from
+        <code>raw_event</code> on startup.</p>
+      <p><strong>구현:</strong> <code>transcript_tail::run</code> re-calls
+        <code>ingest::store::ingest_file(pool, path)</code> on every debounced
+        flush. The existing <code>UNIQUE(source_uri, source_line_no, payload_sha256)</code>
+        constraint absorbs duplicates so no cursor state is needed.</p>
+      <p><strong>트레이드오프:</strong> every flush rehashes the whole file
+        (slice-1 <code>stream_file</code> reads the entire JSONL again, computes
+        per-line sha256). Bounded by Claude Code's per-session JSONL size
+        (typically MB-scale; bahamoth's largest at smoke time was a few MB).
+        In exchange: zero cursor state to corrupt, no migration, and the live
+        tail shares its entire codepath with <code>ingest --all</code> so any
+        slice-1 bugfix benefits both.</p>
+      <p><strong>후속:</strong> byte-offset cursor is a future optimisation
+        if/when users report large transcripts hot-spotting the watcher.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S7-02 Initial catch-up scan runs in a background task</h3>
+      <p><strong>증상:</strong> first impl awaited the catch-up scan inline,
+        which made <code>witmcc serve</code> startup time = total transcript
+        bytes / parse rate. CI test <code>serve_accepts_watch_and_poll_flags</code>
+        (8s budget) failed because the test host's real
+        <code>~/.claude/projects</code> contained too many MB to scan in time.</p>
+      <p><strong>구현:</strong> <code>scan_initial</code> is spawned into a
+        dedicated tokio task wrapped in <code>tokio::select!</code> on
+        <code>cancel.cancelled()</code>. Serve startup is now instantaneous;
+        the notify watcher picks up live writes regardless of whether catch-up
+        is still running. UNIQUE constraint absorbs any race.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S7-03 Transcript tail is on by default</h3>
+      <p><strong>맥락:</strong> the whole slice exists because the user wanted
+        "한번에" — making the tail opt-in would have defeated the goal.</p>
+      <p><strong>구현:</strong> default-on; opt-out via <code>--no-watch-transcripts</code>.
+        Two existing tests (<code>tests/cli_serve.rs::serve_accepts_watch_and_poll_flags</code>
+        and <code>tests/doctor.rs::spawn_server</code>) pass the opt-out so they
+        do not depend on the test host's real transcripts root state.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S7-04 Recommendations now consult <code>effective_env</code>, not process env</h3>
+      <p><strong>증상:</strong> v0.1 build_recommendations only looked at
+        <code>report.envs</code> (process env), so users who had OTel keys in
+        <code>~/.claude/settings.json</code>'s <code>env</code> block (which is
+        the documented way to configure Claude Code) got a misleading
+        "Set the following…" recommendation.</p>
+      <p><strong>구현:</strong> v0.2 uses
+        <code>report.effective_env</code> (settings hierarchy merge) OR process
+        env. Only keys missing from <em>both</em> are recommended. The endpoint
+        suffix rule (<code>/otel</code>) is checked against both sources too.
+        Verified on bahamoth's env — recommendation block now correctly omits
+        the OTel keys he already has.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S7-05 Project walk stops at <code>.git</code> even without <code>.claude/</code></h3>
+      <p><strong>맥락:</strong> a project may have no <code>.claude/</code> dir
+        yet, but the user still expects doctor to report "project shared:
+        absent at <code>&lt;repo&gt;/.claude/settings.json</code>" rather than
+        walk up to <code>$HOME</code>.</p>
+      <p><strong>구현:</strong> <code>project_paths</code> stops at the first
+        of: (a) directory containing <code>.claude/</code>, (b) directory
+        containing <code>.git/</code>. In case (b) the returned paths point
+        into the not-yet-existing <code>.claude/</code> dir so doctor renders
+        them as <code>∅</code> at the correct location.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S7-06 Plugin scope label = <code>plugin:&lt;dirname&gt;</code></h3>
+      <p><strong>구현:</strong> plugin manifests appear with scope label
+        <code>plugin:my-plugin</code> rather than just <code>plugin</code>, so
+        users with multiple plugins can tell which one contributed which hook.
+        For tests, <code>WITMCC_DOCTOR_PLUGINS_ROOT</code> env overrides the
+        default <code>~/.claude/plugins</code> location so the test harness
+        doesn't touch the host's real plugins dir.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S7-07 Hook entry parser accepts two shapes</h3>
+      <p><strong>맥락:</strong> Claude Code docs show
+        <code>hooks.&lt;Event&gt;[].hooks[].command</code> (nested), but some
+        examples in the wild use <code>hooks.&lt;Event&gt;[].command</code> (flat).</p>
+      <p><strong>구현:</strong> <code>collect_hooks_into</code> tries the
+        nested form first, then falls back to flat. Both yield a
+        <code>HookEntry</code>; substring match on
+        <code>"hooks/v1/events"</code> stays the same.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S7-08 docs/02 + docs/03 HTML patch still deferred</h3>
+      <p>Same rationale as DEV-S6-09. design spec + implementation-notes
+        (this page) carry the load. Adding a "doctor" or "live tail" entry
+        to docs/02's pipeline diagram requires editing a single-line HTML;
+        deferred to a docs-only slice.</p>
+    </div>
+  </section>
+
+  <section id="slice7-commits">
+    <h2><span class="num">21</span>Slice-7 Commit Reference</h2>
+    <p>커밋 SHA 목록 (slice-7 branch <code>slice7-live-tail-doctor</code>).
+      PR 머지 시 squash 여부에 따라 SHA가 달라질 수 있다.</p>
+    <ul>
+      <li><code>81ea31e</code> — docs(slice-7): design spec + TDD plan — transcript live tail + doctor v0.2</li>
+      <li><code>61ba39e</code> — feat(transcript): live tail — notify watcher + ingest_file reuse + default-on in serve</li>
+      <li><code>ed869b3</code> — test(transcript): live tail integration — 4 scenarios + isolate slice-6 tests</li>
+      <li><code>c4f6c2e</code> — feat(doctor): v0.2 — settings hierarchy walk, scope attribution, plugin hooks</li>
+      <li><code>04d7500</code> — test(doctor): v0.2 — project scope, local override, plugin manifest, env divergence</li>
+    </ul>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 · 2026-05-21 · branch: slice6-otel-metrics-logs</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 · 2026-05-21 · branch: slice7-live-tail-doctor</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
