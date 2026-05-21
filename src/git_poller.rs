@@ -7,10 +7,13 @@
 //! `CancellationToken` for graceful shutdown.
 
 use crate::ingest::file_git::{extract_commit_records, store_commit};
+use crate::live::{BroadcastSink, LiveEvent};
 use chrono::Utc;
 use git2::Repository;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 
 use crate::ingest::file_git::{CommitRecord, HunkRecord};
@@ -21,8 +24,10 @@ pub async fn run_git_poller(
     pool: sqlx::SqlitePool,
     repo_path: PathBuf,
     interval_secs: u64,
+    live_tx: Arc<broadcast::Sender<LiveEvent>>,
     cancel: CancellationToken,
 ) -> anyhow::Result<()> {
+    let sink = BroadcastSink::new(live_tx);
     // Initialise last-seen tip without entering the async context (git2 is !Send).
     let init = {
         let p = repo_path.clone();
@@ -55,7 +60,7 @@ pub async fn run_git_poller(
                 match extracted {
                     Ok(Ok((new_tip, batch))) => {
                         for (commit, hunks) in batch {
-                            if let Err(e) = store_commit(&pool, commit, hunks, Utc::now(), &crate::live::NoopSink).await {
+                            if let Err(e) = store_commit(&pool, commit, hunks, Utc::now(), &sink).await {
                                 tracing::warn!(error=?e, "store_commit failed");
                             }
                         }

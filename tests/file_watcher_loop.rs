@@ -26,8 +26,10 @@ async fn watcher_observes_file_creation_within_2s() {
     let tok = cancel.clone();
     let pool_cl = pool.clone();
     let root = dir.path().to_path_buf();
+    let (live_tx, _) = tokio::sync::broadcast::channel::<witmcc::live::LiveEvent>(64);
+    let live_tx = std::sync::Arc::new(live_tx);
     let handle = tokio::spawn(async move {
-        run_file_watcher(pool_cl, root, tok).await.unwrap();
+        run_file_watcher(pool_cl, root, live_tx, tok).await.unwrap();
     });
     // Give the watcher a moment to register.
     tokio::time::sleep(Duration::from_millis(200)).await;

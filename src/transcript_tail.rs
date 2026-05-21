@@ -13,13 +13,15 @@
 //! never poison the serve process. Cancellation via `CancellationToken`.
 
 use crate::ingest::store;
+use crate::live::{BroadcastSink, LiveEvent};
 use anyhow::Result;
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 
 const DEBOUNCE_MS: u64 = 100;
@@ -35,12 +37,19 @@ fn is_jsonl(p: &Path) -> bool {
 /// under `root` (catch-up for sessions that ran before serve started). Then
 /// it watches `root` recursively; debounced notify events trigger an
 /// `ingest_file` call per touched path.
-pub async fn run(pool: SqlitePool, root: PathBuf, cancel: CancellationToken) -> Result<()> {
+pub async fn run(
+    pool: SqlitePool,
+    root: PathBuf,
+    live_tx: Arc<broadcast::Sender<LiveEvent>>,
+    cancel: CancellationToken,
+) -> Result<()> {
     if !root.exists() {
         tracing::warn!(?root, "transcripts root does not exist; live tail disabled");
         return Ok(());
     }
     tracing::info!(?root, "transcript live tail started");
+
+    let sink = BroadcastSink::new(live_tx.clone());
 
     // Initial catch-up scan runs in the background so serve startup is not
     // blocked when the user's transcripts root contains large session files.
@@ -51,10 +60,11 @@ pub async fn run(pool: SqlitePool, root: PathBuf, cancel: CancellationToken) -> 
         let pool_cl = pool.clone();
         let root_cl = root.clone();
         let cancel_cl = cancel.clone();
+        let sink_cl = sink.clone();
         tokio::spawn(async move {
             tokio::select! {
                 _ = cancel_cl.cancelled() => {}
-                res = scan_initial(&pool_cl, &root_cl) => {
+                res = scan_initial(&pool_cl, &root_cl, &sink_cl) => {
                     if let Some((files, inserted)) = res {
                         tracing::info!(files, observed_inserted = inserted, "initial transcript scan complete");
                     }
@@ -108,7 +118,7 @@ pub async fn run(pool: SqlitePool, root: PathBuf, cancel: CancellationToken) -> 
                     if !p.exists() {
                         continue;
                     }
-                    match store::ingest_file(&pool, p, &crate::live::NoopSink).await {
+                    match store::ingest_file(&pool, p, &sink).await {
                         Ok(stats) => {
                             if stats.observed_inserted > 0 {
                                 tracing::debug!(
@@ -129,7 +139,11 @@ pub async fn run(pool: SqlitePool, root: PathBuf, cancel: CancellationToken) -> 
     Ok(())
 }
 
-async fn scan_initial(pool: &SqlitePool, root: &Path) -> Option<(usize, u64)> {
+async fn scan_initial(
+    pool: &SqlitePool,
+    root: &Path,
+    sink: &BroadcastSink,
+) -> Option<(usize, u64)> {
     let mut files = 0usize;
     let mut total_inserted = 0u64;
     for entry in walkdir::WalkDir::new(root).into_iter().flatten() {
@@ -138,7 +152,7 @@ async fn scan_initial(pool: &SqlitePool, root: &Path) -> Option<(usize, u64)> {
             continue;
         }
         files += 1;
-        match store::ingest_file(pool, p, &crate::live::NoopSink).await {
+        match store::ingest_file(pool, p, sink).await {
             Ok(s) => total_inserted += s.observed_inserted,
             Err(e) => {
                 tracing::warn!(error = ?e, path = %p.display(), "initial transcript scan failed");

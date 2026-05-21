@@ -1,15 +1,15 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde_json::json;
-use sqlx::SqlitePool;
 
 use crate::api::dto::HookIngestResponse;
 use crate::ingest::hook;
+use crate::live::BroadcastSink;
 use crate::model::meta::{Envelope, ResponseMeta};
 
 const MAX_HOOK_BODY: usize = 1024 * 1024;
 
 pub async fn ingest_events(
-    State(pool): State<SqlitePool>,
+    State(state): State<crate::api::AppState>,
     body: axum::body::Bytes,
 ) -> Result<Json<Envelope<HookIngestResponse>>, (StatusCode, Json<serde_json::Value>)> {
     if body.len() > MAX_HOOK_BODY {
@@ -33,7 +33,8 @@ pub async fn ingest_events(
         )
     })?;
     let parsed = hook::parse_body(&value);
-    let result = hook::store(&pool, parsed, chrono::Utc::now(), &crate::live::NoopSink)
+    let sink = BroadcastSink::new(state.live_tx.clone());
+    let result = hook::store(&state.pool, parsed, chrono::Utc::now(), &sink)
         .await
         .map_err(|err| {
             (
