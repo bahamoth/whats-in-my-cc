@@ -13,7 +13,7 @@ async fn ingest_twice(
         .await
         .unwrap();
     migrate(&pool_a).await.unwrap();
-    store::ingest_file(&pool_a, std::path::Path::new(path))
+    store::ingest_file(&pool_a, std::path::Path::new(path), &witmcc::live::NoopSink)
         .await
         .unwrap();
     build::rebuild_session(&pool_a, session_id).await.unwrap();
@@ -27,7 +27,7 @@ async fn ingest_twice(
         .await
         .unwrap();
     migrate(&pool_b).await.unwrap();
-    store::ingest_file(&pool_b, std::path::Path::new(path))
+    store::ingest_file(&pool_b, std::path::Path::new(path), &witmcc::live::NoopSink)
         .await
         .unwrap();
     build::rebuild_session(&pool_b, session_id).await.unwrap();
@@ -63,6 +63,7 @@ async fn dangling_tool_use_creates_separate_call_node_no_result_edge() {
     store::ingest_file(
         &pool,
         std::path::Path::new("tests/fixtures/transcripts/dangling_tool_use.jsonl"),
+        &witmcc::live::NoopSink,
     )
     .await
     .unwrap();
@@ -85,6 +86,7 @@ async fn sidechain_edge_is_marked() {
     store::ingest_file(
         &pool,
         std::path::Path::new("tests/fixtures/transcripts/sidechain.jsonl"),
+        &witmcc::live::NoopSink,
     )
     .await
     .unwrap();
@@ -114,6 +116,7 @@ async fn multi_text_user_message_dedupes_node() {
     witmcc::ingest::store::ingest_file(
         &pool,
         std::path::Path::new("tests/fixtures/transcripts/multi_text_user.jsonl"),
+        &witmcc::live::NoopSink,
     )
     .await
     .expect("ingest should not crash on multi-text user message");

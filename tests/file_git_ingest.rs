@@ -64,7 +64,7 @@ async fn commit_emits_git_commit_plus_hunks() {
     assert!(commit_record.files_changed.iter().any(|f| f == "a.rs"));
 
     let pool = fresh_pool().await;
-    let r = store_commit(&pool, commit_record, hunks, Utc::now())
+    let r = store_commit(&pool, commit_record, hunks, Utc::now(), &witmcc::live::NoopSink)
         .await
         .unwrap();
     assert_eq!(r.accepted_commits, 1);
@@ -86,7 +86,7 @@ async fn hunk_table_row_per_observed_event() {
     let (cr, hr) = extract_commit_records(&repo, &repo.find_commit(oid).unwrap()).unwrap();
     let n_hunks = hr.len();
     let pool = fresh_pool().await;
-    store_commit(&pool, cr, hr, Utc::now()).await.unwrap();
+    store_commit(&pool, cr, hr, Utc::now(), &witmcc::live::NoopSink).await.unwrap();
 
     let dh = repo_diff_hunk::list_session(&pool, FILESYSTEM_SESSION_ID)
         .await
@@ -106,10 +106,10 @@ async fn re_ingest_same_commit_is_no_op() {
     let (cr, hr) = extract_commit_records(&repo, &repo.find_commit(oid).unwrap()).unwrap();
     let n_hunks = hr.len();
     let pool = fresh_pool().await;
-    store_commit(&pool, cr.clone(), hr.clone(), Utc::now())
+    store_commit(&pool, cr.clone(), hr.clone(), Utc::now(), &witmcc::live::NoopSink)
         .await
         .unwrap();
-    let r2 = store_commit(&pool, cr, hr, Utc::now()).await.unwrap();
+    let r2 = store_commit(&pool, cr, hr, Utc::now(), &witmcc::live::NoopSink).await.unwrap();
     assert_eq!(r2.accepted_commits, 0);
     assert_eq!(r2.duplicate_commits, 1);
     assert_eq!(r2.accepted_hunks, 0);
@@ -132,7 +132,7 @@ async fn binary_file_diff_yields_null_line_range() {
     );
 
     let pool = fresh_pool().await;
-    store_commit(&pool, cr, hr, Utc::now()).await.unwrap();
+    store_commit(&pool, cr, hr, Utc::now(), &witmcc::live::NoopSink).await.unwrap();
     let dh = repo_diff_hunk::list_session(&pool, FILESYSTEM_SESSION_ID)
         .await
         .unwrap();
@@ -146,7 +146,7 @@ async fn graph_for_filesystem_session_has_file_git_nodes() {
     let oid = commit_file(&repo, "a.rs", b"x\n", "x");
     let (cr, hr) = extract_commit_records(&repo, &repo.find_commit(oid).unwrap()).unwrap();
     let pool = fresh_pool().await;
-    store_commit(&pool, cr, hr, Utc::now()).await.unwrap();
+    store_commit(&pool, cr, hr, Utc::now(), &witmcc::live::NoopSink).await.unwrap();
 
     let file_record = FileRecord {
         session_id: FILESYSTEM_SESSION_ID.into(),
@@ -156,7 +156,7 @@ async fn graph_for_filesystem_session_has_file_git_nodes() {
         size_bytes: Some(2),
         observed_at: Utc::now(),
     };
-    store_file_event(&pool, file_record, Utc::now()).await.unwrap();
+    store_file_event(&pool, file_record, Utc::now(), &witmcc::live::NoopSink).await.unwrap();
 
     let (nodes, _) = repo_graph::load_session(&pool, FILESYSTEM_SESSION_ID)
         .await
@@ -177,7 +177,7 @@ async fn observed_events_for_filesystem_session_visible_via_repo() {
     let oid = commit_file(&repo, "a.rs", b"hi\n", "init");
     let (cr, hr) = extract_commit_records(&repo, &repo.find_commit(oid).unwrap()).unwrap();
     let pool = fresh_pool().await;
-    store_commit(&pool, cr, hr, Utc::now()).await.unwrap();
+    store_commit(&pool, cr, hr, Utc::now(), &witmcc::live::NoopSink).await.unwrap();
 
     let sessions = repo_observed::list_sessions(&pool, 100).await.unwrap();
     assert!(

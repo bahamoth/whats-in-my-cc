@@ -24,7 +24,7 @@ async fn store_single_span_inserts_one_observed_event() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
     let parsed = otel::parse_otlp_json(&body);
-    let res = otel::store(&pool, parsed, Utc::now()).await.unwrap();
+    let res = otel::store(&pool, parsed, Utc::now(), &witmcc::live::NoopSink).await.unwrap();
     assert_eq!(res.accepted_spans, 1);
     assert_eq!(res.rejected_spans, 0);
     assert_eq!(res.sessions_touched, vec!["sess-otel-A".to_string()]);
@@ -50,10 +50,10 @@ async fn store_single_span_inserts_one_observed_event() {
 async fn store_is_idempotent() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
-    let r1 = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now())
+    let r1 = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink)
         .await
         .unwrap();
-    let r2 = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now())
+    let r2 = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink)
         .await
         .unwrap();
     assert_eq!(r1.accepted_spans, 1);
@@ -72,7 +72,7 @@ async fn store_is_idempotent() {
 async fn graph_has_otel_span_node_after_ingest() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/parent_child.json");
-    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now())
+    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink)
         .await
         .unwrap();
     let (n, e) = build::rebuild_session(&pool, "sess-otel-B").await.unwrap();
@@ -181,7 +181,7 @@ async fn post_traces_without_session_id_skips_session_listing() {
 async fn session_detail_returns_otel_span_with_telemetry() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
-    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now())
+    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink)
         .await
         .unwrap();
 
@@ -234,7 +234,7 @@ async fn re_post_self_heals_graph_when_raw_dedup_skips_insert() {
     let body = fixture("tests/fixtures/otel/single_span.json");
 
     // First store — observed inserted + graph built normally.
-    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now()).await.unwrap();
+    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink).await.unwrap();
 
     // Simulate stale state: wipe graph_node, leave observed_event alone.
     sqlx::query("DELETE FROM graph_node").execute(&pool).await.unwrap();
@@ -244,7 +244,7 @@ async fn re_post_self_heals_graph_when_raw_dedup_skips_insert() {
     assert_eq!(pre.0, 0);
 
     // Re-POST — raw is duplicate, but session must still get rebuilt.
-    let res = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now()).await.unwrap();
+    let res = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink).await.unwrap();
     assert_eq!(res.duplicate_spans, 1);
     assert_eq!(res.accepted_spans, 0);
     assert_eq!(res.sessions_touched, vec!["sess-otel-A".to_string()]);

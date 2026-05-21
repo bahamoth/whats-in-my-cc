@@ -7,6 +7,7 @@
 use crate::db::{repo_diff_hunk, repo_observed, repo_raw, repo_runs};
 use crate::error::Result;
 use crate::ids::MonotonicUlidGen;
+use crate::live::{LiveEvent, LiveSink};
 use crate::model::meta::{PARSER_VERSION_FILE_GIT, SCHEMA_VERSION};
 use crate::model::observed::{Actor, EventKind, ObservedEvent};
 use chrono::{DateTime, Utc};
@@ -181,6 +182,7 @@ pub async fn store_file_event(
     pool: &SqlitePool,
     record: FileRecord,
     received_at: DateTime<Utc>,
+    sink: &dyn LiveSink,
 ) -> Result<FileIngestResult> {
     let mut gen = MonotonicUlidGen::new();
     let run_id = repo_runs::start(pool).await?;
@@ -232,6 +234,14 @@ pub async fn store_file_event(
             ..Default::default()
         };
         repo_observed::insert(pool, &event).await?;
+        sink.emit(LiveEvent {
+            schema_version: LiveEvent::SCHEMA_VERSION.into(),
+            session_id: event.session_id.clone(),
+            event_id: event.event_id.clone(),
+            kind: event.kind,
+            source_type: "file".into(),
+            observed_at: event.observed_at.to_rfc3339(),
+        });
         result.accepted_events += 1;
     }
 
@@ -272,6 +282,7 @@ pub async fn store_commit(
     commit: CommitRecord,
     hunks: Vec<HunkRecord>,
     received_at: DateTime<Utc>,
+    sink: &dyn LiveSink,
 ) -> Result<CommitIngestResult> {
     let mut gen = MonotonicUlidGen::new();
     let run_id = repo_runs::start(pool).await?;
@@ -320,6 +331,14 @@ pub async fn store_commit(
             ..Default::default()
         };
         repo_observed::insert(pool, &ev).await?;
+        sink.emit(LiveEvent {
+            schema_version: LiveEvent::SCHEMA_VERSION.into(),
+            session_id: ev.session_id.clone(),
+            event_id: ev.event_id.clone(),
+            kind: ev.kind,
+            source_type: "git".into(),
+            observed_at: ev.observed_at.to_rfc3339(),
+        });
         result.accepted_commits += 1;
     } else {
         result.duplicate_commits += 1;
@@ -388,6 +407,14 @@ pub async fn store_commit(
             ..Default::default()
         };
         repo_observed::insert(pool, &ev).await?;
+        sink.emit(LiveEvent {
+            schema_version: LiveEvent::SCHEMA_VERSION.into(),
+            session_id: ev.session_id.clone(),
+            event_id: ev.event_id.clone(),
+            kind: ev.kind,
+            source_type: "git".into(),
+            observed_at: ev.observed_at.to_rfc3339(),
+        });
 
         repo_diff_hunk::insert(
             pool,
@@ -769,12 +796,12 @@ mod tests {
     async fn store_file_event_persists_and_dedupes() {
         let pool = fresh_pool().await;
         let r = sample_file_record();
-        let first = store_file_event(&pool, r.clone(), Utc::now()).await.unwrap();
+        let first = store_file_event(&pool, r.clone(), Utc::now(), &crate::live::NoopSink).await.unwrap();
         assert_eq!(first.accepted_events, 1);
         assert_eq!(first.duplicate_events, 0);
         assert_eq!(first.sessions_touched, vec![FILESYSTEM_SESSION_ID.to_string()]);
 
-        let second = store_file_event(&pool, r, Utc::now()).await.unwrap();
+        let second = store_file_event(&pool, r, Utc::now(), &crate::live::NoopSink).await.unwrap();
         assert_eq!(second.accepted_events, 0);
         assert_eq!(second.duplicate_events, 1);
         // Self-heal: touched even on duplicate.
@@ -796,7 +823,7 @@ mod tests {
         let pool = fresh_pool().await;
         let c = sample_commit_record();
         let hunks = vec![sample_hunk_record()];
-        let r = store_commit(&pool, c, hunks, Utc::now()).await.unwrap();
+        let r = store_commit(&pool, c, hunks, Utc::now(), &crate::live::NoopSink).await.unwrap();
         assert_eq!(r.accepted_commits, 1);
         assert_eq!(r.accepted_hunks, 1);
         assert_eq!(r.duplicate_commits, 0);
@@ -824,10 +851,10 @@ mod tests {
         let pool = fresh_pool().await;
         let c = sample_commit_record();
         let hunks = vec![sample_hunk_record()];
-        store_commit(&pool, c.clone(), hunks.clone(), Utc::now())
+        store_commit(&pool, c.clone(), hunks.clone(), Utc::now(), &crate::live::NoopSink)
             .await
             .unwrap();
-        let r = store_commit(&pool, c, hunks, Utc::now()).await.unwrap();
+        let r = store_commit(&pool, c, hunks, Utc::now(), &crate::live::NoopSink).await.unwrap();
         assert_eq!(r.accepted_commits, 0);
         assert_eq!(r.duplicate_commits, 1);
         assert_eq!(r.accepted_hunks, 0);
@@ -852,7 +879,7 @@ mod tests {
             h.file_path = format!("f{i}.rs");
             hunks.push(h);
         }
-        let r = store_commit(&pool, c, hunks, Utc::now()).await.unwrap();
+        let r = store_commit(&pool, c, hunks, Utc::now(), &crate::live::NoopSink).await.unwrap();
         assert_eq!(r.accepted_hunks as usize, MAX_HUNKS_PER_COMMIT);
         assert_eq!(r.dropped_hunks_over_limit, 5);
     }
@@ -864,7 +891,7 @@ mod tests {
         let mut h = sample_hunk_record();
         h.line_range_after = None;
         h.patch_preview = "<binary>".into();
-        let r = store_commit(&pool, c, vec![h], Utc::now()).await.unwrap();
+        let r = store_commit(&pool, c, vec![h], Utc::now(), &crate::live::NoopSink).await.unwrap();
         assert_eq!(r.accepted_hunks, 1);
         let dh = crate::db::repo_diff_hunk::list_session(&pool, FILESYSTEM_SESSION_ID)
             .await

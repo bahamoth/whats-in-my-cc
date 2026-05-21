@@ -33,7 +33,7 @@ pub async fn ingest_events(
         )
     })?;
     let parsed = hook::parse_body(&value);
-    let result = hook::store(&pool, parsed, chrono::Utc::now())
+    let result = hook::store(&pool, parsed, chrono::Utc::now(), &crate::live::NoopSink)
         .await
         .map_err(|err| {
             (
