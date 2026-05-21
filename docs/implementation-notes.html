@@ -63,6 +63,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice7-overview">Overview (slice-7)</a>
     <a href="#slice7-deviations">Intentional Deviations (slice-7)</a>
     <a href="#slice7-commits">Commit Reference (slice-7)</a>
+    <a href="#slice8-overview">Overview (slice-8)</a>
+    <a href="#slice8-deviations">Intentional Deviations (slice-8)</a>
+    <a href="#slice8-commits">Commit Reference (slice-8)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
 </aside>
@@ -1291,8 +1294,169 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </ul>
   </section>
 
+  <section id="slice8-overview">
+    <h2><span class="num">22</span>Slice-8 Overview</h2>
+    <p><code>slice8-sse-live</code> branch — closes the &ldquo;refresh-to-see-new-data&rdquo;
+      UX gap reported after slice-7. Adds one in-process broadcast channel from every ingest
+      writer to a single SSE endpoint (<code>GET /v1/stream</code>), with optional
+      <code>?session=&lt;id&gt;</code> server-side filter. The WebUI subscribes via a new
+      <code>useLiveStream</code> hook; the LIVE badge semantic flips from
+      &ldquo;last_observed_at within 60s&rdquo; to &ldquo;received an SSE envelope within 60s&rdquo;
+      so the indicator becomes an honest client-observation signal rather than a stale-data heuristic.</p>
+    <p>The same primitive (<code>Arc&lt;broadcast::Sender&lt;LiveEvent&gt;&gt;</code>) is the
+      foundation for M6 MCP Streamable HTTP, so this slice is dual-purpose.</p>
+    <p><strong>전체 상태:</strong> slice-8 완료. 7 commits, +1.2k LOC. 147 cargo +
+      55 vitest tests still green; 3 new L3 subprocess tests verify per-ingest-path SSE
+      emission against the real <code>witmcc serve</code> binary. End-to-end smoke
+      manually verified: POST /hooks/v1/events → SSE envelope received with
+      <code>source_type="hook"</code> + ULID event_id within ~50ms (loopback).</p>
+  </section>
+
+  <section id="slice8-deviations">
+    <h2><span class="num">23</span>Slice-8 Intentional Deviations</h2>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-01</span>
+        <code>otel::store_raw</code>에는 <code>LiveSink</code>를 thread하지 않음
+      </div>
+      <div class="dev-body">
+        <p><strong>맥락:</strong> 초기 계획 (slice-8 spec §3)은 모든 ingest 함수에
+          <code>&amp;dyn LiveSink</code>를 추가하라 명시했지만, <code>otel::store_raw</code>는
+          OTLP/JSON 본문을 <code>raw_event</code>에만 쓰고 <code>observed_event</code>는
+          만들지 않는다 (slice-6 Stage 1).</p>
+        <p><strong>구현:</strong> <code>store_raw</code> 시그니처는 변경 없음. Stage 2의
+          <code>otel_metrics::store_request</code> / <code>otel_logs::store_request</code>
+          가 <code>insert_or_ignore</code>로 행 단위 dedup하고 <code>inserted</code> 분기에서만
+          envelope을 발송하므로 의미적 손실 없음. 만약 store_raw에 sink를 강제로 묶었다면
+          API 핸들러에서 Stage1+Stage2 두 번 emit이 일어나 dedup 의미가 흐려질 위험이 있었음.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-02</span>
+        L2 SSE streaming 테스트는 L3 subprocess로 위임
+      </div>
+      <div class="dev-body">
+        <p><strong>맥락:</strong> spec §7.3 (L2 cargo integration)에서 backfill / dedup / gap /
+          keepalive / 구독자 라이프사이클을 in-process 테스트로 잠그도록 제시.
+          하지만 axum-test 16은 응답 본문을 fully buffered로 collect 한다 (chunked streaming
+          response 미지원). long-lived SSE 응답에서 영구 hang을 유발한다.</p>
+        <p><strong>구현:</strong> <code>tests/sse_integration.rs</code>는 (a) production
+          wiring guard (ingest_file → BroadcastSink → live_tx 구독자 도달 검증, HTTP 없음)와
+          (b) 동기 에러 경로 (<code>last_event_id=NOT-A-ULID</code> → HTTP 400)만 in-process로
+          검증. streaming 거동은 <code>tests/sse_subprocess.rs</code>의 L3 테스트가 실제
+          <code>witmcc serve</code> 바이너리 + raw TCP HTTP/1.1로 검증.</p>
+        <p><strong>대안 검토:</strong> reqwest의 streaming feature를 dev-dep으로 추가하면
+          in-process도 가능하지만 axum-test와 비교해 가치가 작아 보류.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-03</span>
+        SessionDetailPage는 envelope 도착 시 전체 refetch
+      </div>
+      <div class="dev-body">
+        <p><strong>맥락:</strong> spec §6.2는 &ldquo;append Timeline marker built from envelope
+          alone&rdquo;을 권고했지만 Timeline은 graph payload (nodes + edges)에서 렌더하고,
+          envelope만으로는 graph_node 구조 (lane 위치, edge 관계)가 결정되지 않는다.</p>
+        <p><strong>구현:</strong> envelope 한 건 도착할 때마다 <code>getSession</code> +
+          <code>getGraph</code> 둘 다 다시 호출하여 state를 갱신. sqlite local이라 cost는
+          무시 가능 (수 ms). 진정한 incremental append는 graph layer에서 partial-update
+          API를 만들어야 가능하며, MVP에선 가치 대비 비용이 크다.</p>
+        <p><strong>후속:</strong> 한 세션에 분당 envelope이 수십~수백 건 들어오는 사례가
+          관측되면 incremental append로 최적화 검토.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-04</span>
+        Browser L5 smoke는 binary smoke로 대체, claude-in-chrome 미실행
+      </div>
+      <div class="dev-body">
+        <p><strong>맥락:</strong> spec §7.6은 commit 전 claude-in-chrome 기반 L5 smoke 11건을
+          의무로 했다. 현 세션 환경에 Playwright 및 claude-in-chrome 도구가 설치되지 않아
+          자동화 실행 불가.</p>
+        <p><strong>구현:</strong> <code>witmcc serve</code> + <code>curl</code> 기반 binary
+          smoke로 end-to-end SSE 전달을 확인 (POST /hooks/v1/events → SSE envelope에 정확한
+          event_id + source_type=hook + schema_version=1 도착). 이는 L3 subprocess 테스트와
+          동일한 경로지만 release 바이너리로 한 번 더 검증한 셈.</p>
+        <p><strong>사용자 검증 필요:</strong> S-1 (실 claude CLI 띄운 상태에서 DOM 라이브
+          갱신), S-5 (F5 reload + Last-Event-ID resume), S-8 (다탭) 등은 실 브라우저에서 PR
+          머지 전에 한 번 시각 검증 권장.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-05</span>
+        Phase 2 + Phase 3 결합 commit (sink 시그니처 + emit 동시)
+      </div>
+      <div class="dev-body">
+        <p><strong>맥락:</strong> spec §8 마이그레이션 순서는 Step 4에서
+          &ldquo;sink param 추가만, NoopSink 주입, 모든 기존 테스트 통과&rdquo;를 checkpoint로
+          두고 Step 9에서 별도로 sink.emit을 추가하라 명시.</p>
+        <p><strong>구현:</strong> 하나의 commit (<code>c71bf68</code>)에서 sink param 추가 +
+          NoopSink 마이그레이션 + 실제 sink.emit 호출 모두 처리. NoopSink는 emit을 no-op
+          처리하므로 기존 테스트는 자동으로 같은 결과를 낸다 (spec checkpoint의 본질은
+          만족). 분리하면 commit 두 개가 되지만 다른 의미적 차이가 없어 작업 효율을 우선했다.</p>
+        <p><strong>리스크:</strong> 한 commit이 회귀를 일으키면 시그니처와 emit 둘 중
+          어느 쪽이 원인인지 commit 단위로 격리할 수 없음. 보완으로 새 테스트
+          <code>transcript_ingest_publishes_to_live_tx</code> (L2) +
+          <code>binary_emits_sse_for_hooks</code> (L3)가 emit 동작을 명시 검증하므로 회귀
+          탐지력은 보존.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-06</span>
+        <code>FromRef&lt;AppState&gt; for SqlitePool</code>으로 기존 핸들러 보존
+      </div>
+      <div class="dev-body">
+        <p><strong>맥락:</strong> AppState 도입 시 모든 axum 핸들러를
+          <code>State&lt;SqlitePool&gt;</code> → <code>State&lt;AppState&gt;</code>로
+          일괄 변경하면 5개 파일 9개 호출지의 본문을 다 수정해야 한다.</p>
+        <p><strong>구현:</strong> <code>impl FromRef&lt;AppState&gt; for SqlitePool</code>을
+          제공하여 기존 핸들러는 시그니처 그대로 컴파일 통과.
+          <code>state.pool</code>을 필요로 하는 신규 핸들러 (SSE)만
+          <code>State&lt;AppState&gt;</code>를 직접 받는다. 추후 OTel + Hook 핸들러처럼
+          <code>live_tx</code>가 필요한 곳은 그때만 AppState로 전환.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-07</span>
+        LIVE 뱃지 시맨틱 변경 (last_observed_at → envelope 수신)
+      </div>
+      <div class="dev-body">
+        <p><strong>슬라이스 7 정의:</strong> <code>now - last_observed_at &lt; 60s</code>.
+          첫 fetch 시점의 DB 시각을 기준으로 하므로 페이지가 5분 idle 상태여도 ON으로 표시
+          가능 (실제로 stream이 끊겼는데도).</p>
+        <p><strong>슬라이스 8 정의:</strong> 클라이언트가 그 session_id에 대해 SSE envelope을
+          최근 60초 내 수신한 경우에만 ON. 5초 ticker는 유지 — envelope이 도착하지 않더라도
+          60s 윈도우를 재평가하기 위함.</p>
+        <p><strong>회귀 가드:</strong> 기존 slice-7 LIVE 뱃지 vitest는 새 시맨틱으로 교체
+          (&ldquo;LIVE OFF by default until envelope&rdquo;). 두 정의가 양립할 수 없는 단일
+          assertion으로 silent rollback을 방지.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="slice8-commits">
+    <h2><span class="num">24</span>Slice-8 Commit Reference</h2>
+    <p>커밋 SHA 목록 (slice-8 branch <code>slice8-sse-live</code>).
+      PR 머지 시 squash 여부에 따라 SHA가 달라질 수 있다.</p>
+    <ul>
+      <li><code>e1d5f0b</code> — feat(live): LiveEvent v1 envelope + LiveSink trait (Noop, Capturing, Broadcast)</li>
+      <li><code>c71bf68</code> — feat(ingest): thread LiveSink + emit envelopes from every ingest path</li>
+      <li><code>d86a099</code> — refactor(api): introduce AppState + router(state) with FromRef&lt;SqlitePool&gt;</li>
+      <li><code>52cd608</code> — feat(serve): wire BroadcastSink into every production ingest path</li>
+      <li><code>fd56ca1</code> — feat(api): SSE handler at GET /v1/stream — backfill + live forward</li>
+      <li><code>5f489a7</code> — test(sse): subprocess E2E — hook + OTel metrics + session filter</li>
+      <li><code>7c4db3d</code> — feat(webui): live update via SSE + envelope-based LIVE badge</li>
+    </ul>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 · 2026-05-21 · branch: slice7-live-tail-doctor</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 · 2026-05-21 · branch: slice8-sse-live</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
