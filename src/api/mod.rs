@@ -16,6 +16,7 @@ const MAX_REQUEST_BODY: usize = 4 * 1024 * 1024;
 pub fn router(pool: SqlitePool) -> Router {
     Router::new()
         .route("/v1/health", get(routes::health))
+        .route("/v1/health/sources", get(routes::health_sources))
         .route("/v1/sessions", get(routes::list_sessions))
         .route("/v1/sessions/:id", get(routes::session_detail))
         .route("/v1/sessions/:id/graph", get(routes::session_graph))

@@ -21,6 +21,61 @@ pub async fn health() -> impl IntoResponse {
     Json(json!({"status":"ok","build_sha": option_env!("GIT_SHA").unwrap_or("dev")}))
 }
 
+/// slice-6 — per-source freshness summary for `witmcc doctor`.
+///
+/// Groups `raw_event` by source_type, returns the fixed taxonomy with
+/// `null`/`0` rows for sources that have never ingested anything. The mapping
+/// from DB `source_type` to UI label is normalised here (e.g., DB stores
+/// `"otel"` for traces, label is `"otel-traces"`; `"file_git"` becomes
+/// `"file-git"`; `"claude_transcript"` becomes `"transcript"`).
+pub async fn health_sources(State(pool): State<SqlitePool>) -> impl IntoResponse {
+    use sqlx::Row;
+    // (db source_type, ui label)
+    let taxonomy: &[(&str, &str)] = &[
+        ("claude_transcript", "transcript"),
+        ("otel", "otel-traces"),
+        ("otel-metrics", "otel-metrics"),
+        ("otel-logs", "otel-logs"),
+        ("hook", "hook"),
+        ("file_git", "file-git"),
+    ];
+    let rows = sqlx::query(
+        "SELECT source_type,
+                MAX(captured_at) AS last_ingested_at,
+                SUM(CASE WHEN captured_at >= datetime('now','-1 day') THEN 1 ELSE 0 END) AS row_count_24h,
+                COUNT(*) AS total_rows
+           FROM raw_event GROUP BY source_type",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("db");
+    let mut by_type: std::collections::HashMap<String, (Option<String>, i64, i64)> =
+        std::collections::HashMap::new();
+    for r in rows {
+        let st: String = r.get("source_type");
+        let last: Option<String> = r.try_get("last_ingested_at").ok();
+        let cnt24: i64 = r.try_get("row_count_24h").unwrap_or(0);
+        let total: i64 = r.try_get("total_rows").unwrap_or(0);
+        by_type.insert(st, (last, cnt24, total));
+    }
+    let sources: Vec<SourceHealth> = taxonomy
+        .iter()
+        .map(|(db, label)| {
+            let entry = by_type.get(*db);
+            SourceHealth {
+                label: (*label).to_string(),
+                last_ingested_at: entry.and_then(|(t, _, _)| t.clone()),
+                row_count_24h: entry.map(|(_, c, _)| *c).unwrap_or(0),
+                total_rows: entry.map(|(_, _, t)| *t).unwrap_or(0),
+            }
+        })
+        .collect();
+    Json(Envelope {
+        meta: ResponseMeta::now(),
+        data: HealthSourcesResponse { sources },
+    })
+}
+
 pub async fn list_sessions(
     State(pool): State<SqlitePool>,
     Query(q): Query<ListQuery>,

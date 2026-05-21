@@ -34,6 +34,20 @@ pub struct OtelLogsRawResponse {
     pub sessions_touched: Vec<String>,
 }
 
+/// slice-6 — per-source freshness for `/v1/health/sources`. Powers `witmcc doctor`.
+#[derive(Debug, Serialize)]
+pub struct SourceHealth {
+    pub label: String,
+    pub last_ingested_at: Option<String>,
+    pub row_count_24h: i64,
+    pub total_rows: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct HealthSourcesResponse {
+    pub sources: Vec<SourceHealth>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct HookIngestResponse {
     pub accepted_events: u64,
