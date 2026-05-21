@@ -27,6 +27,9 @@ fn spawn_server(extra_env: &[(&str, &str)]) -> (std::process::Child, String, tem
         "--auto-migrate",
         "--shutdown-after-ms",
         "3000",
+        // slice-7: keep doctor tests deterministic regardless of the test
+        // host's real ~/.claude/projects contents.
+        "--no-watch-transcripts",
     ])
     .stdout(Stdio::null())
     .stderr(Stdio::null());
