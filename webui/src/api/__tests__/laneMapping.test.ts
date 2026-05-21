@@ -20,6 +20,11 @@ describe('laneForNodeKind', () => {
     expect(laneForNodeKind('diff_hunk')).toBe('Files');
   });
 
+  it('maps metric_sample / log_record to OTel (slice-6)', () => {
+    expect(laneForNodeKind('metric_sample')).toBe('OTel');
+    expect(laneForNodeKind('log_record')).toBe('OTel');
+  });
+
   it('returns null for unknown kinds', () => {
     expect(laneForNodeKind('unknown_kind')).toBeNull();
   });
