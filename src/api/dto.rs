@@ -63,6 +63,10 @@ pub struct SessionListItem {
     pub last_observed_at: String,
     pub event_count: i64,
     pub source_uris: Vec<String>, // slice-1: empty array (tracked at observed_event payload level)
+    /// slice-7 — per-kind row counts so the WebUI can surface
+    /// transcript-only vs OTel-only sessions in the list view.
+    #[serde(default)]
+    pub by_kind: std::collections::BTreeMap<String, i64>,
 }
 
 #[derive(Serialize)]

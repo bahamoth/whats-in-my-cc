@@ -6,6 +6,8 @@ export type SessionListItem = {
   last_observed_at: string;
   event_count: number;
   source_uris: string[];
+  /** slice-7 — per-kind row counts. May be absent on older servers. */
+  by_kind?: Record<string, number>;
 };
 
 export type ObservedEventDto = {
