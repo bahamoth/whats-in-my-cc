@@ -143,19 +143,18 @@ describe('SessionListPage', () => {
     expect(rows[3]).toHaveTextContent('small');
   });
 
-  it('renders a live badge for sessions touched in the last 60s', async () => {
+  it('slice-8: LIVE badge OFF by default even when last_observed_at is recent', async () => {
+    // New semantic — LIVE means "client received an SSE envelope within 60s",
+    // not "row was recent the last time we fetched". So a freshly fetched row
+    // with no envelope received has NO badge.
     const now = new Date();
     const recent = new Date(now.getTime() - 5_000).toISOString();
-    const stale  = new Date(now.getTime() - 3 * 3600_000).toISOString();
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(envelope([
       { session_id: 'aaa', first_observed_at: '2026-05-21T00:00:00Z', last_observed_at: recent, event_count: 1, source_uris: [] },
-      { session_id: 'bbb', first_observed_at: '2026-05-21T00:00:00Z', last_observed_at: stale,  event_count: 1, source_uris: [] },
     ]));
     render(withRouter(<SessionListPage />));
-    const recentRow = (await screen.findByText('aaa')).closest('tr')!;
-    const staleRow  = screen.getByText('bbb').closest('tr')!;
-    expect(within(recentRow).getByTestId('live-badge')).toBeInTheDocument();
-    expect(within(staleRow).queryByTestId('live-badge')).toBeNull();
+    const row = (await screen.findByText('aaa')).closest('tr')!;
+    expect(within(row).queryByTestId('live-badge')).toBeNull();
   });
 
   it('clicking the active header again flips the sort direction', async () => {
