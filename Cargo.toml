@@ -31,7 +31,7 @@ thiserror          = "2"
 dirs               = "5"
 walkdir            = "2"
 futures            = "0.3"
-tokio-stream       = { version = "0.1", features = ["io-util"] }
+tokio-stream       = { version = "0.1", features = ["io-util", "sync"] }
 sha2               = "0.10"
 hex                = "0.4"
 once_cell          = "1"
