@@ -19,7 +19,12 @@ import styles from './SessionDetailPage.module.css';
 // inside that window reuse the existing timer. When the timer fires we run
 // exactly one refetch. New envelopes that arrive during the fetch itself
 // arm a fresh timer for the next refetch, so we never queue refetches.
-const LIVE_REFETCH_DEBOUNCE_MS = 250;
+// 1000ms — 250ms was too aggressive for 4000+ event sessions where each
+// refetch carries ~200 KB JSON + a Timeline re-render over thousands of
+// SVG circles. Verified: with 250ms the renderer froze within seconds of
+// active claude code activity. 1000ms keeps the UI responsive and the
+// "live" feeling is still well within human perception.
+const LIVE_REFETCH_DEBOUNCE_MS = 1000;
 
 type Loaded = { session: SessionDetail; graph: GraphPayload };
 type State =
@@ -43,11 +48,14 @@ export default function SessionDetailPage() {
         if (e instanceof ApiError && e.status === 404) graph = { nodes: [], edges: [] };
         else throw e;
       }
-      // Anti-flicker: if the new graph came back empty but the previous render
-      // had a non-empty graph, treat this as a transient race during ingest's
-      // graph::build::rebuild_session (DELETE then INSERT not in one
-      // transaction) and KEEP the previous graph. Otherwise Timeline flickers
-      // every time a new transcript line lands during an active session.
+      // Anti-flicker + anti-thrash:
+      // (a) If the new graph came back empty but the previous render had a
+      //     non-empty graph, treat as a transient race during ingest's
+      //     graph::build::rebuild_session and KEEP the previous graph.
+      // (b) If nothing structural changed (same node/edge counts, same event
+      //     count), return the prev reference. React skips re-render on
+      //     identity equality, so Timeline does not re-layout 3000+ SVG
+      //     circles for no reason.
       setState((prev) => {
         if (
           graph.nodes.length === 0 &&
@@ -55,6 +63,14 @@ export default function SessionDetailPage() {
           prev.data.graph.nodes.length > 0
         ) {
           return { kind: 'ok', data: { session, graph: prev.data.graph } };
+        }
+        if (
+          prev.kind === 'ok' &&
+          prev.data.graph.nodes.length === graph.nodes.length &&
+          prev.data.graph.edges.length === graph.edges.length &&
+          prev.data.session.summary.event_count === session.summary.event_count
+        ) {
+          return prev;
         }
         return { kind: 'ok', data: { session, graph } };
       });
