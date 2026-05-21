@@ -349,30 +349,30 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
         out.push(block.trim_end().to_string());
     }
 
-    // Hooks — check the merged hook_entries + plugin_hooks, not just user-scope.
-    let any_witmcc_hook = report
-        .hook_entries
-        .iter()
-        .chain(report.plugin_hooks.iter())
-        .any(|h| h.forwards_to_witmcc);
-    if !any_witmcc_hook {
-        out.push(
-            "No hook entry forwards to /hooks/v1/events in any scope (user, project, local, managed, or plugin). \
-             Register one in ~/.claude/settings.json — see README 'Hook Collector (slice-4)'."
-                .into(),
-        );
-    }
-
+    // Hooks intentionally NOT in the recommendation block.
+    //
+    // The substring match on `hooks/v1/events` is a heuristic that produces
+    // false negatives whenever the user runs a wrapper script, pipes through
+    // jq, or targets a non-default endpoint. doctor cannot tell from settings
+    // alone whether a hook command will reach witmcc. Whether hook events
+    // actually arrived is observable in /v1/health/sources (informational
+    // table), which is the source of truth for "is data flowing". The same
+    // logic applies to file_git: doctor has no way of knowing which repo
+    // the user intends to `serve --watch`, so a "no file-git data" message
+    // is not actionable — it's just a statement of fact about the DB.
+    //
+    // Managed policy is still surfaced because those flags really do block
+    // hook execution regardless of user intent, but only when present.
     if report.managed_policy.disable_all_hooks {
         out.push(
             "Managed policy `disableAllHooks = true` is set — no hooks will ever fire. \
              Hook collector will receive 0 events regardless of user/project entries."
                 .into(),
         );
-    } else if report.managed_policy.allow_managed_hooks_only && !any_witmcc_hook {
+    } else if report.managed_policy.allow_managed_hooks_only {
         out.push(
             "Managed policy `allowManagedHooksOnly = true` is set — user/project hooks are ignored. \
-             Ask the admin to add the witmcc forwarder to the managed settings file or to a force-enabled plugin."
+             Only managed / SDK / force-enabled-plugin hooks load."
                 .into(),
         );
     }
@@ -382,11 +382,15 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
             "witmcc server unreachable. Start it with: `witmcc serve --auto-migrate`.".into(),
         );
     } else {
+        // Hook + file-git are user-configured and intentionally excluded from
+        // the "no data, do X" recommendation — doctor doesn't know X.
+        // Surface only sources whose absence really is actionable.
+        const ACTIONABLE: &[&str] = &["transcript", "otel-traces", "otel-metrics", "otel-logs"];
         let no_data: Vec<&str> = report
             .server
             .sources
             .iter()
-            .filter(|s| s.status == "no_data")
+            .filter(|s| s.status == "no_data" && ACTIONABLE.contains(&s.label.as_str()))
             .map(|s| s.label.as_str())
             .collect();
         if !no_data.is_empty() {
@@ -403,12 +407,18 @@ fn compute_exit_code(report: &DoctorReport) -> i32 {
     if !report.server.reachable {
         return 1;
     }
-    let any_recent_source = report
+    // Only "actionable" sources affect exit code. hook + file-git are user-
+    // configured externals (forward script + `--watch <path>`) — their
+    // absence is not a failure doctor can diagnose. See the matching block
+    // in build_recommendations() for the same rationale.
+    const ACTIONABLE: &[&str] = &["transcript", "otel-traces", "otel-metrics", "otel-logs"];
+    let any_actionable_source_has_data = report
         .server
         .sources
         .iter()
+        .filter(|s| ACTIONABLE.contains(&s.label.as_str()))
         .any(|s| s.status == "recent" || s.status == "stale");
-    if any_recent_source {
+    if any_actionable_source_has_data {
         0
     } else {
         1
@@ -479,19 +489,34 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
             "  {:<14} {:<28} {:>9} {:>8}",
             "source", "last_ingested_at", "rows/24h", "total"
         )?;
+        // hook + file-git are user-configured (forward script / `serve --watch`).
+        // doctor cannot diagnose how those should be wired, so it surfaces
+        // them as informational only — no red ✗ marker that suggests action.
+        const INFO_SOURCES: &[&str] = &["hook", "file-git"];
         for s in &sp.sources {
-            let marker = match s.status {
-                "recent" => green("✓"),
-                "stale" => yellow("~"),
-                _ => red("✗"),
+            let info = INFO_SOURCES.contains(&s.label.as_str());
+            let marker = if info {
+                if s.status == "no_data" { dim("ℹ") } else { green("✓") }
+            } else {
+                match s.status {
+                    "recent" => green("✓"),
+                    "stale" => yellow("~"),
+                    _ => red("✗"),
+                }
             };
             let last = s.last_ingested_at.as_deref().unwrap_or("—");
+            let suffix = if info { dim("  (info-only)") } else { String::new() };
             writeln!(
                 w,
-                "  {marker} {:<12} {:<28} {:>9} {:>8}",
-                s.label, last, s.row_count_24h, s.total_rows
+                "  {marker} {:<12} {:<28} {:>9} {:>8}{}",
+                s.label, last, s.row_count_24h, s.total_rows, suffix
             )?;
         }
+        writeln!(
+            w,
+            "      {}",
+            dim("ℹ info-only = depends on external wiring; absence is not a failure")
+        )?;
     } else {
         writeln!(w, "  {} unreachable", red("✗"))?;
         if let Some(e) = &sp.error {

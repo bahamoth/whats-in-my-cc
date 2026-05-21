@@ -287,6 +287,138 @@ fn doctor_v02_env_divergence_when_settings_has_more_than_shell() {
     );
 }
 
+/// Invariant from the PR-5 doctor scope discussion: hook + file-git are
+/// user-configured externals (forward script / `serve --watch`) so doctor
+/// cannot diagnose how they should be wired. They must not appear in the
+/// "no data, do X" recommendation block.
+#[test]
+fn doctor_recommendations_omit_hook_and_file_git() {
+    let (mut child, url, _db) = spawn_server(&[]);
+    let out = AssertCmd::cargo_bin("witmcc")
+        .unwrap()
+        .args(["doctor", "--server", &url])
+        .env_remove("CLAUDE_CODE_ENABLE_TELEMETRY")
+        .output()
+        .expect("doctor");
+    let _ = child.kill();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // Recommendation block must NOT mention hook substring matching or
+    // file-git path advice — those are not actionable from doctor's vantage.
+    let recs_start = stdout.find("# Recommendations").unwrap_or(stdout.len());
+    let recs = &stdout[recs_start..];
+    assert!(
+        !recs.to_lowercase().contains("forward to /hooks/v1/events"),
+        "hook forward substring should not be in recommendations; got:\n{recs}"
+    );
+    assert!(
+        !recs.to_lowercase().contains("no data yet from") || !recs.contains("hook")
+            && !recs.contains("file-git"),
+        "'no data yet from' should never list hook or file-git; got:\n{recs}"
+    );
+}
+
+/// Exit code must be driven only by actionable sources (transcript + the
+/// three OTel signals). A DB that has hook rows but no transcript/OTel must
+/// still exit 1 — hook arrival alone does not prove the wiring is correct.
+#[test]
+fn doctor_exit_ignores_hook_only_data() {
+    let port = pick_port();
+    let db = tempfile::NamedTempFile::new().expect("tempfile");
+    let bin = env!("CARGO_BIN_EXE_witmcc");
+
+    // Migrate then insert a single hook raw row.
+    let init = std::process::Command::new(bin)
+        .args(["--db-path", db.path().to_str().unwrap(), "init-db"])
+        .output()
+        .expect("init-db");
+    assert!(init.status.success());
+
+    let conn = rusqlite_open(db.path());
+    conn.execute(
+        "INSERT INTO ingest_run(run_id, started_at, status, stats) VALUES('run','2026-05-21T00:00:00Z','ok','{}')",
+        [],
+    ).unwrap();
+    conn.execute(
+        "INSERT INTO raw_event(raw_event_id, ingest_run_id, source_type, source_uri, source_line_no, source_byte_offset, payload_sha256, payload, parse_error, captured_at) \
+         VALUES('r1','run','hook','hook://t/1',0,0,'sha',X'7B7D',NULL,datetime('now'))",
+        [],
+    ).unwrap();
+    drop(conn);
+
+    // Spawn witmcc serve against this DB.
+    let mut child = std::process::Command::new(bin)
+        .args([
+            "--db-path",
+            db.path().to_str().unwrap(),
+            "serve",
+            "--port",
+            &port.to_string(),
+            "--auto-migrate",
+            "--shutdown-after-ms",
+            "3000",
+            "--no-watch-transcripts",
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("spawn");
+    // Wait for ready.
+    let url = format!("http://127.0.0.1:{port}");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while std::time::Instant::now() < deadline {
+        if let Ok(r) = std::thread::spawn({
+            let url = url.clone();
+            move || ureq_get(&format!("{url}/v1/health"))
+        })
+        .join()
+        .unwrap()
+        {
+            if r { break; }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
+    let out = AssertCmd::cargo_bin("witmcc")
+        .unwrap()
+        .args(["doctor", "--server", &url])
+        .output()
+        .expect("doctor");
+    let _ = child.kill();
+    let _ = child.wait();
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "hook-only data must still exit 1 (hook is informational)"
+    );
+}
+
+fn rusqlite_open(_path: &std::path::Path) -> RusqliteShim {
+    // We don't want to depend on rusqlite for one test. Use sqlx blocking via
+    // a tiny tokio runtime instead.
+    RusqliteShim::new(_path.to_path_buf())
+}
+
+struct RusqliteShim {
+    rt: tokio::runtime::Runtime,
+    pool: sqlx::SqlitePool,
+}
+
+impl RusqliteShim {
+    fn new(path: std::path::PathBuf) -> Self {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let url = format!("sqlite://{}?mode=rwc", path.display());
+        let pool = rt
+            .block_on(async { sqlx::SqlitePool::connect(&url).await })
+            .unwrap();
+        Self { rt, pool }
+    }
+    fn execute(&self, sql: &str, _: [(); 0]) -> Result<u64, sqlx::Error> {
+        self.rt.block_on(async {
+            sqlx::query(sql).execute(&self.pool).await.map(|r| r.rows_affected())
+        })
+    }
+}
+
 #[test]
 fn doctor_unreachable_server_exits_1_with_error() {
     // No spawn; point at an unbound port.
