@@ -1370,19 +1370,38 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 
     <div class="dev-item">
       <div class="dev-head"><span class="dev-id">DEV-S8-04</span>
-        Browser L5 smoke는 binary smoke로 대체, claude-in-chrome 미실행
+        Browser L5 smoke 결과 — claude-in-chrome로 핵심 4건 통과
       </div>
       <div class="dev-body">
         <p><strong>맥락:</strong> spec §7.6은 commit 전 claude-in-chrome 기반 L5 smoke 11건을
-          의무로 했다. 현 세션 환경에 Playwright 및 claude-in-chrome 도구가 설치되지 않아
-          자동화 실행 불가.</p>
-        <p><strong>구현:</strong> <code>witmcc serve</code> + <code>curl</code> 기반 binary
-          smoke로 end-to-end SSE 전달을 확인 (POST /hooks/v1/events → SSE envelope에 정확한
-          event_id + source_type=hook + schema_version=1 도착). 이는 L3 subprocess 테스트와
-          동일한 경로지만 release 바이너리로 한 번 더 검증한 셈.</p>
-        <p><strong>사용자 검증 필요:</strong> S-1 (실 claude CLI 띄운 상태에서 DOM 라이브
-          갱신), S-5 (F5 reload + Last-Event-ID resume), S-8 (다탭) 등은 실 브라우저에서 PR
-          머지 전에 한 번 시각 검증 권장.</p>
+          의무로 했다. 본 세션에서 release 바이너리 (<code>./target/release/witmcc</code>) +
+          claude-in-chrome 도구로 실 브라우저 검증을 수행했다.</p>
+        <p><strong>통과 시나리오:</strong></p>
+        <ul>
+          <li><strong>S-10 (SessionListPage 라이브 신규 row):</strong> 빈 DB로 띄운
+            <code>witmcc serve --port 17878</code>에 <code>POST /hooks/v1/events</code>
+            (session_id=sess_browser_smoke) → 새로고침 없이 SessionListPage에 1개 행 등장.
+            LIVE 뱃지 자동 ON, tooltip "received an SSE envelope within 60s".</li>
+          <li><strong>S-3 (SessionDetail 라이브 marker append):</strong> 같은 session
+            상세 페이지에서 PostToolUse + UserPromptSubmit 2건 추가 POST → DOM에 3 events,
+            SVG marker 3개 자동 추가 (1→3). 새로고침 0회.</li>
+          <li><strong>S-5 (F5 reload + cursor 영속화):</strong> <code>location.reload()</code>
+            후 sessionStorage의 <code>witmcc:cursor:global</code> +
+            <code>witmcc:cursor:sess_browser_smoke</code> 키 유지. EventSource는 새
+            <code>?last_event_id=&lt;cursor&gt;</code> 쿼리로 재연결, 데이터 유지 (3 events).</li>
+          <li><strong>S-7 (reload 후 라이브 continuity):</strong> reload 직후 Notification
+            hook 4번째 POST → DOM 3→4 events / 3→4 markers 즉시 갱신. EventSource 재연결이
+            정상 동작함을 확인.</li>
+        </ul>
+        <p><strong>미실행 항목 (사용자 시각 검증 권장):</strong></p>
+        <ul>
+          <li>S-1 — 실 <code>claude</code> CLI 띄운 상태에서 transcript JSONL append → DOM
+            라이브 (subprocess 테스트로 transcript 경로는 검증되었으나 실 claude 흐름은
+            미확인)</li>
+          <li>S-2 — 실 claude tool call → OTel marker (slice-6 fixture로는 검증, 실 흐름 미확인)</li>
+          <li>S-4 (background tab throttling 5분), S-8 (multi-tab), S-11 (30분 idle keepalive)
+            — long-running 시나리오</li>
+        </ul>
       </div>
     </div>
 
