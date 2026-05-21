@@ -1,6 +1,7 @@
 use sqlx::{Row, SqlitePool};
 
 use crate::error::Result;
+use crate::model::cursor::Cursor;
 use crate::model::observed::{Actor, EventKind, ObservedEvent, TelemetryFacet};
 
 pub async fn insert(pool: &SqlitePool, e: &ObservedEvent) -> Result<()> {
@@ -195,6 +196,121 @@ pub async fn list_session_latest(
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(row_to_observed).collect())
+}
+
+/// Slice-9 — windowed range query for paged event reads. Supersedes
+/// `list_session_latest` in handler usage; `list_session_latest` remains as
+/// the no-cursor convenience for SSE backfill's `last_event_id` path.
+///
+/// Ordering: `(observed_at, event_id)` ASC on the wire (DEV-S8-10 lock).
+/// SQL: when `before` is set or no cursors → DESC LIMIT then reverse in
+/// memory so we always return the most relevant window without a full scan;
+/// when only `after` is set → ASC LIMIT directly.
+///
+/// Limits: clamped to `[1, 1000]`. Returning 5000+ rows is the slice-8
+/// anti-pattern this slice replaces — see DEV-S8-14.
+pub async fn list_session_window(
+    pool: &SqlitePool,
+    session_id: &str,
+    before: Option<&Cursor>,
+    after: Option<&Cursor>,
+    limit: i64,
+) -> Result<Vec<ObservedEvent>> {
+    let limit = limit.clamp(1, 1000);
+    let rows = match (before, after) {
+        (None, None) => {
+            sqlx::query(
+                "SELECT * FROM observed_event WHERE session_id = ? \
+                 ORDER BY observed_at DESC, event_id DESC LIMIT ?",
+            )
+            .bind(session_id)
+            .bind(limit)
+            .fetch_all(pool)
+            .await?
+        }
+        (Some(b), None) => {
+            let ts = b.observed_at.to_rfc3339();
+            sqlx::query(
+                "SELECT * FROM observed_event WHERE session_id = ? \
+                 AND (observed_at < ? OR (observed_at = ? AND event_id < ?)) \
+                 ORDER BY observed_at DESC, event_id DESC LIMIT ?",
+            )
+            .bind(session_id)
+            .bind(&ts)
+            .bind(&ts)
+            .bind(&b.event_id)
+            .bind(limit)
+            .fetch_all(pool)
+            .await?
+        }
+        (None, Some(a)) => {
+            let ts = a.observed_at.to_rfc3339();
+            sqlx::query(
+                "SELECT * FROM observed_event WHERE session_id = ? \
+                 AND (observed_at > ? OR (observed_at = ? AND event_id > ?)) \
+                 ORDER BY observed_at ASC, event_id ASC LIMIT ?",
+            )
+            .bind(session_id)
+            .bind(&ts)
+            .bind(&ts)
+            .bind(&a.event_id)
+            .bind(limit)
+            .fetch_all(pool)
+            .await?
+        }
+        (Some(b), Some(a)) => {
+            let ats = a.observed_at.to_rfc3339();
+            let bts = b.observed_at.to_rfc3339();
+            sqlx::query(
+                "SELECT * FROM observed_event WHERE session_id = ? \
+                 AND (observed_at > ? OR (observed_at = ? AND event_id > ?)) \
+                 AND (observed_at < ? OR (observed_at = ? AND event_id < ?)) \
+                 ORDER BY observed_at ASC, event_id ASC LIMIT ?",
+            )
+            .bind(session_id)
+            .bind(&ats)
+            .bind(&ats)
+            .bind(&a.event_id)
+            .bind(&bts)
+            .bind(&bts)
+            .bind(&b.event_id)
+            .bind(limit)
+            .fetch_all(pool)
+            .await?
+        }
+    };
+    let mut events: Vec<ObservedEvent> = rows.into_iter().map(row_to_observed).collect();
+    // before-only and no-cursor used DESC SQL — flip to chronological ASC.
+    let needs_reverse = matches!((before, after), (Some(_), None) | (None, None));
+    if needs_reverse {
+        events.reverse();
+    }
+    Ok(events)
+}
+
+/// Slice-9 — per-kind row counts for a single session. Replaces the
+/// summary's `by_kind` that slice-8 derived from the (windowed) events array;
+/// once `session_detail` stopped returning events, by_kind needed its own
+/// query so the WebUI's source-mix badges stay accurate on 5000+ event
+/// sessions.
+pub async fn session_kind_counts(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<std::collections::BTreeMap<String, i64>> {
+    let rows = sqlx::query(
+        "SELECT kind, COUNT(*) AS n FROM observed_event \
+         WHERE session_id = ? GROUP BY kind",
+    )
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+    let mut out = std::collections::BTreeMap::new();
+    for r in rows {
+        let k: String = r.get("kind");
+        let n: i64 = r.get("n");
+        out.insert(k, n);
+    }
+    Ok(out)
 }
 
 /// Slice-8 — accurate per-session summary (count + first/last observed_at)

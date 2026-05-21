@@ -104,13 +104,8 @@ pub async fn list_sessions(
 pub async fn session_detail(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
-    Query(q): Query<ListQuery>,
 ) -> Result<Json<Envelope<SessionDetail>>, (StatusCode, Json<serde_json::Value>)> {
-    let limit = clamp_limit(q.limit);
-
-    // Summary first — accurate count + first/last across the WHOLE session,
-    // independent of the `latest <limit>` events window we ship to the WebUI.
-    // A `None` here means no rows for this session_id → 404.
+    // Slice-9 — summary only. Events ship via /v1/sessions/:id/events.
     let Some((event_count, first_obs, last_obs)) = repo_observed::session_summary(&pool, &id)
         .await
         .expect("db")
@@ -123,21 +118,13 @@ pub async fn session_detail(
         ));
     };
 
-    // Newest `limit` events, then reverse so the wire order is chronological
-    // (the WebUI Timeline component still expects ASC).
-    let mut evs = repo_observed::list_session_latest(&pool, &id, limit)
+    // Per-kind counts cover the whole session (not a windowed sample), so
+    // ranking, badges, and source-mix UIs stay accurate independently of any
+    // paging the events endpoint applies.
+    let by_kind = repo_observed::session_kind_counts(&pool, &id)
         .await
         .expect("db");
-    evs.reverse();
 
-    let mut by_kind = std::collections::BTreeMap::new();
-    for e in &evs {
-        *by_kind.entry(e.kind.as_str().to_string()).or_insert(0) += 1;
-    }
-    let events: Vec<serde_json::Value> = evs
-        .iter()
-        .map(|e| serde_json::to_value(observed_to_dto(e)).unwrap())
-        .collect();
     Ok(Json(Envelope {
         meta: ResponseMeta::now(),
         data: SessionDetail {
@@ -148,7 +135,78 @@ pub async fn session_detail(
                 first_observed_at: first_obs,
                 last_observed_at: last_obs,
             },
+        },
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct EventsQuery {
+    pub before: Option<String>,
+    pub after: Option<String>,
+    pub limit: Option<i64>,
+}
+
+/// Slice-9 — cursor-paged event window. See
+/// `docs/superpowers/specs/2026-05-21-witmcc-slice9-windowed-buffer-design.md`
+/// §4 for the cursor format and `prev_cursor`/`next_cursor` semantics.
+pub async fn session_events(
+    State(pool): State<SqlitePool>,
+    Path(id): Path<String>,
+    Query(q): Query<EventsQuery>,
+) -> Result<Json<Envelope<SessionEventsResponse>>, (StatusCode, Json<serde_json::Value>)> {
+    use crate::model::cursor::Cursor;
+    fn parse_cursor(
+        opt: Option<&str>,
+    ) -> Result<Option<Cursor>, (StatusCode, Json<serde_json::Value>)> {
+        match opt {
+            None => Ok(None),
+            Some(s) => s.parse::<Cursor>().map(Some).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "type":"about:blank",
+                        "title":"INVALID_CURSOR",
+                        "detail": e.to_string(),
+                    })),
+                )
+            }),
+        }
+    }
+    let before = parse_cursor(q.before.as_deref())?;
+    let after = parse_cursor(q.after.as_deref())?;
+    let limit = q.limit.unwrap_or(500);
+
+    let evs =
+        repo_observed::list_session_window(&pool, &id, before.as_ref(), after.as_ref(), limit)
+            .await
+            .expect("db");
+
+    let (prev_cursor, next_cursor) = match (evs.first(), evs.last()) {
+        (Some(first), Some(last)) => {
+            let prev = format!("{}|{}", first.observed_at.to_rfc3339(), first.event_id);
+            // next_cursor is null when the window already reaches the session's
+            // live tip — further events arrive via SSE, not via another page
+            // fetch. The summary's last_observed_at is the authoritative tip.
+            let summary = repo_observed::session_summary(&pool, &id).await.expect("db");
+            let at_live_tip = matches!(summary, Some((_, _, last_observed_at)) if last_observed_at == last.observed_at.to_rfc3339());
+            let next = if at_live_tip {
+                None
+            } else {
+                Some(format!("{}|{}", last.observed_at.to_rfc3339(), last.event_id))
+            };
+            (Some(prev), next)
+        }
+        _ => (None, None),
+    };
+
+    let events: Vec<serde_json::Value> =
+        evs.iter().map(|e| observed_to_dto(e)).collect();
+    Ok(Json(Envelope {
+        meta: ResponseMeta::now(),
+        data: SessionEventsResponse {
             events,
+            prev_cursor,
+            next_cursor,
         },
     }))
 }

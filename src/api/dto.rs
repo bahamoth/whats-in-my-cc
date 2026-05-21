@@ -69,11 +69,24 @@ pub struct SessionListItem {
     pub by_kind: std::collections::BTreeMap<String, i64>,
 }
 
+/// Slice-9 — `events` field removed. Use `GET /v1/sessions/:id/events?...`
+/// for cursor-paged event windows. Replaces slice-8's DEV-S8-14 newest-5000
+/// cap workaround.
 #[derive(Serialize)]
 pub struct SessionDetail {
     pub session_id: String,
     pub summary: SessionSummary,
+}
+
+/// Slice-9 — response payload for `GET /v1/sessions/:id/events`.
+/// Cursors are `<observed_at_rfc3339>|<event_id>` (see `model::cursor`).
+/// `next_cursor: null` means the window already reaches the session's live
+/// tip; further updates arrive via SSE rather than another page fetch.
+#[derive(Serialize)]
+pub struct SessionEventsResponse {
     pub events: Vec<Value>,
+    pub prev_cursor: Option<String>,
+    pub next_cursor: Option<String>,
 }
 
 #[derive(Serialize)]

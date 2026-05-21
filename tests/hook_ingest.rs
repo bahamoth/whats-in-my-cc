@@ -54,8 +54,10 @@ async fn duplicate_post_increments_duplicate_events_and_keeps_one_row() {
     // Self-heal: session still marked touched on full dup.
     assert_eq!(r2["data"]["sessions_touched"][0], "sess_fix_A");
 
-    let detail: Value = s.get("/v1/sessions/sess_fix_A").await.json();
-    let cnt = detail["data"]["events"]
+    // Slice-9 — session_detail no longer ships events. Use the windowed
+    // /events endpoint instead.
+    let events: Value = s.get("/v1/sessions/sess_fix_A/events").await.json();
+    let cnt = events["data"]["events"]
         .as_array()
         .unwrap()
         .iter()
@@ -71,8 +73,8 @@ async fn unknown_hook_event_name_accepts_with_unknown_subkind() {
     let r: Value = s.post("/hooks/v1/events").json(&body).await.json();
     assert_eq!(r["data"]["accepted_events"], 1);
 
-    let detail: Value = s.get("/v1/sessions/sess_fix_A").await.json();
-    let unknown = detail["data"]["events"]
+    let events: Value = s.get("/v1/sessions/sess_fix_A/events").await.json();
+    let unknown = events["data"]["events"]
         .as_array()
         .unwrap()
         .iter()
@@ -86,8 +88,8 @@ async fn raw_endpoint_returns_original_hook_json() {
     let body = load("tests/fixtures/hook/notification.json");
     s.post("/hooks/v1/events").json(&body).await;
 
-    let detail: Value = s.get("/v1/sessions/sess_fix_A").await.json();
-    let event_id = detail["data"]["events"]
+    let events: Value = s.get("/v1/sessions/sess_fix_A/events").await.json();
+    let event_id = events["data"]["events"]
         .as_array()
         .unwrap()
         .iter()

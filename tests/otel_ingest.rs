@@ -188,7 +188,8 @@ async fn session_detail_returns_otel_span_with_telemetry() {
     let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool));
     let server = TestServer::new(app).unwrap();
 
-    let resp = server.get("/v1/sessions/sess-otel-A").await;
+    // Slice-9 — session_detail dropped events; fetch via the new endpoint.
+    let resp = server.get("/v1/sessions/sess-otel-A/events").await;
     resp.assert_status_ok();
     let v: serde_json::Value = resp.json();
 
