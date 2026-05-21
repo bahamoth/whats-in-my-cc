@@ -57,6 +57,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice5-overview">Overview (slice-5)</a>
     <a href="#slice5-deviations">Intentional Deviations (slice-5)</a>
     <a href="#slice5-commits">Commit Reference (slice-5)</a>
+    <a href="#slice6-overview">Overview (slice-6)</a>
+    <a href="#slice6-deviations">Intentional Deviations (slice-6)</a>
+    <a href="#slice6-commits">Commit Reference (slice-6)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
 </aside>
@@ -963,8 +966,149 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </ul>
   </section>
 
+  <section id="slice6-overview">
+    <h2><span class="num">16</span>Slice-6 Overview</h2>
+    <p><code>slice6-otel-metrics-logs</code> branch — OTLP/JSON <strong>metrics</strong> and
+      <strong>logs</strong> receivers (the two signals Claude Code actually emits by default;
+      traces are beta). Two-stage receiver: Stage 1 persists the raw OTLP request into
+      <code>raw_event</code> verbatim; Stage 2 (anchored on real Claude Code v01 fixtures)
+      normalises per-data-point / per-record into <code>MetricSample</code> /
+      <code>LogRecord</code> <code>ObservedEvent</code> rows + graph nodes. A new
+      <code>witmcc doctor</code> CLI reports env / hook-settings / per-source freshness
+      without mutating anything. SCHEMA_VERSION 0.4.0 → 0.5.0.</p>
+    <p><strong>전체 상태:</strong> slice-6 완료. 9 commits, +1486 LOC, 123 cargo + 36 vitest
+      tests (slice-5 대비 +20 cargo, +5 vitest). 실 Claude Code 2.1.145 payload로 fixture를
+      동결했고 end-to-end (POST → raw → observed → graph → Pull API → WebUI)가 통과한다.
+      doctor는 reachable / no_data / recent 3-state로 collector 결선을 컬러 출력한다.</p>
+  </section>
+
+  <section id="slice6-deviations">
+    <h2><span class="num">17</span>Slice-6 Intentional Deviations</h2>
+
+    <div class="dev">
+      <h3>DEV-S6-01 Two-stage receiver instead of a separate capture tool</h3>
+      <p><strong>맥락:</strong> 초기 작업 계획에서 "fixture 동결용 1회 dump script"를
+        별도 도구로 두려 했으나, CLAUDE.md의 source-preserving 원칙에 따르면 raw payload
+        보존은 모든 receiver의 영구 동작이다. 별도 도구는 컨셉을 흐림.</p>
+      <p><strong>구현:</strong> Stage 1 receiver는 OTLP/JSON 본문을 그대로 <code>raw_event</code>에
+        넣는 minimal endpoint다. Stage 2 normalize는 그 위에 점진 적층. 실 Claude Code 캡처는
+        Stage 1 머지 직후 사용자가 실 <code>claude</code>를 한 번 띄워서 DB에 들어온 row를
+        <code>scripts/freeze_real_otel_fixtures.py</code>로 추출 + redaction.</p>
+      <p><strong>결과:</strong> capture 도구 없음. raw_event 자체가 capture이자 영구 보존.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S6-02 source_type "otel" vs label "otel-traces"</h3>
+      <p><strong>맥락:</strong> traces는 slice-3에서 <code>source_type = "otel"</code>로
+        저장되기 시작했다. slice-6에서 metrics/logs를 추가하면서 raw_event 컬럼 값을
+        rename하면 schema migration이 필요하다.</p>
+      <p><strong>구현:</strong> DB 값은 보존(<code>"otel"</code>), API 응답
+        (<code>/v1/health/sources</code>)과 doctor 출력 라벨에서만 normalise하여
+        <code>"otel-traces"</code>로 표시. 새 source_type은
+        <code>"otel-metrics"</code>, <code>"otel-logs"</code>.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S6-03 Per-data-point ObservedEvent (no rollups)</h3>
+      <p><strong>맥락:</strong> metric은 시계열이라 rollup하는 게 자연스러워 보이지만
+        evidence-linked finding의 단위는 single sample이다.</p>
+      <p><strong>구현:</strong> <code>resourceMetrics[].scopeMetrics[].metrics[].dataPoints[]</code>의
+        각 datapoint = 한 ObservedEvent + 한 graph_node. Claude Code의 기본
+        export interval (60s)로 bounded되므로 row 폭발은 없다 (10 instruments ×
+        12 sessions/day ≈ 17 k rows/day).</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S6-04 event_id에 attribute hash 포함</h3>
+      <p><strong>맥락:</strong> 실 Claude Code의 metric 한 instrument는 같은 timestamp에
+        다른 attribute set으로 여러 datapoint를 보낼 수 있다 (이번 v01 fixture는 매 instrument에
+        2 dataPoint). spec §5.5의 초기 event_id 공식 <code>metric:&lt;resource&gt;:&lt;instrument&gt;:&lt;time&gt;:&lt;attr&gt;</code>은
+        이미 attr_sha8을 포함하지만 graph merge_keys에는 누락 → 6 datapoint가 3 node로 dedup됨.</p>
+      <p><strong>구현:</strong> <code>graph::build::compute</code>의
+        <code>metric_sample</code> / <code>log_record</code> merge_keys에 <code>event_id</code>
+        자체를 추가. 같은 (instrument, time)이라도 attribute가 다른 datapoint는 별도 노드.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S6-05 row_to_observed의 신규 EventKind 매핑 누락 (수정됨)</h3>
+      <p><strong>증상:</strong> 첫 Stage 2 실행 시 observed_event는 6 row 들어가지만
+        graph_node는 0. 원인은 <code>repo_observed::row_to_observed</code>의
+        <code>match kind.as_str()</code>에 <code>"metric_sample"</code> /
+        <code>"log_record"</code> 분기 누락 — DB 행이 <code>EventKind::Unknown</code>로
+        역직렬화되고 graph compute가 <code>_ => continue</code>로 skip.</p>
+      <p><strong>교훈:</strong> 새 EventKind 추가 시 loader도 반드시 동시에 갱신한다.
+        후속 slice에선 EventKind enum/match를 strum 등으로 derive해서 동기화 비용을 없앨 만함.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S6-06 cross-source dedup (otel-logs ↔ transcript) 보류</h3>
+      <p><strong>맥락:</strong> 실 fixture에서 <code>event.name="hook_execution_complete"</code>
+        log record가 등장 — 같은 사건이 slice-4 hook receiver로도 들어올 수 있다. 두 source가
+        모두 활성이면 같은 hook 실행이 두 노드로 보일 가능성.</p>
+      <p><strong>구현:</strong> 본 slice에서는 별도 노드로 보존. dedup은 시간 윈도우 +
+        attribute heuristic이 필요하며 별도 slice (DEV-S4-05와 같은 패턴).</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S6-07 raw_event index에 session_id 포함하지 않음</h3>
+      <p><strong>사양 원문:</strong> design spec §5.3 — <code>idx_raw_source_type_session ON raw_event(source_type, session_id)</code>.</p>
+      <p><strong>실제 구현:</strong> raw_event 테이블에 <code>session_id</code> 컬럼이
+        없다 (session 귀속은 observed_event에만 있음). migration 0004의 인덱스를
+        <code>idx_raw_source_type ON raw_event(source_type)</code> 단일 컬럼으로 변경.
+        <code>/v1/health/sources</code>는 source_type GROUP BY만 하므로 단일 컬럼 인덱스로
+        충분.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S6-08 doctor는 환경변수 셸 process만 본다</h3>
+      <p><strong>맥락:</strong> 사용자가 <code>~/.claude/settings.json</code>의
+        <code>env</code> 객체에 OTel 변수를 설정해도 doctor 실행 셸에는 적용 안 됨.
+        Claude Code는 자기 child process에만 그 env를 주입한다.</p>
+      <p><strong>구현:</strong> doctor는 자신의 process env만 검사 — 사용자가 다른 셸에서
+        export하지 않은 상태에서는 모두 "unset"으로 보임. 이는 의도된 동작이며 false
+        positive가 아니다. 추가로 settings.json의 env 블록도 읽어서 두 출처를 비교 표시하는
+        UX 개선은 follow-up.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S6-09 docs/02 + docs/03 HTML patch 보류 (follow-up)</h3>
+      <p><strong>맥락:</strong> 두 spec HTML은 single-line으로 거대해서 안전한 in-place
+        patch가 어렵다.</p>
+      <p><strong>구현:</strong> 본 slice에서는 design spec
+        (<code>docs/superpowers/specs/2026-05-20-witmcc-slice6-...md</code>) +
+        implementation-notes (이 페이지)가 사실상 spec patch 역할. docs/02 (architecture) /
+        docs/03 (data model)의 HTML 통합은 별도 작업으로 분리. design spec과 이 페이지에
+        모든 결정·매핑이 명시되어 있다.</p>
+    </div>
+
+    <div class="dev">
+      <h3>DEV-S6-10 doctor의 settings.json 자동 변경 없음 (CLAUDE.md 원칙 재확인)</h3>
+      <p><strong>구현:</strong> doctor는 <code>~/.claude/settings.json</code>을 read-only로
+        peek만 한다. <code>--apply</code> 같은 플래그 의도적 미구현. 권장 사항은
+        copy-pastable snippet으로 출력만 한다. CLAUDE.md "Claude Code 설정 변경 금지" 원칙
+        준수.</p>
+    </div>
+  </section>
+
+  <section id="slice6-commits">
+    <h2><span class="num">18</span>Slice-6 Commit Reference</h2>
+    <p>커밋 SHA 목록 (slice-6 branch <code>slice6-otel-metrics-logs</code>).
+      PR 머지 시 squash 여부에 따라 SHA가 달라질 수 있다.</p>
+    <ul>
+      <li><code>3115a39</code> — docs(slice-6): design spec + TDD plan — metrics/logs receiver + doctor</li>
+      <li><code>79c1580</code> — chore(meta): bump SCHEMA_VERSION 0.4.0 -&gt; 0.5.0; add otel-metrics/otel-logs constants + migration 0004</li>
+      <li><code>03e3430</code> — feat(api): Stage1 raw receivers — POST /otel/v1/{metrics,logs}</li>
+      <li><code>1433535</code> — test(otel): Stage1 metrics + logs receivers — ingest, dedup, gzip, bad-json</li>
+      <li><code>df6b198</code> — test(otel): freeze real Claude Code OTel payloads v01 — metrics/logs/traces (redacted)</li>
+      <li><code>5e899b4</code> — feat(ingest): Stage2 normalize — MetricSample + LogRecord + graph nodes</li>
+      <li><code>790629d</code> — feat(webui): metric_sample / log_record markers on OTel lane</li>
+      <li><code>f48562c</code> — feat(api): GET /v1/health/sources — per-source freshness for witmcc doctor</li>
+      <li><code>2904f64</code> — feat(cli): witmcc doctor — env / hook settings / server probe (read-only)</li>
+    </ul>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 · 2026-05-20 · branch: slice5-file-git</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 · 2026-05-21 · branch: slice6-otel-metrics-logs</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>

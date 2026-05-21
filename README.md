@@ -70,28 +70,87 @@ The SPA has two pages:
 
 Node 20 is required; see `webui/.nvmrc`.
 
-### OTel Traces Receiver (slice-3)
+### OTel Receivers (slice-3 traces, slice-6 metrics + logs)
 
-`POST /otel/v1/traces` accepts OTLP/JSON traces. gzip-encoded request bodies are
-decompressed automatically. Set your exporter to JSON:
+witmcc accepts all three Claude Code OTel signals at a single loopback origin:
 
-```bash
-export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=http/json
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:7878/otel
+| Endpoint | Signal | Notes |
+|---|---|---|
+| `POST /otel/v1/metrics` | metrics (slice-6) | OTLP/JSON, gzip optional, ≤4 MB |
+| `POST /otel/v1/logs`    | logs (slice-6)    | OTLP/JSON, gzip optional, ≤4 MB |
+| `POST /otel/v1/traces`  | traces (slice-3, beta) | requires `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` |
+
+Receiver is two-stage: raw OTLP body is persisted verbatim into `raw_event` first
+(source-preserving), then normalised into per-data-point `MetricSample` and
+per-record `LogRecord` `ObservedEvent` rows + graph nodes (slice-6 Stage 2).
+Each signal also surfaces on the `OTel` lane in the WebUI with kind-specific
+markers (indigo dashed = span, sky-blue = metric, amber = log).
+
+#### Wire Claude Code via `~/.claude/settings.json`
+
+```jsonc
+{
+  "env": {
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
+    "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_LOGS_EXPORTER":    "otlp",
+    "OTEL_TRACES_EXPORTER":  "otlp",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:7878/otel",
+    "OTEL_METRIC_EXPORT_INTERVAL": "5000",
+    "OTEL_LOGS_EXPORT_INTERVAL":   "2000",
+    "OTEL_TRACES_EXPORT_INTERVAL": "2000"
+  }
+}
 ```
 
-Manual smoke test:
+The `/otel` suffix on the endpoint is **required** — without it the OTel SDK
+posts to `…/v1/metrics` instead of `…/otel/v1/metrics` and witmcc returns 404.
+witmcc does **not** auto-edit settings.json (CLAUDE.md non-goal).
+
+Manual smoke (any signal):
 
 ```bash
-curl -X POST http://127.0.0.1:7878/otel/v1/traces \
+curl -X POST http://127.0.0.1:7878/otel/v1/metrics \
   -H 'Content-Type: application/json' \
-  --data-binary @tests/fixtures/otel/single_span.json
+  --data-binary @tests/fixtures/otel/real/metrics_v01.json
 ```
+
+#### Re-freeze real fixtures
+
+After a noteworthy Claude Code release, refresh the v01 fixtures to keep
+parser anchors on real bytes:
+
+```bash
+./target/release/witmcc serve --auto-migrate &
+cd /any/repo && claude   # short interactive session, /exit
+python3 scripts/freeze_real_otel_fixtures.py
+# inspect + commit the diff in tests/fixtures/otel/real/
+```
+
+PII (user.email / user.id / *.account_* / organization.id / session.id) is
+auto-redacted to stable placeholders by the freeze script. Always grep for
+your own email before committing.
 
 Notes:
-- traces signal only — metrics/logs are future slices.
-- Spans without `session.id` are stored but excluded from `/v1/sessions`.
-- No redaction yet — do not send spans containing secrets.
+- Traces are beta in Claude Code — without `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`
+  the SDK never emits spans.
+- No redaction (M7). Logs in particular carry user prompts and tool input;
+  treat the SQLite file as sensitive until M7 ships.
+- Records without `session.id` are stored but excluded from `/v1/sessions`.
+
+### Doctor (slice-6)
+
+```bash
+witmcc doctor            # pretty table, exits 0 when collectors are healthy
+witmcc doctor --json     # structured report for tooling, always exits 0
+witmcc doctor --server http://127.0.0.1:7878
+```
+
+Reports OTel env vars, hook settings wiring, and per-source `last_ingested_at`
+from `GET /v1/health/sources`. Pure read-only — never writes settings.json or
+shell env. Missing items are printed as copy-pastable snippets at the bottom.
 
 ### Hook Collector (slice-4)
 
