@@ -10,7 +10,7 @@ async fn setup() -> TestServer {
         .await
         .unwrap();
     migrate(&pool).await.unwrap();
-    let app = witmcc::api::router(pool);
+    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool));
     TestServer::new(app).unwrap()
 }
 
