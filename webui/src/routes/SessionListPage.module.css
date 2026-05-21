@@ -25,8 +25,12 @@
 .tagFile       { background: #f1e8fb; color: #6a3eaa; border-color: #d8c5ec; }
 .tagDim        { color: #9aa1ad; font-size: 11px; }
 
-/* sessions that received OTel-only data — likely the otel-session-id ≠
-   transcript-session-id correlation gap. Marked subtly. */
+/* Sessions for which only OTel events landed — i.e. a Claude Code conversation
+ * that emitted at least one OTel signal (SessionStart hook log, etc.) but
+ * never wrote a transcript JSONL line. OTel `session.id` IS the transcript
+ * conversation UUID (verified against ~/.claude/projects + session-env), so
+ * this is NOT a correlation gap. The row is tinted subtly so users can
+ * recognise "empty conversation" sessions at a glance. */
 .otelOnly { background: #fcfbf6; }
 .otelOnly td { color: #6b7280; }
 .otelOnly td a { color: #5d4eab; }
