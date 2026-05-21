@@ -6,6 +6,7 @@
 //! graceful shutdown alongside the HTTP server.
 
 use crate::ingest::file_git::{self, FileChange, FileRecord, FILESYSTEM_SESSION_ID};
+use crate::live::{BroadcastSink, LiveEvent};
 use chrono::Utc;
 use notify::{
     event::{CreateKind, ModifyKind, RemoveKind, RenameMode},
@@ -13,8 +14,9 @@ use notify::{
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 
 const DEBOUNCE: Duration = Duration::from_millis(250);
@@ -23,8 +25,10 @@ const POLL_TICK: Duration = Duration::from_millis(100);
 pub async fn run_file_watcher(
     pool: sqlx::SqlitePool,
     root: PathBuf,
+    live_tx: Arc<broadcast::Sender<LiveEvent>>,
     cancel: CancellationToken,
 ) -> anyhow::Result<()> {
+    let sink = BroadcastSink::new(live_tx);
     let (tx, mut rx) = mpsc::unbounded_channel::<RawFsEvent>();
     let root_for_filter = root.clone();
     let mut watcher: RecommendedWatcher = notify::recommended_watcher({
@@ -68,7 +72,7 @@ pub async fn run_file_watcher(
                         size_bytes,
                         observed_at: Utc::now(),
                     };
-                    if let Err(e) = file_git::store_file_event(&pool, record, Utc::now(), &crate::live::NoopSink).await {
+                    if let Err(e) = file_git::store_file_event(&pool, record, Utc::now(), &sink).await {
                         tracing::warn!(error=?e, "store_file_event failed");
                     }
                 }

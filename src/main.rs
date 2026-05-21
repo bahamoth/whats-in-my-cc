@@ -99,14 +99,20 @@ async fn serve_cmd(
     let cancel = tokio_util::sync::CancellationToken::new();
     let mut bg_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
+    let (live_tx, _) = tokio::sync::broadcast::channel::<witmcc::live::LiveEvent>(512);
+    let live_tx = std::sync::Arc::new(live_tx);
+
     if let Some(root) = watch.as_ref() {
         if root.exists() {
             tracing::info!(?root, "file watcher started");
             let pool_cl = pool.clone();
             let root_cl = root.clone();
             let tok = cancel.clone();
+            let live_cl = live_tx.clone();
             bg_handles.push(tokio::spawn(async move {
-                if let Err(e) = witmcc::watcher::run_file_watcher(pool_cl, root_cl, tok).await {
+                if let Err(e) =
+                    witmcc::watcher::run_file_watcher(pool_cl, root_cl, live_cl, tok).await
+                {
                     tracing::error!(error=?e, "file watcher exited with error");
                 }
             }));
@@ -117,9 +123,11 @@ async fn serve_cmd(
                 let pool_cl = pool.clone();
                 let root_cl = root.clone();
                 let tok = cancel.clone();
+                let live_cl = live_tx.clone();
                 bg_handles.push(tokio::spawn(async move {
                     if let Err(e) =
-                        witmcc::git_poller::run_git_poller(pool_cl, root_cl, secs, tok).await
+                        witmcc::git_poller::run_git_poller(pool_cl, root_cl, secs, live_cl, tok)
+                            .await
                     {
                         tracing::error!(error=?e, "git poller exited with error");
                     }
@@ -141,8 +149,9 @@ async fn serve_cmd(
                 tracing::info!(root = ?r, "transcript live tail enabled");
                 let pool_cl = pool.clone();
                 let tok = cancel.clone();
+                let live_cl = live_tx.clone();
                 bg_handles.push(tokio::spawn(async move {
-                    if let Err(e) = witmcc::transcript_tail::run(pool_cl, r, tok).await {
+                    if let Err(e) = witmcc::transcript_tail::run(pool_cl, r, live_cl, tok).await {
                         tracing::error!(error=?e, "transcript tail exited with error");
                     }
                 }));
@@ -163,8 +172,6 @@ async fn serve_cmd(
         });
     }
 
-    let (live_tx, _) = tokio::sync::broadcast::channel::<witmcc::live::LiveEvent>(512);
-    let live_tx = std::sync::Arc::new(live_tx);
     let state = witmcc::api::AppState {
         pool: pool.clone(),
         live_tx: live_tx.clone(),

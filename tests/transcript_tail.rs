@@ -70,8 +70,10 @@ fn spawn_tail(
 ) -> (CancellationToken, tokio::task::JoinHandle<()>) {
     let cancel = CancellationToken::new();
     let cancel_clone = cancel.clone();
+    let (live_tx, _) = tokio::sync::broadcast::channel::<witmcc::live::LiveEvent>(64);
+    let live_tx = std::sync::Arc::new(live_tx);
     let h = tokio::spawn(async move {
-        let _ = witmcc::transcript_tail::run(pool, root, cancel_clone).await;
+        let _ = witmcc::transcript_tail::run(pool, root, live_tx, cancel_clone).await;
     });
     (cancel, h)
 }
@@ -186,7 +188,9 @@ async fn missing_root_does_not_error() {
     let tmp = tempfile::tempdir().unwrap();
     let nonexistent = tmp.path().join("does-not-exist");
     let cancel = CancellationToken::new();
+    let (live_tx, _) = tokio::sync::broadcast::channel::<witmcc::live::LiveEvent>(64);
+    let live_tx = std::sync::Arc::new(live_tx);
     let res =
-        witmcc::transcript_tail::run(pool.clone(), nonexistent, cancel).await;
+        witmcc::transcript_tail::run(pool.clone(), nonexistent, live_tx, cancel).await;
     assert!(res.is_ok());
 }

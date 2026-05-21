@@ -1,9 +1,9 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde_json::json;
-use sqlx::SqlitePool;
 
 use crate::api::dto::{OtelIngestResponse, OtelLogsRawResponse, OtelMetricsRawResponse};
 use crate::ingest::{otel, otel_logs, otel_metrics};
+use crate::live::BroadcastSink;
 use crate::model::meta::{
     Envelope, ResponseMeta, SOURCE_TYPE_OTEL_LOGS, SOURCE_TYPE_OTEL_METRICS,
 };
@@ -44,7 +44,7 @@ fn db_failure(err: impl std::fmt::Display) -> (StatusCode, Json<serde_json::Valu
 }
 
 pub async fn ingest_traces(
-    State(pool): State<SqlitePool>,
+    State(state): State<crate::api::AppState>,
     body: axum::body::Bytes,
 ) -> Result<Json<Envelope<OtelIngestResponse>>, (StatusCode, Json<serde_json::Value>)> {
     if body.len() > MAX_DECOMPRESSED_BYTES {
@@ -52,7 +52,8 @@ pub async fn ingest_traces(
     }
     let value: serde_json::Value = serde_json::from_slice(&body).map_err(bad_json)?;
     let parsed = otel::parse_otlp_json(&value);
-    let result = otel::store(&pool, parsed, chrono::Utc::now(), &crate::live::NoopSink)
+    let sink = BroadcastSink::new(state.live_tx.clone());
+    let result = otel::store(&state.pool, parsed, chrono::Utc::now(), &sink)
         .await
         .map_err(db_failure)?;
 
@@ -70,7 +71,7 @@ pub async fn ingest_traces(
 /// slice-6 — accept OTLP/JSON metrics request, persist raw (Stage 1), then
 /// normalise into per-data-point MetricSample ObservedEvents (Stage 2).
 pub async fn ingest_metrics(
-    State(pool): State<SqlitePool>,
+    State(state): State<crate::api::AppState>,
     body: axum::body::Bytes,
 ) -> Result<Json<Envelope<OtelMetricsRawResponse>>, (StatusCode, Json<serde_json::Value>)> {
     if body.len() > MAX_DECOMPRESSED_BYTES {
@@ -84,7 +85,7 @@ pub async fn ingest_metrics(
         .unwrap_or(0);
     let received_at = chrono::Utc::now();
     let (inserted, raw_id, _sha) = otel::store_raw(
-        &pool,
+        &state.pool,
         SOURCE_TYPE_OTEL_METRICS,
         "otel-metrics",
         &value,
@@ -95,7 +96,8 @@ pub async fn ingest_metrics(
     let (stored_raw_rows, duplicate_raw_rows) = if inserted { (1, 0) } else { (0, 1) };
     // Stage 2 is idempotent via insert_or_ignore so we can always run it. Re-POSTs
     // of an already-seen body will return all-duplicate_data_points and zero accepts.
-    let stage2 = otel_metrics::store_request(&pool, &raw_id, &value, received_at, &crate::live::NoopSink)
+    let sink = BroadcastSink::new(state.live_tx.clone());
+    let stage2 = otel_metrics::store_request(&state.pool, &raw_id, &value, received_at, &sink)
         .await
         .map_err(db_failure)?;
     Ok(Json(Envelope {
@@ -115,7 +117,7 @@ pub async fn ingest_metrics(
 /// slice-6 — accept OTLP/JSON logs request, persist raw (Stage 1), then
 /// normalise into per-record LogRecord ObservedEvents (Stage 2).
 pub async fn ingest_logs(
-    State(pool): State<SqlitePool>,
+    State(state): State<crate::api::AppState>,
     body: axum::body::Bytes,
 ) -> Result<Json<Envelope<OtelLogsRawResponse>>, (StatusCode, Json<serde_json::Value>)> {
     if body.len() > MAX_DECOMPRESSED_BYTES {
@@ -129,7 +131,7 @@ pub async fn ingest_logs(
         .unwrap_or(0);
     let received_at = chrono::Utc::now();
     let (inserted, raw_id, _sha) = otel::store_raw(
-        &pool,
+        &state.pool,
         SOURCE_TYPE_OTEL_LOGS,
         "otel-logs",
         &value,
@@ -138,7 +140,8 @@ pub async fn ingest_logs(
     .await
     .map_err(db_failure)?;
     let (stored_raw_rows, duplicate_raw_rows) = if inserted { (1, 0) } else { (0, 1) };
-    let stage2 = otel_logs::store_request(&pool, &raw_id, &value, received_at, &crate::live::NoopSink)
+    let sink = BroadcastSink::new(state.live_tx.clone());
+    let stage2 = otel_logs::store_request(&state.pool, &raw_id, &value, received_at, &sink)
         .await
         .map_err(db_failure)?;
     Ok(Json(Envelope {
