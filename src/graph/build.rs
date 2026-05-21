@@ -9,13 +9,20 @@ use crate::model::graph::{GraphEdge, GraphNode};
 use crate::model::meta::SCHEMA_VERSION;
 use crate::model::observed::{EventKind, ObservedEvent};
 
+/// Slice-9 — atomic rebuild. compute() runs against the pool (a read-only
+/// SELECT that doesn't need to share the write tx), then a single
+/// transaction holds DELETE + INSERT. Concurrent SELECTs against
+/// `graph_node` either see the pre-rebuild rows or the post-rebuild rows,
+/// never the empty mid-rebuild state. Fixes DEV-S8-12.
 pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usize, usize)> {
     let evs = repo_observed::list_session(pool, session_id, 100_000).await?;
     let (nodes, edges) = compute(session_id, &evs);
-    repo_graph::delete_session(pool, session_id).await?;
     let n = nodes.len();
     let e = edges.len();
-    repo_graph::insert_nodes_edges(pool, &nodes, &edges).await?;
+    let mut tx = pool.begin().await?;
+    repo_graph::delete_session_in_tx(&mut tx, session_id).await?;
+    repo_graph::insert_nodes_edges_in_tx(&mut tx, &nodes, &edges).await?;
+    tx.commit().await?;
     Ok((n, e))
 }
 

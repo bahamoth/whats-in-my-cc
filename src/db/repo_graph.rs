@@ -1,19 +1,31 @@
-use sqlx::{Row, SqlitePool};
+use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 use crate::error::Result;
 use crate::model::graph::{GraphEdge, GraphNode};
 
 pub async fn delete_session(pool: &SqlitePool, session_id: &str) -> Result<()> {
     let mut tx = pool.begin().await?;
+    delete_session_in_tx(&mut tx, session_id).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Slice-9 — tx-aware DELETE so `rebuild_session` can hold the whole
+/// rebuild (DELETE then INSERT) inside a single transaction. Concurrent
+/// SELECTs see the pre-state row count until commit, never zero rows mid
+/// rebuild (DEV-S8-12 fix).
+pub async fn delete_session_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    session_id: &str,
+) -> Result<()> {
     sqlx::query("DELETE FROM graph_edge WHERE session_id = ?")
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     sqlx::query("DELETE FROM graph_node WHERE session_id = ?")
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
-    tx.commit().await?;
     Ok(())
 }
 
@@ -23,6 +35,18 @@ pub async fn insert_nodes_edges(
     edges: &[GraphEdge],
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
+    insert_nodes_edges_in_tx(&mut tx, nodes, edges).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Slice-9 — tx-aware INSERT companion to `delete_session_in_tx`. Same
+/// callers, single commit boundary.
+pub async fn insert_nodes_edges_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    nodes: &[GraphNode],
+    edges: &[GraphEdge],
+) -> Result<()> {
     for n in nodes {
         sqlx::query(
             "INSERT INTO graph_node(node_id, schema_version, session_id, node_kind, \
@@ -39,7 +63,7 @@ pub async fn insert_nodes_edges(
         .bind(serde_json::to_string(&n.source_event_ids).unwrap())
         .bind(serde_json::to_string(&n.source_uris).unwrap())
         .bind(n.payload.to_string())
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     }
     for e in edges {
@@ -56,10 +80,9 @@ pub async fn insert_nodes_edges(
         .bind(&e.edge_kind)
         .bind(&e.origin)
         .bind(e.attributes.to_string())
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     }
-    tx.commit().await?;
     Ok(())
 }
 
