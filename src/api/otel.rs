@@ -3,7 +3,7 @@ use serde_json::json;
 use sqlx::SqlitePool;
 
 use crate::api::dto::{OtelIngestResponse, OtelLogsRawResponse, OtelMetricsRawResponse};
-use crate::ingest::otel;
+use crate::ingest::{otel, otel_logs, otel_metrics};
 use crate::model::meta::{
     Envelope, ResponseMeta, SOURCE_TYPE_OTEL_LOGS, SOURCE_TYPE_OTEL_METRICS,
 };
@@ -67,7 +67,8 @@ pub async fn ingest_traces(
     }))
 }
 
-/// slice-6 Stage 1 — accept OTLP/JSON metrics request, persist raw, no normalisation.
+/// slice-6 — accept OTLP/JSON metrics request, persist raw (Stage 1), then
+/// normalise into per-data-point MetricSample ObservedEvents (Stage 2).
 pub async fn ingest_metrics(
     State(pool): State<SqlitePool>,
     body: axum::body::Bytes,
@@ -81,27 +82,38 @@ pub async fn ingest_metrics(
         .and_then(|v| v.as_array())
         .map(|a| a.len() as u64)
         .unwrap_or(0);
-    let (inserted, _raw_id, _sha) = otel::store_raw(
+    let received_at = chrono::Utc::now();
+    let (inserted, raw_id, _sha) = otel::store_raw(
         &pool,
         SOURCE_TYPE_OTEL_METRICS,
         "otel-metrics",
         &value,
-        chrono::Utc::now(),
+        received_at,
     )
     .await
     .map_err(db_failure)?;
     let (stored_raw_rows, duplicate_raw_rows) = if inserted { (1, 0) } else { (0, 1) };
+    // Stage 2 is idempotent via insert_or_ignore so we can always run it. Re-POSTs
+    // of an already-seen body will return all-duplicate_data_points and zero accepts.
+    let stage2 = otel_metrics::store_request(&pool, &raw_id, &value, received_at)
+        .await
+        .map_err(db_failure)?;
     Ok(Json(Envelope {
         meta: ResponseMeta::now(),
         data: OtelMetricsRawResponse {
             accepted_resource_metrics,
             stored_raw_rows,
             duplicate_raw_rows,
+            accepted_data_points: stage2.accepted_data_points,
+            duplicate_data_points: stage2.duplicate_data_points,
+            rejected_data_points: stage2.rejected_data_points,
+            sessions_touched: stage2.sessions_touched,
         },
     }))
 }
 
-/// slice-6 Stage 1 — accept OTLP/JSON logs request, persist raw, no normalisation.
+/// slice-6 — accept OTLP/JSON logs request, persist raw (Stage 1), then
+/// normalise into per-record LogRecord ObservedEvents (Stage 2).
 pub async fn ingest_logs(
     State(pool): State<SqlitePool>,
     body: axum::body::Bytes,
@@ -115,22 +127,30 @@ pub async fn ingest_logs(
         .and_then(|v| v.as_array())
         .map(|a| a.len() as u64)
         .unwrap_or(0);
-    let (inserted, _raw_id, _sha) = otel::store_raw(
+    let received_at = chrono::Utc::now();
+    let (inserted, raw_id, _sha) = otel::store_raw(
         &pool,
         SOURCE_TYPE_OTEL_LOGS,
         "otel-logs",
         &value,
-        chrono::Utc::now(),
+        received_at,
     )
     .await
     .map_err(db_failure)?;
     let (stored_raw_rows, duplicate_raw_rows) = if inserted { (1, 0) } else { (0, 1) };
+    let stage2 = otel_logs::store_request(&pool, &raw_id, &value, received_at)
+        .await
+        .map_err(db_failure)?;
     Ok(Json(Envelope {
         meta: ResponseMeta::now(),
         data: OtelLogsRawResponse {
             accepted_resource_logs,
             stored_raw_rows,
             duplicate_raw_rows,
+            accepted_log_records: stage2.accepted_log_records,
+            duplicate_log_records: stage2.duplicate_log_records,
+            rejected_log_records: stage2.rejected_log_records,
+            sessions_touched: stage2.sessions_touched,
         },
     }))
 }

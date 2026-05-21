@@ -443,7 +443,7 @@ pub(crate) fn canonical_json(value: &Value) -> String {
     norm(value).to_string()
 }
 
-fn unix_nano_to_utc(nano: i64) -> Option<DateTime<Utc>> {
+pub(crate) fn unix_nano_to_utc(nano: i64) -> Option<DateTime<Utc>> {
     if nano <= 0 {
         return None;
     }

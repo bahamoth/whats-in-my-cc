@@ -101,6 +101,27 @@ pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, V
                     "diff_hunk_id": e.payload.pointer("/hunk/diff_hunk_id"),
                 }),
             ),
+            EventKind::MetricSample => (
+                "metric_sample",
+                json!({
+                    "session_id":      session_id,
+                    "instrument_name": e.payload.get("instrument_name"),
+                    "time_unix_nano":  e.payload.get("time_unix_nano"),
+                    // event_id is already deterministic-by-(resource, instrument, time, attrs)
+                    // — include it so distinct data points with same (instrument, time) but
+                    // different attributes do not collapse onto the same graph node.
+                    "event_id":        e.event_id,
+                }),
+            ),
+            EventKind::LogRecord => (
+                "log_record",
+                json!({
+                    "session_id":     session_id,
+                    "time_unix_nano": e.payload.get("time_unix_nano"),
+                    "event_name":     e.payload.get("event_name"),
+                    "event_id":       e.event_id,
+                }),
+            ),
             // attachment_meta, session_state, file_history_snapshot, thinking,
             // system_summary, unknown — not promoted to graph nodes
             _ => continue,
@@ -333,7 +354,12 @@ pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, V
         .filter(|n| {
             !matches!(
                 n.node_kind.as_str(),
-                "otel_span" | "file_event" | "git_commit" | "diff_hunk"
+                "otel_span"
+                    | "file_event"
+                    | "git_commit"
+                    | "diff_hunk"
+                    | "metric_sample"
+                    | "log_record"
             )
         })
         .collect();
