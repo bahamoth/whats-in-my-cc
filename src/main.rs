@@ -8,10 +8,18 @@ fn main() -> error::Result<()> {
     rt.block_on(async move {
         match cli.command {
             cli::Command::InitDb => init_db(&cli.db_path).await,
-            cli::Command::Doctor { json, server } => {
-                let code = doctor::run(doctor::DoctorOpts { json, server })
-                    .await
-                    .map_err(anyhow::Error::from)?;
+            cli::Command::Doctor {
+                json,
+                server,
+                project,
+            } => {
+                let code = doctor::run(doctor::DoctorOpts {
+                    json,
+                    server,
+                    project,
+                })
+                .await
+                .map_err(anyhow::Error::from)?;
                 std::process::exit(code);
             }
             cli::Command::Ingest { path, all } => ingest_cmd(&cli.db_path, path, all).await,

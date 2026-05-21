@@ -1,14 +1,19 @@
-//! Slice-6 — `witmcc doctor`.
+//! `witmcc doctor` — read-only diagnostic for collector wiring.
 //!
-//! Read-only diagnostic: dumps OTel env vars, peeks at `~/.claude/settings.json`
-//! for hook wiring, probes the running witmcc server for per-source freshness.
-//! No file mutation (CLAUDE.md non-goal). Prints copy-pastable recommendations
-//! when items are missing; never auto-applies anything.
+//! Slice-6 v0.1: process env + single user settings.json.
+//! Slice-7 v0.2: full Claude Code settings hierarchy walk (managed > local >
+//! project > user) + plugin manifests + managed policy detection + scope
+//! attribution per env/hook value. Still never mutates anything.
+
+pub mod settings;
 
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::io::Write;
+use std::path::PathBuf;
 use std::time::Duration;
+
+use self::settings::{EnvSource, HookEntry, ManagedPolicy, SettingsScope};
 
 const EXPECTED_ENDPOINT_SUFFIX: &str = "/otel";
 
@@ -25,6 +30,8 @@ const OTEL_ENVS: &[(&str, &str)] = &[
 pub struct DoctorOpts {
     pub json: bool,
     pub server: String,
+    /// Slice-7: project root for `.claude/settings.json` walk. Defaults to CWD.
+    pub project: Option<PathBuf>,
 }
 
 #[derive(Debug, Serialize)]
@@ -65,12 +72,28 @@ struct SourceFreshness {
 
 #[derive(Debug, Serialize)]
 struct DoctorReport {
+    // v0.1 (kept for backwards-compat with existing JSON consumers)
     envs: Vec<EnvCheck>,
     endpoint: EnvCheck,
     hook_settings: HookSettingsCheck,
     server: ServerProbe,
     recommendations: Vec<String>,
     exit_code: i32,
+    // v0.2 — slice-7 additions
+    settings_scopes: Vec<SettingsScope>,
+    effective_env: BTreeMap<String, EnvSource>,
+    env_divergence: Vec<EnvDivergence>,
+    hook_entries: Vec<HookEntry>,
+    plugin_hooks: Vec<HookEntry>,
+    managed_policy: ManagedPolicy,
+}
+
+#[derive(Debug, Serialize)]
+struct EnvDivergence {
+    key: String,
+    file_value: Option<String>,
+    file_scope: Option<String>,
+    process_value: Option<String>,
 }
 
 fn ansi(code: &str, s: impl AsRef<str>) -> String {
@@ -283,40 +306,81 @@ async fn probe_server(server: &str) -> ServerProbe {
 
 fn build_recommendations(report: &DoctorReport) -> Vec<String> {
     let mut out = Vec::new();
-    let mut env_block: BTreeMap<&str, String> = BTreeMap::new();
-    for e in &report.envs {
-        if e.status != "ok" {
-            if let Some(want) = &e.expected {
-                env_block.insert(e.key.as_str(), want.clone());
-            }
+
+    // Use the file-effective env (settings hierarchy) as the source of truth
+    // for what `claude` will actually see, not process env. v0.1 was wrong
+    // here — it printed "Set the following…" even when the user already had
+    // the keys in ~/.claude/settings.json.
+    let mut missing_env: BTreeMap<&str, String> = BTreeMap::new();
+    for (k, expected) in OTEL_ENVS.iter() {
+        let present_in_file = report
+            .effective_env
+            .get(*k)
+            .map(|v| v.value == *expected)
+            .unwrap_or(false);
+        let present_in_process = std::env::var(k).ok().as_deref() == Some(*expected);
+        if !present_in_file && !present_in_process {
+            missing_env.insert(*k, expected.to_string());
         }
     }
-    if report.endpoint.status != "ok" {
-        env_block.insert(
+    // endpoint suffix rule
+    let endpoint_ok_file = report
+        .effective_env
+        .get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        .map(|v| v.value.trim_end_matches('/').ends_with(EXPECTED_ENDPOINT_SUFFIX))
+        .unwrap_or(false);
+    let endpoint_ok_process = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
+        .ok()
+        .map(|v| v.trim_end_matches('/').ends_with(EXPECTED_ENDPOINT_SUFFIX))
+        .unwrap_or(false);
+    if !endpoint_ok_file && !endpoint_ok_process {
+        missing_env.insert(
             "OTEL_EXPORTER_OTLP_ENDPOINT",
             "http://localhost:7878/otel".into(),
         );
     }
-    if !env_block.is_empty() {
+    if !missing_env.is_empty() {
         let mut block = String::from(
-            "Set the following in ~/.claude/settings.json env (or as shell exports):\n",
+            "Add to ~/.claude/settings.json `env` block (or any higher-precedence scope):\n",
         );
-        for (k, v) in env_block {
-            block.push_str(&format!("    {k}={v}\n"));
+        for (k, v) in missing_env {
+            block.push_str(&format!("    \"{k}\": \"{v}\",\n"));
         }
         out.push(block.trim_end().to_string());
     }
-    if !report.hook_settings.wired_for_witmcc {
+
+    // Hooks — check the merged hook_entries + plugin_hooks, not just user-scope.
+    let any_witmcc_hook = report
+        .hook_entries
+        .iter()
+        .chain(report.plugin_hooks.iter())
+        .any(|h| h.forwards_to_witmcc);
+    if !any_witmcc_hook {
         out.push(
-            "Register at least one hook forwarder in ~/.claude/settings.json. \
-             See README 'Hook Collector (slice-4)' for the snippet."
+            "No hook entry forwards to /hooks/v1/events in any scope (user, project, local, managed, or plugin). \
+             Register one in ~/.claude/settings.json — see README 'Hook Collector (slice-4)'."
                 .into(),
         );
     }
+
+    if report.managed_policy.disable_all_hooks {
+        out.push(
+            "Managed policy `disableAllHooks = true` is set — no hooks will ever fire. \
+             Hook collector will receive 0 events regardless of user/project entries."
+                .into(),
+        );
+    } else if report.managed_policy.allow_managed_hooks_only && !any_witmcc_hook {
+        out.push(
+            "Managed policy `allowManagedHooksOnly = true` is set — user/project hooks are ignored. \
+             Ask the admin to add the witmcc forwarder to the managed settings file or to a force-enabled plugin."
+                .into(),
+        );
+    }
+
     if !report.server.reachable {
-        out.push(format!(
-            "witmcc server unreachable. Start it with: `witmcc serve --auto-migrate`."
-        ));
+        out.push(
+            "witmcc server unreachable. Start it with: `witmcc serve --auto-migrate`.".into(),
+        );
     } else {
         let no_data: Vec<&str> = report
             .server
@@ -327,7 +391,7 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
             .collect();
         if !no_data.is_empty() {
             out.push(format!(
-                "No data yet from: {}. Run a `claude` session with telemetry on and try again.",
+                "No data yet from: {}. Run a `claude` session against witmcc to populate.",
                 no_data.join(", ")
             ));
         }
@@ -436,6 +500,91 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
     }
     writeln!(w)?;
 
+    // ---- slice-7 v0.2 sections ----
+    writeln!(w, "{}", dim("# Settings files probed (Claude Code hierarchy)"))?;
+    for s in &report.settings_scopes {
+        let marker = if s.present { green("✓") } else { yellow("∅") };
+        writeln!(w, "  {marker} {:<10} {}", s.label, s.path.display())?;
+        if let Some(n) = &s.note {
+            writeln!(w, "      {}", dim(n))?;
+        }
+    }
+    writeln!(w)?;
+
+    writeln!(w, "{}", dim("# Effective OTel env (file scope = what `claude` will see)"))?;
+    if report.effective_env.is_empty() {
+        writeln!(w, "  {} no env block in any scope", yellow("∅"))?;
+    } else {
+        for (k, src) in &report.effective_env {
+            writeln!(w, "  {} {:<40} = {:<24} ({})", green("✓"), k, src.value, src.scope)?;
+        }
+    }
+    if !report.env_divergence.is_empty() {
+        writeln!(w)?;
+        writeln!(w, "  {}", dim("env divergence between file scope and current shell:"))?;
+        for d in &report.env_divergence {
+            let file = d
+                .file_value
+                .as_deref()
+                .map(|v| format!("file:{}={}", d.file_scope.as_deref().unwrap_or("?"), v))
+                .unwrap_or_else(|| "file:(none)".into());
+            let proc = d
+                .process_value
+                .as_deref()
+                .map(|v| format!("process={v}"))
+                .unwrap_or_else(|| "process:(unset)".into());
+            writeln!(w, "    {} {:<40}  {file}  {proc}", yellow("~"), d.key)?;
+        }
+    }
+    writeln!(w)?;
+
+    writeln!(w, "{}", dim("# Hook forwarding to witmcc"))?;
+    let mut all_hooks = report.hook_entries.clone();
+    all_hooks.extend(report.plugin_hooks.iter().cloned());
+    let witmcc_hooks: Vec<&HookEntry> =
+        all_hooks.iter().filter(|h| h.forwards_to_witmcc).collect();
+    if witmcc_hooks.is_empty() {
+        writeln!(
+            w,
+            "  {} no hook entry forwards to /hooks/v1/events in any scope",
+            yellow("∅"),
+        )?;
+    } else {
+        for h in &witmcc_hooks {
+            writeln!(w, "  {} {:<14} → {} ({})", green("✓"), h.event, h.command, h.scope)?;
+        }
+    }
+    // surface non-witmcc hooks too if present
+    let other_hooks: Vec<&HookEntry> =
+        all_hooks.iter().filter(|h| !h.forwards_to_witmcc).collect();
+    if !other_hooks.is_empty() {
+        writeln!(w, "  {}", dim("(other hooks observed; not relevant to witmcc):"))?;
+        for h in other_hooks.iter().take(5) {
+            writeln!(w, "    {:<14} {} ({})", h.event, h.command, h.scope)?;
+        }
+        if other_hooks.len() > 5 {
+            writeln!(w, "    ... +{} more", other_hooks.len() - 5)?;
+        }
+    }
+    writeln!(w)?;
+
+    if report.managed_policy.allow_managed_hooks_only
+        || report.managed_policy.disable_all_hooks
+    {
+        writeln!(w, "{}", dim("# Managed policy (may silence user/project hooks)"))?;
+        if report.managed_policy.disable_all_hooks {
+            writeln!(w, "  {} disableAllHooks = true — no hooks will fire", red("✗"))?;
+        }
+        if report.managed_policy.allow_managed_hooks_only {
+            writeln!(
+                w,
+                "  {} allowManagedHooksOnly = true — only managed/SDK/force-enabled plugin hooks load",
+                yellow("!"),
+            )?;
+        }
+        writeln!(w)?;
+    }
+
     if !report.recommendations.is_empty() {
         writeln!(w, "{}", dim("# Recommendations (none of these will be applied automatically)"))?;
         for r in &report.recommendations {
@@ -457,6 +606,47 @@ pub async fn run(opts: DoctorOpts) -> std::io::Result<i32> {
     let endpoint = check_endpoint();
     let hook_settings = read_hook_settings();
     let server = probe_server(&opts.server).await;
+
+    // ---- slice-7 v0.2: settings hierarchy walk ----
+    let project_start = opts
+        .project
+        .clone()
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let settings_scopes = settings::scopes(&project_start);
+    let effective_env_map = settings::effective_env(&settings_scopes);
+    let plugins_root_override = std::env::var_os("WITMCC_DOCTOR_PLUGINS_ROOT").map(PathBuf::from);
+    let plugins_root = plugins_root_override
+        .or_else(settings::default_plugins_root)
+        .unwrap_or_else(|| PathBuf::from("/nonexistent"));
+    let all_hooks = settings::hook_entries(&settings_scopes, &plugins_root);
+    let (plugin_hooks, hook_entries): (Vec<HookEntry>, Vec<HookEntry>) =
+        all_hooks.into_iter().partition(|h| h.scope.starts_with("plugin:"));
+    let managed_policy = settings::managed_policy(&settings_scopes);
+
+    // env divergence: file-effective vs process env, for keys relevant to OTel.
+    let mut env_divergence: Vec<EnvDivergence> = Vec::new();
+    let mut relevant_keys: Vec<String> = OTEL_ENVS.iter().map(|(k, _)| k.to_string()).collect();
+    relevant_keys.push("OTEL_EXPORTER_OTLP_ENDPOINT".into());
+    for key in &relevant_keys {
+        let file = effective_env_map.get(key);
+        let process = std::env::var(key).ok();
+        let differs = match (file, &process) {
+            (Some(f), Some(p)) => &f.value != p,
+            (Some(_), None) => true,
+            (None, Some(_)) => true,
+            (None, None) => false,
+        };
+        if differs {
+            env_divergence.push(EnvDivergence {
+                key: key.clone(),
+                file_value: file.map(|f| f.value.clone()),
+                file_scope: file.map(|f| f.scope.clone()),
+                process_value: process,
+            });
+        }
+    }
+
     let mut report = DoctorReport {
         envs,
         endpoint,
@@ -464,6 +654,12 @@ pub async fn run(opts: DoctorOpts) -> std::io::Result<i32> {
         server,
         recommendations: vec![],
         exit_code: 0,
+        settings_scopes,
+        effective_env: effective_env_map,
+        env_divergence,
+        hook_entries,
+        plugin_hooks,
+        managed_policy,
     };
     report.recommendations = build_recommendations(&report);
     report.exit_code = compute_exit_code(&report);

@@ -53,6 +53,10 @@ pub enum Command {
         /// witmcc server to probe. Defaults to WITMCC_SERVER or http://127.0.0.1:7878.
         #[arg(long, env = "WITMCC_SERVER", default_value = "http://127.0.0.1:7878")]
         server: String,
+        /// Project root to walk for `.claude/settings.json` and `.claude/settings.local.json`.
+        /// Defaults to CWD; slice-7 settings hierarchy.
+        #[arg(long)]
+        project: Option<PathBuf>,
     },
     /// Start the read-only Pull API HTTP server.
     Serve {
