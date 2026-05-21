@@ -59,6 +59,14 @@ pub async fn ingest_file(pool: &SqlitePool, path: &Path) -> Result<IngestStats> 
                 .await?;
                 if !inserted {
                     stats.raw_skipped += 1;
+                    // slice-7: still mark the session as touched so a later
+                    // graph rebuild runs. Without this, replaying `ingest --all`
+                    // after the graph-rebuild fix landed has no effect on
+                    // already-ingested transcripts — every line dedups and
+                    // sessions_touched stays empty.
+                    if let Some(sid) = rec.session_id() {
+                        stats.sessions_touched.insert(sid.to_string());
+                    }
                     continue;
                 }
                 stats.raw_inserted += 1;
@@ -99,6 +107,12 @@ pub async fn ingest_file(pool: &SqlitePool, path: &Path) -> Result<IngestStats> 
 
     for session_id in &stats.sessions_touched {
         backfill_turn_ids(pool, session_id).await?;
+        // slice-7 fix: every touched session must have its graph rebuilt so
+        // the WebUI timeline renders markers. Without this, OTel ingest
+        // paths populate graph_node but the transcript path does not —
+        // SessionDetail shows zero markers even when /v1/sessions/<id>
+        // reports hundreds of events.
+        crate::graph::build::rebuild_session(pool, session_id).await?;
     }
 
     repo_runs::finish(
