@@ -3,6 +3,7 @@ pub mod hook;
 pub mod middleware;
 pub mod otel;
 pub mod routes;
+pub mod sse;
 pub mod static_assets;
 
 use std::sync::Arc;
@@ -70,6 +71,7 @@ pub fn router(state: AppState) -> Router {
         .route("/otel/v1/metrics", post(otel::ingest_metrics))
         .route("/otel/v1/logs", post(otel::ingest_logs))
         .route("/hooks/v1/events", post(hook::ingest_events))
+        .route("/v1/stream", get(sse::stream_handler))
         .fallback(static_assets::spa_handler)
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY))
         .layer(RequestDecompressionLayer::new().gzip(true))

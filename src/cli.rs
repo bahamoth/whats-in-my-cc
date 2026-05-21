@@ -86,5 +86,13 @@ pub enum Command {
         /// Default: `~/.claude/projects` (autodetected).
         #[arg(long)]
         transcripts_root: Option<PathBuf>,
+        /// SSE keep-alive comment interval in seconds. Sent as `:keepalive\n\n`
+        /// on the WebUI live stream so middle proxies do not idle-time-out.
+        #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u64).range(5..=120))]
+        sse_keepalive_secs: u64,
+        /// Capacity of the in-process broadcast channel that ingest writers
+        /// emit into and the SSE handler subscribes to.
+        #[arg(long, default_value_t = 512, value_parser = clap::value_parser!(u64).range(64..=8192))]
+        sse_channel_capacity: u64,
     },
 }

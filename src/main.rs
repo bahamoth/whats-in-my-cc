@@ -32,6 +32,8 @@ fn main() -> error::Result<()> {
                 shutdown_after_ms,
                 no_watch_transcripts,
                 transcripts_root,
+                sse_keepalive_secs,
+                sse_channel_capacity,
             } => {
                 serve_cmd(
                     &cli.db_path,
@@ -43,6 +45,8 @@ fn main() -> error::Result<()> {
                     shutdown_after_ms,
                     no_watch_transcripts,
                     transcripts_root,
+                    sse_keepalive_secs,
+                    sse_channel_capacity,
                 )
                 .await
             }
@@ -69,6 +73,8 @@ async fn serve_cmd(
     shutdown_after_ms: Option<u64>,
     no_watch_transcripts: bool,
     transcripts_root: Option<std::path::PathBuf>,
+    sse_keepalive_secs: u64,
+    sse_channel_capacity: u64,
 ) -> error::Result<()> {
     // Loopback-only enforcement: accepts 127.0.0.0/8 and ::1 (is_loopback()).
     // Strict 127.0.0.1-only would use `bind == IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)`.
@@ -99,7 +105,8 @@ async fn serve_cmd(
     let cancel = tokio_util::sync::CancellationToken::new();
     let mut bg_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
-    let (live_tx, _) = tokio::sync::broadcast::channel::<witmcc::live::LiveEvent>(512);
+    let (live_tx, _) =
+        tokio::sync::broadcast::channel::<witmcc::live::LiveEvent>(sse_channel_capacity as usize);
     let live_tx = std::sync::Arc::new(live_tx);
 
     if let Some(root) = watch.as_ref() {
@@ -175,8 +182,8 @@ async fn serve_cmd(
     let state = witmcc::api::AppState {
         pool: pool.clone(),
         live_tx: live_tx.clone(),
-        sse_keepalive_secs: 30,
-        sse_channel_capacity: 512,
+        sse_keepalive_secs,
+        sse_channel_capacity: sse_channel_capacity as usize,
     };
     let app = witmcc::api::router(state);
     let addr = std::net::SocketAddr::new(bind, port);
