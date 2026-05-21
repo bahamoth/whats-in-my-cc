@@ -47,7 +47,7 @@ pub async fn stream_handler(
     });
 
     if let Some(c) = cursor.as_deref() {
-        if !is_valid_ulid(c) {
+        if !is_well_formed_event_id(c) {
             return Err((
                 StatusCode::BAD_REQUEST,
                 format!("malformed last-event-id: {c}"),
@@ -123,11 +123,17 @@ pub async fn stream_handler(
     ))
 }
 
-fn is_valid_ulid(s: &str) -> bool {
-    // ULID is 26 chars Crockford base32; this is a structural check, not a
-    // full validation. Malformed cursors are HTTP 400; valid-shape cursors
-    // that miss in DB get `event: resync`.
-    s.len() == 26 && s.chars().all(|c| c.is_ascii_alphanumeric())
+fn is_well_formed_event_id(s: &str) -> bool {
+    // event_id format is source-dependent. ULIDs (26 chars Crockford base32)
+    // for transcripts/hooks/file_git, but slice-6 metric/log records use
+    // deterministic ids like `metric:<resource>:<instrument>:<time>:<attr>` or
+    // `log:<resource>:<time>:<trace>:<span>`. So we accept anything that looks
+    // like a printable ASCII id of reasonable length. Truly malformed
+    // (control chars, > 200 bytes) → 400; unknown-but-well-formed → resync.
+    !s.is_empty()
+        && s.len() <= 200
+        && s.chars()
+            .all(|c| c.is_ascii() && !c.is_ascii_control())
 }
 
 async fn load_backfill(
@@ -144,31 +150,41 @@ async fn load_backfill(
     }
 
     let cursor_str = cursor.unwrap();
-    let cursor_exists = {
-        let n: i64 = sqlx::query_scalar("SELECT COUNT(1) FROM observed_event WHERE event_id = ?")
+    // Lookup the cursor row's observed_at. event_id alone is NOT a sortable
+    // key across sources because slice-6 metric/log ids
+    // (`metric:<resource>:<instrument>:<time>:<attr>`) are not in the same
+    // lexicographic order as ULIDs. Sorting + filtering by observed_at +
+    // (event_id as tiebreaker) gives a monotonic resume order across all
+    // sources without re-encoding event_id.
+    let cursor_observed_at: Option<String> =
+        sqlx::query_scalar("SELECT observed_at FROM observed_event WHERE event_id = ?")
             .bind(cursor_str)
-            .fetch_one(pool)
+            .fetch_optional(pool)
             .await?;
-        n > 0
+    let cursor_observed_at = match cursor_observed_at {
+        Some(t) => t,
+        None => return Ok((Vec::new(), true)), // resync
     };
-    let resync_needed = !cursor_exists;
-    if resync_needed {
-        return Ok((Vec::new(), true));
-    }
 
-    // Cursor exists — emit only newer events. Limit guards against multi-day
-    // disconnects + LIMIT 10000 catastrophes; clients past the cap should
-    // detect the gap and refetch baseline.
+    // Cursor exists — emit rows strictly newer in observed_at, plus rows at
+    // the same instant with a higher event_id (so duplicate-tied timestamps
+    // do not cause re-emission of the cursor row itself). LIMIT guards a
+    // catastrophic multi-day backfill; past that, clients drop the cursor
+    // and refetch baseline via GET.
     let mut q = String::from(
         "SELECT event_id, session_id, kind, observed_at \
-         FROM observed_event WHERE event_id > ?",
+         FROM observed_event \
+         WHERE (observed_at > ? OR (observed_at = ? AND event_id > ?))",
     );
     if session.is_some() {
         q.push_str(" AND session_id = ?");
     }
-    q.push_str(" ORDER BY event_id ASC LIMIT 10000");
+    q.push_str(" ORDER BY observed_at ASC, event_id ASC LIMIT 10000");
 
-    let mut query = sqlx::query(&q).bind(cursor_str);
+    let mut query = sqlx::query(&q)
+        .bind(&cursor_observed_at)
+        .bind(&cursor_observed_at)
+        .bind(cursor_str);
     if let Some(s) = session {
         query = query.bind(s);
     }
@@ -190,7 +206,7 @@ async fn load_backfill(
             }
         })
         .collect();
-    Ok((envs, resync_needed))
+    Ok((envs, false))
 }
 
 fn parse_event_kind(s: &str) -> EventKind {
@@ -224,5 +240,34 @@ fn derive_source_type(kind: EventKind) -> String {
         EventKind::FileEvent => "file".into(),
         EventKind::GitCommit | EventKind::DiffHunk => "git".into(),
         _ => "transcript".into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_well_formed_event_id as ok;
+
+    #[test]
+    fn metric_format_accepted() {
+        // Slice-6 metric event_ids use `metric:<resource>:<instrument>:<time>:<attr>`
+        // (DEV-S6-04). The validator must accept them, otherwise EventSource gets
+        // 400 → onerror → reconnect loop with no data ever delivered. Observed live
+        // on bahamoth's server when the WebUI sent
+        // `last_event_id=metric:595247aa:claude_code.token.usage:...`.
+        assert!(ok("metric:abc:claude_code.token.usage:1779340143371000000:c334b58e"));
+        assert!(ok("log:abc:1779340143371000000:trace:span"));
+    }
+
+    #[test]
+    fn ulid_accepted() {
+        assert!(ok("01HZZZ000000000000000000A"));
+    }
+
+    #[test]
+    fn rejected_inputs() {
+        assert!(!ok(""));                  // empty
+        assert!(!ok("with\ncontrol"));     // control char
+        assert!(!ok(&"x".repeat(300)));    // too long
+        assert!(!ok("non-ascii: 한글"));    // non-ASCII
     }
 }
