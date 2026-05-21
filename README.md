@@ -5,15 +5,24 @@ JSONL ingest → SQLite → deterministic-edge session graph → 127.0.0.1 read-
 
 Out of slice-1 (later slices): OTel/Hook/File-Git collectors, UI, MCP, redaction, auth.
 
-## Quick start
+## Quick start (one running process, all sources live)
 
 ```bash
 cargo run -- init-db
-cargo run -- ingest --all                     # scans ~/.claude/projects/**/*.jsonl
-cargo run -- serve                            # 127.0.0.1:7878
-curl http://127.0.0.1:7878/v1/health
-curl http://127.0.0.1:7878/v1/sessions | jq .
+cargo run -- serve --auto-migrate             # 127.0.0.1:7878
+#  ↳ transcripts live-tailed from ~/.claude/projects (slice-7)
+#  ↳ file/git watcher when --watch <repo> is passed (slice-5)
+#  ↳ OTel + hook receivers always on
+cargo run -- doctor                           # verify collector wiring
 ```
+
+`witmcc ingest --all` is still available for backfill (cold-start sweep of
+existing JSONLs) but no longer required for live operation.
+
+For Claude Code to actually emit OTel + hook events into witmcc, the user
+still has to wire `~/.claude/settings.json` once — see [OTel Receivers](#otel-receivers-slice-3-traces-slice-6-metrics--logs)
+and [Hook Collector](#hook-collector-slice-4). `witmcc doctor` will tell you
+which scope each value came from and what's still missing.
 
 ## Endpoints
 
@@ -140,17 +149,51 @@ Notes:
   treat the SQLite file as sensitive until M7 ships.
 - Records without `session.id` are stored but excluded from `/v1/sessions`.
 
-### Doctor (slice-6)
+### Doctor (slice-6 v0.1, expanded in slice-7 v0.2)
 
 ```bash
-witmcc doctor            # pretty table, exits 0 when collectors are healthy
-witmcc doctor --json     # structured report for tooling, always exits 0
+witmcc doctor                            # pretty table; exit 0 when collectors are healthy
+witmcc doctor --json                     # structured report for tooling; always exits 0
 witmcc doctor --server http://127.0.0.1:7878
+witmcc doctor --project /path/to/repo    # use this project root for the .claude/ walk
 ```
 
-Reports OTel env vars, hook settings wiring, and per-source `last_ingested_at`
-from `GET /v1/health/sources`. Pure read-only — never writes settings.json or
-shell env. Missing items are printed as copy-pastable snippets at the bottom.
+Walks the full Claude Code settings hierarchy per the [official docs](https://code.claude.com/docs/en/settings):
+
+```
+managed  (/Library/Application Support/ClaudeCode/managed-settings.json + .d/)
+   ↓
+local    (<project>/.claude/settings.local.json)
+   ↓
+project  (<project>/.claude/settings.json)
+   ↓
+user     (~/.claude/settings.json)
+```
+
+For each scope the `env` and `hooks` blocks are surfaced with **scope attribution**
+— so you can see exactly where `OTEL_EXPORTER_OTLP_ENDPOINT` is coming from
+(or that it's missing everywhere). Plugin manifests under
+`~/.claude/plugins/<plugin>/{plugin,manifest,hooks}.json` are walked for
+forward entries to `/hooks/v1/events`; matches appear with scope `plugin:<name>`.
+
+Managed policy flags (`allowManagedHooksOnly`, `disableAllHooks`,
+`allowedHttpHookUrls`) are detected and warned about — a user-scope hook
+entry might be silently ignored if managed policy says so.
+
+Pure read-only: doctor never writes to settings.json, env, or anything else.
+The recommendations block prints copy-pastable snippets only.
+
+### `witmcc serve` flags (slice-1 → slice-7 accumulated)
+
+```
+witmcc serve [--bind 127.0.0.1] [--port 7878]
+             [--auto-migrate]                       # slice-1
+             [--watch <repo>]                       # slice-5: file + git watcher
+             [--git-poll-secs N]                    # slice-5
+             [--shutdown-after-ms N]                # smoke-test convenience
+             [--transcripts-root <PATH>]            # slice-7: override ~/.claude/projects
+             [--no-watch-transcripts]               # slice-7: disable the live tail
+```
 
 ### Hook Collector (slice-4)
 
