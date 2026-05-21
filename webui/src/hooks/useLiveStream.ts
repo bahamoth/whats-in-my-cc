@@ -38,6 +38,19 @@ export function useLiveStream({
 }: UseLiveStreamArgs): void {
   const esRef = useRef<EventSource | null>(null);
 
+  // Callbacks are stored in a ref so the EventSource effect does not re-run
+  // (and therefore close + reopen the connection) on every parent render. A
+  // naive `[url, scope, onEnvelope, ...]` dep array makes every envelope
+  // trigger setState → parent re-render → new inline callback references →
+  // effect cleanup + re-run → connection thrash. Verified live on
+  // bahamoth's WebUI: 44 EventSource entries observed within ~1.5s when
+  // SessionDetailPage's `onEnvelope: () => void refetch()` was reading
+  // `refetch` directly from dep array.
+  const cbsRef = useRef({ onEnvelope, onGap, onResync });
+  useEffect(() => {
+    cbsRef.current = { onEnvelope, onGap, onResync };
+  });
+
   useEffect(() => {
     const cursor = readCursor(scope);
     const fullUrl = cursor
@@ -50,7 +63,7 @@ export function useLiveStream({
       try {
         const env: LiveEnvelope = JSON.parse(ev.data);
         writeCursor(scope, env.event_id);
-        onEnvelope(env);
+        cbsRef.current.onEnvelope(env);
       } catch {
         /* ignore malformed frame */
       }
@@ -58,7 +71,7 @@ export function useLiveStream({
     es.addEventListener('gap', (ev) => {
       try {
         const info = JSON.parse((ev as MessageEvent).data ?? '{}');
-        onGap?.(info);
+        cbsRef.current.onGap?.(info);
       } catch {
         /* ignore */
       }
@@ -67,7 +80,7 @@ export function useLiveStream({
       clearCursor(scope);
       try {
         const info = JSON.parse((ev as MessageEvent).data ?? '{}');
-        onResync?.(info);
+        cbsRef.current.onResync?.(info);
       } catch {
         /* ignore */
       }
@@ -77,5 +90,5 @@ export function useLiveStream({
       es.close();
       esRef.current = null;
     };
-  }, [url, scope, onEnvelope, onGap, onResync]);
+  }, [url, scope]);
 }
