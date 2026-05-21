@@ -53,6 +53,7 @@ pretty_assertions  = "1"
 assert_cmd         = "2"
 portpicker         = "0.1"
 flate2             = "1"
+urlencoding        = "2"
 
 [profile.release]
 lto = "thin"

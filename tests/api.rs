@@ -150,10 +150,12 @@ async fn hook_post_accepts_single_pretooluse() {
     assert_eq!(v["data"]["duplicate_events"], 0);
     assert_eq!(v["data"]["sessions_touched"][0], "sess_HK1");
 
-    let detail = s.get("/v1/sessions/sess_HK1").await;
-    detail.assert_status_ok();
-    let dv: Value = detail.json();
-    let has_hook = dv["data"]["events"].as_array().unwrap().iter().any(|e| {
+    // Slice-9 — session_detail no longer ships events. Verify the hook landed
+    // by fetching the new windowed events endpoint instead.
+    let events = s.get("/v1/sessions/sess_HK1/events").await;
+    events.assert_status_ok();
+    let ev: Value = events.json();
+    let has_hook = ev["data"]["events"].as_array().unwrap().iter().any(|e| {
         e["kind"] == "hook_event" && e["subkind"] == "pre_tool_use"
     });
     assert!(has_hook, "hook_event with subkind=pre_tool_use missing");
