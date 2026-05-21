@@ -4,7 +4,28 @@ use crate::error::Result;
 use crate::model::observed::{Actor, EventKind, ObservedEvent, TelemetryFacet};
 
 pub async fn insert(pool: &SqlitePool, e: &ObservedEvent) -> Result<()> {
-    sqlx::query(
+    insert_inner(pool, e, false).await.map(|_| ())
+}
+
+/// slice-6 — insert that skips on PK conflict. Returns true when a new row was
+/// added, false when `event_id` already existed. Used by reparse-friendly
+/// ingesters (otel metrics / logs) where the same data point may be normalised
+/// more than once across Stage 1 → Stage 2 transitions.
+pub async fn insert_or_ignore(pool: &SqlitePool, e: &ObservedEvent) -> Result<bool> {
+    insert_inner(pool, e, true).await
+}
+
+async fn insert_inner(pool: &SqlitePool, e: &ObservedEvent, ignore: bool) -> Result<bool> {
+    let sql = if ignore {
+        "INSERT OR IGNORE INTO observed_event(
+            event_id, raw_event_id, schema_version, session_id, event_uuid, parent_uuid,
+            observed_at, actor, kind, subkind, tool_use_id, tool_name, request_id,
+            message_id, turn_id, source_tool_assistant_uuid, source_tool_use_id,
+            is_sidechain, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
+            trace_id, span_id, parent_span_id, latency_ms,
+            payload, parser_version)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+    } else {
         "INSERT INTO observed_event(
             event_id, raw_event_id, schema_version, session_id, event_uuid, parent_uuid,
             observed_at, actor, kind, subkind, tool_use_id, tool_name, request_id,
@@ -12,8 +33,9 @@ pub async fn insert(pool: &SqlitePool, e: &ObservedEvent) -> Result<()> {
             is_sidechain, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
             trace_id, span_id, parent_span_id, latency_ms,
             payload, parser_version)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-    )
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+    };
+    let res = sqlx::query(sql)
     .bind(&e.event_id)
     .bind(&e.raw_event_id)
     .bind(&e.schema_version)
@@ -46,7 +68,7 @@ pub async fn insert(pool: &SqlitePool, e: &ObservedEvent) -> Result<()> {
     .bind(&e.parser_version)
     .execute(pool)
     .await?;
-    Ok(())
+    Ok(res.rows_affected() > 0)
 }
 
 fn merge_payload_with_telemetry(
@@ -159,6 +181,8 @@ fn row_to_observed(r: sqlx::sqlite::SqliteRow) -> ObservedEvent {
             "file_event" => EventKind::FileEvent,
             "git_commit" => EventKind::GitCommit,
             "diff_hunk" => EventKind::DiffHunk,
+            "metric_sample" => EventKind::MetricSample,
+            "log_record" => EventKind::LogRecord,
             _ => EventKind::Unknown,
         },
         subkind: r.try_get("subkind").ok(),

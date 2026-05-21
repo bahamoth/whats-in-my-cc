@@ -1,4 +1,8 @@
-//! Slice-6 Stage 1 — POST /otel/v1/metrics raw receiver integration tests.
+//! Slice-6 — POST /otel/v1/metrics receiver integration tests.
+//!
+//! Stage 1 (raw_event idempotency, gzip, bad-json) plus Stage 2
+//! (per-data-point MetricSample ObservedEvents + graph nodes anchored on the
+//! real Claude Code fixture).
 
 use axum_test::TestServer;
 use flate2::write::GzEncoder;
@@ -87,6 +91,70 @@ async fn post_metrics_non_json_body_is_400() {
         .await;
     assert_eq!(resp.status_code(), 400);
     assert_eq!(metrics_raw_count(&pool).await, 0);
+}
+
+async fn observed_metric_sample_count(pool: &sqlx::SqlitePool) -> i64 {
+    let row: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM observed_event WHERE kind = 'metric_sample'")
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    row.0
+}
+
+#[tokio::test]
+async fn post_metrics_real_fixture_normalises_data_points_and_builds_graph() {
+    let (s, pool) = http_setup().await;
+    let body = fixture_bytes("tests/fixtures/otel/real/metrics_v01.json");
+    let resp = s
+        .post("/otel/v1/metrics")
+        .add_header("content-type", "application/json")
+        .bytes(body.into())
+        .await;
+    resp.assert_status_ok();
+    let v: serde_json::Value = resp.json();
+    let accepted = v["data"]["accepted_data_points"].as_u64().unwrap_or(0);
+    assert!(accepted >= 3, "real fixture has ≥3 data points; got {accepted}");
+    let touched = v["data"]["sessions_touched"].as_array().unwrap();
+    assert_eq!(touched.len(), 1, "real fixture has one session");
+    let session_id = touched[0].as_str().unwrap().to_string();
+
+    assert_eq!(observed_metric_sample_count(&pool).await, accepted as i64);
+
+    let graph_row: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM graph_node WHERE session_id = ? AND node_kind = 'metric_sample'",
+    )
+    .bind(&session_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(graph_row.0, accepted as i64, "one graph_node per data point");
+}
+
+#[tokio::test]
+async fn post_metrics_real_fixture_twice_dedupes_data_points() {
+    let (s, pool) = http_setup().await;
+    let body = fixture_bytes("tests/fixtures/otel/real/metrics_v01.json");
+    let _ = s
+        .post("/otel/v1/metrics")
+        .add_header("content-type", "application/json")
+        .bytes(body.clone().into())
+        .await;
+    let first_count = observed_metric_sample_count(&pool).await;
+    assert!(first_count > 0);
+
+    let resp2 = s
+        .post("/otel/v1/metrics")
+        .add_header("content-type", "application/json")
+        .bytes(body.into())
+        .await;
+    resp2.assert_status_ok();
+    let v: serde_json::Value = resp2.json();
+    // raw row dedup'd; stage 2 still runs and reports duplicate_data_points
+    assert_eq!(v["data"]["stored_raw_rows"], 0);
+    assert_eq!(v["data"]["accepted_data_points"], 0);
+    assert!(v["data"]["duplicate_data_points"].as_u64().unwrap() >= 1);
+    assert_eq!(observed_metric_sample_count(&pool).await, first_count);
 }
 
 #[tokio::test]
