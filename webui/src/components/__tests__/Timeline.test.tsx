@@ -164,4 +164,40 @@ describe('Timeline', () => {
     expect(screen.getByText('OTel')).toBeInTheDocument();
     expect(screen.queryByText(/no OTel observed/i)).toBeNull();
   });
+
+  it('renders metric_sample and log_record markers on the OTel lane (slice-6)', () => {
+    const graph: GraphPayload = {
+      nodes: [
+        {
+          node_id: 'nd_m_1',
+          schema_version: '0.5.0',
+          session_id: 's',
+          node_kind: 'metric_sample',
+          started_at: '2026-05-20T00:00:00Z',
+          ended_at: '2026-05-20T00:00:00Z',
+          merge_keys: { instrument_name: 'claude_code.cost.usage', time_unix_nano: 1, event_id: 'metric:a:b:1:c' },
+          source_event_ids: ['ev_m_1'],
+          source_uris: [],
+          payload: {},
+        },
+        {
+          node_id: 'nd_l_1',
+          schema_version: '0.5.0',
+          session_id: 's',
+          node_kind: 'log_record',
+          started_at: '2026-05-20T00:00:01Z',
+          ended_at: '2026-05-20T00:00:01Z',
+          merge_keys: { event_name: 'hook_execution_complete', time_unix_nano: 2, event_id: 'log:a:2:b:c' },
+          source_event_ids: ['ev_l_1'],
+          source_uris: [],
+          payload: {},
+        },
+      ],
+      edges: [],
+    };
+    render(<Timeline graph={graph} selectedNodeId={null} onSelect={() => {}} />);
+    expect(document.querySelector('[data-node-id="nd_m_1"]')).not.toBeNull();
+    expect(document.querySelector('[data-node-id="nd_l_1"]')).not.toBeNull();
+    expect(screen.getByText('OTel')).toBeInTheDocument();
+  });
 });
