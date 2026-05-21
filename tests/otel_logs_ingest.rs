@@ -22,7 +22,7 @@ async fn make_pool() -> sqlx::SqlitePool {
 
 async fn http_setup() -> (TestServer, sqlx::SqlitePool) {
     let pool = make_pool().await;
-    let app = witmcc::api::router(pool.clone());
+    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool.clone()));
     let server = TestServer::new(app).unwrap();
     (server, pool)
 }

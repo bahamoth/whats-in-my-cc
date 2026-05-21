@@ -163,7 +163,15 @@ async fn serve_cmd(
         });
     }
 
-    let app = witmcc::api::router(pool);
+    let (live_tx, _) = tokio::sync::broadcast::channel::<witmcc::live::LiveEvent>(512);
+    let live_tx = std::sync::Arc::new(live_tx);
+    let state = witmcc::api::AppState {
+        pool: pool.clone(),
+        live_tx: live_tx.clone(),
+        sse_keepalive_secs: 30,
+        sse_channel_capacity: 512,
+    };
+    let app = witmcc::api::router(state);
     let addr = std::net::SocketAddr::new(bind, port);
     tracing::info!(%addr, "serving");
     let listener = tokio::net::TcpListener::bind(addr)

@@ -91,7 +91,7 @@ async fn graph_has_otel_span_node_after_ingest() {
 
 async fn http_setup() -> TestServer {
     let pool = make_pool().await;
-    let app = witmcc::api::router(pool);
+    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool));
     TestServer::new(app).unwrap()
 }
 
@@ -185,7 +185,7 @@ async fn session_detail_returns_otel_span_with_telemetry() {
         .await
         .unwrap();
 
-    let app = witmcc::api::router(pool);
+    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool));
     let server = TestServer::new(app).unwrap();
 
     let resp = server.get("/v1/sessions/sess-otel-A").await;

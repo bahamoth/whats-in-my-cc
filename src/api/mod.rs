@@ -5,15 +5,60 @@ pub mod otel;
 pub mod routes;
 pub mod static_assets;
 
+use std::sync::Arc;
+
 use axum::{
-    extract::DefaultBodyLimit, middleware as axum_mw, routing::get, routing::post, Router,
+    extract::{DefaultBodyLimit, FromRef},
+    middleware as axum_mw,
+    routing::get,
+    routing::post,
+    Router,
 };
 use sqlx::SqlitePool;
+use tokio::sync::broadcast;
 use tower_http::decompression::RequestDecompressionLayer;
+
+use crate::live::LiveEvent;
 
 const MAX_REQUEST_BODY: usize = 4 * 1024 * 1024;
 
-pub fn router(pool: SqlitePool) -> Router {
+/// Slice-8 — shared state for axum handlers, including the in-process broadcast
+/// channel that ingest writers emit into and the SSE handler subscribes to.
+///
+/// `FromRef<AppState> for SqlitePool` is provided so existing handlers that
+/// declare `State<SqlitePool>` continue to compile without source change; only
+/// handlers that actually need `live_tx` (currently the SSE handler) take
+/// `State<AppState>` directly.
+#[derive(Clone)]
+pub struct AppState {
+    pub pool: SqlitePool,
+    pub live_tx: Arc<broadcast::Sender<LiveEvent>>,
+    pub sse_keepalive_secs: u64,
+    pub sse_channel_capacity: usize,
+}
+
+impl AppState {
+    /// Test-only constructor. Builds a fresh broadcast channel with default
+    /// capacity. `live_tx::receiver_count()` will be 0 at first; `BroadcastSink`
+    /// tolerates that.
+    pub fn new_for_tests(pool: SqlitePool) -> Self {
+        let (tx, _) = broadcast::channel(512);
+        Self {
+            pool,
+            live_tx: Arc::new(tx),
+            sse_keepalive_secs: 30,
+            sse_channel_capacity: 512,
+        }
+    }
+}
+
+impl FromRef<AppState> for SqlitePool {
+    fn from_ref(state: &AppState) -> Self {
+        state.pool.clone()
+    }
+}
+
+pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1/health", get(routes::health))
         .route("/v1/health/sources", get(routes::health_sources))
@@ -30,5 +75,5 @@ pub fn router(pool: SqlitePool) -> Router {
         .layer(RequestDecompressionLayer::new().gzip(true))
         .layer(axum_mw::from_fn(middleware::host_allowlist))
         .layer(tower_http::trace::TraceLayer::new_for_http())
-        .with_state(pool)
+        .with_state(state)
 }
