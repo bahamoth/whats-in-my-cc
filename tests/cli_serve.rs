@@ -22,6 +22,7 @@ fn serve_accepts_watch_and_poll_flags() {
             "--shutdown-after-ms",
             "300",
             "--auto-migrate",
+            "--no-watch-transcripts",
         ])
         .timeout(Duration::from_secs(8))
         .assert()
