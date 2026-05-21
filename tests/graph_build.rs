@@ -15,6 +15,7 @@ async fn deterministic_minimal_graph() {
     store::ingest_file(
         &pool,
         std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl"),
+        &witmcc::live::NoopSink,
     )
     .await
     .unwrap();

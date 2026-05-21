@@ -52,7 +52,7 @@ pub async fn ingest_traces(
     }
     let value: serde_json::Value = serde_json::from_slice(&body).map_err(bad_json)?;
     let parsed = otel::parse_otlp_json(&value);
-    let result = otel::store(&pool, parsed, chrono::Utc::now())
+    let result = otel::store(&pool, parsed, chrono::Utc::now(), &crate::live::NoopSink)
         .await
         .map_err(db_failure)?;
 
@@ -95,7 +95,7 @@ pub async fn ingest_metrics(
     let (stored_raw_rows, duplicate_raw_rows) = if inserted { (1, 0) } else { (0, 1) };
     // Stage 2 is idempotent via insert_or_ignore so we can always run it. Re-POSTs
     // of an already-seen body will return all-duplicate_data_points and zero accepts.
-    let stage2 = otel_metrics::store_request(&pool, &raw_id, &value, received_at)
+    let stage2 = otel_metrics::store_request(&pool, &raw_id, &value, received_at, &crate::live::NoopSink)
         .await
         .map_err(db_failure)?;
     Ok(Json(Envelope {
@@ -138,7 +138,7 @@ pub async fn ingest_logs(
     .await
     .map_err(db_failure)?;
     let (stored_raw_rows, duplicate_raw_rows) = if inserted { (1, 0) } else { (0, 1) };
-    let stage2 = otel_logs::store_request(&pool, &raw_id, &value, received_at)
+    let stage2 = otel_logs::store_request(&pool, &raw_id, &value, received_at, &crate::live::NoopSink)
         .await
         .map_err(db_failure)?;
     Ok(Json(Envelope {

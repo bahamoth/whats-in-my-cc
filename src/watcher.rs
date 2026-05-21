@@ -68,7 +68,7 @@ pub async fn run_file_watcher(
                         size_bytes,
                         observed_at: Utc::now(),
                     };
-                    if let Err(e) = file_git::store_file_event(&pool, record, Utc::now()).await {
+                    if let Err(e) = file_git::store_file_event(&pool, record, Utc::now(), &crate::live::NoopSink).await {
                         tracing::warn!(error=?e, "store_file_event failed");
                     }
                 }

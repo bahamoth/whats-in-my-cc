@@ -204,7 +204,7 @@ async fn ingest_cmd(
     }
     for f in files {
         tracing::info!(?f, "ingesting");
-        let stats = witmcc::ingest::store::ingest_file(&pool, &f).await?;
+        let stats = witmcc::ingest::store::ingest_file(&pool, &f, &witmcc::live::NoopSink).await?;
         tracing::info!(?stats, "ingest done");
         for sid in &stats.sessions_touched {
             let g = witmcc::graph::build::rebuild_session(&pool, sid).await?;

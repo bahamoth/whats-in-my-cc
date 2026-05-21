@@ -13,6 +13,7 @@
 use crate::db::repo_observed;
 use crate::error::Result;
 use crate::ingest::otel::unix_nano_to_utc;
+use crate::live::{LiveEvent, LiveSink};
 use crate::model::meta::{PARSER_VERSION_OTEL_METRICS, SCHEMA_VERSION};
 use crate::model::observed::{Actor, EventKind, MetricFacet, ObservedEvent};
 use chrono::{DateTime, Utc};
@@ -310,6 +311,7 @@ pub async fn store_request(
     raw_event_id: &str,
     body: &Value,
     received_at: DateTime<Utc>,
+    sink: &dyn LiveSink,
 ) -> Result<MetricsIngestResult> {
     let records = parse_request(body);
     let mut result = MetricsIngestResult::default();
@@ -337,6 +339,14 @@ pub async fn store_request(
         let inserted = repo_observed::insert_or_ignore(pool, &event).await?;
         if inserted {
             result.accepted_data_points += 1;
+            sink.emit(LiveEvent {
+                schema_version: LiveEvent::SCHEMA_VERSION.into(),
+                session_id: event.session_id.clone(),
+                event_id: event.event_id.clone(),
+                kind: event.kind,
+                source_type: "otel-metrics".into(),
+                observed_at: event.observed_at.to_rfc3339(),
+            });
         } else {
             result.duplicate_data_points += 1;
         }

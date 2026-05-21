@@ -55,7 +55,7 @@ pub async fn run_git_poller(
                 match extracted {
                     Ok(Ok((new_tip, batch))) => {
                         for (commit, hunks) in batch {
-                            if let Err(e) = store_commit(&pool, commit, hunks, Utc::now()).await {
+                            if let Err(e) = store_commit(&pool, commit, hunks, Utc::now(), &crate::live::NoopSink).await {
                                 tracing::warn!(error=?e, "store_commit failed");
                             }
                         }

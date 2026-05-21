@@ -108,7 +108,7 @@ pub async fn run(pool: SqlitePool, root: PathBuf, cancel: CancellationToken) -> 
                     if !p.exists() {
                         continue;
                     }
-                    match store::ingest_file(&pool, p).await {
+                    match store::ingest_file(&pool, p, &crate::live::NoopSink).await {
                         Ok(stats) => {
                             if stats.observed_inserted > 0 {
                                 tracing::debug!(
@@ -138,7 +138,7 @@ async fn scan_initial(pool: &SqlitePool, root: &Path) -> Option<(usize, u64)> {
             continue;
         }
         files += 1;
-        match store::ingest_file(pool, p).await {
+        match store::ingest_file(pool, p, &crate::live::NoopSink).await {
             Ok(s) => total_inserted += s.observed_inserted,
             Err(e) => {
                 tracing::warn!(error = ?e, path = %p.display(), "initial transcript scan failed");

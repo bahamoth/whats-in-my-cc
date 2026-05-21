@@ -6,6 +6,7 @@ use sqlx::SqlitePool;
 use std::path::Path;
 
 use crate::db::{repo_observed, repo_raw, repo_runs};
+use crate::live::{LiveEvent, LiveSink};
 
 /// Row type for the turn_id backfill query: (event_uuid, parent_uuid, turn_id, event_id)
 type TurnBackfillRow = (String, Option<String>, Option<String>, Option<String>);
@@ -22,7 +23,11 @@ pub struct IngestStats {
     pub sessions_touched: std::collections::BTreeSet<String>,
 }
 
-pub async fn ingest_file(pool: &SqlitePool, path: &Path) -> Result<IngestStats> {
+pub async fn ingest_file(
+    pool: &SqlitePool,
+    path: &Path,
+    sink: &dyn LiveSink,
+) -> Result<IngestStats> {
     let mut gen = MonotonicUlidGen::new();
     let run_id = repo_runs::start(pool).await?;
     let mut stats = IngestStats::default();
@@ -75,6 +80,14 @@ pub async fn ingest_file(pool: &SqlitePool, path: &Path) -> Result<IngestStats> 
                     stats.sessions_touched.insert(ev.session_id.clone());
                     repo_observed::insert(pool, &ev).await?;
                     stats.observed_inserted += 1;
+                    sink.emit(LiveEvent {
+                        schema_version: LiveEvent::SCHEMA_VERSION.into(),
+                        session_id: ev.session_id.clone(),
+                        event_id: ev.event_id.clone(),
+                        kind: ev.kind,
+                        source_type: "transcript".into(),
+                        observed_at: ev.observed_at.to_rfc3339(),
+                    });
                 }
             }
             Err(WitmccError::ParseLine {
