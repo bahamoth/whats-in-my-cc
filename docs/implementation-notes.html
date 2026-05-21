@@ -1237,6 +1237,45 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
         to docs/02's pipeline diagram requires editing a single-line HTML;
         deferred to a docs-only slice.</p>
     </div>
+
+    <div class="dev">
+      <h3>DEV-S7-09 (correction) "session_id correlation gap" 주장 철회</h3>
+      <p><strong>잘못된 statement:</strong> slice-7 SessionList commit
+        (<code>1a5c6d8</code>)과 코드 주석에서 "OTel session.id와 transcript
+        session_id가 서로 다른 ID여서 같은 conversation이 두 row로 분리된다"고
+        결론지었다. 표본은 단 1건(<code>b88a0bfb-...</code>)뿐이었다.</p>
+      <p><strong>실 데이터 + docs 재검증:</strong></p>
+      <ul>
+        <li>Claude Code 공식 docs (<code>code.claude.com/docs/en/monitoring-usage</code>):
+          <code>session.id</code> = "Unique session identifier" 단일 정의.</li>
+        <li><code>~/.claude/session-env/b88a0bfb-b00a-4891-8088-e7edf379af00/</code>
+          디렉토리가 실제로 존재 — 즉 이 UUID는 Claude Code conversation
+          identifier이다 (jsonl filename stem과 같은 도메인).</li>
+        <li>같은 시각에 만들어진 <strong>transcript JSONL 파일은 없음</strong>
+          (<code>~/.claude/projects/**/b88a0bfb*.jsonl</code> 0 matches).</li>
+        <li>OTel events의 첫 record는 <code>event.name=hook_execution_complete</code> /
+          <code>hook_event=SessionStart</code> — 즉 SessionStart hook이 fire된 시점.</li>
+        <li>현재 DB의 source 분포: transcript 97,582 rows vs otel-logs 4 + otel-metrics 1.
+          OTel 표본 자체가 매우 적어 cross-source 매칭 검증이 사실상 불가능.</li>
+      </ul>
+      <p><strong>올바른 결론:</strong> <code>b88a0bfb</code>는
+        <em>빈 conversation</em>이다. 사용자가 <code>claude</code>를 띄워
+        SessionStart hook + OTel SDK init까지 진행했지만 user message
+        입력 없이 종료해 transcript JSONL이 생성되지 않은 케이스.
+        correlation 자체는 정상 작동 중이며, OTel <code>session.id</code> =
+        transcript conversation UUID로 같은 ID. SessionListPage 코드 +
+        CSS 주석에서 "correlation gap" 표현 제거됨.</p>
+      <p><strong>교훈 (CLAUDE.md 정책으로 승격, 커밋 <code>82aa025</code>):</strong></p>
+      <ul>
+        <li>표본 1건으로 일반화하지 않는다.</li>
+        <li>attribute / field 의미 주장은 공식 docs 인용 또는 real-fixture
+          invariant assertion으로 잠금. 그 둘 다 없는 추론은 commit log /
+          주석 / spec 어디에도 적지 않는다.</li>
+        <li>TDD red 단계 의무. SessionList 변경에서 vitest 없이 commit한 것이
+          이 정정의 단초가 된 패턴(슬슬 누적된 추측). 정정 커밋과 같은 turn에
+          vitest 6개를 추가해 retroactively 채움.</li>
+      </ul>
+    </div>
   </section>
 
   <section id="slice7-commits">

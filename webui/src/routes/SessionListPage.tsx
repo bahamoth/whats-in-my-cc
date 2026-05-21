@@ -14,6 +14,15 @@ type State =
 
 // slice-7 — collapse by_kind into a compact source-mix tag so users can spot
 // transcript-only / OTel-only / hook-only sessions at a glance.
+//
+// Note on "OTel-only" rows: OTel `session.id` is the same value Claude Code
+// uses as the transcript JSONL filename (i.e. the conversation UUID). A
+// session that shows up with only OTel events is an *empty conversation* —
+// the user started claude (SessionStart hook fires, OTel SDK initialises)
+// but exited before any transcript line was written. Not a correlation
+// failure. Verified against ~/.claude/session-env/<uuid>/ + docs at
+// code.claude.com/docs/en/monitoring-usage (`session.id` = "Unique session
+// identifier").
 const TRANSCRIPT_KINDS = new Set([
   'user_message',
   'assistant_message',
