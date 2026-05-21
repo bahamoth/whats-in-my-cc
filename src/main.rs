@@ -1,5 +1,5 @@
 use clap::Parser;
-use witmcc::{cli, db, error, paths, telemetry};
+use witmcc::{cli, db, doctor, error, paths, telemetry};
 
 fn main() -> error::Result<()> {
     let cli = cli::Cli::parse();
@@ -8,6 +8,12 @@ fn main() -> error::Result<()> {
     rt.block_on(async move {
         match cli.command {
             cli::Command::InitDb => init_db(&cli.db_path).await,
+            cli::Command::Doctor { json, server } => {
+                let code = doctor::run(doctor::DoctorOpts { json, server })
+                    .await
+                    .map_err(anyhow::Error::from)?;
+                std::process::exit(code);
+            }
             cli::Command::Ingest { path, all } => ingest_cmd(&cli.db_path, path, all).await,
             cli::Command::Serve {
                 bind,
