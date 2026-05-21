@@ -43,6 +43,25 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
   쓰는 API는 정의·구현하지 않는다.
 - **Local-first**: 기본 bind `127.0.0.1`. `0.0.0.0`은 explicit setting일 때만.
 - **Schema versioning**: 모든 top-level object는 `schema_version` + provenance.
+- **TDD red 우선**: 어떤 모듈/함수/UI 변경이든 *실패하는* 테스트를 먼저 작성하고
+  그 테스트가 빨강을 보이는 것을 확인한 다음에 구현으로 넘어간다.
+  test가 후행이거나 omit된 commit은 만들지 않는다. 단순 doc 변경은 예외.
+- **Real-data anchoring**: 외부 source(transcript JSONL / OTLP / hook stdin / git2 등)의
+  attribute·field 의미에 대한 주장은 *둘 중 하나*에 의해 잠긴다.
+  (a) 공식 docs URL과 인용,  (b) `tests/fixtures/**/real/`에 동결된 실 payload에 대한
+  invariant assertion. 둘 다 없는 가정은 spec/commit log/주석에 적지 않는다.
+  표본 1건으로 일반화하지 않는다 — 패턴인지 단일 케이스인지 명시.
+- **UI는 브라우저 smoke 후 commit**: WebUI 변경은 `cargo build` + `vitest` 통과만으로는
+  완료가 아니다. 사용자 환경에서 `witmcc serve` + 브라우저 navigation (claude-in-chrome
+  도구) + 시각 검증까지 끝낸 뒤 commit. 가능한 한 매 incremental 변경마다 smoke.
+
+## Self-check before every commit (의무 체크리스트)
+
+1. 이 변경을 잠그는 새 test가 있는가? 없다면 doc-only 변경인가?
+2. 새 attribute / field / behaviour 주장에 docs 인용 또는 real-fixture assertion이 붙어 있는가?
+3. UI 변경이 포함된다면 브라우저 smoke를 끝냈는가?
+4. 단일 사례 관찰을 일반화한 statement는 없는가? ("대부분", "항상", "모두" 류는 표본 수 명시.)
+5. 이전 commit log / 주석 / spec 중 위 검증으로 잘못 판명된 부분이 있다면 같은 commit에서 정정했는가?
 
 ## Non-goals (절대 만들지 말 것)
 
