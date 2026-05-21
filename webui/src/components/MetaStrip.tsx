@@ -1,8 +1,17 @@
-import type { SessionDetail } from '../api/types';
+import type { ObservedEventDto, SessionDetail } from '../api/types';
 
-export function MetaStrip({ session }: { session: SessionDetail }) {
+/** Slice-9 — `events` was inlined on SessionDetail and used here just to
+ *  derive a turn count. Now SessionDetailPage owns the event window
+ *  separately (useSessionWindow); pass that array in as `events`. */
+export function MetaStrip({
+  session,
+  events,
+}: {
+  session: SessionDetail;
+  events: ObservedEventDto[];
+}) {
   const turns = new Set(
-    session.events
+    events
       .map((e) => e.turn_id)
       .filter((t): t is string => Boolean(t)),
   ).size;

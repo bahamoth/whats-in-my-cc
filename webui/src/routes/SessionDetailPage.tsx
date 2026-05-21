@@ -1,44 +1,63 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError, getGraph, getSession } from '../api/client';
-import type { GraphPayload, SessionDetail } from '../api/types';
+import type {
+  GraphPayload,
+  ObservedEventDto,
+  SessionDetail,
+} from '../api/types';
 import { MetaStrip } from '../components/MetaStrip';
 import { SourcePanel } from '../components/SourcePanel';
 import { Timeline } from '../components/Timeline';
-import { useLiveStream } from '../hooks/useLiveStream';
+import { useLiveStream, type LiveEnvelope } from '../hooks/useLiveStream';
+import { useSessionWindow } from '../hooks/useSessionWindow';
 import styles from './SessionDetailPage.module.css';
 
-// Live update throttle. Without this, a session with rapid OTel/log/transcript
-// activity (e.g. claude code mid-tool-call emitting tens of envelopes per
-// second) makes onEnvelope → refetch fire continuously. Each refetch returns
-// up to 5000 events; React re-renders the entire timeline on every setState
-// and the main thread freezes within seconds. Verified live on bahamoth's
-// 4000+ event session, which froze the renderer until a hard reload.
-//
-// Trailing debounce: every envelope arms a 250ms timer; subsequent envelopes
-// inside that window reuse the existing timer. When the timer fires we run
-// exactly one refetch. New envelopes that arrive during the fetch itself
-// arm a fresh timer for the next refetch, so we never queue refetches.
-// 1000ms — 250ms was too aggressive for 4000+ event sessions where each
-// refetch carries ~200 KB JSON + a Timeline re-render over thousands of
-// SVG circles. Verified: with 250ms the renderer froze within seconds of
-// active claude code activity. 1000ms keeps the UI responsive and the
-// "live" feeling is still well within human perception.
-const LIVE_REFETCH_DEBOUNCE_MS = 1000;
+// Slice-9 — graph refetch throttle. Replaces the slice-8 1000ms debounce on
+// "refetch everything" (DEV-S8-13). Now only the graph is re-fetched; the
+// summary refetch is interval-driven (see GRAPH_REFETCH_TICK_MS), and the
+// per-event marker arrives via SSE without any backend round-trip.
+const GRAPH_REFETCH_DEBOUNCE_MS = 800;
+const SUMMARY_REFETCH_TICK_MS = 10_000;
 
-type Loaded = { session: SessionDetail; graph: GraphPayload };
-type State =
+type PageState =
   | { kind: 'loading' }
-  | { kind: 'ok'; data: Loaded }
+  | { kind: 'ok'; session: SessionDetail; graph: GraphPayload }
   | { kind: 'not_found' }
   | { kind: 'error'; message: string };
 
+function envelopeToObserved(env: LiveEnvelope): ObservedEventDto {
+  return {
+    event_id: env.event_id,
+    raw_event_id: '',
+    session_id: env.session_id,
+    event_uuid: null,
+    parent_uuid: null,
+    observed_at: env.observed_at,
+    actor: 'unknown',
+    kind: env.kind,
+    subkind: null,
+    tool_use_id: null,
+    tool_name: null,
+    turn_id: null,
+    is_sidechain: false,
+    is_meta: false,
+    payload: {},
+  };
+}
+
 export default function SessionDetailPage() {
   const { sessionId = '' } = useParams();
-  const [state, setState] = useState<State>({ kind: 'loading' });
+  const [state, setState] = useState<PageState>({ kind: 'loading' });
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  const refetch = useCallback(async () => {
+  const window_ = useSessionWindow(sessionId);
+
+  // Mount: fetch summary + graph in parallel. 404 on summary → not_found.
+  // 404 on graph alone falls back to an empty graph (slice-8 DEV-S8-12 — the
+  // empty-graph race during rebuild is now atomic but the *empty session*
+  // case still legitimately returns an empty graph).
+  const fetchAll = useCallback(async () => {
     try {
       const session = await getSession(sessionId);
       let graph: GraphPayload;
@@ -48,39 +67,7 @@ export default function SessionDetailPage() {
         if (e instanceof ApiError && e.status === 404) graph = { nodes: [], edges: [] };
         else throw e;
       }
-      // Anti-flicker + anti-thrash:
-      // (a) If the new graph came back empty but the previous render had a
-      //     non-empty graph, treat as a transient race during ingest's
-      //     graph::build::rebuild_session and KEEP the previous graph.
-      // (b) If nothing structural changed (same node/edge counts, same event
-      //     count), return the prev reference. React skips re-render on
-      //     identity equality, so Timeline does not re-layout 3000+ SVG
-      //     circles for no reason.
-      setState((prev) => {
-        if (
-          graph.nodes.length === 0 &&
-          prev.kind === 'ok' &&
-          prev.data.graph.nodes.length > 0
-        ) {
-          return { kind: 'ok', data: { session, graph: prev.data.graph } };
-        }
-        if (
-          prev.kind === 'ok' &&
-          prev.data.graph.nodes.length === graph.nodes.length &&
-          prev.data.graph.edges.length === graph.edges.length &&
-          prev.data.session.summary.event_count === session.summary.event_count &&
-          // Also compare the latest event_id in the events window — when the
-          // session has more events than the 5000-cap, event_count keeps
-          // advancing on the server but the page's window count stays the
-          // same; without this extra check we would skip re-render and the
-          // newest envelope would never reach the Timeline.
-          prev.data.session.events[prev.data.session.events.length - 1]?.event_id ===
-            session.events[session.events.length - 1]?.event_id
-        ) {
-          return prev;
-        }
-        return { kind: 'ok', data: { session, graph } };
-      });
+      setState({ kind: 'ok', session, graph });
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 404) setState({ kind: 'not_found' });
       else setState({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
@@ -88,30 +75,53 @@ export default function SessionDetailPage() {
   }, [sessionId]);
 
   useEffect(() => {
-    let cancelled = false;
     setState({ kind: 'loading' });
-    refetch().then(() => {
-      if (cancelled) setState({ kind: 'loading' });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [refetch]);
+    void fetchAll();
+  }, [fetchAll]);
 
-  // slice-8 — live updates with trailing debounce (see constant above).
-  const debounceTimer = useRef<number | null>(null);
-  const queueRefetch = useCallback(() => {
-    if (debounceTimer.current !== null) return;
-    debounceTimer.current = window.setTimeout(() => {
-      debounceTimer.current = null;
-      void refetch();
-    }, LIVE_REFETCH_DEBOUNCE_MS);
-  }, [refetch]);
+  // Lightweight graph refetch on envelope arrival. We never re-fetch the
+  // session detail or the full event window — those land via summary tick
+  // and SSE-driven `appendOne` respectively. The debounce avoids stacking
+  // graph fetches during a rapid envelope burst (claude code mid-tool-call
+  // can emit dozens per second).
+  const graphTimer = useRef<number | null>(null);
+  const queueGraphRefetch = useCallback(() => {
+    if (graphTimer.current !== null) return;
+    graphTimer.current = window.setTimeout(() => {
+      graphTimer.current = null;
+      void getGraph(sessionId)
+        .then((graph) =>
+          setState((prev) => (prev.kind === 'ok' ? { ...prev, graph } : prev)),
+        )
+        .catch((e) => {
+          if (!(e instanceof ApiError && e.status === 404)) {
+            // transient — leave previous graph on screen
+          }
+        });
+    }, GRAPH_REFETCH_DEBOUNCE_MS);
+  }, [sessionId]);
+
+  // Summary refetch on a slow interval so MetaStrip (event_count, last_observed_at,
+  // per-kind counts) stays accurate without a backend round trip per envelope.
+  useEffect(() => {
+    if (state.kind !== 'ok') return;
+    const id = window.setInterval(() => {
+      void getSession(sessionId)
+        .then((session) =>
+          setState((prev) => (prev.kind === 'ok' ? { ...prev, session } : prev)),
+        )
+        .catch(() => {
+          /* swallow transient */
+        });
+    }, SUMMARY_REFETCH_TICK_MS);
+    return () => window.clearInterval(id);
+  }, [sessionId, state.kind]);
+
   useEffect(() => {
     return () => {
-      if (debounceTimer.current !== null) {
-        window.clearTimeout(debounceTimer.current);
-        debounceTimer.current = null;
+      if (graphTimer.current !== null) {
+        window.clearTimeout(graphTimer.current);
+        graphTimer.current = null;
       }
     };
   }, []);
@@ -119,14 +129,44 @@ export default function SessionDetailPage() {
   useLiveStream({
     url: `/v1/stream?session=${encodeURIComponent(sessionId)}`,
     scope: sessionId,
-    onEnvelope: queueRefetch,
-    onResync: queueRefetch,
-    onGap: queueRefetch,
+    onEnvelope: (env) => {
+      window_.appendOne(envelopeToObserved(env));
+      queueGraphRefetch();
+    },
+    onResync: () => {
+      void window_.reload();
+      queueGraphRefetch();
+    },
+    onGap: () => {
+      void window_.reload();
+      queueGraphRefetch();
+    },
   });
+
+  // IntersectionObserver on the left-edge sentinel triggers `loadOlder` when
+  // the user scrolls (or the Timeline's container brings the sentinel into
+  // view). 0.5 intersection ratio keeps us from firing on hairline overlap
+  // during initial render.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const e = entries[0];
+        if (e && e.intersectionRatio >= 0.5) {
+          void window_.loadOlder();
+        }
+      },
+      { threshold: [0, 0.5, 1] },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [window_]);
 
   const selectedEventId =
     state.kind === 'ok' && selectedNodeId
-      ? state.data.graph.nodes.find((n) => n.node_id === selectedNodeId)
+      ? state.graph.nodes.find((n) => n.node_id === selectedNodeId)
           ?.source_event_ids[0] ?? null
       : null;
 
@@ -143,13 +183,16 @@ export default function SessionDetailPage() {
       {state.kind === 'error' && <p role="alert">{state.message}</p>}
       {state.kind === 'ok' && (
         <>
-          <MetaStrip session={state.data.session} />
+          <MetaStrip session={state.session} events={window_.events} />
           <div className={styles.split}>
-            <Timeline
-              graph={state.data.graph}
-              selectedNodeId={selectedNodeId}
-              onSelect={setSelectedNodeId}
-            />
+            <div>
+              <div ref={sentinelRef} aria-hidden style={{ height: 1 }} data-testid="scroll-sentinel" />
+              <Timeline
+                graph={state.graph}
+                selectedNodeId={selectedNodeId}
+                onSelect={setSelectedNodeId}
+              />
+            </div>
             <SourcePanel eventId={selectedEventId} />
           </div>
         </>
