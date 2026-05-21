@@ -1457,6 +1457,165 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
           assertion으로 silent rollback을 방지.</p>
       </div>
     </div>
+
+    <h3 style="margin-top:32px">Post-Smoke Fixes (round 2)</h3>
+    <p>맥락: 첫 PR 이후 사용자가 실제 9000+ event 세션 + active OTel/transcript stream으로
+      검증하면서 발견한 production bug 5건 + design 한계 1건. 초기 manual smoke가 fresh
+      DB + hook POST에 국한되어서 모두 못 잡았음. 이 절은 그 lessons.</p>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-08</span>
+        no-cursor connect가 전체 backfill을 토하는 버그
+      </div>
+      <div class="dev-body">
+        <p><strong>증상:</strong> 사용자가 SessionListPage 열어도 라이브 갱신 안 보임. 실제로는
+          서버가 cursor=None인 첫 연결에 옛 row 10,000건을 backfill로 부어서 최신 envelope이
+          queue 뒤로 밀린 것.</p>
+        <p><strong>원인:</strong> spec §5 row 1 ("No Last-Event-ID → Backfill = nothing")이
+          구현에 안 반영. <code>load_backfill</code>이 cursor.is_none() 조건 미체크.</p>
+        <p><strong>fix:</strong> cursor=None면 즉시 빈 backfill return. baseline은 GET endpoint
+          이 별도 제공. 회귀 가드: <code>sse_subprocess::no_cursor_means_no_backfill</code>.
+          commit <code>e6d80b7</code>.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-09</span>
+        event_id format 검증 ULID-only → ASCII printable
+      </div>
+      <div class="dev-body">
+        <p><strong>증상:</strong> 사용자 브라우저가 EventSource로 metric event_id를
+          Last-Event-ID로 보내면 서버가 400 → onerror → 무한 reconnect 루프.</p>
+        <p><strong>원인:</strong> spec/구현이 event_id가 항상 ULID(26-char alphanumeric)라
+          가정. 그러나 slice-6 metric/log는 deterministic id (<code>metric:&lt;resource&gt;:
+          &lt;instrument&gt;:&lt;time&gt;:&lt;attr&gt;</code>) 형식 — DEV-S6-04에 명시되어
+          있었지만 slice-8 spec/구현에서 무시.</p>
+        <p><strong>fix:</strong> <code>is_well_formed_event_id</code>를 ASCII printable
+          ≤200자 허용으로 완화. control char, empty, oversize만 400. 회귀 가드:
+          <code>src/api/sse.rs#[cfg(test)] mod tests</code>의 unit test 3건. commit
+          <code>7d71ae3</code>.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-10</span>
+        backfill 정렬을 event_id에서 observed_at으로
+      </div>
+      <div class="dev-body">
+        <p><strong>증상:</strong> metric event_id (예: <code>metric:abc:...</code>)를 cursor로
+          보내면 그 이후 ULID 형식의 transcript event들이 backfill에서 누락. 사용자가 metric
+          envelope을 마지막으로 본 시점부터의 신규 transcript line이 SSE로 도달 안 함.</p>
+        <p><strong>원인:</strong> backfill SELECT가 <code>ORDER BY event_id ASC</code>인데
+          <code>'metric:...'</code> > <code>'01HZ...'</code> in lexicographic order (M=0x4D
+          vs 0=0x30). cross-source id는 lexicographic 정렬이 시간 순서와 일치하지 않음.</p>
+        <p><strong>fix:</strong> backfill 정렬을 <code>observed_at ASC, event_id ASC</code>로
+          변경. 같은 시점 동시 row는 event_id로 secondary tiebreaker. 회귀 가드:
+          <code>sse_integration::metric_format_cursor_resumes_correctly</code>. commit
+          <code>7d71ae3</code>.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-11</span>
+        useLiveStream EventSource 무한 재연결 (44회/1.5s)
+      </div>
+      <div class="dev-body">
+        <p><strong>증상:</strong> live update가 안 일어남. EventSource는 떠 있지만 onmessage
+          호출되어도 React state 갱신이 race로 망가짐.</p>
+        <p><strong>원인:</strong> <code>useLiveStream</code>의 <code>useEffect</code> dep array에
+          inline callback (<code>onEnvelope: () =&gt; void refetch()</code>)이 포함되어 매 render
+          마다 새 reference → effect cleanup + reopen 무한 사이클. envelope 도착 → setState →
+          re-render → cleanup → 다시 mount → backfill 처음부터.</p>
+        <p><strong>fix:</strong> callback을 <code>useRef</code>에 보관 + dep array에서 제거.
+          연결은 <code>[url, scope]</code> 변경에만 재시도. 표준 React 패턴이지만 spec
+          작성 시 누락. commit <code>459f5c5</code>.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-12</span>
+        session_graph race + SessionDetailPage 깜빡임
+      </div>
+      <div class="dev-body">
+        <p><strong>증상:</strong> 사용자가 라이브 stream 보는 중 Timeline marker가 주기적으로
+          사라지고 &ldquo;no observations in this session&rdquo; 메시지로 깜빡거림. 잠시 후 다시
+          marker 등장 → 반복.</p>
+        <p><strong>원인:</strong> <code>graph::build::rebuild_session</code>이 DELETE + INSERT를
+          transaction 없이 수행. ingest_file이 새 transcript line마다 호출 → DELETE와 INSERT
+          사이 ms 동안 graph_node 0 rows. SessionDetailPage가 그 시점에 refetch하면
+          <code>session_graph</code> handler의 <code>if nodes.is_empty() → 404</code> trigger.
+          클라이언트는 404를 잡아 빈 graph로 처리 → Timeline 깜빡임.</p>
+        <p><strong>fix (2-layer):</strong></p>
+        <ol>
+          <li>server: <code>session_graph</code>가 빈 nodes에도 200 반환. 빈 graph는 valid
+            transient state.</li>
+          <li>client: refetch가 빈 graph 받으면 이전 graph state 유지 (race가 self-resolve할
+            시간 확보).</li>
+        </ol>
+        <p><strong>잔여:</strong> rebuild_session 자체를 <code>sqlx::transaction</code>으로 wrap.
+          별도 commit으로 진행 예정. commits <code>c6102c8</code>, <code>8a25ac7</code>.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-13</span>
+        SessionDetailPage refetch 폭주로 renderer freeze
+      </div>
+      <div class="dev-body">
+        <p><strong>증상:</strong> 사용자 페이지가 1~2분 안에 frozen (CDP timeout 45s).
+          eventCount 갱신 멈춤.</p>
+        <p><strong>원인:</strong> envelope 매 도착마다 refetch → GET 4000+ events JSON (~200KB)
+          + Timeline 3500+ SVG circle 재생성. active 세션에서 envelope/sec이 setState burst를
+          유발. main thread block.</p>
+        <p><strong>fix:</strong></p>
+        <ol>
+          <li>refetch trailing-debounce 250ms → 1000ms.</li>
+          <li>setState identity-skip: 새 graph가 이전과 node/edge/event_count + latest
+            event_id 모두 동일하면 prev state reference 그대로 반환 → React가 Timeline
+            re-render 자체 skip.</li>
+        </ol>
+        <p><strong>잔여:</strong> spec §6.2 envelope inline append 본격 구현이 진짜 fix.
+          slice-9 windowed buffering 작업에 포함. commits <code>8a25ac7</code>,
+          <code>4abf612</code>.</p>
+      </div>
+    </div>
+
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S8-14</span>
+        GET /v1/sessions/:id가 oldest 5000만 반환 → newest 안 보임
+      </div>
+      <div class="dev-body">
+        <p><strong>증상:</strong> 5000+ event 세션에서 새 transcript line이 timeline에 안 보임.
+          DB는 갱신되지만 GET endpoint가 가장 오래된 5000개만 반환.</p>
+        <p><strong>원인:</strong> <code>repo_observed::list_session</code>이
+          <code>ORDER BY observed_at ASC LIMIT ?</code>. clamp_limit max 5000. 5000+ session
+          에서 oldest 5000만 가져오고 newest는 제외.</p>
+        <p><strong>fix (옵션 1, 임시):</strong> 새 함수 <code>list_session_latest</code>
+          (DESC LIMIT) + <code>session_summary</code> (정확한 COUNT + MIN/MAX). handler가
+          newest 5000을 받고 reverse해서 ASC 순서로 wire에 보냄. summary는 별도 쿼리로 진짜
+          first/last 시각.</p>
+        <p><strong>잔여 (slice-9 follow-up):</strong> 사용자가 제안한 video-streaming 패턴의
+          windowed buffering이 정답. server range query
+          (<code>?from=&amp;to=&amp;limit=</code>), client LRU chunk cache + virtualization,
+          scroll/seek 지원. 옵션 1은 그 전까지의 임시방편 — 사용자가 conversation 처음부터
+          따라가려면 별도 pagination 필요. commit <code>4abf612</code>.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:32px">Lessons (post-smoke)</h3>
+    <ul>
+      <li>초기 manual smoke가 fresh DB + hook POST에 국한되어서 9000+ event 세션 + active
+        stream + cross-source event_id 형식의 실 시나리오에서만 드러나는 버그 5건을 못 잡음.
+        CLAUDE.md "real-data anchoring" 원칙을 명시했지만 적용에서 누락. 다음 슬라이스부터
+        manual smoke를 사용자 실 DB로 명시 의무.</li>
+      <li>axum-test가 SSE long-lived response에서 hang하는 한계를 spec(DEV-S8-02)에 적어
+        놓고 본인이 추후 라운드에서 반복 위반. 200-OK SSE response를 axum-test로 검증하지
+        않는다는 정책을 코드 주석으로 박음. 대신 <code>ServiceExt::oneshot</code> +
+        <code>http_body_util::BodyExt::frame()</code>로 chunked body를 chunk 단위로 읽는
+        패턴이 사용자 제안으로 정립됨.</li>
+      <li>9000+ event 세션의 매 refetch가 200KB JSON + 3500 SVG render인 점을 spec 작성
+        시 미고려. DEV-S8-03("naive refetch가 단순해서 OK")의 가정이 깨짐.</li>
+    </ul>
   </section>
 
   <section id="slice8-commits">
@@ -1471,6 +1630,14 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       <li><code>fd56ca1</code> — feat(api): SSE handler at GET /v1/stream — backfill + live forward</li>
       <li><code>5f489a7</code> — test(sse): subprocess E2E — hook + OTel metrics + session filter</li>
       <li><code>7c4db3d</code> — feat(webui): live update via SSE + envelope-based LIVE badge</li>
+      <li><code>084fcae</code> — docs(slice-8): claude-in-chrome browser smoke results (4 scenarios)</li>
+      <li><code>e6d80b7</code> — fix(sse): no-cursor connect must not flood with full backfill (DEV-S8-08)</li>
+      <li><code>7d71ae3</code> — fix(sse): cross-source cursor ordering + accept non-ULID event_ids + proper L2 integration tests (DEV-S8-09, 10)</li>
+      <li><code>459f5c5</code> — fix(webui): useLiveStream callback in ref + getSession limit=5000 (DEV-S8-11)</li>
+      <li><code>485393d</code> — fix(webui): trailing-debounce refetch in SessionDetailPage (DEV-S8-13 part 1)</li>
+      <li><code>c6102c8</code> — fix: graph endpoint + SessionDetailPage flicker on rebuild race (DEV-S8-12)</li>
+      <li><code>8a25ac7</code> — fix(webui): debounce 1000ms + identity-skip setState (DEV-S8-13 part 2)</li>
+      <li><code>4abf612</code> — fix: session_detail returns newest-N + accurate summary (DEV-S8-14)</li>
     </ul>
   </section>
 
