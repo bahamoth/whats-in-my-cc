@@ -41,6 +41,7 @@ notify             = "7"
 git2               = { version = "0.19", default-features = false, features = ["vendored-libgit2"] }
 tokio-util         = { version = "0.7",  features = ["rt"] }
 reqwest            = { version = "0.12", default-features = false, features = ["json","rustls-tls"] }
+strum              = { version = "0.26", features = ["derive"] }
 
 [dev-dependencies]
 assert-json-diff   = "2"

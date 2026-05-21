@@ -7,6 +7,7 @@ pub mod git_poller;
 pub mod graph;
 pub mod ids;
 pub mod ingest;
+pub mod live;
 pub mod model;
 pub mod paths;
 pub mod telemetry;
