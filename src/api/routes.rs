@@ -148,14 +148,15 @@ pub async fn session_graph(
     Path(id): Path<String>,
 ) -> Result<Json<Envelope<GraphPayload>>, (StatusCode, Json<serde_json::Value>)> {
     let (nodes, edges) = repo_graph::load_session(&pool, &id).await.expect("db");
-    if nodes.is_empty() {
-        return Err((
-            StatusCode::NOT_FOUND,
-            Json(
-                json!({"type":"about:blank","title":"RESOURCE_NOT_FOUND","detail":format!("session {id} has no graph")}),
-            ),
-        ));
-    }
+    // Empty graph_node is a VALID transient state — rebuild_session uses a
+    // DELETE-then-INSERT pattern (not in a transaction), and a SELECT that
+    // races between those two statements observes zero rows even though the
+    // session has thousands of events. Returning 404 here caused the WebUI
+    // SessionDetailPage to flicker its Timeline to "no observations" on
+    // every transcript line landing during active sessions. Now we always
+    // return 200 with whatever rows exist; the client decides how to render
+    // an empty graph (no flicker, just an empty timeline until the rebuild
+    // finishes and the next refetch lands).
     Ok(Json(Envelope {
         meta: ResponseMeta::now(),
         data: GraphPayload {

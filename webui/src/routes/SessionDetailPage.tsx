@@ -43,7 +43,21 @@ export default function SessionDetailPage() {
         if (e instanceof ApiError && e.status === 404) graph = { nodes: [], edges: [] };
         else throw e;
       }
-      setState({ kind: 'ok', data: { session, graph } });
+      // Anti-flicker: if the new graph came back empty but the previous render
+      // had a non-empty graph, treat this as a transient race during ingest's
+      // graph::build::rebuild_session (DELETE then INSERT not in one
+      // transaction) and KEEP the previous graph. Otherwise Timeline flickers
+      // every time a new transcript line lands during an active session.
+      setState((prev) => {
+        if (
+          graph.nodes.length === 0 &&
+          prev.kind === 'ok' &&
+          prev.data.graph.nodes.length > 0
+        ) {
+          return { kind: 'ok', data: { session, graph: prev.data.graph } };
+        }
+        return { kind: 'ok', data: { session, graph } };
+      });
     } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 404) setState({ kind: 'not_found' });
       else setState({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
