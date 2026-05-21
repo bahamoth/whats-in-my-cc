@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { listSessions, ApiError } from '../api/client';
 import type { SessionListItem } from '../api/types';
+import { useLiveStream, type LiveEnvelope } from '../hooks/useLiveStream';
 import styles from './SessionListPage.module.css';
 
 type SortKey = 'last_observed_at' | 'first_observed_at' | 'event_count' | 'session_id';
@@ -58,15 +59,14 @@ function sourceMix(byKind?: Record<string, number>): SourceMix {
 
 const LIVE_THRESHOLD_MS = 60_000;
 
-function isLive(lastObservedAt: string, nowMs: number): boolean {
-  // slice-7 — flag sessions whose last_observed_at is within the live-tail
-  // freshness window (~60s). Claude Code writes a transcript line on every
-  // turn; the live tail ingests it within ~100ms, so a 60s window covers
-  // typical pauses (user thinking) without flagging long-idle sessions.
-  // Falls back to false if last_observed_at cannot be parsed.
-  const t = Date.parse(lastObservedAt);
-  if (Number.isNaN(t)) return false;
-  return nowMs - t <= LIVE_THRESHOLD_MS;
+function isLive(envelopeAtMs: number | undefined, nowMs: number): boolean {
+  // slice-8 — flag sessions whose last SSE envelope arrived within the live
+  // window. Replaces slice-7's last_observed_at-based predicate; the new
+  // semantic asks "is the client *currently observing* this session?" rather
+  // than "was this row recent the last time we fetched?". Honest signal:
+  // turns OFF when stream goes silent, ON when an envelope arrives.
+  if (envelopeAtMs === undefined) return false;
+  return nowMs - envelopeAtMs <= LIVE_THRESHOLD_MS;
 }
 
 function compare(a: SessionListItem, b: SessionListItem, key: SortKey): number {
@@ -92,12 +92,16 @@ export default function SessionListPage() {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [sortKey, setSortKey] = useState<SortKey>('last_observed_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  // ticks every 5s so the live badge does not get stuck after mount.
+  // ticks every 5s so the live badge re-evaluates the 60s window even when no
+  // envelope arrives (a stream that went silent should flip OFF after 60s).
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setNowMs(Date.now()), 5_000);
     return () => window.clearInterval(t);
   }, []);
+
+  // slice-8 — per-session envelope arrival timestamps, populated by SSE.
+  const [envelopeAt, setEnvelopeAt] = useState<Map<string, number>>(() => new Map());
 
   const load = useCallback(async () => {
     setState({ kind: 'loading' });
@@ -111,6 +115,50 @@ export default function SessionListPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  // slice-8 — subscribe to the global SSE stream. On each envelope, update
+  // envelopeAt and mark the matching row's last_observed_at + event_count.
+  // For unknown session_ids, trigger a baseline refetch so the new row
+  // appears (cheaper than synthesising a partial row client-side).
+  const onEnvelope = useCallback(
+    (env: LiveEnvelope) => {
+      setEnvelopeAt((prev) => {
+        const next = new Map(prev);
+        next.set(env.session_id, Date.now());
+        return next;
+      });
+      setState((s) => {
+        if (s.kind !== 'ok') return s;
+        const idx = s.rows.findIndex((r) => r.session_id === env.session_id);
+        if (idx < 0) {
+          // New session — refetch list to pull in the full row.
+          void load();
+          return s;
+        }
+        const updated = s.rows.slice();
+        const row = updated[idx];
+        updated[idx] = {
+          ...row,
+          last_observed_at: env.observed_at,
+          event_count: row.event_count + 1,
+        };
+        return { kind: 'ok', rows: updated };
+      });
+    },
+    [load],
+  );
+  useLiveStream({
+    url: '/v1/stream',
+    scope: 'global',
+    onEnvelope,
+    onResync: () => {
+      setEnvelopeAt(new Map());
+      void load();
+    },
+    onGap: () => {
+      void load();
+    },
+  });
 
   const sortedRows = useMemo(() => {
     if (state.kind !== 'ok') return [];
@@ -178,7 +226,7 @@ export default function SessionListPage() {
                 const mix = sourceMix(r.by_kind);
                 const otelOnly =
                   mix.transcript === 0 && mix.hook === 0 && mix.file_git === 0 && mix.otel > 0;
-                const live = isLive(r.last_observed_at, nowMs);
+                const live = isLive(envelopeAt.get(r.session_id), nowMs);
                 return (
                   <tr key={r.session_id} className={otelOnly ? styles.otelOnly : undefined}>
                     <td>
@@ -187,7 +235,7 @@ export default function SessionListPage() {
                         <span
                           className={styles.liveBadge}
                           data-testid="live-badge"
-                          title="last_observed_at within 60s — claude is likely still active"
+                          title="received an SSE envelope within 60s — claude is currently active"
                         >
                           {' '}LIVE
                         </span>
