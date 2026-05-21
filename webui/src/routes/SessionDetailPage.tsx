@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError, getGraph, getSession } from '../api/client';
 import type { GraphPayload, SessionDetail } from '../api/types';
@@ -7,6 +7,19 @@ import { SourcePanel } from '../components/SourcePanel';
 import { Timeline } from '../components/Timeline';
 import { useLiveStream } from '../hooks/useLiveStream';
 import styles from './SessionDetailPage.module.css';
+
+// Live update throttle. Without this, a session with rapid OTel/log/transcript
+// activity (e.g. claude code mid-tool-call emitting tens of envelopes per
+// second) makes onEnvelope → refetch fire continuously. Each refetch returns
+// up to 5000 events; React re-renders the entire timeline on every setState
+// and the main thread freezes within seconds. Verified live on bahamoth's
+// 4000+ event session, which froze the renderer until a hard reload.
+//
+// Trailing debounce: every envelope arms a 250ms timer; subsequent envelopes
+// inside that window reuse the existing timer. When the timer fires we run
+// exactly one refetch. New envelopes that arrive during the fetch itself
+// arm a fresh timer for the next refetch, so we never queue refetches.
+const LIVE_REFETCH_DEBOUNCE_MS = 250;
 
 type Loaded = { session: SessionDetail; graph: GraphPayload };
 type State =
@@ -48,22 +61,30 @@ export default function SessionDetailPage() {
     };
   }, [refetch]);
 
-  // slice-8 — live updates. Refetch on each envelope for this session.
-  // Naive but correct: an envelope means a new row landed, and sqlite is
-  // local so the refetch is cheap. Incremental append would be ~50 LOC and
-  // is a follow-up if the chattiness is ever an issue.
+  // slice-8 — live updates with trailing debounce (see constant above).
+  const debounceTimer = useRef<number | null>(null);
+  const queueRefetch = useCallback(() => {
+    if (debounceTimer.current !== null) return;
+    debounceTimer.current = window.setTimeout(() => {
+      debounceTimer.current = null;
+      void refetch();
+    }, LIVE_REFETCH_DEBOUNCE_MS);
+  }, [refetch]);
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current !== null) {
+        window.clearTimeout(debounceTimer.current);
+        debounceTimer.current = null;
+      }
+    };
+  }, []);
+
   useLiveStream({
     url: `/v1/stream?session=${encodeURIComponent(sessionId)}`,
     scope: sessionId,
-    onEnvelope: () => {
-      void refetch();
-    },
-    onResync: () => {
-      void refetch();
-    },
-    onGap: () => {
-      void refetch();
-    },
+    onEnvelope: queueRefetch,
+    onResync: queueRefetch,
+    onGap: queueRefetch,
   });
 
   const selectedEventId =
