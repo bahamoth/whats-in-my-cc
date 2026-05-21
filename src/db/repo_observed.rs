@@ -96,10 +96,15 @@ pub struct SessionRow {
     pub first_observed_at: String,
     pub last_observed_at: String,
     pub event_count: i64,
+    /// slice-7 — per-source row counts so the WebUI can show transcript-only
+    /// vs OTel-only sessions at a glance without a second round trip.
+    pub by_kind: std::collections::BTreeMap<String, i64>,
 }
 
 pub async fn list_sessions(pool: &SqlitePool, limit: i64) -> Result<Vec<SessionRow>> {
-    let rows = sqlx::query(
+    use sqlx::Row as _Row;
+    // First pass: per-session totals + ordering. Limit applies here.
+    let totals = sqlx::query(
         "SELECT session_id,
                 MIN(observed_at) AS first_observed_at,
                 MAX(observed_at) AS last_observed_at,
@@ -110,13 +115,44 @@ pub async fn list_sessions(pool: &SqlitePool, limit: i64) -> Result<Vec<SessionR
     .bind(limit)
     .fetch_all(pool)
     .await?;
-    Ok(rows
+    if totals.is_empty() {
+        return Ok(Vec::new());
+    }
+    // Second pass: by_kind for just the session_ids we returned. Inlining the
+    // IN(?) list with a dynamic placeholder list keeps it sqlx-friendly.
+    let ids: Vec<String> = totals.iter().map(|r| r.get::<String, _>("session_id")).collect();
+    let placeholders = (0..ids.len()).map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT session_id, kind, COUNT(*) AS n
+           FROM observed_event
+          WHERE session_id IN ({placeholders})
+          GROUP BY session_id, kind"
+    );
+    let mut q = sqlx::query(&sql);
+    for id in &ids {
+        q = q.bind(id);
+    }
+    let kind_rows = q.fetch_all(pool).await?;
+    let mut by_kind_map: std::collections::HashMap<String, std::collections::BTreeMap<String, i64>> =
+        std::collections::HashMap::new();
+    for r in kind_rows {
+        let sid: String = r.get("session_id");
+        let kind: String = r.get("kind");
+        let n: i64 = r.get("n");
+        by_kind_map.entry(sid).or_default().insert(kind, n);
+    }
+    Ok(totals
         .into_iter()
-        .map(|r| SessionRow {
-            session_id: r.get("session_id"),
-            first_observed_at: r.get("first_observed_at"),
-            last_observed_at: r.get("last_observed_at"),
-            event_count: r.get("event_count"),
+        .map(|r| {
+            let sid: String = r.get("session_id");
+            let by_kind = by_kind_map.remove(&sid).unwrap_or_default();
+            SessionRow {
+                session_id: sid,
+                first_observed_at: r.get("first_observed_at"),
+                last_observed_at: r.get("last_observed_at"),
+                event_count: r.get("event_count"),
+                by_kind,
+            }
         })
         .collect())
 }

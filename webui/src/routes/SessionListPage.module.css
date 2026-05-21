@@ -1,5 +1,32 @@
 .page { padding: 24px; }
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.hint { color: #6b7280; font-size: 12px; margin: 0 0 8px; }
 .table { width: 100%; border-collapse: collapse; }
-.table th, .table td { padding: 8px; border-bottom: 1px solid #e3e6eb; text-align: left; }
+.table th, .table td { padding: 8px; border-bottom: 1px solid #e3e6eb; text-align: left; vertical-align: top; }
 .empty { padding: 32px; background: #fff; border: 1px dashed #b9bfca; border-radius: 8px; }
+
+.sortable { cursor: pointer; user-select: none; }
+.sortable:hover { background: #f6f8fb; }
+.sortInactive { color: #cbd0d8; }
+.sortActive { color: #2c5cc5; }
+
+.mix { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+.tagTranscript { background: #fef3e7; color: #b85c11; border-color: #f4d3b0; }
+.tagOtel       { background: #e6edff; color: #2c4ba0; border-color: #c4d2f5; }
+.tagHook       { background: #e8f4ee; color: #1d6b46; border-color: #c0e0d2; }
+.tagFile       { background: #f1e8fb; color: #6a3eaa; border-color: #d8c5ec; }
+.tagDim        { color: #9aa1ad; font-size: 11px; }
+
+/* sessions that received OTel-only data — likely the otel-session-id ≠
+   transcript-session-id correlation gap. Marked subtly. */
+.otelOnly { background: #fcfbf6; }
+.otelOnly td { color: #6b7280; }
+.otelOnly td a { color: #5d4eab; }

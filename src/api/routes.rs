@@ -92,6 +92,7 @@ pub async fn list_sessions(
             last_observed_at: r.last_observed_at,
             event_count: r.event_count,
             source_uris: vec![],
+            by_kind: r.by_kind,
         })
         .collect();
     Json(Envelope {
