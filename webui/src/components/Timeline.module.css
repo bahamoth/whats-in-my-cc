@@ -13,3 +13,6 @@
 .node_assistant_message { fill: #2c5cc5; }
 .node_tool_call { fill: #1aa37a; }
 .node_file_history_snapshot { fill: #8a4fbd; }
+.node_otel_span { fill: #6366f1; stroke: #4338ca; stroke-width: 1; stroke-dasharray: 2 1; }
+.node_metric_sample { fill: #0ea5e9; }
+.node_log_record { fill: #f59e0b; }

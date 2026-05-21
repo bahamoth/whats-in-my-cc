@@ -22,6 +22,8 @@ export function laneForNodeKind(kind: string): Lane | null {
     case 'diff_hunk':               return 'Files';
     case 'hook_event':              return 'Hook';
     case 'otel_span':               return 'OTel';
+    case 'metric_sample':           return 'OTel';
+    case 'log_record':              return 'OTel';
     default:                        return null;
   }
 }

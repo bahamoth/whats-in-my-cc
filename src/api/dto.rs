@@ -9,6 +9,45 @@ pub struct OtelIngestResponse {
     pub sessions_touched: Vec<String>,
 }
 
+/// slice-6 — receiver response for `/otel/v1/metrics`. Stage 1 fields plus the
+/// Stage 2 per-data-point counters once the normaliser ran.
+#[derive(Debug, Serialize)]
+pub struct OtelMetricsRawResponse {
+    pub accepted_resource_metrics: u64,
+    pub stored_raw_rows: u64,
+    pub duplicate_raw_rows: u64,
+    pub accepted_data_points: u64,
+    pub duplicate_data_points: u64,
+    pub rejected_data_points: u64,
+    pub sessions_touched: Vec<String>,
+}
+
+/// slice-6 — receiver response for `/otel/v1/logs`.
+#[derive(Debug, Serialize)]
+pub struct OtelLogsRawResponse {
+    pub accepted_resource_logs: u64,
+    pub stored_raw_rows: u64,
+    pub duplicate_raw_rows: u64,
+    pub accepted_log_records: u64,
+    pub duplicate_log_records: u64,
+    pub rejected_log_records: u64,
+    pub sessions_touched: Vec<String>,
+}
+
+/// slice-6 — per-source freshness for `/v1/health/sources`. Powers `witmcc doctor`.
+#[derive(Debug, Serialize)]
+pub struct SourceHealth {
+    pub label: String,
+    pub last_ingested_at: Option<String>,
+    pub row_count_24h: i64,
+    pub total_rows: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct HealthSourcesResponse {
+    pub sources: Vec<SourceHealth>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct HookIngestResponse {
     pub accepted_events: u64,

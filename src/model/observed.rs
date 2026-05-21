@@ -42,6 +42,8 @@ pub enum EventKind {
     FileEvent,
     GitCommit,
     DiffHunk,
+    MetricSample,
+    LogRecord,
     #[default]
     Unknown,
 }
@@ -63,6 +65,8 @@ impl EventKind {
             EventKind::FileEvent => "file_event",
             EventKind::GitCommit => "git_commit",
             EventKind::DiffHunk => "diff_hunk",
+            EventKind::MetricSample => "metric_sample",
+            EventKind::LogRecord => "log_record",
             EventKind::Unknown => "unknown",
         }
     }
@@ -82,6 +86,55 @@ pub struct TelemetryFacet {
     pub resource: Value,
     pub scope_name: Option<String>,
     pub scope_version: Option<String>,
+}
+
+/// slice-6 — OTel metric data-point facet. Lives inside `ObservedEvent.payload`
+/// as JSON; no dedicated column. One ObservedEvent per data point.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MetricFacet {
+    pub instrument_name: String,
+    /// `sum` | `gauge` | `histogram` | `exponential_histogram` | `summary`
+    pub instrument_kind: String,
+    pub unit: Option<String>,
+    pub description: Option<String>,
+    /// `cumulative` | `delta` — only meaningful for sum/histogram.
+    pub temporality: Option<String>,
+    pub is_monotonic: Option<bool>,
+    pub value_int: Option<i64>,
+    pub value_float: Option<f64>,
+    /// Raw datapoint for histogram / exponentialHistogram / summary so source is preserved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub histogram: Option<Value>,
+    #[serde(default)]
+    pub attributes: Value,
+    #[serde(default)]
+    pub resource: Value,
+    pub scope_name: Option<String>,
+    pub scope_version: Option<String>,
+    pub time_unix_nano: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_time_unix_nano: Option<i64>,
+}
+
+/// slice-6 — OTel log record facet. Lives inside `ObservedEvent.payload`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LogFacet {
+    pub severity_number: Option<i32>,
+    pub severity_text: Option<String>,
+    /// OTLP "body" is AnyValue; preserved verbatim.
+    #[serde(default)]
+    pub body: Value,
+    /// Pulled out of attributes for indexing convenience.
+    pub event_name: Option<String>,
+    #[serde(default)]
+    pub attributes: Value,
+    #[serde(default)]
+    pub resource: Value,
+    pub scope_name: Option<String>,
+    pub scope_version: Option<String>,
+    pub time_unix_nano: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_time_unix_nano: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default)]
