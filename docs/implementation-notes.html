@@ -69,6 +69,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice9-overview">Overview (slice-9)</a>
     <a href="#slice9-deviations">Intentional Deviations (slice-9)</a>
     <a href="#slice9-commits">Commit Reference (slice-9)</a>
+    <a href="#slice10a">Overview (slice-10a)</a>
+    <a href="#slice10a-deviations">Intentional Deviations (slice-10a)</a>
+    <a href="#slice10a-commits">Commit Reference (slice-10a)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
 </aside>
@@ -1760,8 +1763,140 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </ul>
   </section>
 
+  <section id="slice10a">
+    <h2><span class="num">28</span>Overview (slice-10a) — filesystem-source removal, transcript-only file lineage</h2>
+    <p><strong>전체 상태:</strong> slice-10a 완료. 8+ commits, cargo 184 + vitest 67 tests green, browser smoke 통과.
+      File lineage가 별도 collector(notify watcher + git2 poller) 없이 transcript <code>toolUseResult.structuredPatch</code>에서 derived되도록 재구성.
+      M5 Insight engine을 시작하기 위한 prerequisite — 모든 ObservedEvent가 진짜 session_id를 갖게 됨 (<code>FILESYSTEM_SESSION_ID</code> 합성 세션 제거).</p>
+    <h3>Spec / Plan</h3>
+    <ul>
+      <li><code>docs/superpowers/specs/2026-05-22-witmcc-slice10a-filesystem-removal-design.md</code></li>
+      <li><code>docs/superpowers/plans/2026-05-22-witmcc-slice10a-filesystem-removal.md</code></li>
+    </ul>
+  </section>
+
+  <section id="slice10a-deviations">
+    <h2><span class="num">29</span>Slice-10a Intentional Deviations</h2>
+
+    <article class="dev">
+      <h3>DEV-S10A-01 <span class="muted">notify watcher (slice-5) 제거</span></h3>
+      <p><strong>맥락:</strong> <code>src/watcher.rs</code>는 notify 기반 filesystem watcher로 파일 변경을 합성 세션
+        <code>FILESYSTEM_SESSION_ID = "filesystem"</code>에 기록했다.</p>
+      <p><strong>편차:</strong> 모듈 + 합성 세션 제거. 9 transcript 실 데이터 분석 결과 watcher가 잡는 in-scope 변경(Claude의
+        Edit/Write tool call)이 transcript의 <code>toolUseResult.structuredPatch</code>로 더 정확하게(session-scoped + hunk-level)
+        잡힌다. watcher만의 unique 정보는 Claude 외부 편집인데 PRD scope 밖.</p>
+      <p><strong>리스크:</strong> 외부 편집은 invisible. transcript의 <code>userModified</code> flag가 다음 Claude tool call
+        시점에 잡아내는 fallback 신호.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S10A-02 <span class="muted">git2 poller (slice-5) 제거</span></h3>
+      <p><strong>맥락:</strong> <code>src/git_poller.rs</code>는 git2 기반 commit walker.</p>
+      <p><strong>편차:</strong> 모듈 + <code>git2</code> dependency 제거. transcript의 <code>toolUseResult.structuredPatch</code>가
+        commit timing이 아닌 발생 시점에 hunk를 정확히 잡음 (timing skew 없음). git poller만의 unique 정보(Claude 외부 commit)는
+        PRD scope 밖. <code>Bash → git commit</code>의 경우 SHA가 stdout에 있고 그 정보는 transcript tool_result에 보존됨.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S10A-03 <span class="muted">structuredPatch invariant — real-fixture 잠금</span></h3>
+      <p><strong>맥락:</strong> <code>toolUseResult.structuredPatch</code> 형식은 공식 문서 부재.</p>
+      <p><strong>편차:</strong> docs URL 인용 대신 real fixture 3건으로 잠금 —
+        <code>tests/fixtures/transcripts/real/structured_patch_v01.jsonl</code>:
+        (a) single-hunk Edit, (b) Write empty-patch, (c) multi-hunk Edit.
+        <code>tests/transcript_structured_patch.rs</code>의 11 tests가 shape drift를 감지.
+        표본 1건 일반화 회피: 9 transcripts × 228 Edit+Write ops 전체에서 invariant holding 확인.</p>
+      <p><strong>한계:</strong> 모든 Claude Code 버전에 일반화 주장 안 함 — <code>~/.claude/projects/</code>의 transcript에서만 검증.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S10A-04 <span class="muted">EventKind variant 축소</span></h3>
+      <p><strong>맥락:</strong> <code>EventKind</code> enum이 16 variants.</p>
+      <p><strong>편차:</strong> 3개 제거 — <code>FileEvent</code> (watcher 산물), <code>GitCommit</code> (poller 산물),
+        <code>FileHistorySnapshot</code> (transcript meta). 마지막은 *제거가 아니라 강등*: 페이로드 그대로 보존되며
+        <code>EventKind::SessionState + subkind="file_history_snapshot"</code>으로 저장.
+        <code>mapping.rs::file_history</code>가 기존 <code>session_state(...)</code> 패턴 사용. 결과 enum 13 variants.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S10A-05 <span class="muted">Migration in-place 수정 — dev DB 폐기 필요</span></h3>
+      <p><strong>맥락:</strong> diff_hunk 컬럼 변경을 위해 0005 신규 migration 대신 기존 0003을 in-place 편집.</p>
+      <p><strong>편차:</strong> migration history가 마치 transcript-only가 처음부터 설계된 것처럼 보임.
+        <strong>중요 부작용</strong>: sqlx의 migration hash 검증이 기존 dev DB에 대해 fail →
+        <code>.witmcc.sqlite*</code> 삭제 후 <code>witmcc init-db</code> 재생성 필요. 사용자가 명시적으로
+        "임시 데이터 폐기 무방"으로 결정.</p>
+      <p><strong>실제 수정:</strong> <code>migrations/20260520120000_0003_diff_hunk.sql</code>만 변경 (file_event/commit 테이블은
+        애초에 별도 migration이 없었고, observed_event.kind는 freeform TEXT라 CHECK 변경 불요).</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S10A-06 <span class="muted">git2만 제거, notify는 유지</span></h3>
+      <p><strong>맥락:</strong> 원래 spec은 두 crate 모두 제거 가정.</p>
+      <p><strong>편차:</strong> <code>notify</code>는 <code>src/transcript_tail.rs</code> (slice-7 live JSONL tail)가 의존하므로 유지.
+        <code>tests/cargo_dep_audit.rs</code>가 두 invariant를 명시 — <code>cargo_toml_has_no_git2_direct_dep</code> +
+        <code>notify_stays_because_transcript_tail_needs_it</code>. test 이름이 미래 contributor에 대한 의도 문서 역할.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S10A-07 <span class="muted">userModified flag — DiffHunk 컬럼 보존, Finding 룰은 M5</span></h3>
+      <p><strong>맥락:</strong> transcript <code>toolUseResult.userModified: bool</code>은 Claude가 만든 변경에 사용자가 외부 편집을
+        끼워 넣은 신호.</p>
+      <p><strong>편차:</strong> slice-10a는 *데이터만* 보존 (<code>diff_hunk.user_modified INTEGER NOT NULL DEFAULT 0</code>).
+        <code>risky_action</code> finding 생성은 M5로 명시 이연. <strong>real-fixture 부재 문제</strong>: 9 transcripts / 228 ops
+        에서 <code>userModified=true</code> 실 데이터 0건. polarity round-trip test는 fixture (a)를 clone해 flag만 flip한
+        synthetic JSON 사용. slice-10a에서 유일한 non-fixture-based assertion이며 explicit tradeoff로 기록.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S10A-08 <span class="muted">Commit SHA verification marker 영구 거부</span></h3>
+      <p><strong>맥락:</strong> design discussion 중 "Bash tool_result stdout에서 commit SHA를 정규식으로 뽑아 verification
+        boundary로 인식"이 deferred 옵션으로 잠시 고려됨.</p>
+      <p><strong>편차:</strong> 사용자 지적("git 추적 안한다고 하지 않음?")으로 영구 out-of-product-scope로 분류.
+        이유: transcript-only 정책의 backdoor 재도입. M5 verification semantics는 (a) Bash test 명령 (npm test / cargo test /
+        pytest 등) stdout/exit, (b) hook PreToolUse/PostToolUse verification 명령, (c) OTel verification span에서만 도출.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S10A-09 <span class="muted">Commit topology 압축 — 3 commits → 1</span></h3>
+      <p><strong>맥락:</strong> plan §9는 commit 3(migration), 4(EventKind 변경), 5(watcher/poller 제거)를 별도 commit으로 분리.</p>
+      <p><strong>편차:</strong> 세 변경이 dependency cycle을 형성 — file_git이 EventKind를 사용, repo_diff_hunk 변경이 file_git 호출자를 깸,
+        watcher/poller가 file_git에 의존. 단일 commit으로 합쳐야 build "never broken between commits" 상태 유지 가능. PR 리뷰어가
+        하나의 큰 변경(<code>145e00a</code>)을 한 번에 봐야 함을 이 deviation으로 명시.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S10A-10 <span class="muted">기존 invalid 테스트 식별 + 재작성</span></h3>
+      <p><strong>맥락:</strong> 사용자 지시 "기존 테스트 중에 유효하지 않은 것들을 식별하여 제대로 테스트가 되도록 추적".</p>
+      <p><strong>발견 + 재작성:</strong></p>
+      <ul>
+        <li><code>tests/cli_serve.rs::serve_accepts_watch_and_poll_flags</code> — 제거된 <code>--watch</code> + <code>--git-poll-secs</code>
+          flag가 *통과*해야 한다고 가정. <strong>재작성</strong> → <code>serve_rejects_removed_watch_and_poll_flags</code> (negative-lock).</li>
+        <li><code>tests/doctor.rs::doctor_json_mode_emits_parseable_report</code> — taxonomy 6 source 가정. <strong>수정</strong> → 5
+          (file-git label 제거됨).</li>
+        <li><code>tests/health_sources.rs::health_sources_returns_full_taxonomy_when_db_empty</code> — labels 배열에 "file-git" 포함.
+          <strong>수정</strong> → 제거.</li>
+        <li><code>tests/file_git_ingest.rs</code>, <code>tests/file_watcher_loop.rs</code> — 제거된 pipeline 테스트. <strong>파일 자체 삭제</strong>.</li>
+      </ul>
+      <p>모든 변경은 commit body에 explicit. 임시 disabled stub 만들지 않음.</p>
+    </article>
+  </section>
+
+  <section id="slice10a-commits">
+    <h2><span class="num">30</span>Slice-10a Commit Reference</h2>
+    <p>커밋 SHA 목록 (slice-10a branch <code>slice10a-filesystem-removal</code>). PR 머지 시 squash 여부에 따라 SHA가 달라질 수 있다.</p>
+    <ul>
+      <li><code>57614a8</code> — docs(slice-10a): design spec + TDD plan — filesystem-source removal</li>
+      <li><code>203d9c7</code> — test(slice-10a): red-locking tests for structuredPatch + dep audit</li>
+      <li><code>7716a3f</code> — feat(ingest): transcript structuredPatch extractor body</li>
+      <li><code>145e00a</code> — refactor(slice-10a): remove filesystem sources + reshape diff_hunk schema (combined commits 3-5)</li>
+      <li><code>a318b4b</code> — feat(ingest): wire transcript → diff_hunk write path</li>
+      <li><code>65f442f</code> — chore(deps): remove git2; keep notify (transcript_tail still uses it)</li>
+      <li><code>7c0a6f5</code> — docs(spec): file lineage from transcript structuredPatch (slice-10a)</li>
+    </ul>
+    <p>추가로 implementation-notes + CLAUDE.md status 커밋이 이 PR 안에 들어가지만 SHA는 commit 후 결정.</p>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 · 2026-05-22 · branch: slice9-windowed-buffer</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a · 2026-05-22 · branch: slice10a-filesystem-removal</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
