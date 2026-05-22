@@ -142,6 +142,86 @@ describe('useSessionWindow', () => {
     expect(result.current.events).toHaveLength(3);
   });
 
+  it('LRU evict followed by loadOlder fetches from the new oldest cursor', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(
+      envelope({
+        events: [makeEvent(0), makeEvent(1)],
+        prev_cursor: '2026-05-21T00:00:00Z|01J' + '0'.repeat(20) + '000',
+        next_cursor: null,
+      }),
+    );
+    const { result } = renderHook(() =>
+      useSessionWindow('s', { initialLimit: 2, maxEvents: 3, pageLimit: 100 }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+
+    // Burst past cap so trim fires and oldest cursor moves forward.
+    act(() => {
+      for (let i = 2; i < 10; i++) result.current.appendOne(makeEvent(i));
+    });
+    expect(result.current.events.length).toBeLessThanOrEqual(3);
+    const evictedOldest = result.current.oldest;
+    expect(evictedOldest).not.toBe('2026-05-21T00:00:00Z|01J' + '0'.repeat(20) + '000');
+    expect(evictedOldest).not.toBeNull();
+
+    // loadOlder must fetch with the NEW oldest cursor (evict-driven), not
+    // the original prev_cursor. Mock returns a recognisable older page.
+    f.mockResolvedValueOnce(
+      envelope({
+        events: [makeEvent(100)], // sentinel id we can spot
+        prev_cursor: 'pc-after-evict-load',
+        next_cursor: null,
+      }),
+    );
+    await act(async () => {
+      await result.current.loadOlder();
+    });
+    // The fetch URL must have used the post-evict oldest, not 'pc-original'.
+    const lastCall = f.mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).toContain('?before=');
+    expect(lastCall).toContain(encodeURIComponent(evictedOldest!));
+    expect(result.current.events.some((e) => e.event_id.includes('00000100'))).toBe(true);
+    expect(result.current.oldest).toBe('pc-after-evict-load');
+  });
+
+  it('reload() re-issues the initial fetch and resets cursors', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(
+      envelope({
+        events: [makeEvent(1), makeEvent(2)],
+        prev_cursor: 'pc-first',
+        next_cursor: 'nc-first',
+      }),
+    );
+    const { result } = renderHook(() => useSessionWindow('s'));
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+    expect(result.current.oldest).toBe('pc-first');
+    expect(result.current.newest).toBe('nc-first');
+
+    // appendOne to mutate state away from initial — reload must wipe this.
+    act(() => {
+      result.current.appendOne(makeEvent(99));
+    });
+    expect(result.current.events.length).toBe(3);
+
+    f.mockResolvedValueOnce(
+      envelope({
+        events: [makeEvent(5)],
+        prev_cursor: 'pc-reloaded',
+        next_cursor: null,
+      }),
+    );
+    await act(async () => {
+      await result.current.reload();
+    });
+    expect(result.current.events).toHaveLength(1);
+    expect(result.current.events[0].event_id).toContain('00000005');
+    expect(result.current.oldest).toBe('pc-reloaded');
+    expect(result.current.newest).toBeNull();
+    expect(result.current.atLiveTip).toBe(true);
+  });
+
   it('LRU cap: appending past maxEvents trims oldest and shifts oldest cursor', async () => {
     const f = fetch as unknown as ReturnType<typeof vi.fn>;
     f.mockResolvedValueOnce(

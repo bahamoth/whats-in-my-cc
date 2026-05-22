@@ -1,8 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import '@testing-library/jest-dom/vitest';
 import SessionDetailPage from '../SessionDetailPage';
+import { MockEventSource } from '../../test/MockEventSource';
 
 function rendered(sessionId: string) {
   return render(
@@ -159,6 +160,70 @@ describe('SessionDetailPage', () => {
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
     expect(screen.queryByText(/session not found/i)).not.toBeInTheDocument();
     expect(screen.getByText('Intent')).toBeInTheDocument();
+  });
+
+  // Slice-9 — envelope-driven append + debounced graph refetch. Verifies
+  // that an envelope burst inside the debounce window collapses to ONE
+  // graph fetch (not one per envelope as slice-8 did) and that neither the
+  // summary nor the events endpoint is re-hit per envelope. This is the
+  // integration lock for DEV-S8-13 fix.
+  it('envelope burst triggers a single debounced graph refetch (not per-envelope)', async () => {
+    MockEventSource.install();
+    const f = setupFetch({
+      detail: env(sessionDetail),
+      graph: env(graph),
+      events: env(eventsPayload),
+    });
+    rendered('s1');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+
+    // Snapshot mount-time fetch counts.
+    const callsOf = (matcher: (u: string) => boolean) =>
+      f.mock.calls.filter((c) => matcher(String(c[0]))).length;
+    const summaryAtMount = callsOf((u) => /\/v1\/sessions\/[^/]+$/.test(u));
+    const graphAtMount = callsOf((u) => u.includes('/graph'));
+    const eventsAtMount = callsOf((u) => u.includes('/events'));
+    expect(summaryAtMount).toBe(1);
+    expect(graphAtMount).toBe(1);
+    expect(eventsAtMount).toBe(1);
+
+    // Fire 5 envelopes in tight succession. They should all `appendOne`
+    // into useSessionWindow synchronously and arm exactly one graph
+    // debounce timer.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const es = MockEventSource.latest();
+    expect(es).toBeDefined();
+    act(() => {
+      for (let i = 1; i <= 5; i++) {
+        es!.emit(
+          'message',
+          JSON.stringify({
+            schema_version: '1',
+            session_id: 's1',
+            event_id: `01J${String(i).padStart(23, '0')}`,
+            kind: 'tool_call',
+            source_type: 'transcript',
+            observed_at: `2026-05-19T10:00:1${i}Z`,
+          }),
+        );
+      }
+    });
+
+    // Advance just past the 800ms debounce window (and well before the
+    // 10s summary interval).
+    await act(async () => {
+      vi.advanceTimersByTime(900);
+    });
+    vi.useRealTimers();
+
+    // Wait for the queued fetch to resolve. The graph endpoint should now
+    // have been hit exactly once more than at mount; summary and events
+    // unchanged.
+    await waitFor(() => {
+      expect(callsOf((u) => u.includes('/graph'))).toBe(graphAtMount + 1);
+    });
+    expect(callsOf((u) => /\/v1\/sessions\/[^/]+$/.test(u))).toBe(summaryAtMount);
+    expect(callsOf((u) => u.includes('/events'))).toBe(eventsAtMount);
   });
 
   // Slice-9 — IntersectionObserver-driven loadOlder. The mounted sentinel
