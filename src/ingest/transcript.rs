@@ -77,6 +77,13 @@ pub struct UserRecord {
     #[serde(rename = "sourceToolUseID")]
     pub source_tool_use_id: Option<String>,
     pub message: Value,
+    /// Slice-10a — top-level `toolUseResult` envelope (Edit/Write outputs
+    /// carry `filePath`, `structuredPatch`, `userModified`, `oldString`,
+    /// `newString` here). Optional because not every `user` record is a
+    /// tool_result.
+    #[serde(rename = "toolUseResult")]
+    #[serde(default)]
+    pub tool_use_result: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -5,14 +5,16 @@ use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use std::path::Path;
 
-use crate::db::{repo_observed, repo_raw, repo_runs};
+use crate::db::{repo_diff_hunk, repo_observed, repo_raw, repo_runs};
 use crate::live::{LiveEvent, LiveSink};
 
 /// Row type for the turn_id backfill query: (event_uuid, parent_uuid, turn_id, event_id)
 type TurnBackfillRow = (String, Option<String>, Option<String>, Option<String>);
 use crate::error::{Result, WitmccError};
 use crate::ids::MonotonicUlidGen;
-use crate::ingest::{mapping, transcript};
+use crate::ingest::{diff_hunk, mapping, transcript};
+use crate::model::observed::EventKind;
+use crate::model::meta::SCHEMA_VERSION;
 
 #[derive(Debug, Default, Serialize)]
 pub struct IngestStats {
@@ -75,6 +77,12 @@ pub async fn ingest_file(
                     continue;
                 }
                 stats.raw_inserted += 1;
+                // Slice-10a: pluck out toolUseResult before move so we can
+                // populate diff_hunk after the matching tool_result event lands.
+                let tu_result: Option<serde_json::Value> = match &rec {
+                    transcript::ParsedRecord::User(u) => u.tool_use_result.clone(),
+                    _ => None,
+                };
                 let evs = mapping::map_record(&meta, &rec, &raw_id, &mut gen)?;
                 for ev in evs {
                     stats.sessions_touched.insert(ev.session_id.clone());
@@ -88,6 +96,45 @@ pub async fn ingest_file(
                         source_type: "transcript".into(),
                         observed_at: ev.observed_at.to_rfc3339(),
                     });
+                    // Slice-10a — file lineage. tool_result ObservedEvents with
+                    // a toolUseResult.structuredPatch produce one diff_hunk
+                    // row per hunk. Write tool_results carry an empty patch
+                    // by design and yield zero rows.
+                    if ev.kind == EventKind::ToolResult {
+                        if let Some(tu) = tu_result.as_ref() {
+                            let hunks = diff_hunk::extract_diff_hunks(
+                                &ev.event_id,
+                                ev.tool_use_id.as_deref(),
+                                &ev.session_id,
+                                tu,
+                            );
+                            for h in hunks {
+                                repo_diff_hunk::insert(
+                                    pool,
+                                    &repo_diff_hunk::NewDiffHunk {
+                                        diff_hunk_id: h.diff_hunk_id,
+                                        schema_version: SCHEMA_VERSION.into(),
+                                        session_id: h.session_id,
+                                        file_path: h.file_path,
+                                        change_type: h.change_type,
+                                        line_range_after_start: h
+                                            .line_range_after
+                                            .map(|(s, _)| s as i64),
+                                        line_range_after_end: h
+                                            .line_range_after
+                                            .map(|(_, e)| e as i64),
+                                        introduced_by_event_id: h.introduced_by_event_id,
+                                        introduced_by_tool_use_id: h.introduced_by_tool_use_id,
+                                        patch_preview: h.patch_preview,
+                                        lines_added: h.lines_added as i64,
+                                        lines_removed: h.lines_removed as i64,
+                                        user_modified: h.user_modified,
+                                    },
+                                )
+                                .await?;
+                            }
+                        }
+                    }
                 }
             }
             Err(WitmccError::ParseLine {
