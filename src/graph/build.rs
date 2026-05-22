@@ -86,21 +86,6 @@ pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, V
                     "span_id":    e.span_id,
                 }),
             ),
-            EventKind::FileEvent => (
-                "file_event",
-                json!({
-                    "session_id":  session_id,
-                    "file_path":   e.payload.pointer("/file/path"),
-                    "change_type": e.payload.pointer("/file/change_type"),
-                }),
-            ),
-            EventKind::GitCommit => (
-                "git_commit",
-                json!({
-                    "session_id": session_id,
-                    "sha":        e.payload.pointer("/git/sha"),
-                }),
-            ),
             EventKind::DiffHunk => (
                 "diff_hunk",
                 json!({

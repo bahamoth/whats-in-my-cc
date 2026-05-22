@@ -1,7 +1,11 @@
 use std::time::Duration;
 
+/// Slice-10a — `--watch` + `--git-poll-secs` flags were removed when the
+/// notify watcher + git poller modules were deleted. We assert the binary
+/// rejects the flags now so a regression that silently re-adds them is
+/// caught at the CLI surface.
 #[test]
-fn serve_accepts_watch_and_poll_flags() {
+fn serve_rejects_removed_watch_and_poll_flags() {
     let db = tempfile::NamedTempFile::new().unwrap().into_temp_path();
     let watch_dir = tempfile::tempdir().unwrap();
     let port: u16 = portpicker::pick_unused_port().expect("port");
@@ -17,16 +21,23 @@ fn serve_accepts_watch_and_poll_flags() {
             &port.to_string(),
             "--watch",
             watch_dir.path().to_str().unwrap(),
+        ])
+        .timeout(Duration::from_secs(5))
+        .assert()
+        .failure();
+
+    assert_cmd::Command::cargo_bin("witmcc")
+        .unwrap()
+        .args([
+            "--db-path",
+            db.to_str().unwrap(),
+            "serve",
             "--git-poll-secs",
             "1",
-            "--shutdown-after-ms",
-            "300",
-            "--auto-migrate",
-            "--no-watch-transcripts",
         ])
-        .timeout(Duration::from_secs(8))
+        .timeout(Duration::from_secs(5))
         .assert()
-        .success();
+        .failure();
 }
 
 #[tokio::test]

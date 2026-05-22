@@ -295,7 +295,12 @@ fn file_history(
     let mut e = base(meta, raw_event_id, gen);
     e.observed_at = chrono::Utc::now();
     e.actor = Actor::System;
-    e.kind = EventKind::FileHistorySnapshot;
+    // slice-10a — FileHistorySnapshot is no longer a top-level EventKind. It
+    // rides under SessionState + subkind, mirroring the pattern used by other
+    // session-meta records. Payload is unchanged so downstream consumers still
+    // see {isSnapshotUpdate, snapshot}.
+    e.kind = EventKind::SessionState;
+    e.subkind = Some("file_history_snapshot".into());
     e.message_id = Some(f.message_id.clone());
     e.payload = json!({"isSnapshotUpdate": f.is_snapshot_update, "snapshot": f.snapshot});
     e

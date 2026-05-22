@@ -112,7 +112,10 @@ fn doctor_json_mode_emits_parseable_report() {
     assert!(v["envs"].is_array());
     assert!(v["server"]["reachable"].as_bool().unwrap());
     let sources = v["server"]["sources"].as_array().unwrap();
-    assert_eq!(sources.len(), 6, "fixed taxonomy of 6 sources");
+    // Slice-10a — taxonomy shrank from 6 to 5: file-git removed (filesystem
+    // watcher + git poller are gone). File lineage now derives from
+    // transcript structuredPatch, surfaced under the "transcript" source.
+    assert_eq!(sources.len(), 5, "fixed taxonomy of 5 sources");
     // --json always exits 0
     assert_eq!(out.status.code(), Some(0));
 }
