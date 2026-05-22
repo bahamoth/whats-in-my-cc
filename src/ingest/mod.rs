@@ -1,3 +1,4 @@
+pub mod diff_hunk;
 pub mod file_git;
 pub mod hook;
 pub mod mapping;
