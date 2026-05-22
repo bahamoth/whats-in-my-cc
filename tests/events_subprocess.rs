@@ -258,3 +258,135 @@ async fn paginate_backwards_reconstructs_full_session() {
     let _ = child.kill();
     let _ = child.wait();
 }
+
+fn http_post_json(host: &str, path: &str, body: &str) -> String {
+    let addr: std::net::SocketAddr = host.parse().expect("host:port");
+    let mut s = TcpStream::connect_timeout(&addr, Duration::from_secs(1)).expect("connect");
+    s.set_read_timeout(Some(Duration::from_secs(5))).ok();
+    let req = format!(
+        "POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\n\
+         Content-Length: {len}\r\nConnection: close\r\n\r\n{body}",
+        path = path,
+        host = host,
+        len = body.len(),
+        body = body,
+    );
+    s.write_all(req.as_bytes()).expect("write");
+    let mut buf = Vec::new();
+    s.read_to_end(&mut buf).ok();
+    String::from_utf8_lossy(&buf).into_owned()
+}
+
+/// Slice-9 — live activity + paging coexistence. Verifies that after
+/// fetching page-1 (which captures `initial_newest` cursor), a burst of
+/// new events landing into the same session is fully recovered by
+/// `?after=initial_newest` and that the original page-1 cursor still
+/// paginates older history without overlap with the new tail.
+///
+/// This is the "SSE + paging" integration gap I called out — the slice-9
+/// PR description claims the two coexist; this test locks it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn paging_remains_consistent_through_live_activity() {
+    let db = tempfile::NamedTempFile::new().expect("tempfile");
+    seed_db(db.path()).await;
+    let (mut child, host) = spawn_serve(db.path());
+
+    // 1. Page-1 capture
+    let r1 = http_get(
+        &host,
+        &format!("/v1/sessions/{SESS}/events?limit={PAGE_LIMIT}"),
+    );
+    let v1 = json_body(&r1);
+    let initial_first_cursor = {
+        let e = &v1["data"]["events"].as_array().unwrap()[0];
+        format!("{}|{}", e["observed_at"].as_str().unwrap(), e["event_id"].as_str().unwrap())
+    };
+    let initial_newest = v1["data"]["events"]
+        .as_array()
+        .unwrap()
+        .last()
+        .map(|e| format!("{}|{}", e["observed_at"].as_str().unwrap(), e["event_id"].as_str().unwrap()))
+        .expect("initial newest");
+
+    // 2. Burst of live activity — 50 hook POSTs against the same session.
+    //    Hook ingest stamps `captured_at = now()`, which is later than any
+    //    seed row (base 2026-05-21T00:00:00Z + ≤1199s). Hooks land at the
+    //    live tip and only the live tip.
+    const BURST: usize = 50;
+    for i in 0..BURST {
+        let body = format!(
+            r#"{{"session_id":"{SESS}","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"echo {i}"}},"tool_use_id":"tu_burst_{i}"}}"#
+        );
+        let resp = http_post_json(&host, "/hooks/v1/events", &body);
+        assert!(
+            resp.starts_with("HTTP/1.1 200"),
+            "hook POST {i} did not 200: {}",
+            &resp[..80.min(resp.len())]
+        );
+    }
+
+    // 3. ?after=initial_newest must surface exactly the BURST new rows.
+    let r_after = http_get(
+        &host,
+        &format!(
+            "/v1/sessions/{SESS}/events?after={}&limit=500",
+            urlencoding::encode(&initial_newest)
+        ),
+    );
+    let v_after = json_body(&r_after);
+    let after_events = v_after["data"]["events"].as_array().expect("events array");
+    assert_eq!(
+        after_events.len(),
+        BURST,
+        "after-cursor should surface exactly {BURST} new hook rows; got {}",
+        after_events.len()
+    );
+    // All BURST events must be kind=hook_event.
+    for e in after_events {
+        assert_eq!(
+            e["kind"].as_str().unwrap(),
+            "hook_event",
+            "after-window must be hook-only — leak from seed?"
+        );
+    }
+
+    // 4. The original page-1's `?before=` cursor still paginates older
+    //    history (unaffected by the live tail).
+    let r_before = http_get(
+        &host,
+        &format!(
+            "/v1/sessions/{SESS}/events?before={}&limit={PAGE_LIMIT}",
+            urlencoding::encode(&initial_first_cursor)
+        ),
+    );
+    let v_before = json_body(&r_before);
+    let before_events = v_before["data"]["events"].as_array().expect("events array");
+    assert_eq!(
+        before_events.len(),
+        PAGE_LIMIT,
+        "older window unchanged by live activity"
+    );
+    let before_last_id = before_events.last().unwrap()["event_id"].as_str().unwrap();
+    assert!(
+        before_last_id.starts_with("01J"),
+        "older window must contain only ULID seed ids, not hook ids; got {before_last_id}"
+    );
+
+    // 5. A fresh page-1 fetch now ends at the latest hook row.
+    let r_p1_after = http_get(
+        &host,
+        &format!("/v1/sessions/{SESS}/events?limit={PAGE_LIMIT}"),
+    );
+    let v_p1_after = json_body(&r_p1_after);
+    let new_p1 = v_p1_after["data"]["events"].as_array().unwrap();
+    let new_p1_last_kind = new_p1.last().unwrap()["kind"].as_str().unwrap();
+    assert_eq!(
+        new_p1_last_kind, "hook_event",
+        "after burst, page-1's newest row should be a hook_event"
+    );
+    // next_cursor stays null (we're at the live tip).
+    assert!(v_p1_after["data"]["next_cursor"].is_null());
+
+    let _ = child.kill();
+    let _ = child.wait();
+}
