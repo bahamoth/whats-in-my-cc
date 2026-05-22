@@ -12,8 +12,14 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
 
 ## Status
 
-- 현재 단계: **M0 (Spec freeze)** — 코드 없음, `docs/`에 사양서만
-- 다음 단계: M1 ingestion (transcript / OTel / hook / file·git 수집기)
+- 현재 단계: **M3·M4 진행 중** — slice-1~9 완료 (transcript / OTel / hook /
+  file·git ingest · ObservedEvent + telemetry facet · 기본 graph builder ·
+  WebUI replay · SSE live updates · windowed event buffer).
+- 남은 작업: M3 잔여(episode segmentation, causal inference, file lineage),
+  M4 잔여 (Why Panel, Source views, Resource drawer), **M5 Insight engine
+  (0건 finding)**, M6 MCP Streamable HTTP, M7 보안 강화 (Origin/token/
+  redaction manifest/retention).
+- 구현 상세: `docs/implementation-notes.html` 의 slice별 섹션.
 
 ## Document Map
 
