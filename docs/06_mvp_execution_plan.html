@@ -42,11 +42,11 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <a href="#questions">Feedback</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set · 2026-05-19</div><h1>MVP Execution Plan</h1><p>OTel-first 단일 세션 분석 MVP를 구현하기 위한 범위, 마일스톤, acceptance criteria, test matrix를 정의한다.</p><div class="badges"><span class="badge">MVP</span><span class="badge">Acceptance</span><span class="badge">OTel in M1</span></div></header>
 <section id="strategy"><h2><span class="num">01</span>MVP Strategy</h2>
 <p>MVP의 목적은 “한 세션을 정확히 이해하고 설명하는 것”이다. cross-session advanced analytics보다 단일 세션의 high-fidelity replay, OTel-linked graph, evidence-backed finding을 먼저 완성한다.</p>
-<div class="callout good"><strong>MVP 기준:</strong> transcript + OTel + hook + file/git을 모두 초기 schema에 포함한다. 일부 collector가 mock/adapter 수준이어도 data model과 graph contract는 OTel-first로 고정한다.</div>
+<div class="callout good"><strong>MVP 기준:</strong> transcript + OTel + hook를 모두 초기 schema에 포함한다. <strong>Slice-10a (2026-05-22):</strong> 별도의 file/git collector는 제거됐다 — file lineage는 transcript <code>toolUseResult.structuredPatch</code>에서 derived. 일부 collector가 mock/adapter 수준이어도 data model과 graph contract는 OTel-first로 고정한다.</div>
 </section>
 <section id="scope"><h2><span class="num">02</span>MVP Scope</h2>
 <table><thead><tr><th>Area</th><th>Included</th><th>Excluded</th></tr></thead><tbody>
-<tr><td>Sources</td><td>transcript, OTel metrics/logs/traces, hook lifecycle, file/git diff, verification runs</td><td>remote SaaS ingestion, team-wide identity</td></tr>
+<tr><td>Sources</td><td>transcript (incl. Edit/Write <code>toolUseResult.structuredPatch</code> for file lineage), OTel metrics/logs/traces, hook lifecycle, verification runs (M5)</td><td>remote SaaS ingestion, team-wide identity, <strong>git history tracking</strong> (slice-10a), <strong>commit-SHA as verification marker</strong> (slice-10a — git tracking would be a backdoor)</td></tr>
 <tr><td>Graph</td><td>logical node merge, deterministic edges, basic inferred causal edges</td><td>advanced probabilistic causal model</td></tr>
 <tr><td>Insights</td><td>missing verification, tool failure, risky action, context bloat, final-state mismatch</td><td>automated improvement generation</td></tr>
 <tr><td>Serving</td><td>local UI, Pull API, MCP Streamable HTTP read resources/tools</td><td>external write feedback, webhooks</td></tr>

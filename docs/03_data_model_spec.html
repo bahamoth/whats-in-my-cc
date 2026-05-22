@@ -73,7 +73,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "redaction_state": "redacted",
   "integrity": { "payload_hash": "sha256:..." }
 }</code></pre>
-<table><thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead><tbody><tr><td>source_type</td><td>yes</td><td>transcript, otel_metric, otel_log, otel_trace, hook, file_git</td></tr><tr><td>raw_payload_ref</td><td>yes</td><td>payload itself may be redacted or encrypted</td></tr><tr><td>redaction_state</td><td>yes</td><td>not_scanned, redacted, clean, blocked</td></tr></tbody></table>
+<table><thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead><tbody><tr><td>source_type</td><td>yes</td><td>transcript, otel_metric, otel_log, otel_trace, hook. <strong>Slice-10a:</strong> <code>file_git</code> removed; file lineage comes from transcript <code>toolUseResult.structuredPatch</code>.</td></tr><tr><td>raw_payload_ref</td><td>yes</td><td>payload itself may be redacted or encrypted</td></tr><tr><td>redaction_state</td><td>yes</td><td>not_scanned, redacted, clean, blocked</td></tr></tbody></table>
 </section>
 <section id="observed"><h2><span class="num">04</span>ObservedEvent</h2>
 <pre><code>{
@@ -150,16 +150,21 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 }</code></pre>
 </section>
 <section id="lineage"><h2><span class="num">07</span>File Lineage and VerificationRun</h2>
+<div class="callout"><strong>Slice-10a — transcript-only file lineage:</strong> DiffHunk rows are produced from the transcript <code>toolUseResult.structuredPatch</code> of Edit tool_result lines. Write tool_results carry <code>structuredPatch=[]</code> by design and produce zero rows. No filesystem watcher, no git poller, no commit-SHA-as-verification-marker. The <code>structuredPatch</code> shape is locked by a real-fixture invariant test (see <a href="implementation-notes.html#slice10a">implementation-notes slice-10a</a>).</div>
 <div class="grid"><div class="card"><h4>DiffHunk</h4><pre><code>{
-  "diff_hunk_id": "hunk_01J...",
+  "diff_hunk_id": "dh_…sha256…",
   "schema_version": "diff_hunk.v1",
-  "file_path": "src/service.ts",
-  "change_type": "modify",
+  "session_id": "sess_real",
+  "file_path": "/abs/path/src/service.ts",
+  "change_type": "modified",
   "line_range_after": { "start": 42, "end": 57 },
-  "introduced_by_node_id": "node_edit_002",
-  "related_episode_id": "ep_action_001",
-  "verification_refs": [{ "verification_run_id": "verify_001", "status": "passed" }]
-}</code></pre></div><div class="card"><h4>VerificationRun</h4><pre><code>{
+  "introduced_by_event_id": "ev_tool_result_01J…",
+  "introduced_by_tool_use_id": "toolu_…",
+  "patch_preview": " context\n-old\n+new\n",
+  "lines_added": 1,
+  "lines_removed": 1,
+  "user_modified": false
+}</code></pre><p><small>Slice-10a removed <code>introduced_by_commit_sha</code> and the <code>introduced_by_node_id</code> coupling. <code>user_modified</code> mirrors transcript <code>toolUseResult.userModified</code> for M5 <code>risky_action</code> rule consumption.</small></p></div><div class="card"><h4>VerificationRun</h4><pre><code>{
   "verification_run_id": "verify_001",
   "schema_version": "verification_run.v1",
   "command": "npm test",
@@ -213,7 +218,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 }</code></pre>
 </section>
 <section id="indexes"><h2><span class="num">10</span>Indexes and Query Keys</h2>
-<table><thead><tr><th>Index</th><th>Fields</th><th>Used by</th></tr></thead><tbody><tr><td>session_time_idx</td><td>session_id, observed_at</td><td>timeline, replay</td></tr><tr><td>otel_trace_idx</td><td>trace_id, span_id, parent_span_id</td><td>span graph, latency attribution</td></tr><tr><td>tool_idx</td><td>tool_use_id, session_id</td><td>logical merge</td></tr><tr><td>file_lineage_idx</td><td>file_path, diff_hunk_id, verification_run_id</td><td>file lineage</td></tr><tr><td>finding_idx</td><td>category, severity, confidence, session_id</td><td>dashboard, API/MCP search</td></tr><tr><td>resource_idx</td><td>resource_id, resource_type, subject</td><td>Pull API, MCP resources</td></tr></tbody></table>
+<table><thead><tr><th>Index</th><th>Fields</th><th>Used by</th></tr></thead><tbody><tr><td>session_time_idx</td><td>session_id, observed_at</td><td>timeline, replay</td></tr><tr><td>otel_trace_idx</td><td>trace_id, span_id, parent_span_id</td><td>span graph, latency attribution</td></tr><tr><td>tool_idx</td><td>tool_use_id, session_id</td><td>logical merge</td></tr><tr><td>file_lineage_idx</td><td>file_path, diff_hunk_id</td><td>file lineage (slice-10a: <code>verification_run_id</code> removed from index — verification semantics deferred to M5 and decoupled from git)</td></tr>
+<tr><td>diff_hunk_event_idx</td><td>introduced_by_event_id</td><td>slice-10a — trace a hunk back to its producing tool_result event</td></tr>
+<tr><td>diff_hunk_tool_use_idx</td><td>introduced_by_tool_use_id</td><td>slice-10a — group hunks by the originating tool_use</td></tr><tr><td>finding_idx</td><td>category, severity, confidence, session_id</td><td>dashboard, API/MCP search</td></tr><tr><td>resource_idx</td><td>resource_id, resource_type, subject</td><td>Pull API, MCP resources</td></tr></tbody></table>
 </section>
 <section id="migration"><h2><span class="num">11</span>Schema Migration Policy</h2>
 <ul><li>Minor schema changes must preserve existing fields or provide derived compatibility view.</li><li>Parser version changes must be recorded on every ObservedEvent.</li><li>Export bundles must remain interpretable using the schema version embedded in the bundle.</li><li>OTel schema drift must not break raw event preservation; unknown telemetry fields are stored under <code>attributes.extra</code>.</li></ul>
