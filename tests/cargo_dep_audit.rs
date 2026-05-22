@@ -47,12 +47,23 @@ fn cargo_toml_has_no_git2_direct_dep() {
     }
 }
 
+// Slice-10a — `notify` is retained: `src/transcript_tail.rs` (slice-7)
+// still depends on it for live JSONL tailing. The removed `notify` consumer
+// was `src/watcher.rs` (filesystem watcher), which is gone in slice-10a.
+// Test name documents this so future contributors don't try to "clean up"
+// notify here.
 #[test]
-fn cargo_toml_has_no_notify_direct_dep() {
+fn notify_stays_because_transcript_tail_needs_it() {
     let text = manifest_text();
+    let mut present = false;
     for line in text.lines() {
         if declares_key(line, "notify") {
-            panic!("Cargo.toml still declares notify as a direct dep: `{line}`");
+            present = true;
+            break;
         }
     }
+    assert!(
+        present,
+        "notify must remain in Cargo.toml — src/transcript_tail.rs depends on it"
+    );
 }
