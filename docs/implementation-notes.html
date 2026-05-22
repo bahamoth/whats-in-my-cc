@@ -66,6 +66,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice8-overview">Overview (slice-8)</a>
     <a href="#slice8-deviations">Intentional Deviations (slice-8)</a>
     <a href="#slice8-commits">Commit Reference (slice-8)</a>
+    <a href="#slice9-overview">Overview (slice-9)</a>
+    <a href="#slice9-deviations">Intentional Deviations (slice-9)</a>
+    <a href="#slice9-commits">Commit Reference (slice-9)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
 </aside>
@@ -1641,8 +1644,124 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </ul>
   </section>
 
+  <section id="slice9-overview">
+    <h2><span class="num">25</span>Slice-9 Overview</h2>
+    <div class="meta-row">
+      <span class="badge">slice-9</span>
+      <span class="badge">windowed-buffer</span>
+      <span class="badge">DEV-S8-12/13/14 superseded</span>
+    </div>
+    <p>이 절은 <code>docs/superpowers/specs/2026-05-21-witmcc-slice9-windowed-buffer-design.md</code> 와
+      <code>docs/superpowers/plans/2026-05-21-witmcc-slice9-windowed-buffer.md</code> 대비 실제 구현의 차이를 기록한다.</p>
+    <p><strong>전체 상태:</strong> slice-9 완료. 5 commits, cargo 70+ tests + vitest 64 + L3 subprocess 1
+      모두 green. browser smoke 5 시나리오 모두 통과 (사용자 실 53k+ event DB).</p>
+    <p>슬라이스 8의 임시방편 3건이 superseded 됐다:</p>
+    <ul>
+      <li><strong>DEV-S8-12</strong> (graph rebuild race) — <code>graph::build::rebuild_session</code>
+        이 단일 <code>sqlx::transaction</code>으로 감싸졌다. SessionDetailPage의 keep-prev-graph-on-empty
+        client-side workaround는 제거되었다. L2 chaos test (writer 12회 × reader 8×60 = 480 reads)에서
+        zero 0-row observations 확인.</li>
+      <li><strong>DEV-S8-13</strong> (refetch-the-world freeze) — envelope 도착 시 전체 refetch 패턴이
+        envelope-driven append + lightweight graph-only debounce로 교체. 1000ms trailing debounce 제거,
+        setState identity-skip 제거.</li>
+      <li><strong>DEV-S8-14</strong> (oldest-N 5000 cap) — <code>session_detail</code>이 events 필드를
+        더 이상 반환하지 않고, 신규 <code>GET /v1/sessions/:id/events?before=&amp;after=&amp;limit=</code> 가
+        cursor-paged window를 ship한다. <code>list_session_latest</code>의 newest-N 호출처는 모두
+        제거되었다 (SSE backfill은 자체 SQL이라 영향 없음).</li>
+    </ul>
+  </section>
+
+  <section id="slice9-deviations">
+    <h2><span class="num">26</span>Slice-9 Intentional Deviations</h2>
+
+    <article class="dev">
+      <h3>DEV-S9-01 <span class="muted">spec §4.3 — <code>next_cursor</code> "live tip" 판정</span></h3>
+      <p><strong>맥락:</strong> spec은 "the window's last row equals session_summary.last_observed_at"
+        일 때 <code>next_cursor: null</code>이라고 했다. RFC3339 표현에서 동일 시각의 둘 이상의 row가
+        존재할 수 있다 (DEV-S8-10 cross-source ordering).</p>
+      <p><strong>구현:</strong> <code>last_observed_at</code> 문자열 비교만 한다. 같은 second 안에 여러
+        row가 있어도 last row가 last_observed_at과 일치하면 live tip으로 본다. client는
+        <code>next_cursor</code>가 null일 때 SSE 구독으로 갈음하므로 fetch 추가 round-trip이 없을 뿐
+        실제 손실은 없다.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S9-02 <span class="muted">spec §5.2 — envelope이 ObservedEvent로 변환</span></h3>
+      <p><strong>맥락:</strong> spec은 envelope 도착 시 <code>getSessionEvents(after=newest, limit=50)</code>
+        로 incremental fetch 권고. 하지만 SSE envelope이 이미 <code>event_id</code>,
+        <code>observed_at</code>, <code>kind</code>, <code>session_id</code>, <code>source_type</code>을
+        carry한다 — useSessionWindow의 append에 충분.</p>
+      <p><strong>구현:</strong> <code>envelopeToObserved()</code>가 envelope을 부분 ObservedEventDto로
+        변환하여 직접 <code>appendOne</code>. raw_event_id / actor / payload 등은 default("", "unknown",
+        {}) — 어차피 Timeline은 graph 기반 렌더이므로 이 값들이 사용되지 않는다.</p>
+      <p><strong>리스크:</strong> 향후 Timeline이 events 기반 렌더로 옮기면 변환 손실이 visible.
+        그때는 envelope → <code>/v1/events/:id/raw</code> fetch 또는 server-side enriched envelope으로
+        변경.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S9-03 <span class="muted">spec §5.1 — LRU trim 절대값 → 비율</span></h3>
+      <p><strong>맥락:</strong> spec은 maxEvents=5000일 때 trim=500 (10%)로 명시.</p>
+      <p><strong>구현:</strong> <code>LRU_TRIM_RATIO = 0.1</code>로 동적 계산
+        (<code>Math.max(1, Math.floor(maxEvents * 0.1))</code>). vitest에서 maxEvents=5 같은 작은 값을
+        써도 trim이 합리적으로 동작 (1 row drop). 5000 prod path는 spec과 동일하게 500 trim.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S9-04 <span class="muted">spec §5.4 — IntersectionObserver fake for vitest</span></h3>
+      <p><strong>맥락:</strong> jsdom은 IntersectionObserver를 제공하지 않는다. SessionDetailPage가
+        mount 시 IO를 생성하면 첫 effect에서 throw.</p>
+      <p><strong>구현:</strong> <code>webui/src/test/setup.ts</code>에 no-op IntersectionObserver 전역
+        shim을 항상 install. 실제 트리거가 필요한 테스트(IO triggers loadOlder)는 vi.stubGlobal로
+        per-test override. EventSource shim과 동일한 패턴.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S9-05 <span class="muted">L3 subprocess: 10000 → 1200 events</span></h3>
+      <p><strong>맥락:</strong> spec §6 L3는 10000-event 시드를 명시. 실 DB I/O 부담을 줄이려고 1200
+        events × 200-per-page = 6 pages로 진행.</p>
+      <p><strong>구현:</strong> <code>tests/events_subprocess.rs</code>가 1200 events file-backed WAL DB
+        시드 + 6 페이지 backwards paging + union 정합성 검증 + live-tip <code>?after=</code> 빈 응답 검증.
+        L3 의도(real HTTP, real subprocess, full reconstruction)는 그대로 만족. 10000-event 부하 검증은
+        browser smoke에서 53k events 실 DB로 직접 확인되었으므로 별도 fixture 불필요.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S9-06 <span class="muted">spec §6.2 — Timeline 자체 변경 없음</span></h3>
+      <p><strong>맥락:</strong> 사용자 제안(슬라이스 8 round 2)의 video-streaming 패턴은 viewport
+        virtualization + SVG dynamic culling을 함의했다.</p>
+      <p><strong>구현:</strong> slice-9 scope는 server range query + client window/cache까지. Timeline
+        SVG 자체의 virtualization은 slice-10. 사용자의 53k event DB에서도 Timeline은 graph 기반
+        렌더이므로 (graph node 수는 events 수의 일부) 현재 deepest 케이스에서도 brownser freeze 없음
+        (browser smoke 확인). 진짜 viewport-only 렌더링은 graph 자체가 5k+ 노드를 가질 때 필요.</p>
+    </article>
+
+    <article class="dev">
+      <h3>DEV-S9-07 <span class="muted">graph refetch — debounce + interval 분리</span></h3>
+      <p><strong>맥락:</strong> envelope 도착 시 graph는 어차피 stale. spec은 "50 envelopes 또는 10s
+        interval"로 graph refresh를 trigger하라 했다.</p>
+      <p><strong>구현:</strong> 두 메커니즘 분리. (a) envelope arrival → 800ms trailing debounce로
+        <code>getGraph</code>만 호출. (b) 별도 10s <code>setInterval</code>로 <code>getSession</code>
+        (summary) refresh. envelope count 임계값 기반은 사용하지 않음 — debounce가 이미 burst를
+        흡수하고, summary는 idle-friendly cadence가 더 정확.</p>
+    </article>
+  </section>
+
+  <section id="slice9-commits">
+    <h2><span class="num">27</span>Slice-9 Commit Reference</h2>
+    <p>커밋 SHA 목록 (slice-9 branch <code>slice9-windowed-buffer</code>). PR 머지 시 squash 여부에 따라
+      SHA가 달라질 수 있다.</p>
+    <ul>
+      <li><code>87a216b</code> — docs(slice-9): design spec + TDD plan — windowed event buffering</li>
+      <li><code>ddde028</code> — feat(api): GET /v1/sessions/:id/events range query + Cursor (slice-9)</li>
+      <li><code>28eb90f</code> — fix(graph): rebuild_session is atomic — single tx for DELETE+INSERT (DEV-S8-12)</li>
+      <li><code>034e6ee</code> — feat(webui): useSessionWindow + envelope-driven append (slice-9)</li>
+      <li><code>73d4af5</code> — test(slice-9): L3 subprocess E2E — 1200-event paging via raw TCP HTTP</li>
+    </ul>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 · 2026-05-21 · branch: slice8-sse-live</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 · 2026-05-22 · branch: slice9-windowed-buffer</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
