@@ -26,8 +26,10 @@ pub async fn health() -> impl IntoResponse {
 /// Groups `raw_event` by source_type, returns the fixed taxonomy with
 /// `null`/`0` rows for sources that have never ingested anything. The mapping
 /// from DB `source_type` to UI label is normalised here (e.g., DB stores
-/// `"otel"` for traces, label is `"otel-traces"`; `"file_git"` becomes
-/// `"file-git"`; `"claude_transcript"` becomes `"transcript"`).
+/// `"otel"` for traces, label is `"otel-traces"`; `"claude_transcript"`
+/// becomes `"transcript"`). Slice-10a — `file_git` removed: filesystem
+/// watcher + git poller no longer exist; file lineage comes from transcript
+/// `toolUseResult.structuredPatch`.
 pub async fn health_sources(State(pool): State<SqlitePool>) -> impl IntoResponse {
     use sqlx::Row;
     // (db source_type, ui label)
@@ -37,7 +39,6 @@ pub async fn health_sources(State(pool): State<SqlitePool>) -> impl IntoResponse
         ("otel-metrics", "otel-metrics"),
         ("otel-logs", "otel-logs"),
         ("hook", "hook"),
-        ("file_git", "file-git"),
     ];
     let rows = sqlx::query(
         "SELECT source_type,

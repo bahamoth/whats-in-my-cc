@@ -356,10 +356,7 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
     // jq, or targets a non-default endpoint. doctor cannot tell from settings
     // alone whether a hook command will reach witmcc. Whether hook events
     // actually arrived is observable in /v1/health/sources (informational
-    // table), which is the source of truth for "is data flowing". The same
-    // logic applies to file_git: doctor has no way of knowing which repo
-    // the user intends to `serve --watch`, so a "no file-git data" message
-    // is not actionable — it's just a statement of fact about the DB.
+    // table), which is the source of truth for "is data flowing".
     //
     // Managed policy is still surfaced because those flags really do block
     // hook execution regardless of user intent, but only when present.
@@ -382,8 +379,8 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
             "witmcc server unreachable. Start it with: `witmcc serve --auto-migrate`.".into(),
         );
     } else {
-        // Hook + file-git are user-configured and intentionally excluded from
-        // the "no data, do X" recommendation — doctor doesn't know X.
+        // Hook is user-configured and intentionally excluded from the
+        // "no data, do X" recommendation — doctor doesn't know X.
         // Surface only sources whose absence really is actionable.
         const ACTIONABLE: &[&str] = &["transcript", "otel-traces", "otel-metrics", "otel-logs"];
         let no_data: Vec<&str> = report
@@ -407,10 +404,10 @@ fn compute_exit_code(report: &DoctorReport) -> i32 {
     if !report.server.reachable {
         return 1;
     }
-    // Only "actionable" sources affect exit code. hook + file-git are user-
-    // configured externals (forward script + `--watch <path>`) — their
-    // absence is not a failure doctor can diagnose. See the matching block
-    // in build_recommendations() for the same rationale.
+    // Only "actionable" sources affect exit code. hook is a user-configured
+    // external (forward script) — its absence is not a failure doctor can
+    // diagnose. See the matching block in build_recommendations() for the
+    // same rationale.
     const ACTIONABLE: &[&str] = &["transcript", "otel-traces", "otel-metrics", "otel-logs"];
     let any_actionable_source_has_data = report
         .server
@@ -489,10 +486,10 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
             "  {:<14} {:<28} {:>9} {:>8}",
             "source", "last_ingested_at", "rows/24h", "total"
         )?;
-        // hook + file-git are user-configured (forward script / `serve --watch`).
-        // doctor cannot diagnose how those should be wired, so it surfaces
-        // them as informational only — no red ✗ marker that suggests action.
-        const INFO_SOURCES: &[&str] = &["hook", "file-git"];
+        // hook is user-configured (forward script). doctor cannot diagnose
+        // how it should be wired, so it surfaces as informational only — no
+        // red ✗ marker that suggests action.
+        const INFO_SOURCES: &[&str] = &["hook"];
         for s in &sp.sources {
             let info = INFO_SOURCES.contains(&s.label.as_str());
             let marker = if info {

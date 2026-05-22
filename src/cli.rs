@@ -67,13 +67,6 @@ pub enum Command {
         /// Apply pending migrations on startup instead of refusing.
         #[arg(long)]
         auto_migrate: bool,
-        /// Watch a directory for file/git changes (slice-5). If the path
-        /// contains a `.git/` directory, a git poller also starts.
-        #[arg(long)]
-        watch: Option<PathBuf>,
-        /// Polling interval for new git commits (seconds). Minimum 1.
-        #[arg(long, default_value_t = 5)]
-        git_poll_secs: u64,
         /// Test-only: auto-shutdown after N ms (used by smoke + cli tests).
         #[arg(long)]
         shutdown_after_ms: Option<u64>,

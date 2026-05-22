@@ -27,8 +27,6 @@ fn main() -> error::Result<()> {
                 bind,
                 port,
                 auto_migrate,
-                watch,
-                git_poll_secs,
                 shutdown_after_ms,
                 no_watch_transcripts,
                 transcripts_root,
@@ -40,8 +38,6 @@ fn main() -> error::Result<()> {
                     bind,
                     port,
                     auto_migrate,
-                    watch,
-                    git_poll_secs,
                     shutdown_after_ms,
                     no_watch_transcripts,
                     transcripts_root,
@@ -68,8 +64,6 @@ async fn serve_cmd(
     bind: std::net::IpAddr,
     port: u16,
     auto_migrate: bool,
-    watch: Option<std::path::PathBuf>,
-    git_poll_secs: u64,
     shutdown_after_ms: Option<u64>,
     no_watch_transcripts: bool,
     transcripts_root: Option<std::path::PathBuf>,
@@ -108,44 +102,6 @@ async fn serve_cmd(
     let (live_tx, _) =
         tokio::sync::broadcast::channel::<witmcc::live::LiveEvent>(sse_channel_capacity as usize);
     let live_tx = std::sync::Arc::new(live_tx);
-
-    if let Some(root) = watch.as_ref() {
-        if root.exists() {
-            tracing::info!(?root, "file watcher started");
-            let pool_cl = pool.clone();
-            let root_cl = root.clone();
-            let tok = cancel.clone();
-            let live_cl = live_tx.clone();
-            bg_handles.push(tokio::spawn(async move {
-                if let Err(e) =
-                    witmcc::watcher::run_file_watcher(pool_cl, root_cl, live_cl, tok).await
-                {
-                    tracing::error!(error=?e, "file watcher exited with error");
-                }
-            }));
-            let git_dir = root.join(".git");
-            if git_dir.exists() {
-                let secs = git_poll_secs.max(1);
-                tracing::info!(?root, secs, "git poller started");
-                let pool_cl = pool.clone();
-                let root_cl = root.clone();
-                let tok = cancel.clone();
-                let live_cl = live_tx.clone();
-                bg_handles.push(tokio::spawn(async move {
-                    if let Err(e) =
-                        witmcc::git_poller::run_git_poller(pool_cl, root_cl, secs, live_cl, tok)
-                            .await
-                    {
-                        tracing::error!(error=?e, "git poller exited with error");
-                    }
-                }));
-            } else {
-                tracing::info!(?git_dir, "no .git directory; git poller skipped");
-            }
-        } else {
-            tracing::warn!(?root, "--watch path does not exist; collectors disabled");
-        }
-    }
 
     if !no_watch_transcripts {
         let root = transcripts_root
