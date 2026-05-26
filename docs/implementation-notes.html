@@ -1880,8 +1880,57 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </article>
   </section>
 
+  <section id="slice10a-followup">
+    <h2><span class="num">30</span>Slice-10a Follow-up — Files lane wiring + diff-hunks endpoint</h2>
+    <p>slice-10a PR review에서 surface된 3가지 잔재를 같은 브랜치 안에서 정리한 후속 작업. 모두 동일 e2e 라운드(브라우저 스모크 포함)에서 같이 검증됨.</p>
+
+    <h3>Resolved findings</h3>
+    <ul>
+      <li><strong>Files lane 카피.</strong> <code>webui/src/components/Timeline.tsx:17</code>의 "no file/git observations in this session"가 slice-10a 자체가 만든 직접적 모순(이 PR이 git 추적을 삭제). "no file edits in this session"으로 교체. Timeline.test.tsx에서 negative-lock 추가.</li>
+      <li><strong>Files lane 비어 있음 (84 hunks ↛ UI).</strong> ingest는 <code>diff_hunk</code> 테이블에 쓰지만 graph 빌더는 노드를 발행하지 않아 Files lane이 항상 placeholder. <code>build::rebuild_session</code>에 <code>repo_diff_hunk::list_session</code> 패스 추가 → 노드 매터리얼라이즈 + <code>caused_diff_hunk</code> 엣지 (<code>tool_call → diff_hunk</code> via <code>introduced_by_tool_use_id</code>). aac68973 실세션에서 84 노드/엣지 모두 발행.</li>
+      <li><strong>HTTP exposure 없음.</strong> <code>GET /v1/sessions/{id}/diff-hunks</code> 신설. 응답 shape는 SQLite row 1:1, <code>introduced_by_event_id</code> 필수, <code>introduced_by_commit_sha</code>는 부재 (slice-10a 폐기).</li>
+    </ul>
+
+    <h3>Additional cleanup (zero-cost while in the file)</h3>
+    <ul>
+      <li><code>webui/src/components/SourcePanel.tsx</code>: <code>FileEventSection</code>/<code>GitCommitSection</code> 및 <code>record_type === 'file_event' | 'git_commit'</code> 분기 제거. <code>DiffHunkRecord</code> 타입을 slice-10a schema(<code>introduced_by_event_id</code>/<code>tool_use_id</code>/<code>user_modified</code>)로 재정렬, <code>introduced_by_commit_sha</code> 필드/표시 row 삭제.</li>
+      <li><code>webui/src/api/laneMapping.ts</code>: <code>file_event</code>/<code>git_commit</code> 케이스 제거 (이제 <code>null</code> 반환). negative-lock 테스트 추가.</li>
+      <li><code>webui/src/routes/SessionListPage.tsx</code>: <code>FILE_GIT_KINDS</code> set + <code>file_git</code> source mix 컬럼 삭제. <code>file</code> 태그 칩 제거.</li>
+      <li><code>SourcePanel</code> 가 optional <code>node</code> prop 수용. <code>node.node_kind === 'diff_hunk'</code>면 fetch 우회하고 <code>node.payload.hunk</code>로 즉시 렌더. 데이터가 이미 graph 응답에 실려오므로 추가 round-trip 불필요.</li>
+    </ul>
+
+    <h3>DEV-S10A-11 <span class="muted">graph builder가 diff_hunk 사이드테이블을 직접 읽음</span></h3>
+    <p><strong>왜:</strong> diff_hunk를 ObservedEvent로 다시 흘려보내려면 (a) ingest 경로에서 synthetic ObservedEvent 발행, (b) <code>raw_event</code>에 같은 데이터 중복 적재, (c) <code>observed_event.kind='diff_hunk'</code> 카운트가 다른 source taxonomy를 오염 — 세 가지 모두 비용이 큼.</p>
+    <p><strong>편차:</strong> <code>compute()</code> 시그니처를 <code>(session_id, &amp;[ObservedEvent], &amp;[DiffHunkRow])</code>로 확장하고 hunks → diff_hunk 노드 변환을 별도 단계로 처리. raw_event 적재 경로는 변하지 않고, diff_hunk는 여전히 사이드테이블에서만 산다 (single source of truth 유지).</p>
+    <p><strong>트레이드오프:</strong> <code>compute()</code>가 두 종류 input을 받는다는 비대칭이 생김 — 다만 graph 노드는 이미 여러 source(event + telemetry)에서 구성되므로 자연스러운 확장으로 봄. M3 후속에서 OTel span ↔ tool_call 같은 cross-source 링크가 추가되면 같은 패턴을 재사용 가능.</p>
+
+    <h3>DEV-S10A-12 <span class="muted">diff_hunk click — SourcePanel fetch 우회</span></h3>
+    <p><strong>왜:</strong> graph node의 <code>source_event_ids[0]</code>는 introducing <code>tool_result</code>의 event_id를 가리킴. 이 경로 그대로 두면 <code>/v1/events/{id}/raw</code>가 <code>record_type='tool_result'</code>를 반환하고, SourcePanel의 <code>DiffHunkSection</code> 분기는 영원히 비활성. 두 가지 옵션:
+      (a) <code>/v1/diff-hunks/{id}</code> 신설 + record_type 변환,
+      (b) graph 응답에 이미 실린 <code>node.payload.hunk</code>를 SourcePanel이 직접 렌더.
+    </p>
+    <p><strong>편차:</strong> (b)를 택함. <code>SourcePanel</code>이 optional <code>node</code> prop을 수용하고 diff_hunk면 fetch를 우회. round-trip 1개 절약하고 endpoint 표면을 작게 유지.</p>
+    <p><strong>트레이드오프:</strong> SourcePanel header에 보이는 <code>source.file_path:line_no</code> (transcript jsonl 경로)는 diff_hunk 경로에서 사라짐. 대신 DiffHunkSection이 <code>file_path L&lt;range&gt;</code> + <code>introduced_by_event_id</code> + <code>introduced_by_tool_use_id</code>를 직접 표시 — 정보량은 동등 이상.</p>
+
+    <h3>Test additions (red-first)</h3>
+    <ul>
+      <li><code>tests/graph_diff_hunk_node.rs</code> (2 tests) — <code>rebuild_session</code>이 diff_hunk graph_node와 caused_diff_hunk edge를 발행하는지 단언.</li>
+      <li><code>tests/api_diff_hunks.rs</code> (2 tests) — <code>/v1/sessions/{id}/diff-hunks</code> 200 + row shape + unknown session도 empty array 반환.</li>
+      <li><code>webui/src/api/__tests__/laneMapping.test.ts</code> — <code>file_event</code>/<code>git_commit</code>이 null 반환하는 negative lock.</li>
+      <li><code>webui/src/components/__tests__/Timeline.test.tsx</code> — 새 placeholder copy + 비어있을 때 "no file edits" 단언.</li>
+      <li><code>webui/src/components/__tests__/SourcePanel.test.tsx</code> — diff_hunk node prop 경로가 fetch 없이 inline 렌더되는지 단언 (<code>expect(fetch).not.toHaveBeenCalled()</code>).</li>
+    </ul>
+
+    <h3>Verification</h3>
+    <ul>
+      <li>cargo: <strong>189 / 189 green</strong> (was 185 → +4).</li>
+      <li>vitest: <strong>68 / 68 green</strong> (was 67 → +1).</li>
+      <li>Browser smoke: aac68973 real session, 1478 graph nodes (이전 1394 + 84 diff_hunk), 3085 edges (이전 3001 + 84 caused_diff_hunk). Files lane 더 이상 placeholder 미표시. diff_hunk 클릭 → SourcePanel가 file_path/line range/tool_use_id/event_id/patch_preview 모두 표시. 콘솔 클린.</li>
+    </ul>
+  </section>
+
   <section id="slice10a-commits">
-    <h2><span class="num">30</span>Slice-10a Commit Reference</h2>
+    <h2><span class="num">31</span>Slice-10a Commit Reference</h2>
     <p>커밋 SHA 목록 (slice-10a branch <code>slice10a-filesystem-removal</code>). PR 머지 시 squash 여부에 따라 SHA가 달라질 수 있다.</p>
     <ul>
       <li><code>57614a8</code> — docs(slice-10a): design spec + TDD plan — filesystem-source removal</li>
@@ -1891,8 +1940,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       <li><code>a318b4b</code> — feat(ingest): wire transcript → diff_hunk write path</li>
       <li><code>65f442f</code> — chore(deps): remove git2; keep notify (transcript_tail still uses it)</li>
       <li><code>7c0a6f5</code> — docs(spec): file lineage from transcript structuredPatch (slice-10a)</li>
+      <li><code>c5c7c13</code> — docs(slice-10a): implementation-notes + CLAUDE.md status sync</li>
     </ul>
-    <p>추가로 implementation-notes + CLAUDE.md status 커밋이 이 PR 안에 들어가지만 SHA는 commit 후 결정.</p>
+    <p>Follow-up (Files lane wiring + diff-hunks endpoint) 커밋 SHA는 push 후 결정.</p>
   </section>
 
   <footer class="footer">
