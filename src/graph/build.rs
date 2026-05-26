@@ -2,7 +2,8 @@ use serde_json::{json, Value};
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 
-use crate::db::{repo_graph, repo_observed};
+use crate::db::repo_diff_hunk::DiffHunkRow;
+use crate::db::{repo_diff_hunk, repo_graph, repo_observed};
 use crate::error::Result;
 use crate::ids::{derive_edge_id, derive_node_id};
 use crate::model::graph::{GraphEdge, GraphNode};
@@ -16,7 +17,8 @@ use crate::model::observed::{EventKind, ObservedEvent};
 /// never the empty mid-rebuild state. Fixes DEV-S8-12.
 pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usize, usize)> {
     let evs = repo_observed::list_session(pool, session_id, 100_000).await?;
-    let (nodes, edges) = compute(session_id, &evs);
+    let hunks = repo_diff_hunk::list_session(pool, session_id).await?;
+    let (nodes, edges) = compute(session_id, &evs, &hunks);
     let n = nodes.len();
     let e = edges.len();
     let mut tx = pool.begin().await?;
@@ -26,7 +28,11 @@ pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usi
     Ok((n, e))
 }
 
-pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, Vec<GraphEdge>) {
+pub fn compute(
+    session_id: &str,
+    events: &[ObservedEvent],
+    hunks: &[DiffHunkRow],
+) -> (Vec<GraphNode>, Vec<GraphEdge>) {
     let mut nodes: Vec<GraphNode> = Vec::new();
     // node_id -> index in `nodes` for deduplication
     let mut node_index_by_id: HashMap<String, usize> = HashMap::new();
@@ -176,6 +182,76 @@ pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, V
             source_event_ids: vec![e.event_id.clone()],
             source_uris: vec![],
             payload: e.payload.clone(),
+        });
+    }
+
+    // Snapshot tool_call node_ids by tool_use_id BEFORE the merge step removes
+    // tool_result nodes. After removal, Vec indices in `tool_call_node` shift,
+    // so we cache the stable node_id string keys here for downstream edge
+    // wiring (diff_hunk linkage below).
+    let tool_call_nid_by_tid: HashMap<String, String> = tool_call_node
+        .iter()
+        .filter_map(|(tid, idx)| nodes.get(*idx).map(|n| (tid.clone(), n.node_id.clone())))
+        .collect();
+
+    // 1b. Slice-10a follow-up — materialise `diff_hunk` graph nodes from the
+    //     side-table the ingest path populates. The Files lane consumes these
+    //     so reviewers can see transcript-derived edits without dropping into
+    //     SQLite. node_id is keyed by (session_id, diff_hunk_id); started_at
+    //     mirrors the introducing event's observed_at when available.
+    let event_observed_at: HashMap<&str, chrono::DateTime<chrono::Utc>> = events
+        .iter()
+        .map(|e| (e.event_id.as_str(), e.observed_at))
+        .collect();
+    for h in hunks {
+        let merge_keys = json!({
+            "session_id": session_id,
+            "diff_hunk_id": h.diff_hunk_id,
+        });
+        let keys_for_hash = canonical_pairs(&merge_keys);
+        let node_id = derive_node_id(
+            "diff_hunk",
+            &keys_for_hash
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect::<Vec<_>>(),
+        );
+        if node_index_by_id.contains_key(&node_id) {
+            continue;
+        }
+        let started_at = event_observed_at
+            .get(h.introduced_by_event_id.as_str())
+            .copied()
+            .unwrap_or_else(chrono::Utc::now);
+        let payload = json!({
+            "hunk": {
+                "diff_hunk_id": h.diff_hunk_id,
+                "file_path": h.file_path,
+                "change_type": h.change_type,
+                "line_range_after": {
+                    "start": h.line_range_after_start,
+                    "end":   h.line_range_after_end,
+                },
+                "lines_added":               h.lines_added,
+                "lines_removed":             h.lines_removed,
+                "patch_preview":             h.patch_preview,
+                "introduced_by_event_id":    h.introduced_by_event_id,
+                "introduced_by_tool_use_id": h.introduced_by_tool_use_id,
+                "user_modified":             h.user_modified,
+            }
+        });
+        node_index_by_id.insert(node_id.clone(), nodes.len());
+        nodes.push(GraphNode {
+            node_id,
+            schema_version: SCHEMA_VERSION.into(),
+            session_id: session_id.into(),
+            node_kind: "diff_hunk".into(),
+            started_at,
+            ended_at: None,
+            merge_keys,
+            source_event_ids: vec![h.introduced_by_event_id.clone()],
+            source_uris: vec![],
+            payload,
         });
     }
 
@@ -335,6 +411,43 @@ pub fn compute(session_id: &str, events: &[ObservedEvent]) -> (Vec<GraphNode>, V
                 json!({"matched_via": "tool_use_id", "merged": true, "tool_use_id": tid}),
             ));
         }
+    }
+
+    // 3c-pre. caused_diff_hunk — tool_call → diff_hunk via
+    //         `introduced_by_tool_use_id`. Emitted before turn_order so the
+    //         filter that excludes diff_hunk from turn_order still sees this
+    //         edge in the final set.
+    for h in hunks {
+        let Some(tid) = h.introduced_by_tool_use_id.as_deref() else {
+            continue;
+        };
+        let Some(call_nid) = tool_call_nid_by_tid.get(tid) else {
+            continue;
+        };
+        let dh_keys = json!({
+            "session_id":   session_id,
+            "diff_hunk_id": h.diff_hunk_id,
+        });
+        let dh_pairs = canonical_pairs(&dh_keys);
+        let dh_nid = derive_node_id(
+            "diff_hunk",
+            &dh_pairs
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect::<Vec<_>>(),
+        );
+        if !valid_nodes.contains(call_nid.as_str())
+            || !valid_nodes.contains(dh_nid.as_str())
+        {
+            continue;
+        }
+        edges.push(make_edge(
+            session_id,
+            call_nid,
+            &dh_nid,
+            "caused_diff_hunk",
+            json!({"tool_use_id": tid}),
+        ));
     }
 
     // 3c. turn_order — adjacent pairs of nodes ordered by (started_at, node_id).

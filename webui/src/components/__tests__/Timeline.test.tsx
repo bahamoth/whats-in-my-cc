@@ -65,54 +65,50 @@ describe('Timeline', () => {
     expect(container.querySelectorAll('[data-testid="edge-path"]').length).toBe(1);
   });
 
-  it('renders file_event / git_commit / diff_hunk markers on the Files lane (slice-5)', () => {
+  it('renders diff_hunk markers on the Files lane (slice-10a — transcript-only)', () => {
     const graph: GraphPayload = {
       nodes: [
         {
-          node_id: 'nd_f_1',
-          schema_version: '0.4.0',
-          session_id: 'filesystem',
-          node_kind: 'file_event',
-          started_at: '2026-05-20T00:00:00Z',
-          ended_at: null,
-          merge_keys: { file_path: '/tmp/a.rs', change_type: 'modified' },
-          source_event_ids: ['ev_f_1'],
-          source_uris: [],
-          payload: {},
-        },
-        {
-          node_id: 'nd_g_1',
-          schema_version: '0.4.0',
-          session_id: 'filesystem',
-          node_kind: 'git_commit',
-          started_at: '2026-05-20T00:00:01Z',
-          ended_at: null,
-          merge_keys: { sha: 'abc1234' },
-          source_event_ids: ['ev_g_1'],
-          source_uris: [],
-          payload: {},
-        },
-        {
-          node_id: 'nd_h_2',
-          schema_version: '0.4.0',
-          session_id: 'filesystem',
+          node_id: 'nd_h_1',
+          schema_version: '0.5.0',
+          session_id: 's_real',
           node_kind: 'diff_hunk',
           started_at: '2026-05-20T00:00:02Z',
           ended_at: null,
-          merge_keys: { diff_hunk_id: 'hunk_1' },
-          source_event_ids: ['ev_h_2'],
+          merge_keys: { session_id: 's_real', diff_hunk_id: 'dh_abc' },
+          source_event_ids: ['ev_intro_1'],
           source_uris: [],
-          payload: {},
+          payload: {
+            hunk: {
+              diff_hunk_id: 'dh_abc',
+              file_path: '/tmp/a.rs',
+              change_type: 'modified',
+              lines_added: 2,
+              lines_removed: 1,
+              introduced_by_event_id: 'ev_intro_1',
+              introduced_by_tool_use_id: 'toolu_1',
+              user_modified: false,
+            },
+          },
         },
       ],
       edges: [],
     };
     render(<Timeline graph={graph} selectedNodeId={null} onSelect={() => {}} />);
-    expect(document.querySelector('[data-node-id="nd_f_1"]')).not.toBeNull();
-    expect(document.querySelector('[data-node-id="nd_g_1"]')).not.toBeNull();
-    expect(document.querySelector('[data-node-id="nd_h_2"]')).not.toBeNull();
+    expect(document.querySelector('[data-node-id="nd_h_1"]')).not.toBeNull();
     expect(screen.getByText('Files')).toBeInTheDocument();
+    // Placeholder copy must reflect the slice-10a reality — no "git" any more.
+    expect(screen.queryByText(/no file edits/i)).toBeNull();
     expect(screen.queryByText(/no file\/git observations/i)).toBeNull();
+  });
+
+  it('Files lane placeholder reads "no file edits" when empty (slice-10a copy fix)', () => {
+    const graph: GraphPayload = { nodes: [], edges: [] };
+    render(<Timeline graph={graph} selectedNodeId={null} onSelect={() => {}} />);
+    expect(screen.getByText(/no file edits in this session/i)).toBeInTheDocument();
+    // Negative lock: the stale "file/git" wording from pre-slice-10a must
+    // never come back — that pipeline was removed.
+    expect(screen.queryByText(/file\/git/i)).toBeNull();
   });
 
   it('renders a hook_event node marker on the Hook lane (slice-4)', () => {

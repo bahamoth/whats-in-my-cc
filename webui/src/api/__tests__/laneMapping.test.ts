@@ -14,10 +14,15 @@ describe('laneForNodeKind', () => {
     expect(laneForNodeKind('hook_event')).toBe('Hook');
   });
 
-  it('maps file_event / git_commit / diff_hunk to Files (slice-5)', () => {
-    expect(laneForNodeKind('file_event')).toBe('Files');
-    expect(laneForNodeKind('git_commit')).toBe('Files');
+  it('maps diff_hunk to Files (slice-10a — transcript-only file lineage)', () => {
     expect(laneForNodeKind('diff_hunk')).toBe('Files');
+  });
+
+  it('rejects file_event / git_commit since slice-10a removed those pipelines', () => {
+    // Negative lock: future contributors shouldn't accidentally re-route the
+    // deleted filesystem-source kinds — the Files lane is diff_hunk-only now.
+    expect(laneForNodeKind('file_event')).toBeNull();
+    expect(laneForNodeKind('git_commit')).toBeNull();
   });
 
   it('maps metric_sample / log_record to OTel (slice-6)', () => {
