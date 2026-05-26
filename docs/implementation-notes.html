@@ -1945,8 +1945,64 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <p>Follow-up (Files lane wiring + diff-hunks endpoint) 커밋 SHA는 push 후 결정.</p>
   </section>
 
+  <section id="slice11">
+    <h2><span class="num">32</span>Overview (slice-11) — M5 첫 finding rule: tool_failure</h2>
+    <p>M5 Insight Engine 진입 슬라이스. 첫 rule은 <code>tool_failure</code> — 가장 deterministic (transcript <code>tool_result.is_error</code> 직접 관찰). 다른 카테고리 (missing_verification, context_bloat, final_state_mismatch, risky_action)는 후속 슬라이스에서 다룬다.</p>
+
+    <h3>Signal (real-data anchored)</h3>
+    <p>Claude Code transcript의 user-role <code>tool_result</code> content item이 <code>is_error: true</code>를 가지면 트리거. 실제 fixture로 확인:</p>
+    <ul>
+      <li>실세션 <code>~/.claude/projects/-Users-bahamoth-projects-optiflow-help-center-mcp/0daafa6e-...jsonl</code> 에서 <code>is_error:true</code> 케이스 발견 — content는 "The user doesn't want to proceed with this tool use…" (user-rejection 형태).</li>
+      <li>표본 1건이므로 일반화 금지: Bash 실패, file-not-found, MCP error, user rejection 모두 같은 <code>is_error:true</code> 플래그를 쓰는지는 아직 확인 안 됨. 이번 슬라이스는 신호만 사용하고 sub-classification은 다음 슬라이스로 미룬다.</li>
+    </ul>
+
+    <h3>Schema decisions</h3>
+    <ul>
+      <li>새 table <code>finding</code>: <code>finding_id</code>, <code>schema_version</code>, <code>session_id</code>, <code>category</code>, <code>severity</code>, <code>claim</code>, <code>confidence</code> (REAL 0-1), <code>limitations_json</code>, <code>evidence_refs_json</code>, <code>generated_at</code>, <code>rule_version</code>.</li>
+      <li><code>finding_id</code> = <code>derive_node_id("finding", canonical_pairs({session_id, category, evidence_event_id}))</code> — 같은 evidence가 두 번 발견되면 같은 id가 나와 idempotent.</li>
+      <li><code>evidence_refs_json</code> shape는 spec §08을 그대로 따른다: <code>[{ "node_id": "...", "role": "supporting" }]</code>. 슬라이스-11은 node_id 대신 <code>event_id</code>를 supporting evidence로 등록한다 — graph 빌드 후 별도 매핑 단계는 두지 않는다.</li>
+      <li><code>schema_version = "finding.v1"</code>, <code>rule_version = "tool_failure.v1"</code>.</li>
+      <li><code>severity = "medium"</code>, <code>confidence = 0.95</code> — deterministic 신호이지만 "user rejected"와 "tool errored" 구분 안 한 상태이므로 max 1.0은 보류.</li>
+    </ul>
+
+    <h3>API surface</h3>
+    <ul>
+      <li><code>GET /v1/sessions/{session_id}/findings</code> — read-only list. 알 수 없는 세션은 200/empty array (slice-10a diff-hunks endpoint와 동일 규약).</li>
+      <li>Response envelope: <code>{ "meta": {...}, "data": { "schema_version": "0.5.0", "findings": [DTO...] } }</code>.</li>
+      <li>이번 슬라이스에서는 <code>/v1/findings/{id}</code> detail / search filter / MCP resource는 만들지 않는다 — 후속 슬라이스.</li>
+    </ul>
+
+    <h3>Pipeline wiring</h3>
+    <p>graph rebuild 직후 같은 트랜잭션에서 rule을 돌린다. <code>rebuild_session</code>이 끝난 뒤 <code>insight::run_session(pool, session_id)</code>를 호출해 모든 rule을 순회하고 결과를 <code>finding</code> table에 upsert (PK 기반 idempotent). 새 session에 대해서는 처음 한 번, live SSE replay 후에는 graph refetch tick에 맞춰 자동 재계산.</p>
+
+    <h3>WebUI</h3>
+    <ul>
+      <li>SessionDetailPage 하단(Source panel 아래)에 <code>FindingsPanel</code> 추가. category badge + severity chip + claim + confidence + "show evidence" 버튼.</li>
+      <li>"show evidence" 클릭 → 첫 evidence_event_id를 selectedNodeId로 set (event_id → tool_result node 매핑은 graph build 결과의 source_event_ids를 역참조).</li>
+      <li>이번 슬라이스는 inline list만. 별도 lane이나 filter chip은 후속 슬라이스.</li>
+    </ul>
+
+    <h3>TDD 순서</h3>
+    <ol>
+      <li>Red — <code>tests/insight_tool_failure.rs</code>: synthetic ObservedEvent (kind=tool_result, payload.tool_result.is_error=true) → <code>run_session</code> 호출 → finding table에 1행, category=tool_failure, evidence_refs에 event_id 포함.</li>
+      <li>Red — <code>tests/api_findings.rs</code>: GET /v1/sessions/{id}/findings, 알 수 없는 세션도 200/empty.</li>
+      <li>Red — vitest <code>FindingsPanel.test.tsx</code>: 단일 finding row 렌더링, "show evidence" 클릭 시 onSelect callback에 evidence_event_id가 들어가야.</li>
+      <li>Green — migration + repo + rule + endpoint + UI.</li>
+      <li>Browser smoke — 실세션에 tool_failure가 있는지 확인 후 navigate, FindingsPanel 표시 + 클릭 시 source panel 동기화 검증.</li>
+    </ol>
+
+    <h3>Non-goals for slice-11</h3>
+    <ul>
+      <li>다른 4개 finding category (missing_verification 등)</li>
+      <li>MCP resources / tools</li>
+      <li>finding edit/dismiss API (no annotation model)</li>
+      <li>rule plugin system — slice-11은 hard-coded rule registry</li>
+      <li>user-rejection vs tool-error subclassification</li>
+    </ul>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a · 2026-05-22 · branch: slice10a-filesystem-removal</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 · 2026-05-26 · branch: slice11-tool-failure-finding</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
