@@ -15,11 +15,11 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
 - 현재 단계: **M3·M4 진행 중** — slice-1~10a 완료 (transcript / OTel / hook /
   ObservedEvent + telemetry facet · 기본 graph builder · WebUI replay ·
   SSE live updates · windowed event buffer · **filesystem-source removal +
-  transcript-only file lineage (slice-10a)**).
-- 남은 작업: M3 잔여(episode segmentation, causal inference, file lineage
-  graph linkage), M4 잔여 (Why Panel, Source views, Resource drawer),
-  **M5 Insight engine (0건 finding)**, M6 MCP Streamable HTTP, M7 보안
-  강화 (Origin/token/redaction manifest/retention).
+  transcript-only file lineage + Files lane graph linkage (slice-10a)**).
+- 남은 작업: M3 잔여(episode segmentation, causal inference), M4 잔여 (Why
+  Panel, Source views, Resource drawer), **M5 Insight engine (0건 finding)**,
+  M6 MCP Streamable HTTP, M7 보안 강화 (Origin/token/redaction
+  manifest/retention).
 - 구현 상세: `docs/implementation-notes.html` 의 slice별 섹션.
 - **운영 주의 (slice-10a):** 기존 dev DB (`.witmcc.sqlite*`)는 폐기 후
   `witmcc init-db`로 재생성 필요. sqlx migration hash 변경됨.
