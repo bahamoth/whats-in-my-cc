@@ -3,9 +3,10 @@ use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 
 use crate::db::repo_diff_hunk::DiffHunkRow;
-use crate::db::{repo_diff_hunk, repo_graph, repo_observed};
+use crate::db::{repo_diff_hunk, repo_finding, repo_graph, repo_observed};
 use crate::error::Result;
 use crate::ids::{derive_edge_id, derive_node_id};
+use crate::insight;
 use crate::model::graph::{GraphEdge, GraphNode};
 use crate::model::meta::SCHEMA_VERSION;
 use crate::model::observed::{EventKind, ObservedEvent};
@@ -15,15 +16,25 @@ use crate::model::observed::{EventKind, ObservedEvent};
 /// transaction holds DELETE + INSERT. Concurrent SELECTs against
 /// `graph_node` either see the pre-rebuild rows or the post-rebuild rows,
 /// never the empty mid-rebuild state. Fixes DEV-S8-12.
+///
+/// Slice-11 — insight engine runs in the same transaction so a session's
+/// graph and its findings stay in lock-step. Previous findings for the
+/// session are deleted before inserting fresh ones; rules are pure over the
+/// freshly-computed in-memory nodes (no extra DB round-trip).
 pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usize, usize)> {
     let evs = repo_observed::list_session(pool, session_id, 100_000).await?;
     let hunks = repo_diff_hunk::list_session(pool, session_id).await?;
     let (nodes, edges) = compute(session_id, &evs, &hunks);
+    let findings = insight::run_session_pure(session_id, &evs, &nodes);
     let n = nodes.len();
     let e = edges.len();
     let mut tx = pool.begin().await?;
     repo_graph::delete_session_in_tx(&mut tx, session_id).await?;
     repo_graph::insert_nodes_edges_in_tx(&mut tx, &nodes, &edges).await?;
+    repo_finding::delete_session_in_tx(&mut tx, session_id).await?;
+    for f in &findings {
+        repo_finding::insert_in_tx(&mut tx, f).await?;
+    }
     tx.commit().await?;
     Ok((n, e))
 }

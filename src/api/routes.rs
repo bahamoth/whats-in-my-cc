@@ -9,7 +9,7 @@ use serde_json::json;
 use sqlx::SqlitePool;
 
 use crate::api::dto::*;
-use crate::db::{repo_diff_hunk, repo_graph, repo_observed, repo_raw};
+use crate::db::{repo_diff_hunk, repo_finding, repo_graph, repo_observed, repo_raw};
 use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
 
 #[derive(Deserialize)]
@@ -266,6 +266,33 @@ pub async fn session_diff_hunks(
     Ok(Json(Envelope {
         meta: ResponseMeta::now(),
         data: DiffHunksResponse { hunks },
+    }))
+}
+
+pub async fn session_findings(
+    State(pool): State<SqlitePool>,
+    Path(id): Path<String>,
+) -> Result<Json<Envelope<FindingsResponse>>, (StatusCode, Json<serde_json::Value>)> {
+    let rows = repo_finding::list_session(&pool, &id).await.expect("db");
+    let findings = rows
+        .into_iter()
+        .map(|r| FindingDto {
+            finding_id: r.finding_id,
+            schema_version: r.schema_version,
+            session_id: r.session_id,
+            category: r.category,
+            severity: r.severity,
+            claim: r.claim,
+            confidence: r.confidence,
+            limitations: r.limitations,
+            evidence_refs: r.evidence_refs,
+            generated_at: r.generated_at,
+            rule_version: r.rule_version,
+        })
+        .collect();
+    Ok(Json(Envelope {
+        meta: ResponseMeta::now(),
+        data: FindingsResponse { findings },
     }))
 }
 

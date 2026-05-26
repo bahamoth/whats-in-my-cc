@@ -6,7 +6,7 @@
 //! callers don't depend on a fixed struct shape — different rules may attach
 //! additional metadata (e.g. `counter_evidence_refs`) without a migration.
 
-use sqlx::{Row, SqlitePool};
+use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 use crate::error::Result;
 
@@ -84,6 +84,47 @@ pub async fn delete_session(pool: &SqlitePool, session_id: &str) -> Result<()> {
         .bind(session_id)
         .execute(pool)
         .await?;
+    Ok(())
+}
+
+/// Slice-11 — tx-aware companions so `rebuild_session` keeps the graph and
+/// findings consistent under a single commit boundary (mirrors
+/// `repo_graph::*_in_tx`).
+pub async fn delete_session_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    session_id: &str,
+) -> Result<()> {
+    sqlx::query("DELETE FROM finding WHERE session_id = ?")
+        .bind(session_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+pub async fn insert_in_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    row: &NewFinding,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT OR IGNORE INTO finding(
+            finding_id, schema_version, session_id, category, severity,
+            claim, confidence, limitations_json, evidence_refs_json,
+            generated_at, rule_version)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+    )
+    .bind(&row.finding_id)
+    .bind(&row.schema_version)
+    .bind(&row.session_id)
+    .bind(&row.category)
+    .bind(&row.severity)
+    .bind(&row.claim)
+    .bind(row.confidence)
+    .bind(row.limitations.to_string())
+    .bind(row.evidence_refs.to_string())
+    .bind(&row.generated_at)
+    .bind(&row.rule_version)
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 

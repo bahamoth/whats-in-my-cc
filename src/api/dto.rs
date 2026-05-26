@@ -128,6 +128,30 @@ pub struct DiffHunksResponse {
     pub hunks: Vec<DiffHunkDto>,
 }
 
+/// Slice-11 — JSON shape returned by `GET /v1/sessions/{id}/findings`.
+/// Mirrors the SQLite `finding` row 1:1. `evidence_refs` is a raw JSON value
+/// because different rules attach different shapes (slice-11's tool_failure
+/// is `[{node_id, role}]`; later rules may add `counter_evidence_refs`).
+#[derive(Serialize)]
+pub struct FindingDto {
+    pub finding_id: String,
+    pub schema_version: String,
+    pub session_id: String,
+    pub category: String,
+    pub severity: String,
+    pub claim: String,
+    pub confidence: f64,
+    pub limitations: Value,
+    pub evidence_refs: Value,
+    pub generated_at: String,
+    pub rule_version: String,
+}
+
+#[derive(Serialize)]
+pub struct FindingsResponse {
+    pub findings: Vec<FindingDto>,
+}
+
 #[derive(Serialize)]
 pub struct RawSource {
     pub kind: String,

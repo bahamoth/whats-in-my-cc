@@ -71,6 +71,10 @@ pub fn router(state: AppState) -> Router {
             "/v1/sessions/:id/diff-hunks",
             get(routes::session_diff_hunks),
         )
+        .route(
+            "/v1/sessions/:id/findings",
+            get(routes::session_findings),
+        )
         .route("/v1/events/:event_id/raw", get(routes::event_raw))
         .route("/otel/v1/traces", post(otel::ingest_traces))
         .route("/otel/v1/metrics", post(otel::ingest_metrics))
