@@ -67,6 +67,10 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/sessions/:id", get(routes::session_detail))
         .route("/v1/sessions/:id/events", get(routes::session_events))
         .route("/v1/sessions/:id/graph", get(routes::session_graph))
+        .route(
+            "/v1/sessions/:id/diff-hunks",
+            get(routes::session_diff_hunks),
+        )
         .route("/v1/events/:event_id/raw", get(routes::event_raw))
         .route("/otel/v1/traces", post(otel::ingest_traces))
         .route("/otel/v1/metrics", post(otel::ingest_metrics))

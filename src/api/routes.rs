@@ -9,7 +9,7 @@ use serde_json::json;
 use sqlx::SqlitePool;
 
 use crate::api::dto::*;
-use crate::db::{repo_graph, repo_observed, repo_raw};
+use crate::db::{repo_diff_hunk, repo_graph, repo_observed, repo_raw};
 use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
 
 #[derive(Deserialize)]
@@ -238,6 +238,34 @@ pub async fn session_graph(
                 .map(|e| serde_json::to_value(e).unwrap())
                 .collect(),
         },
+    }))
+}
+
+pub async fn session_diff_hunks(
+    State(pool): State<SqlitePool>,
+    Path(id): Path<String>,
+) -> Result<Json<Envelope<DiffHunksResponse>>, (StatusCode, Json<serde_json::Value>)> {
+    let rows = repo_diff_hunk::list_session(&pool, &id).await.expect("db");
+    let hunks = rows
+        .into_iter()
+        .map(|r| DiffHunkDto {
+            diff_hunk_id: r.diff_hunk_id,
+            session_id: r.session_id,
+            file_path: r.file_path,
+            change_type: r.change_type,
+            line_range_after_start: r.line_range_after_start,
+            line_range_after_end: r.line_range_after_end,
+            introduced_by_event_id: r.introduced_by_event_id,
+            introduced_by_tool_use_id: r.introduced_by_tool_use_id,
+            patch_preview: r.patch_preview,
+            lines_added: r.lines_added,
+            lines_removed: r.lines_removed,
+            user_modified: r.user_modified,
+        })
+        .collect();
+    Ok(Json(Envelope {
+        meta: ResponseMeta::now(),
+        data: DiffHunksResponse { hunks },
     }))
 }
 

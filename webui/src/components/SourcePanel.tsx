@@ -16,105 +16,22 @@ type HookRecord = {
   source?: string;
 };
 
-type FileEventRecord = {
-  file?: {
-    path?: string;
-    change_type?: string;
-    old_path?: string;
-    size_bytes?: number;
-    observed_at?: string;
-  };
-};
-
-type GitCommitRecord = {
-  git?: {
-    repo?: string;
-    sha?: string;
-    parents?: string[];
-    author?: { name?: string; email?: string; time?: string };
-    committer?: { name?: string; email?: string; time?: string };
-    message?: string;
-    branch?: string;
-    files_changed?: string[];
-  };
-};
-
+// Slice-10a — transcript-only diff_hunk record. The previous
+// `introduced_by_commit_sha` field is gone with the git poller.
 type DiffHunkRecord = {
   hunk?: {
     diff_hunk_id?: string;
     file_path?: string;
     change_type?: string;
     line_range_after?: { start?: number; end?: number } | null;
-    introduced_by_commit_sha?: string;
+    introduced_by_event_id?: string;
+    introduced_by_tool_use_id?: string | null;
     patch_preview?: string;
     lines_added?: number;
     lines_removed?: number;
+    user_modified?: boolean;
   };
 };
-
-function FileEventSection({ record }: { record: unknown }) {
-  if (typeof record !== 'object' || record === null) return null;
-  const r = record as FileEventRecord;
-  const f = r.file;
-  if (!f) return null;
-  return (
-    <section className={styles.attributes} aria-labelledby="file-section-heading">
-      <h4 id="file-section-heading">{f.change_type ?? 'file_event'}</h4>
-      <table>
-        <tbody>
-          {f.path && (
-            <tr><td className={styles.attrKey}>path</td><td className={styles.attrValue}>{f.path}</td></tr>
-          )}
-          {f.old_path && (
-            <tr><td className={styles.attrKey}>old_path</td><td className={styles.attrValue}>{f.old_path}</td></tr>
-          )}
-          {typeof f.size_bytes === 'number' && (
-            <tr><td className={styles.attrKey}>size_bytes</td><td className={styles.attrValue}>{f.size_bytes}</td></tr>
-          )}
-          {f.observed_at && (
-            <tr><td className={styles.attrKey}>observed_at</td><td className={styles.attrValue}>{f.observed_at}</td></tr>
-          )}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-function GitCommitSection({ record }: { record: unknown }) {
-  if (typeof record !== 'object' || record === null) return null;
-  const r = record as GitCommitRecord;
-  const g = r.git;
-  if (!g) return null;
-  const shortSha = g.sha?.slice(0, 7);
-  const subject = (g.message ?? '').split('\n')[0].slice(0, 80);
-  return (
-    <section className={styles.attributes} aria-labelledby="git-section-heading">
-      <h4 id="git-section-heading">{shortSha ?? 'git_commit'}{g.branch ? ` @ ${g.branch}` : ''}</h4>
-      {subject && <p>{subject}</p>}
-      <table>
-        <tbody>
-          {g.author?.name && (
-            <tr><td className={styles.attrKey}>author</td><td className={styles.attrValue}>{g.author.name}</td></tr>
-          )}
-          {g.committer?.time && (
-            <tr><td className={styles.attrKey}>committed_at</td><td className={styles.attrValue}>{g.committer.time}</td></tr>
-          )}
-          {g.repo && (
-            <tr><td className={styles.attrKey}>repo</td><td className={styles.attrValue}>{g.repo}</td></tr>
-          )}
-        </tbody>
-      </table>
-      {g.files_changed && g.files_changed.length > 0 && (
-        <details>
-          <summary>files_changed ({g.files_changed.length})</summary>
-          <ul>
-            {g.files_changed.map((f) => <li key={f}>{f}</li>)}
-          </ul>
-        </details>
-      )}
-    </section>
-  );
-}
 
 function DiffHunkSection({ record }: { record: unknown }) {
   if (typeof record !== 'object' || record === null) return null;
@@ -138,8 +55,14 @@ function DiffHunkSection({ record }: { record: unknown }) {
           {typeof h.lines_removed === 'number' && (
             <tr><td className={styles.attrKey}>- lines</td><td className={styles.attrValue}>{h.lines_removed}</td></tr>
           )}
-          {h.introduced_by_commit_sha && (
-            <tr><td className={styles.attrKey}>commit</td><td className={styles.attrValue}>{h.introduced_by_commit_sha.slice(0, 7)}</td></tr>
+          {h.introduced_by_tool_use_id && (
+            <tr><td className={styles.attrKey}>tool_use_id</td><td className={styles.attrValue}>{h.introduced_by_tool_use_id}</td></tr>
+          )}
+          {h.introduced_by_event_id && (
+            <tr><td className={styles.attrKey}>event_id</td><td className={styles.attrValue}>{h.introduced_by_event_id}</td></tr>
+          )}
+          {h.user_modified && (
+            <tr><td className={styles.attrKey}>user_modified</td><td className={styles.attrValue}>true</td></tr>
           )}
         </tbody>
       </table>
@@ -191,7 +114,17 @@ function HookSection({ record }: { record: unknown }) {
   );
 }
 
-type Props = { eventId: string | null };
+// Slice-10a — `node` lets callers short-circuit the raw_event round-trip for
+// node kinds whose payload already rides on the graph response (currently
+// just diff_hunk). For everything else, eventId is used and the existing
+// fetch flow is unchanged.
+type Props = {
+  eventId: string | null;
+  node?: {
+    node_kind: string;
+    payload: unknown;
+  } | null;
+};
 
 type State =
   | { kind: 'idle' }
@@ -199,10 +132,23 @@ type State =
   | { kind: 'ok'; data: RawEventResponse }
   | { kind: 'error'; status: number; message: string };
 
-export function SourcePanel({ eventId }: Props) {
-  const [state, setState] = useState<State>(eventId ? { kind: 'loading' } : { kind: 'idle' });
+function isDiffHunkNode(node: Props['node']): node is { node_kind: 'diff_hunk'; payload: { hunk: unknown } } {
+  if (!node || node.node_kind !== 'diff_hunk') return false;
+  const p = node.payload as { hunk?: unknown } | null;
+  return !!(p && typeof p === 'object' && p.hunk);
+}
+
+export function SourcePanel({ eventId, node }: Props) {
+  const skipFetch = isDiffHunkNode(node);
+  const [state, setState] = useState<State>(
+    eventId && !skipFetch ? { kind: 'loading' } : { kind: 'idle' },
+  );
 
   useEffect(() => {
+    if (skipFetch) {
+      setState({ kind: 'idle' });
+      return;
+    }
     if (!eventId) { setState({ kind: 'idle' }); return; }
     let cancelled = false;
     setState({ kind: 'loading' });
@@ -214,7 +160,20 @@ export function SourcePanel({ eventId }: Props) {
         else setState({ kind: 'error', status: 0, message: String(e) });
       });
     return () => { cancelled = true; };
-  }, [eventId]);
+  }, [eventId, skipFetch]);
+
+  // Inline render path for diff_hunk: graph already carries everything we
+  // need. The DiffHunkSection + JsonView read the node payload directly.
+  if (skipFetch && node) {
+    return (
+      <aside className={styles.panel}>
+        <DiffHunkSection record={node.payload} />
+        <div className={styles.body}>
+          <JsonView data={node.payload} />
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside className={styles.panel}>
@@ -255,12 +214,6 @@ export function SourcePanel({ eventId }: Props) {
           )}
           {state.data.record_type === 'hook_event' && (
             <HookSection record={state.data.record} />
-          )}
-          {state.data.record_type === 'file_event' && (
-            <FileEventSection record={state.data.record} />
-          )}
-          {state.data.record_type === 'git_commit' && (
-            <GitCommitSection record={state.data.record} />
           )}
           {state.data.record_type === 'diff_hunk' && (
             <DiffHunkSection record={state.data.record} />

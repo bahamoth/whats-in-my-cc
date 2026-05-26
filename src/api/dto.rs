@@ -103,6 +103,31 @@ pub struct GraphPayload {
     pub edges: Vec<Value>,
 }
 
+/// Slice-10a follow-up — JSON shape returned by
+/// `GET /v1/sessions/{id}/diff-hunks`. Fields mirror the SQLite `diff_hunk`
+/// row 1:1 so reviewers can verify transcript-derived attribution from the
+/// API alone.
+#[derive(Serialize)]
+pub struct DiffHunkDto {
+    pub diff_hunk_id: String,
+    pub session_id: String,
+    pub file_path: String,
+    pub change_type: String,
+    pub line_range_after_start: Option<i64>,
+    pub line_range_after_end: Option<i64>,
+    pub introduced_by_event_id: String,
+    pub introduced_by_tool_use_id: Option<String>,
+    pub patch_preview: String,
+    pub lines_added: i64,
+    pub lines_removed: i64,
+    pub user_modified: bool,
+}
+
+#[derive(Serialize)]
+pub struct DiffHunksResponse {
+    pub hunks: Vec<DiffHunkDto>,
+}
+
 #[derive(Serialize)]
 pub struct RawSource {
     pub kind: String,

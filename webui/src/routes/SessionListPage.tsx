@@ -36,22 +36,24 @@ const TRANSCRIPT_KINDS = new Set([
   'session_state',
 ]);
 const OTEL_KINDS = new Set(['otel_span', 'metric_sample', 'log_record']);
-const FILE_GIT_KINDS = new Set(['file_event', 'git_commit', 'diff_hunk']);
+// Slice-10a — file_event / git_commit kinds are gone; diff_hunk lives in a
+// side-table and is never exposed via observed_event.by_kind. The mix
+// therefore drops its file_git column entirely. The Files lane is still
+// rendered on the detail page (driven by the graph builder reading the
+// diff_hunk table), it just no longer shows up as a per-session source tag.
 
 type SourceMix = {
   transcript: number;
   otel: number;
   hook: number;
-  file_git: number;
 };
 
 function sourceMix(byKind?: Record<string, number>): SourceMix {
-  const mix: SourceMix = { transcript: 0, otel: 0, hook: 0, file_git: 0 };
+  const mix: SourceMix = { transcript: 0, otel: 0, hook: 0 };
   if (!byKind) return mix;
   for (const [k, v] of Object.entries(byKind)) {
     if (TRANSCRIPT_KINDS.has(k)) mix.transcript += v;
     else if (OTEL_KINDS.has(k)) mix.otel += v;
-    else if (FILE_GIT_KINDS.has(k)) mix.file_git += v;
     else if (k === 'hook_event') mix.hook += v;
   }
   return mix;
@@ -225,7 +227,7 @@ export default function SessionListPage() {
               {sortedRows.map((r) => {
                 const mix = sourceMix(r.by_kind);
                 const otelOnly =
-                  mix.transcript === 0 && mix.hook === 0 && mix.file_git === 0 && mix.otel > 0;
+                  mix.transcript === 0 && mix.hook === 0 && mix.otel > 0;
                 const live = isLive(envelopeAt.get(r.session_id), nowMs);
                 return (
                   <tr key={r.session_id} className={otelOnly ? styles.otelOnly : undefined}>
@@ -253,9 +255,6 @@ export default function SessionListPage() {
                       )}
                       {mix.hook > 0 && (
                         <span className={`${styles.tag} ${styles.tagHook}`}>hook {mix.hook}</span>
-                      )}
-                      {mix.file_git > 0 && (
-                        <span className={`${styles.tag} ${styles.tagFile}`}>file {mix.file_git}</span>
                       )}
                       {!r.by_kind && <span className={styles.tagDim}>—</span>}
                     </td>

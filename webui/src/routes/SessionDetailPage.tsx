@@ -164,11 +164,11 @@ export default function SessionDetailPage() {
     return () => io.disconnect();
   }, [window_]);
 
-  const selectedEventId =
+  const selectedNode =
     state.kind === 'ok' && selectedNodeId
-      ? state.graph.nodes.find((n) => n.node_id === selectedNodeId)
-          ?.source_event_ids[0] ?? null
+      ? state.graph.nodes.find((n) => n.node_id === selectedNodeId) ?? null
       : null;
+  const selectedEventId = selectedNode?.source_event_ids[0] ?? null;
 
   return (
     <div className={styles.page}>
@@ -193,7 +193,7 @@ export default function SessionDetailPage() {
                 onSelect={setSelectedNodeId}
               />
             </div>
-            <SourcePanel eventId={selectedEventId} />
+            <SourcePanel eventId={selectedEventId} node={selectedNode} />
           </div>
         </>
       )}

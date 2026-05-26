@@ -14,7 +14,7 @@ const HEADER_WIDTH = 96;
 const NODE_RADIUS = 6;
 
 const PLACEHOLDERS: Partial<Record<(typeof LANES)[number], string>> = {
-  Files: 'no file/git observations in this session',
+  Files: 'no file edits in this session',
   Hook: 'no hook events observed in this session',
   OTel: 'no OTel observed in this session',
   Quality: 'no findings yet',
