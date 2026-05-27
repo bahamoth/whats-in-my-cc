@@ -9,7 +9,7 @@ use serde_json::json;
 use sqlx::SqlitePool;
 
 use crate::api::dto::*;
-use crate::db::{repo_diff_hunk, repo_graph, repo_observed, repo_raw, repo_verification_run};
+use crate::db::{repo_diff_hunk, repo_episode, repo_graph, repo_observed, repo_raw, repo_verification_run};
 use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
 
 #[derive(Deserialize)]
@@ -465,4 +465,84 @@ fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Val
         "telemetry": telemetry,
         "payload": e.payload,
     })
+}
+
+// ---- Slice-12 — episode endpoints ------------------------------------------
+
+fn row_to_episode_dto(row: repo_episode::EpisodeRow) -> EpisodeDto {
+    let evidence_node_ids: Vec<serde_json::Value> =
+        serde_json::from_str(&row.evidence_node_ids).unwrap_or_default();
+    let classification_basis: Vec<serde_json::Value> =
+        serde_json::from_str(&row.classification_basis).unwrap_or_default();
+    EpisodeDto {
+        episode_id: row.episode_id,
+        schema_version: row.schema_version,
+        session_id: row.session_id,
+        phase: row.phase,
+        start_event_id: row.start_event_id,
+        end_event_id: row.end_event_id,
+        started_at: row.started_at,
+        ended_at: row.ended_at,
+        evidence_node_ids,
+        classification_basis,
+        confidence: row.confidence,
+        summary: row.summary,
+        classifier_version: row.classifier_version,
+        created_at: row.created_at,
+    }
+}
+
+/// `GET /v1/sessions/:id/episodes`
+///
+/// Returns all episodes for a session, ordered by `started_at`.
+/// Returns 200 with an empty `data` array if the session has no episodes or
+/// does not exist.
+pub async fn session_episodes(
+    State(pool): State<SqlitePool>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    match repo_episode::list_session(&pool, &session_id).await {
+        Ok(rows) => {
+            let data: Vec<EpisodeDto> = rows.into_iter().map(row_to_episode_dto).collect();
+            Json(EpisodesResponse { data }).into_response()
+        }
+        Err(err) => {
+            tracing::error!(session_id = %session_id, err = %err, "session_episodes failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// `GET /v1/episodes/:id`
+///
+/// Returns a single episode by ID. 404 if not found.
+pub async fn episode_detail(
+    State(pool): State<SqlitePool>,
+    Path(episode_id): Path<String>,
+) -> impl IntoResponse {
+    match repo_episode::get(&pool, &episode_id).await {
+        Ok(Some(row)) => {
+            Json(EpisodeDetailResponse {
+                data: row_to_episode_dto(row),
+            })
+            .into_response()
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "episode not found", "episode_id": episode_id})),
+        )
+            .into_response(),
+        Err(err) => {
+            tracing::error!(episode_id = %episode_id, err = %err, "episode_detail failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
 }
