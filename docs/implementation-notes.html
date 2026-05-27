@@ -1946,6 +1946,58 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <p>Follow-up (Files lane wiring + diff-hunks endpoint) 커밋 SHA는 push 후 결정.</p>
   </section>
 
+  <section id="slice-11">
+    <h2><span class="num">33</span>slice-11 — VerificationRun ingest (2026-05-27)</h2>
+
+    <h3>Overview</h3>
+    <p>Bash test/build 명령이 실행됐는지, 성공했는지를 <code>verification_run</code> 사이드 테이블에 기록한다.
+       <code>diff_hunk</code> 패턴과 동일: extractor → side-table write → graph builder reads → API expose.</p>
+    <ul>
+      <li><strong>Allowlist</strong>: 16 패턴 (regex), shell metacharacter (<code>|;&amp;&amp;&amp;</code>) 포함 composite command는 거부.
+          <code>cargo build --doc</code>는 post-match guard로 명시 거부 (lookahead가 없는 <code>regex</code> crate 한계 해소).</li>
+      <li><strong>normalise_command()</strong>: <code>2>&amp;1</code>, <code>|</code>, <code>;</code>, <code>&amp;&amp;</code>, <code>&amp;</code> 이후를 잘라 base command 추출.
+          실 transcript에 <code>cargo test 2>&amp;1 | tail -5</code> 형태 존재.</li>
+      <li><strong>ID 결정론</strong>: <code>sha256(session_id || trigger_event_id || started_at)</code> → <code>vr_</code> 접두 8자.</li>
+      <li><strong>Graph edges</strong>: <code>triggered_verification</code> (tool_call → verification_run) + <code>covers_diff_hunk</code> (verification_run → diff_hunk, 시간 순 커버리지 규칙 DEV-S11-02).</li>
+      <li><strong>WebUI lane</strong>: <code>verification_run</code> → <code>null</code>. UX 재설계 epic이 lane 지정 때까지 숨김. negative lock 테스트 추가.</li>
+      <li><strong>Pull API</strong>: <code>GET /v1/sessions/:id/verification-runs</code>, <code>GET /v1/verification-runs/:id</code>.
+          <code>covered_diff_hunk_ids</code>는 응답 시점 계산 (non-stored, DEV-S11-02).</li>
+      <li><strong>Smoke 결과 (aac68973 transcript 재ingest)</strong>: vr 노드 45개 · triggered_verification edge 45개 · covers_diff_hunk edge 1591개.
+          Timeline 렌더 이상 없음, console warning 없음.</li>
+    </ul>
+
+    <h3>Intentional Deviations (slice-11)</h3>
+    <dl>
+      <dt>DEV-S11-01</dt>
+      <dd>OTel branch (<code>attributes["verification.kind"]</code>)는 합성 fixture로만 테스트함.
+          실 transcript aac68973에 OTel verification span 없음. 실 데이터 도착 시 real fixture 추가 예정.</dd>
+      <dt>DEV-S11-02</dt>
+      <dd><code>covered_diff_hunk_ids</code>는 DB 컬럼이 아닌 응답 시점 계산 (temporal precedence rule: VR started_at 이전에 introduced된 hunk).
+          저장 비용 vs. 계산 일관성 트레이드오프에서 계산 쪽 선택.</dd>
+      <dt>DEV-S11-03</dt>
+      <dd>cargo nextest 패턴(<code>cargo nextest run</code>)은 <code>cargo test</code> 패턴과 별도 allowlist 항목으로 추가.
+          real transcript에는 없으나 spec 명시 패턴이므로 포함.</dd>
+      <dt>DEV-S11-04</dt>
+      <dd>Hook branch는 <code>post_tool_use</code> subkind + <code>hook_data["tool_name"]=="Bash"</code> 조건으로 필터.
+          hook event 실 fixture 미보유 — 합성 fixture로 테스트.</dd>
+      <dt>DEV-S11-05</dt>
+      <dd><code>INSERT OR REPLACE</code> 사용으로 ingest 재실행 시 idempotent. race condition 가능성은 단일 writer 보장으로 무시.</dd>
+      <dt>DEV-S11-06</dt>
+      <dd>실 transcript aac68973에 <code>is_error=true</code> Bash tool_result 없음 (45개 전부 passed).
+          fixture <code>verification_v01.jsonl</code> 3쌍(cargo test ×2 + cargo build --release ×1)은 모두 "passed" 상태.
+          failed verification_run은 합성 fixture <code>verification_bash.jsonl</code>에서 커버.</dd>
+    </dl>
+
+    <h3>Commit Reference (slice-11)</h3>
+    <ul>
+      <li><code>51b5761</code> — test(slice-11): red-locking tests for verification_run pipeline</li>
+      <li><code>cc22ad7</code> — feat(db): 0005_verification_run migration + repo_verification_run</li>
+      <li><code>b11bd18</code> — feat(ingest): verification_run extractor (bash, hook, otel-synth)</li>
+      <li><code>bd682a1</code> — feat(graph): verification_run node + triggered/covers edges</li>
+      <li><code>13173b9</code> — feat(api): verification-runs endpoints + webui lane negative lock</li>
+    </ul>
+  </section>
+
   <section id="planning-remaining-milestones">
     <h2><span class="num">32</span>Planning — slice-11 through slice-19 (2026-05-27)</h2>
     <p>잔여 마일스톤 M3 (slice-11/12/13) · M5 Insight (slice-14/15/16) · M6 MCP (slice-17) · M7 Hardening (slice-18/19)의
@@ -1980,7 +2032,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   </section>
 
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a · planning slice-11~19 · 2026-05-27 · branch: planning-remaining-milestones</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 · planning slice-12~19 · 2026-05-27 · branch: feat/remaining-milestones</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
