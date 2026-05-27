@@ -9,7 +9,7 @@ use serde_json::json;
 use sqlx::SqlitePool;
 
 use crate::api::dto::*;
-use crate::db::{repo_diff_hunk, repo_episode, repo_graph, repo_observed, repo_raw, repo_verification_run};
+use crate::db::{repo_diff_hunk, repo_episode, repo_finding, repo_graph, repo_observed, repo_raw, repo_verification_run};
 use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
 
 #[derive(Deserialize)]
@@ -538,6 +538,218 @@ pub async fn episode_detail(
             .into_response(),
         Err(err) => {
             tracing::error!(episode_id = %episode_id, err = %err, "episode_detail failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Slice-14 — Finding endpoints
+// ---------------------------------------------------------------------------
+
+/// Query parameters for `GET /v1/findings`.
+#[derive(Deserialize)]
+pub struct FindingsQuery {
+    pub session_id: Option<String>,
+    pub category: Option<String>,
+    pub severity: Option<String>,
+    pub status: Option<String>,
+    pub limit: Option<i64>,
+}
+
+/// Convert a `FindingRow` to the API DTO shape.
+fn finding_row_to_dto(row: repo_finding::FindingRow) -> FindingDto {
+    let evidence_refs: Vec<serde_json::Value> = serde_json::from_str(&row.evidence_refs)
+        .unwrap_or_else(|_| vec![]);
+    let evidence_projection: serde_json::Value = serde_json::from_str(&row.evidence_projection)
+        .unwrap_or(serde_json::Value::Null);
+    let provenance: serde_json::Value = serde_json::from_str(&row.provenance)
+        .unwrap_or(serde_json::Value::Null);
+    FindingDto {
+        finding_id: row.finding_id,
+        schema_version: row.schema_version,
+        session_id: row.session_id,
+        category: row.category,
+        severity: row.severity,
+        confidence: row.confidence,
+        summary: row.summary,
+        evidence_refs,
+        evidence_projection,
+        provenance,
+        status: row.status,
+        created_at: row.created_at,
+    }
+}
+
+/// `GET /v1/findings` — list findings with optional filters.
+///
+/// Query params: `session_id`, `category`, `severity`, `status` (default `active`),
+/// `limit` (default 50, max 200).
+pub async fn list_findings(
+    State(pool): State<SqlitePool>,
+    Query(q): Query<FindingsQuery>,
+) -> impl IntoResponse {
+    let filter = repo_finding::ListFilter {
+        session_id: q.session_id,
+        category: q.category,
+        severity: q.severity,
+        status: q.status,
+        limit: q.limit.unwrap_or(50).min(200).max(1),
+    };
+    match repo_finding::list(&pool, &filter).await {
+        Ok(rows) => {
+            let data: Vec<FindingDto> = rows.into_iter().map(finding_row_to_dto).collect();
+            Json(FindingsResponse { data }).into_response()
+        }
+        Err(err) => {
+            tracing::error!(err = %err, "list_findings failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// `GET /v1/findings/:id` — single finding detail.
+pub async fn finding_detail(
+    State(pool): State<SqlitePool>,
+    Path(finding_id): Path<String>,
+) -> impl IntoResponse {
+    match repo_finding::get(&pool, &finding_id).await {
+        Ok(Some(row)) => Json(FindingDetailResponse {
+            data: finding_row_to_dto(row),
+        })
+        .into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "finding not found", "finding_id": finding_id})),
+        )
+            .into_response(),
+        Err(err) => {
+            tracing::error!(finding_id = %finding_id, err = %err, "finding_detail failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// `GET /v1/findings/:id/evidence` — finding + subgraph + raw source refs.
+///
+/// The subgraph includes graph nodes whose `source_event_ids` contain any
+/// event_id in the finding's `evidence_refs`. Edges connecting those nodes
+/// are also included. `raw_source_refs` contains the raw event provenance for
+/// each evidenced event.
+pub async fn finding_evidence(
+    State(pool): State<SqlitePool>,
+    Path(finding_id): Path<String>,
+) -> impl IntoResponse {
+    let row = match repo_finding::get(&pool, &finding_id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "finding not found", "finding_id": finding_id})),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            tracing::error!(err = %err, "finding_evidence failed");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response();
+        }
+    };
+
+    let session_id = row.session_id.clone();
+
+    // Parse evidence_refs
+    let evidence_refs: Vec<String> = serde_json::from_str(&row.evidence_refs).unwrap_or_default();
+    let finding_dto = finding_row_to_dto(row);
+
+    // Load graph nodes/edges for the session
+    let (nodes, edges) = repo_graph::load_session(&pool, &session_id)
+        .await
+        .unwrap_or_else(|_| (vec![], vec![]));
+
+    // Filter nodes whose source_event_ids overlap with evidence_refs
+    let relevant_node_ids: std::collections::HashSet<String> = nodes
+        .iter()
+        .filter(|n| {
+            n.source_event_ids.iter().any(|id| evidence_refs.contains(id))
+        })
+        .map(|n| n.node_id.clone())
+        .collect();
+
+    let subgraph_nodes: Vec<serde_json::Value> = nodes
+        .iter()
+        .filter(|n| relevant_node_ids.contains(&n.node_id))
+        .map(|n| serde_json::to_value(n).unwrap_or(serde_json::Value::Null))
+        .collect();
+
+    let subgraph_edges: Vec<serde_json::Value> = edges
+        .iter()
+        .filter(|e| {
+            relevant_node_ids.contains(&e.from_node_id)
+                || relevant_node_ids.contains(&e.to_node_id)
+        })
+        .map(|e| serde_json::to_value(e).unwrap_or(serde_json::Value::Null))
+        .collect();
+
+    // Build raw_source_refs from observed_event → raw_event joins
+    let mut raw_source_refs: Vec<RawSourceRef> = Vec::new();
+    for ev_id in &evidence_refs {
+        if let Ok(Some(raw)) = repo_raw::get_for_event_id(&pool, ev_id).await {
+            raw_source_refs.push(RawSourceRef {
+                event_id: ev_id.clone(),
+                source_type: raw.source_type,
+                source_uri: raw.source_uri,
+                redaction_state: "none".into(),
+            });
+        }
+    }
+
+    Json(FindingEvidenceResponse {
+        data: FindingEvidenceData {
+            finding: finding_dto,
+            subgraph: EvidenceSubgraph {
+                nodes: subgraph_nodes,
+                edges: subgraph_edges,
+            },
+            raw_source_refs,
+        },
+    })
+    .into_response()
+}
+
+/// `GET /v1/sessions/:id/findings` — alias for `GET /v1/findings?session_id=:id`.
+pub async fn session_findings(
+    State(pool): State<SqlitePool>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    let filter = repo_finding::ListFilter {
+        session_id: Some(session_id),
+        status: Some("active".into()),
+        limit: 200,
+        ..Default::default()
+    };
+    match repo_finding::list(&pool, &filter).await {
+        Ok(rows) => {
+            let data: Vec<FindingDto> = rows.into_iter().map(finding_row_to_dto).collect();
+            Json(FindingsResponse { data }).into_response()
+        }
+        Err(err) => {
+            tracing::error!(err = %err, "session_findings failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "internal server error"})),
