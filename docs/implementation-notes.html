@@ -79,6 +79,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice-14-deviations">Intentional Deviations (slice-14)</a>
     <a href="#slice-15">Overview (slice-15)</a>
     <a href="#slice-15-deviations">Intentional Deviations (slice-15)</a>
+    <a href="#slice-16">Overview (slice-16)</a>
+    <a href="#slice-16-deviations">Intentional Deviations (slice-16)</a>
     <a href="#planning-remaining-milestones">Planning — slice-11..19 (2026-05-27)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
@@ -2333,6 +2335,81 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </ul>
   </section>
 
+  <section id="slice-16">
+    <h2><span class="num">38</span>slice-16 — Insight Engine L2 Categories (2026-05-27)</h2>
+    <h3>Overview (slice-16)</h3>
+    <p>Closes M5 (Insight engine) and AC-4. Ships three finding categories that require the L2 LLM judge:
+       <code>risky_action</code>, <code>context_bloat</code>, <code>final_state_mismatch</code>.
+       All three use <code>PromotionPolicy::IfAbove(1.0)</code> — they never promote without a judge verdict.
+       With <code>--judge none</code> (default) they are dormant (queued to <code>findings_pending_judge</code>).</p>
+
+    <h4>risky_action</h4>
+    <p>Fires on: (a) <code>Bash</code> tool_call whose <code>input.command</code> matches the destructive-pattern allowlist
+       (<code>rm -rf</code>, <code>git push --force</code>, <code>git reset --hard</code>, <code>sudo rm</code>, etc.), OR
+       (b) any <code>diff_hunk.user_modified == true</code>. L1 confidence 0.7.
+       Judge decides: was the action user-directed and intentional, or unsupervised drift?</p>
+
+    <h4>context_bloat</h4>
+    <p>Fires when: <code>tool_result</code> content &gt; 50 KB AND next assistant_message found within 3 events AND
+       no downstream tool_call contains ≥ 3 stem overlaps with the bloat content.
+       L1 confidence 0.5. Judge decides: reused vs. wasted.</p>
+
+    <h4>final_state_mismatch</h4>
+    <p>Fires when: first user_message contains a goal verb from the frozen lexicon
+       (<code>fix</code>, <code>add</code>, <code>implement</code>, etc.) AND last verification_run status is <code>failed</code>
+       AND final assistant_message has no completion marker (<code>done</code>, <code>fixed</code>, etc.).
+       Session-level grain (DEV-S16-06): at most 1 finding per session. L1 confidence 0.6.</p>
+
+    <h4>Redaction shim (DEV-S16-05)</h4>
+    <p><code>src/insight/redaction_shim.rs</code> ships as a no-op placeholder. All projection <code>_redacted</code> fields
+       call <code>redaction_shim::apply_text()</code> which passes text through unchanged and emits a
+       <code>tracing::warn!</code> per call (so the lapse is visible in dev logs). Slice-18 replaces this with the real
+       redaction gate. Test <code>tests/redaction_shim_lock.rs</code> asserts the shim is a no-op — will be
+       converted (not deleted) in slice-18.</p>
+
+    <h4>Smoke evidence (aac68973 session, fixture judge)</h4>
+    <ul>
+      <li>Active findings: <code>missing_verification</code>: 68, <code>tool_failure</code>: 473 (L1 categories unaffected)</li>
+      <li>Pending queue: <code>context_bloat</code>: 5 candidates (evidence hash not in fixture — expected)</li>
+      <li><code>risky_action</code>: 0 candidates (no destructive Bash or user_modified hunks in aac68973 — DEV-S16-01)</li>
+      <li><code>final_state_mismatch</code>: 0 candidates (no failed final verification + goal verb combo)</li>
+      <li>With <code>--judge none</code>: only L1 findings active; context_bloat: 2 pending — L2 categories dormant ✓</li>
+    </ul>
+
+    <h3 id="slice-16-deviations">Intentional Deviations (slice-16)</h3>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S16-01</span><span>risky_action real-data anchoring is partial</span></div>
+      <div class="dev-body">The destructive-Bash branch has no real-data fixture (no observed <code>rm -rf</code> in 9-transcript survey at planning time).
+        Synthetic curated transcript used. The <code>user_modified</code> branch is locked by slice-10a's polarity test plus a new synthetic hunk fixture.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S16-02</span><span>context_bloat thresholds are v1 constants</span></div>
+      <div class="dev-body">T=50 KB, M=3 events, lexical overlap ≥ 3 stems are frozen constants. Changing any threshold requires a v2 extractor.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S16-03</span><span>final_state_mismatch uses a closed lexicon</span></div>
+      <div class="dev-body">Goal verb list and completion marker list are frozen at v1. Adding a verb requires a v2 extractor and a recorded gold-update note.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S16-04</span><span>All 3 L2 categories dormant with --judge none</span></div>
+      <div class="dev-body"><code>PromotionPolicy::IfAbove(1.0)</code> means these categories never self-promote. With NoopJudge, all candidates queue to pending. Smoke confirms this.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S16-05</span><span>Redaction shim is a no-op until slice-18</span></div>
+      <div class="dev-body"><code>src/insight/redaction_shim.rs apply_text()</code> passes text through unchanged. Observable via tracing::warn. Slice-18 replaces. Test locked by <code>tests/redaction_shim_lock.rs</code>.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S16-06</span><span>final_state_mismatch emits at most 1 finding per session</span></div>
+      <div class="dev-body">Session-level grain: only the first matching user_message + last verification pair is considered. Multiple failures don't produce multiple findings.</div>
+    </div>
+
+    <h3>Commit Reference (slice-16)</h3>
+    <ul>
+      <li><code>2b29ffe</code> — test(slice-16): red-locking tests for risky_action, context_bloat, final_state_mismatch + registry update</li>
+      <li><code>b4af610</code> — feat(slice-16): RiskyAction + ContextBloat + FinalStateMismatch extractors + redaction shim + e2e</li>
+    </ul>
+  </section>
+
   <section id="planning-remaining-milestones">
     <h2><span class="num">32</span>Planning — slice-11 through slice-19 (2026-05-27)</h2>
     <p>잔여 마일스톤 M3 (slice-11/12/13) · M5 Insight (slice-14/15/16) · M6 MCP (slice-17) · M7 Hardening (slice-18/19)의
@@ -2367,7 +2444,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   </section>
 
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 · planning slice-16~19 · 2026-05-27 · branch: feat/remaining-milestones</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 · planning slice-17~19 · 2026-05-27 · branch: feat/remaining-milestones</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
