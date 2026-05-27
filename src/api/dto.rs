@@ -209,3 +209,59 @@ pub struct EpisodesResponse {
 pub struct EpisodeDetailResponse {
     pub data: EpisodeDto,
 }
+
+/// Slice-14 — a single Finding in the Pull API response.
+/// `evidence_refs` and `evidence_projection` and `provenance` are parsed from
+/// JSON columns before serialisation so callers receive typed values.
+#[derive(Serialize)]
+pub struct FindingDto {
+    pub finding_id: String,
+    pub schema_version: String,
+    pub session_id: String,
+    pub category: String,
+    pub severity: String,
+    pub confidence: f64,
+    pub summary: String,
+    pub evidence_refs: Vec<serde_json::Value>,
+    pub evidence_projection: serde_json::Value,
+    pub provenance: serde_json::Value,
+    pub status: String,
+    pub created_at: String,
+}
+
+#[derive(Serialize)]
+pub struct FindingsResponse {
+    pub data: Vec<FindingDto>,
+}
+
+#[derive(Serialize)]
+pub struct FindingDetailResponse {
+    pub data: FindingDto,
+}
+
+/// Response for `GET /v1/findings/:id/evidence`.
+#[derive(Serialize)]
+pub struct FindingEvidenceResponse {
+    pub data: FindingEvidenceData,
+}
+
+#[derive(Serialize)]
+pub struct FindingEvidenceData {
+    pub finding: FindingDto,
+    pub subgraph: EvidenceSubgraph,
+    pub raw_source_refs: Vec<RawSourceRef>,
+}
+
+#[derive(Serialize)]
+pub struct EvidenceSubgraph {
+    pub nodes: Vec<serde_json::Value>,
+    pub edges: Vec<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+pub struct RawSourceRef {
+    pub event_id: String,
+    pub source_type: String,
+    pub source_uri: String,
+    pub redaction_state: String,
+}

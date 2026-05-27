@@ -47,52 +47,51 @@ async fn pool_with_seeded_findings() -> sqlx::SqlitePool {
 }
 
 async fn pool_with_seeded_findings_and_graph() -> sqlx::SqlitePool {
-    let pool = pool_with_seeded_findings().await;
+    use witmcc::graph::build;
+    use witmcc::ingest::store;
 
-    // Seed a raw event + observed_event so evidence endpoint can return raw refs
-    sqlx::query(
-        "INSERT OR IGNORE INTO raw_event (raw_event_id, source_type, payload, captured_at) \
-         VALUES (?,?,?,?)",
+    // Use ingest_file for a real session so raw_event + observed_event are properly seeded.
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    migrate(&pool).await.unwrap();
+
+    store::ingest_file(
+        &pool,
+        std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl"),
+        &witmcc::live::NoopSink,
     )
-    .bind("raw_001")
-    .bind("claude_transcript")
-    .bind("{}")
-    .bind("2026-01-01T00:00:00Z")
-    .execute(&pool)
+    .await
+    .unwrap();
+    build::rebuild_session(&pool, "sess-A").await.unwrap();
+
+    // Get a user_message event_id that definitely appears as a graph node's source_event_ids.
+    let ev_id: String = sqlx::query_scalar(
+        "SELECT event_id FROM observed_event WHERE session_id='sess-A' AND kind='user_message' LIMIT 1"
+    )
+    .fetch_one(&pool)
     .await
     .unwrap();
 
+    // Seed a finding that references a real event from the ingested session.
     sqlx::query(
-        "INSERT OR IGNORE INTO observed_event \
-         (event_id, raw_event_id, schema_version, session_id, observed_at, actor, kind, parser_version, payload) \
-         VALUES (?,?,?,?,?,?,?,?,?)",
+        "INSERT OR IGNORE INTO finding \
+         (finding_id, session_id, category, severity, confidence, summary, \
+          evidence_refs, evidence_projection, provenance, status) \
+         VALUES (?,?,?,?,?,?,?,?,?,?)",
     )
-    .bind("ev_001")
-    .bind("raw_001")
-    .bind("observed_event.v1")
-    .bind("sess_demo")
-    .bind("2026-01-01T00:00:00Z")
-    .bind("tool")
-    .bind("tool_result")
-    .bind("test")
-    .bind("{}")
-    .execute(&pool)
-    .await
-    .unwrap();
-
-    // Seed a graph node for ev_001
-    sqlx::query(
-        "INSERT OR IGNORE INTO graph_node \
-         (node_id, session_id, node_kind, source_event_ids, label, data, created_at) \
-         VALUES (?,?,?,?,?,?,?)",
-    )
-    .bind("node_001")
-    .bind("sess_demo")
-    .bind("tool_result")
-    .bind(r#"["ev_001"]"#)
-    .bind("tool_result")
-    .bind("{}")
-    .bind("2026-01-01T00:00:00Z")
+    .bind("find_demo_001")
+    .bind("sess-A")
+    .bind("tool_failure")
+    .bind("high")
+    .bind(1.0_f64)
+    .bind("Tool failed.")
+    .bind(serde_json::json!([ev_id]).to_string())
+    .bind(r#"{"category":"tool_failure"}"#)
+    .bind(r#"{"extractor":"tool_failure@v1","layer":"L1","judge":null}"#)
+    .bind("active")
     .execute(&pool)
     .await
     .unwrap();
