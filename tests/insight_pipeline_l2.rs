@@ -8,7 +8,9 @@ use witmcc::db::migrate;
 use witmcc::insight::judge::runtime::JudgeRuntime;
 use witmcc::insight::pipeline::run_extractors_with_runtime;
 
-async fn seeded_pool() -> sqlx::SqlitePool {
+/// A minimal migrated pool. No events needed for NoopTestExtractor (it emits
+/// a synthetic candidate regardless of what events are in the DB).
+async fn empty_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect("sqlite::memory:")
@@ -19,14 +21,31 @@ async fn seeded_pool() -> sqlx::SqlitePool {
         .await
         .unwrap();
     migrate(&pool).await.unwrap();
+    pool
+}
 
-    // Insert a minimal session with one event so NoopTestExtractor emits a candidate.
-    let sess = "sess_t";
+/// Pool with a tool_failure-triggering event. Used only by
+/// l1_categories_unaffected_by_noop_judge which needs actual observed_event rows.
+async fn tool_failure_pool() -> sqlx::SqlitePool {
+    let pool = empty_pool().await;
     let now = "2026-01-01T00:00:00Z";
+
+    // ingest_run (FK parent of raw_event)
+    sqlx::query(
+        "INSERT OR IGNORE INTO ingest_run (run_id, started_at, status) VALUES (?,?,?)",
+    )
+    .bind("run_0")
+    .bind(now)
+    .bind("ok")
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // raw_event — all NOT NULL columns supplied
     sqlx::query(
         "INSERT OR IGNORE INTO raw_event \
-         (raw_event_id,ingest_run_id,source_type,source_uri,source_line_no,\
-          captured_at,payload_json,schema_version,provenance) \
+         (raw_event_id, ingest_run_id, source_type, source_uri, source_line_no, \
+          source_byte_offset, payload_sha256, payload, captured_at) \
          VALUES (?,?,?,?,?,?,?,?,?)",
     )
     .bind("raw_000")
@@ -34,31 +53,42 @@ async fn seeded_pool() -> sqlx::SqlitePool {
     .bind("claude_transcript")
     .bind("file://test.jsonl")
     .bind(0_i64)
+    .bind(0_i64)
+    .bind("aaa")
+    .bind(b"{}" as &[u8])
     .bind(now)
-    .bind("{}")
-    .bind("raw_event.v1")
-    .bind("{}")
     .execute(&pool)
     .await
     .unwrap();
 
+    // observed_event — tool_result with is_error=true inside the payload JSON
+    // (tool_failure extractor reads payload->tool_result->is_error)
+    let payload = serde_json::to_string(&serde_json::json!({
+        "tool_result": {
+            "tool_use_id": "tu_0",
+            "is_error": true,
+            "content": "command failed"
+        }
+    }))
+    .unwrap();
     sqlx::query(
         "INSERT OR IGNORE INTO observed_event \
-         (event_id,raw_event_id,schema_version,session_id,observed_at,\
-          actor,kind,tool_name,tool_use_id,is_error,provenance) \
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+         (event_id, raw_event_id, schema_version, session_id, observed_at, \
+          actor, kind, tool_use_id, is_sidechain, is_meta, payload, parser_version) \
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
     )
     .bind("ev_000")
     .bind("raw_000")
     .bind("observed_event.v1")
-    .bind(sess)
+    .bind("sess_t")
     .bind(now)
     .bind("tool")
-    .bind("tool_use")
-    .bind("Bash")
+    .bind("tool_result")
     .bind("tu_0")
     .bind(0_i64)
-    .bind("{}")
+    .bind(0_i64)
+    .bind(payload)
+    .bind("v1")
     .execute(&pool)
     .await
     .unwrap();
@@ -68,7 +98,7 @@ async fn seeded_pool() -> sqlx::SqlitePool {
 
 #[tokio::test]
 async fn noop_judge_queues_noop_test_candidate_to_pending() {
-    let pool = seeded_pool().await;
+    let pool = empty_pool().await;
     let runtime = JudgeRuntime::noop();
     run_extractors_with_runtime(&pool, "sess_t", &runtime)
         .await
@@ -84,7 +114,7 @@ async fn noop_judge_queues_noop_test_candidate_to_pending() {
 
 #[tokio::test]
 async fn fixture_judge_drains_pending_from_prior_run() {
-    let pool = seeded_pool().await;
+    let pool = empty_pool().await;
 
     // First pass: noop judge — fills pending
     let noop = JudgeRuntime::noop();
@@ -120,7 +150,7 @@ async fn fixture_judge_drains_pending_from_prior_run() {
 
 #[tokio::test]
 async fn budget_exhaustion_leaves_items_in_pending() {
-    let pool = seeded_pool().await;
+    let pool = empty_pool().await;
     let fixture = JudgeRuntime::fixture_with_budget(
         std::path::Path::new("tests/fixtures/judge/scenario_a.json"),
         0, // zero budget — everything queues
@@ -140,47 +170,7 @@ async fn budget_exhaustion_leaves_items_in_pending() {
 #[tokio::test]
 async fn l1_categories_unaffected_by_noop_judge() {
     // tool_failure (L1/Always policy) must still write findings even when judge is noop.
-    let pool = seeded_pool().await;
-    // Insert a tool_result with is_error=1 and no retry — triggers tool_failure L1
-    let now = "2026-01-01T00:00:01Z";
-    sqlx::query(
-        "INSERT OR IGNORE INTO raw_event \
-         (raw_event_id,ingest_run_id,source_type,source_uri,source_line_no,\
-          captured_at,payload_json,schema_version,provenance) \
-         VALUES (?,?,?,?,?,?,?,?,?)",
-    )
-    .bind("raw_001")
-    .bind("run_0")
-    .bind("claude_transcript")
-    .bind("file://test.jsonl")
-    .bind(1_i64)
-    .bind(now)
-    .bind("{}")
-    .bind("raw_event.v1")
-    .bind("{}")
-    .execute(&pool)
-    .await
-    .unwrap();
-    sqlx::query(
-        "INSERT OR IGNORE INTO observed_event \
-         (event_id,raw_event_id,schema_version,session_id,observed_at,\
-          actor,kind,tool_name,tool_use_id,is_error,provenance) \
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-    )
-    .bind("ev_001")
-    .bind("raw_001")
-    .bind("observed_event.v1")
-    .bind("sess_t")
-    .bind(now)
-    .bind("tool")
-    .bind("tool_result")
-    .bind("Bash")
-    .bind("tu_0")
-    .bind(1_i64)
-    .bind("{}")
-    .execute(&pool)
-    .await
-    .unwrap();
+    let pool = tool_failure_pool().await;
 
     let runtime = JudgeRuntime::noop();
     run_extractors_with_runtime(&pool, "sess_t", &runtime)

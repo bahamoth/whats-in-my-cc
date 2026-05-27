@@ -44,6 +44,15 @@ strum              = { version = "0.26", features = ["derive"] }
 regex              = "1"
 async-trait        = "0.1"
 
+[features]
+# Enables test-helper types (NoopTestExtractor) for integration tests.
+# Must NOT be enabled in production builds.
+test-helpers = []
+
+[[test]]
+name = "insight_pipeline_l2"
+required-features = ["test-helpers"]
+
 [dev-dependencies]
 assert-json-diff   = "2"
 insta              = { version = "1", features = ["json","redactions"] }

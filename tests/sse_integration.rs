@@ -45,6 +45,7 @@ async fn setup() -> (sqlx::SqlitePool, AppState) {
         live_tx: Arc::new(tx),
         sse_keepalive_secs: 30,
         sse_channel_capacity: 512,
+        judge_runtime: std::sync::Arc::new(witmcc::insight::judge::runtime::JudgeRuntime::noop()),
     };
     (pool, state)
 }

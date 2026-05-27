@@ -8,49 +8,60 @@ use sqlx::{Row, SqlitePool};
 
 use crate::error::Result;
 
-/// A row in the findings_pending_judge table.
+/// The insertable fields of a pending finding candidate.
+/// DB-generated columns (`queued_at`, `last_attempt_at`, `attempts`,
+/// `schema_version` default) are omitted from inserts.
 #[derive(Debug, Clone)]
 pub struct PendingFindingRow {
     pub candidate_id: String,
     pub schema_version: String,
     pub session_id: String,
     pub category: String,
-    pub confidence_l1: f64,
+    pub confidence_l1: f32,
     pub evidence_refs: String,       // JSON array
     pub evidence_projection: String, // JSON object
+}
+
+/// A full row as read back from the DB (includes DB-generated fields).
+#[derive(Debug, Clone)]
+pub struct PendingFindingRecord {
+    pub candidate_id: String,
+    pub schema_version: String,
+    pub session_id: String,
+    pub category: String,
+    pub confidence_l1: f64,
+    pub evidence_refs: String,
+    pub evidence_projection: String,
     pub queued_at: String,
     pub last_attempt_at: Option<String>,
     pub attempts: i64,
 }
 
-/// Enqueue a candidate (INSERT OR REPLACE — idempotent by candidate_id).
-pub async fn enqueue(
-    pool: &SqlitePool,
-    candidate_id: &str,
-    session_id: &str,
-    category: &str,
-    confidence_l1: f64,
-    evidence_refs: &str,
-    evidence_projection: &str,
-) -> Result<()> {
+/// Enqueue a candidate (INSERT OR IGNORE — idempotent by candidate_id).
+/// Uses INSERT OR IGNORE so a candidate already in the queue is not overwritten
+/// (preserves `queued_at` and `attempts`).
+pub async fn enqueue(pool: &SqlitePool, row: &PendingFindingRow) -> Result<()> {
     sqlx::query(
-        "INSERT OR REPLACE INTO findings_pending_judge \
+        "INSERT OR IGNORE INTO findings_pending_judge \
          (candidate_id, session_id, category, confidence_l1, evidence_refs, evidence_projection) \
          VALUES (?, ?, ?, ?, ?, ?)",
     )
-    .bind(candidate_id)
-    .bind(session_id)
-    .bind(category)
-    .bind(confidence_l1)
-    .bind(evidence_refs)
-    .bind(evidence_projection)
+    .bind(&row.candidate_id)
+    .bind(&row.session_id)
+    .bind(&row.category)
+    .bind(row.confidence_l1 as f64)
+    .bind(&row.evidence_refs)
+    .bind(&row.evidence_projection)
     .execute(pool)
     .await?;
     Ok(())
 }
 
 /// Load all pending candidates for a session, ordered by queued_at ascending.
-pub async fn list_session(pool: &SqlitePool, session_id: &str) -> Result<Vec<PendingFindingRow>> {
+pub async fn list_session(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<Vec<PendingFindingRecord>> {
     let rows = sqlx::query(
         "SELECT candidate_id, schema_version, session_id, category, \
          confidence_l1, evidence_refs, evidence_projection, \
@@ -65,7 +76,7 @@ pub async fn list_session(pool: &SqlitePool, session_id: &str) -> Result<Vec<Pen
 
     Ok(rows
         .into_iter()
-        .map(|r| PendingFindingRow {
+        .map(|r| PendingFindingRecord {
             candidate_id: r.get("candidate_id"),
             schema_version: r.get("schema_version"),
             session_id: r.get("session_id"),
