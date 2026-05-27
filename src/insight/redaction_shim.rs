@@ -1,29 +1,18 @@
-//! Redaction shim — temporary no-op placeholder (slice-16, DEV-S16-05).
+//! Slice-18: redaction shim replaced by real gate.
 //!
-//! Slice-18 replaces this with the real redaction gate that applies
-//! `rule_pack@v1` patterns. Until then, this shim passes text through
-//! unchanged while emitting a tracing warn per call so the lapse is
-//! observable in logs.
+//! The slice-16 no-op shim (DEV-S16-05) is now replaced by a re-export of
+//! the real redaction engine. The tracing warn is removed.
 //!
-//! The `tests/redaction_shim_lock.rs` test asserts this is a no-op;
-//! slice-18 converts that test to assert the real gate is active.
+//! The shim module (`insight::redaction_shim`) is preserved for backward
+//! compat with call sites in the insight pipeline that reference it. The
+//! real engine lives in `security::redaction::engine`.
+//!
+//! `tests/redaction_shim_lock.rs` is updated (DEV-S18-05) to assert the
+//! real gate is active rather than the previous no-op assertion.
 
-/// Apply redaction to a text field before it is placed in an evidence
-/// projection sent to the LLM judge.
-///
-/// # Current behaviour (shim)
-/// Returns the input unchanged. Emits `tracing::warn!` so every call
-/// is visible in development logs, reminding maintainers to complete
-/// slice-18 before production use.
-pub fn apply_text(text: &str) -> String {
-    tracing::warn!(
-        text_len = text.len(),
-        "redaction_shim_invoked: text passed through without redaction (slice-18 pending)"
-    );
-    text.to_string()
-}
+pub use crate::security::redaction::engine::apply_text;
 
-/// Truncate text to `max_bytes` bytes (UTF-8 safe) then apply the shim.
+/// Truncate text to `max_bytes` bytes (UTF-8 safe) then apply redaction.
 pub fn apply_text_truncated(text: &str, max_bytes: usize) -> String {
     let truncated = if text.len() <= max_bytes {
         text
