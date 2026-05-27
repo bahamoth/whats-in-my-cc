@@ -75,6 +75,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice-11">Overview (slice-11)</a>
     <a href="#slice-12">Overview (slice-12)</a>
     <a href="#slice-13">Overview (slice-13)</a>
+    <a href="#slice-14">Overview (slice-14)</a>
+    <a href="#slice-14-deviations">Intentional Deviations (slice-14)</a>
     <a href="#planning-remaining-milestones">Planning — slice-11..19 (2026-05-27)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
@@ -2117,6 +2119,117 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </ul>
   </section>
 
+  <section id="slice-14">
+    <h2><span class="num">36</span>slice-14 — Insight Engine v1 (L1 deterministic) (2026-05-27)</h2>
+    <p>M5를 여는 slice. DB에 <code>finding</code> 테이블을 추가하고, <strong>L1 deterministic</strong>
+       extractor 두 개를 구현한다: <code>missing_verification</code> + <code>tool_failure</code>.
+       LLM 호출 없이 순수 CPU 로직으로 동작한다. <code>rebuild_session</code>에 extractor pipeline이
+       연결되어 매 rebuild마다 finding 행이 자동으로 갱신된다.</p>
+
+    <h3 id="slice-14">Overview (slice-14)</h3>
+    <dl>
+      <dt>Migration <code>0008_finding.sql</code></dt>
+      <dd><code>finding</code> 테이블: finding_id (TEXT PK), schema_version, session_id,
+          category, severity, confidence (REAL), summary, evidence_refs (JSON TEXT),
+          evidence_projection (JSON TEXT), provenance (JSON TEXT),
+          status (TEXT DEFAULT 'active'), created_at. 인덱스 3개.</dd>
+
+      <dt><code>InsightExtractor</code> trait</dt>
+      <dd><code>category()</code>, <code>floor()</code>, <code>promotion_policy()</code>,
+          <code>extract(&amp;SessionInsightView) -&gt; Vec&lt;FindingCandidate&gt;</code>.
+          <code>extract()</code>는 pure CPU: DB 접근·부작용 없음.</dd>
+
+      <dt><code>SessionInsightView</code></dt>
+      <dd>모든 extractor가 공유하는 읽기 전용 컨텍스트.
+          events, diff_hunks, verification_runs, episodes, nodes, edges를 한 번에 로드.
+          <code>OwnedSessionInsightData::load(pool, session_id)</code>가 소유, borrow로 전달.</dd>
+
+      <dt><code>missing_verification</code> 룰</dt>
+      <dd>intake 윈도우 [intake_i, next_intake) 안에서 action episode가 ≥1 diff_hunk를 가지고
+          동일 윈도우에 verification episode가 없을 때 발화. confidence 0.9, severity medium.
+          evidence_refs: action.start_event_id + action.end_event_id + hunk event_ids + intake window start.</dd>
+
+      <dt><code>tool_failure</code> 룰</dt>
+      <dd>is_error=true인 tool_result에 대해 forward 5 events 이내 같은 tool_use_id의 성공 retry가 없을 때 발화.
+          confidence 1.0 (is_error flag 직접 인용), severity high.
+          evidence_refs: [tool_result_event_id, paired_tool_call_event_id].
+          <strong>페이로드 경로</strong>: <code>payload.pointer("/tool_result/is_error")</code> —
+          실제 transcript 페이로드는 <code>{"tool_result": {"is_error": bool, ...}}</code> 구조
+          (aac68973-729e-4014-a02b-28a556f5ff29 실 fixture로 검증).
+          tool_name은 tool_result가 아닌 paired tool_call 이벤트에서 조회.</dd>
+
+      <dt>finding_id 유도</dt>
+      <dd><code>"find_" + hex(sha256(category + "\0" + session_id + "\0" + sorted_refs.join(",")))[..24]</code>.
+          evidence_refs가 동일하면 finding_id가 동일 → <code>INSERT OR REPLACE</code>로 idempotent.</dd>
+
+      <dt>confidence floor</dt>
+      <dd>0.5 미만 candidate는 DB INSERT 전 드롭. 현재 L1 카테고리 (0.9 / 1.0)는 항상 통과.</dd>
+
+      <dt>provenance 구조</dt>
+      <dd><code>{"extractor": "category@v1", "layer": "L1", "judge": null,
+          "judge_template_version": null, "rule_pack": null}</code>.
+          L1 finding은 항상 judge=null.</dd>
+
+      <dt><code>rebuild_session</code> 통합 (DEV-S14-06)</dt>
+      <dd>extractor pipeline은 graph commit <strong>후</strong> 별도 트랜잭션으로 실행.
+          반환 타입이 <code>(usize, usize)</code>에서 <code>(usize, usize, usize)</code>로 확장
+          (nodes, edges, findings). extractor 패닉은 warn+continue로 soft-fault.</dd>
+
+      <dt>HTTP API</dt>
+      <dd>
+        <ul>
+          <li><code>GET /v1/findings</code> — ListFilter: session_id, category, severity, status, limit (200)</li>
+          <li><code>GET /v1/findings/:id</code> — finding detail</li>
+          <li><code>GET /v1/findings/:id/evidence</code> — evidence subgraph + raw_source_refs</li>
+          <li><code>GET /v1/sessions/:id/findings</code> — session alias (status="active" 기본)</li>
+        </ul>
+      </dd>
+
+      <dt>Smoke (aac68973 실 데이터)</dt>
+      <dd>11 tool_failure findings (confidence=1.0, severity=high). 0 missing_verification
+          (48개 verification episode — 잘 테스트된 세션이라 당연). evidence_refs 2개/finding
+          (tool_result + tool_call event_id). raw_source_refs 2개. 모든 refs가 DB에서
+          dereferenceable 확인.</dd>
+    </dl>
+
+    <h3 id="slice-14-deviations">Intentional Deviations (slice-14)</h3>
+    <dl>
+      <dt>DEV-S14-01 <span class="muted">tool_failure is_error 페이로드 경로</span></dt>
+      <dd>spec에서 <code>payload["is_error"]</code>를 직접 참조하는 것으로 기술했으나,
+          실제 transcript 페이로드는 중첩 구조 <code>{"tool_result": {"is_error": bool}}</code>.
+          extractor가 <code>pointer("/tool_result/is_error")</code>를 사용하도록 수정.
+          unit test fixture도 실 payload 구조를 사용하도록 업데이트.
+          단일 실 fixture 관찰 — "모든 transcript"에 대한 일반화가 아닌 단일 케이스 확인.</dd>
+
+      <dt>DEV-S14-02 <span class="muted">missing_verification window에서 has_verification 체크</span></dt>
+      <dd>현재 구현은 윈도우 내 어디에든 verification episode가 있으면 모든 action을 "verified"로 처리.
+          spec §4는 "strictly after A"라고 했으나, 더 보수적인 구현을 채택 (window 단위).
+          이유: false positive 방향 오류 (action이 실제로 검증됐지만 finding 안 뜨는 것)가
+          false negative보다 낫다. L2 judge upgrade 시 세밀 수정 예정.</dd>
+
+      <dt>DEV-S14-03 <span class="muted">tool_name from call event</span></dt>
+      <dd>tool_result observed_event의 tool_name column은 NULL (transcript에서 분리 ingest).
+          tool_failure extractor가 summary에 쓰는 tool_name을 paired tool_call event에서 조회.
+          evidence_refs 내 tool_call event_id로 항상 추적 가능.</dd>
+
+      <dt>DEV-S14-04 <span class="muted">SCHEMA_VERSION 미사용 경고</span></dt>
+      <dd><code>src/insight/pipeline.rs</code>에 <code>use crate::model::meta::SCHEMA_VERSION</code>
+          import가 남아있으나 사용되지 않음. finding row의 schema_version은 하드코딩
+          <code>"finding.v1"</code>을 사용. 다음 slice에서 상수로 교체 예정.</dd>
+    </dl>
+
+    <h3>Commit Reference (slice-14)</h3>
+    <ul>
+      <li><code>96dc2ac</code> — feat(db): 0008_finding migration + repo_finding</li>
+      <li><code>8bac287</code> — feat(insight): InsightExtractor trait + SessionInsightView + registry (stubs)</li>
+      <li><code>b218b42</code> — feat(insight): MissingVerification + ToolFailure extractors (L1)</li>
+      <li><code>8d8db11</code> — feat(api): /v1/findings* + pipeline runner</li>
+      <li><code>224b803</code> — feat(graph): wire insight pipeline into rebuild_session (slice-14 Phase 6)</li>
+      <li><code>c53d250</code> — fix(insight): correct is_error path in tool_failure extractor</li>
+      <li><code>0840b34</code> — fix(insight): use tool_name from call event in tool_failure summary</li>
+    </ul>
+  </section>
+
   <section id="planning-remaining-milestones">
     <h2><span class="num">32</span>Planning — slice-11 through slice-19 (2026-05-27)</h2>
     <p>잔여 마일스톤 M3 (slice-11/12/13) · M5 Insight (slice-14/15/16) · M6 MCP (slice-17) · M7 Hardening (slice-18/19)의
@@ -2151,7 +2264,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   </section>
 
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 · planning slice-14~19 · 2026-05-27 · branch: feat/remaining-milestones</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 · planning slice-15~19 · 2026-05-27 · branch: feat/remaining-milestones</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
