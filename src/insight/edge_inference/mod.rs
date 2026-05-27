@@ -10,7 +10,12 @@ use crate::model::graph::{GraphEdge, GraphNode};
 use crate::model::observed::ObservedEvent;
 
 /// Version-stable canonical rule IDs, one per rule file.
-pub const RULE_IDS: &[&str] = &[];
+/// **Order is stable** — do not reorder without a golden-update commit.
+pub const RULE_IDS: &[&str] = &[
+    rules::caused_repair_v1::RULE_ID,
+    rules::triggered_by_user_message_v1::RULE_ID,
+    rules::large_output_to_next_action_v1::RULE_ID,
+];
 
 /// Shared read-only view of the complete session passed to each rule.
 pub struct SessionGraphView<'a> {
@@ -31,5 +36,9 @@ pub trait EdgeInferenceRule: Send + Sync {
 
 /// Instantiate all registered v1 rules. Used by `compute()` and the counts test.
 pub fn all_rules() -> Vec<Box<dyn EdgeInferenceRule>> {
-    vec![]
+    vec![
+        Box::new(rules::caused_repair_v1::CausedRepairV1),
+        Box::new(rules::triggered_by_user_message_v1::TriggeredByUserMessageV1),
+        Box::new(rules::large_output_to_next_action_v1::LargeOutputToNextActionV1),
+    ]
 }
