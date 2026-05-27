@@ -296,12 +296,19 @@ fn build_l1_row(session_id: &str, c: &FindingCandidate) -> FindingRow {
 /// Production builds only include the production extractors.
 fn all_extractors_for_pipeline() -> Vec<Box<dyn crate::insight::extractor::InsightExtractor>> {
     use crate::insight::extractors::{
-        missing_verification::MissingVerification, tool_failure::ToolFailure,
+        context_bloat::ContextBloat,
+        final_state_mismatch::FinalStateMismatch,
+        missing_verification::MissingVerification,
+        risky_action::RiskyAction,
+        tool_failure::ToolFailure,
     };
     #[allow(unused_mut)]
     let mut v: Vec<Box<dyn crate::insight::extractor::InsightExtractor>> = vec![
         Box::new(MissingVerification),
         Box::new(ToolFailure),
+        Box::new(RiskyAction),
+        Box::new(ContextBloat),
+        Box::new(FinalStateMismatch),
     ];
     #[cfg(feature = "test-helpers")]
     {
