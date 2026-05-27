@@ -12,37 +12,21 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
 
 ## Status
 
-- 현재 단계: **M3 완료 / M5 완료 / M6 완료 / M7 일부** — slice-1~18 완료 (transcript / OTel / hook /
-  ObservedEvent + telemetry facet · 기본 graph builder · WebUI replay ·
-  SSE live updates · windowed event buffer · filesystem-source removal +
-  transcript-only file lineage + Files lane graph linkage (slice-10a) ·
-  VerificationRun ingest + graph edges + Pull API (slice-11) ·
-  Episode segmentation state machine + golden + Pull API (slice-12) ·
-  Causal-edge inference v1 — three inferred-edge rules (slice-13) ·
-  Insight Engine v1 — L1 deterministic extractors + /v1/findings* API (slice-14) ·
-  Insight Engine L2 infra — JudgeProvider + CachedProvider + BudgetGuard +
-  JudgeRuntime + findings_pending_judge queue + /v1/health insight block +
-  `--judge {none|fixture|anthropic}` CLI (slice-15) ·
-  Insight Engine L2 categories — risky_action + context_bloat + final_state_mismatch
-  extractors + redaction shim (DEV-S16-05) + FixtureJudge gold fixtures + e2e tests.
-  M5 (Insight engine) CLOSED. AC-4 fully covered. (slice-16) ·
-  MCP Streamable HTTP — POST /mcp (JSON-RPC) + GET /mcp (SSE) + 6 read-only tools
-  + 6 resource URI templates + Origin validation + Mcp-Session-Id lifecycle +
-  protocol compat golden. M6 CLOSED. AC-5 fully covered. (slice-17) ·
-  **Redaction gate v1 — rule_pack@v1 (11 rules) + engine + manifest +
-  migration 0011 (raw_event.redaction_state + redaction_manifest) +
-  ingest wiring (all paths) + Pull API meta.redaction_policy/summary +
-  MCP annotations + redaction_shim → real gate. M7 partial. AC-7 CLOSED. (slice-18)**).
-- 남은 작업의 **계획은 잠겼음**:
-  `docs/superpowers/specs/2026-05-27-witmcc-remaining-milestones-roadmap.md` +
-  per-slice design specs + per-slice TDD plans (`2026-05-27-witmcc-slice11..19-*`).
-  Insight 엔진 L1/L2 분리 설계는
-  `2026-05-27-witmcc-insight-engine-architecture.md`. UX 재설계는 마일스톤 밖
-  별도 epic (`2026-05-27-witmcc-ux-redesign-epic.md`).
-- 잔여 마일스톤: ~~M5 Insight~~ ✓ · ~~M6 MCP~~ ✓ (slice-17 완료),
-  M7 Hardening (slice-18 Redaction · slice-19 Auth/Retention).
-  (M3 완료: ~~slice-11 VerificationRun~~ ✓ · ~~slice-12 Episode~~ ✓ · ~~slice-13 Causal-edge~~ ✓)
-- 구현 상세: `docs/implementation-notes.html` 의 slice별 섹션.
+- 현재 단계: **MVP EXIT — 2026-05-27. slice-1~19 완료. M3·M5·M6·M7 모두 closed. AC-1~7 모두 green.**
+  - slice-1~10a: transcript / OTel / hook / ObservedEvent + telemetry facet · graph builder · WebUI replay · SSE · windowed events
+  - slice-11: VerificationRun ingest + graph edges + Pull API (M3 일부)
+  - slice-12: Episode segmentation + Pull API (M3 일부)
+  - slice-13: Causal-edge inference v1 — three rules (M3 CLOSED)
+  - slice-14: Insight L1 deterministic extractors + /v1/findings* (M5 일부)
+  - slice-15: Insight L2 infra — JudgeRuntime + BudgetGuard + CachedProvider + CLI
+  - slice-16: Insight L2 categories — risky_action + context_bloat + final_state_mismatch (M5 CLOSED)
+  - slice-17: MCP Streamable HTTP — POST+GET /mcp + 6 tools + 6 resources (M6 CLOSED)
+  - slice-18: Redaction gate v1 — rule_pack@v1 + engine + manifest + ingest wiring (AC-7 CLOSED)
+  - slice-19: Bearer token auth + retention sweep + audit table + /v1/audit + 410 Gone (M7 CLOSED, AC-6 CLOSED)
+- **남은 계획:** UX 재설계 epic (`2026-05-27-witmcc-ux-redesign-epic.md`) — 마일스톤 밖 별도 트랙.
+- **모든 마일스톤 closed:** ~~M3~~ ✓ · ~~M5~~ ✓ · ~~M6~~ ✓ · ~~M7~~ ✓
+- 구현 상세: `docs/implementation-notes.html` §33(slice-18) · §34(slice-19) · §35(MVP Exit Summary).
+- **운영 주의 (slice-19):** Bearer token auth 추가. 첫 기동 시 token이 stderr에 출력되고 `~/.config/witmcc/token`(mode 0600)에 저장됨. 모든 `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요. `witmcc serve --retention-profile default`로 retention sweep 활성화. 신규 migration 0012 + 0013; `witmcc init-db` 필요.
 - **운영 주의 (slice-14):** `finding` 테이블 추가 (migration 0008). 기존 dev DB는
   `witmcc init-db`로 재생성 후 재ingest 필요.
 - **운영 주의 (slice-13):** `graph_edge` 테이블에 `inference_rule_id`, `confidence` 컬럼 추가 (migration 0007). 기존 dev DB는 `witmcc init-db`로 재생성 후 재ingest 필요.
