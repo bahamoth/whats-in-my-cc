@@ -24,6 +24,15 @@ pub struct GraphEdge {
     pub from_node_id: String,
     pub to_node_id: String,
     pub edge_kind: String,
-    pub origin: String, // "deterministic"
+    /// `"deterministic"` for edges built by `compute()`; `"inferred"` for edges
+    /// produced by the inference rules in `src/insight/edge_inference/`.
+    pub origin: String,
     pub attributes: Value,
+    /// Versioned rule ID that produced this edge, e.g. `"caused_repair@v1"`.
+    /// `None` for deterministic edges.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inference_rule_id: Option<String>,
+    /// Numeric confidence in `[0.0, 1.0]`. `None` for deterministic edges.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f32>,
 }

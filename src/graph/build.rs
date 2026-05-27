@@ -691,6 +691,8 @@ fn make_edge(session_id: &str, from: &str, to: &str, kind: &str, attrs: Value) -
         edge_kind: kind.into(),
         origin: "deterministic".into(),
         attributes: attrs,
+        inference_rule_id: None,
+        confidence: None,
     }
 }
 

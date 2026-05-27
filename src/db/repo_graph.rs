@@ -69,8 +69,9 @@ pub async fn insert_nodes_edges_in_tx(
     for e in edges {
         sqlx::query(
             "INSERT INTO graph_edge(edge_id, schema_version, session_id, \
-             from_node_id, to_node_id, edge_kind, origin, attributes) \
-             VALUES (?,?,?,?,?,?,?,?)",
+             from_node_id, to_node_id, edge_kind, origin, attributes, \
+             inference_rule_id, confidence) \
+             VALUES (?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(&e.edge_id)
         .bind(&e.schema_version)
@@ -80,6 +81,8 @@ pub async fn insert_nodes_edges_in_tx(
         .bind(&e.edge_kind)
         .bind(&e.origin)
         .bind(e.attributes.to_string())
+        .bind(&e.inference_rule_id)
+        .bind(e.confidence.map(|c| c as f64))
         .execute(&mut **tx)
         .await?;
     }
@@ -140,6 +143,11 @@ pub async fn load_session(
             origin: r.get("origin"),
             attributes: serde_json::from_str(&r.get::<String, _>("attributes"))
                 .unwrap_or(serde_json::Value::Null),
+            inference_rule_id: r.try_get("inference_rule_id").ok().flatten(),
+            confidence: r
+                .try_get::<f64, _>("confidence")
+                .ok()
+                .map(|v| v as f32),
         })
         .collect();
 
