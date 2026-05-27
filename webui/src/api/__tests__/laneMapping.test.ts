@@ -33,6 +33,14 @@ describe('laneForNodeKind', () => {
   it('returns null for unknown kinds', () => {
     expect(laneForNodeKind('unknown_kind')).toBeNull();
   });
+
+  it('returns null for verification_run (slice-11 — placeholder pending UX redesign)', () => {
+    // Negative lock: verification_run nodes are emitted by the graph builder
+    // (slice-11) but have no UI lane yet. The UX redesign epic owns the lane
+    // assignment. This assertion ensures the null is intentional, not accidental.
+    // When the redesign assigns a lane, update this test to lock the new value.
+    expect(laneForNodeKind('verification_run')).toBeNull();
+  });
 });
 
 describe('LANES constant', () => {
