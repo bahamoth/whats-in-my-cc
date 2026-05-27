@@ -108,5 +108,16 @@ pub enum Command {
         /// Path to fixture verdict JSON (required when --judge=fixture).
         #[arg(long)]
         judge_fixture_path: Option<PathBuf>,
+        /// Slice-19: Print the current token to stderr and exit. Does not start the server.
+        #[arg(long, conflicts_with = "rotate_token")]
+        print_token: bool,
+        /// Slice-19: Generate a new token, overwrite the token file, print it to stderr and exit.
+        /// Existing connections receive 401 on their next request.
+        #[arg(long, conflicts_with = "print_token")]
+        rotate_token: bool,
+        /// Slice-19: Retention profile. Default: "none" (no deletion).
+        /// Use "default" (30d/180d/90d) or "strict" (7d/30d/30d) to enable sweeps.
+        #[arg(long, default_value = "none", value_parser = ["none", "default", "strict"])]
+        retention_profile: String,
     },
 }

@@ -228,6 +228,22 @@ fn read_hook_settings() -> HookSettingsCheck {
     }
 }
 
+/// Attempt to load the witmcc token from `WITMCC_CONFIG_DIR/token` or
+/// `~/.config/witmcc/token`. Returns `None` if the file doesn't exist or can't
+/// be read (doctor stays useful even without credentials).
+fn witmcc_token_from_env_or_file() -> Option<String> {
+    let dir = if let Ok(v) = std::env::var("WITMCC_CONFIG_DIR") {
+        std::path::PathBuf::from(v)
+    } else {
+        dirs::config_dir()?.join("witmcc")
+    };
+    let path = dir.join("token");
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 async fn probe_server(server: &str) -> ServerProbe {
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(2))
@@ -245,11 +261,27 @@ async fn probe_server(server: &str) -> ServerProbe {
     let sources_url = format!("{}/v1/health/sources", server.trim_end_matches('/'));
     let mut probe = ServerProbe::default();
 
-    match client.get(&health_url).send().await {
+    // Slice-19: attempt with token from the token file (if available).
+    // Fall back to unauthenticated so doctor remains useful even without the
+    // token file (e.g., on a different machine than the server).
+    let token: Option<String> = witmcc_token_from_env_or_file();
+    let health_req = if let Some(ref t) = token {
+        client
+            .get(&health_url)
+            .header("Authorization", format!("Bearer {t}"))
+    } else {
+        client.get(&health_url)
+    };
+
+    match health_req.send().await {
         Ok(r) => {
-            probe.reachable = r.status().is_success();
+            // Slice-19: 401 means the server is up but token auth is required.
+            // We still mark the server as reachable; the token issue is a config
+            // problem, not a connectivity problem.
+            let reachable = r.status().is_success() || r.status() == 401;
+            probe.reachable = reachable;
             probe.health_status_code = Some(r.status().as_u16());
-            if probe.reachable {
+            if r.status().is_success() {
                 if let Ok(j) = r.json::<serde_json::Value>().await {
                     probe.build_sha = j
                         .get("build_sha")
@@ -265,7 +297,14 @@ async fn probe_server(server: &str) -> ServerProbe {
     }
 
     if probe.reachable {
-        match client.get(&sources_url).send().await {
+        let sources_req = if let Some(ref t) = token {
+            client
+                .get(&sources_url)
+                .header("Authorization", format!("Bearer {t}"))
+        } else {
+            client.get(&sources_url)
+        };
+        match sources_req.send().await {
             Ok(r) if r.status().is_success() => {
                 if let Ok(j) = r.json::<serde_json::Value>().await {
                     if let Some(sources) = j["data"]["sources"].as_array() {

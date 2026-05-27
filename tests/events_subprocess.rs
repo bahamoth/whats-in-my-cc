@@ -77,9 +77,13 @@ async fn seed_db(path: &Path) {
     pool.close().await;
 }
 
-fn spawn_serve(db_path: &Path) -> (Child, String) {
+/// Spawn a witmcc server. Returns (child, host, token, config_dir).
+/// `config_dir` must be kept alive while the server runs.
+fn spawn_serve(db_path: &Path) -> (Child, String, String, tempfile::TempDir) {
     let port = pick_port();
     let bin = env!("CARGO_BIN_EXE_witmcc");
+    // Slice-19: isolated config dir so tests don't touch ~/.config/witmcc.
+    let config_dir = tempfile::tempdir().expect("config tempdir");
     let child = Command::new(bin)
         .args([
             "--db-path",
@@ -92,6 +96,7 @@ fn spawn_serve(db_path: &Path) -> (Child, String) {
             "15000",
             "--no-watch-transcripts",
         ])
+        .env("WITMCC_CONFIG_DIR", config_dir.path())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -99,25 +104,35 @@ fn spawn_serve(db_path: &Path) -> (Child, String) {
     let host = format!("127.0.0.1:{port}");
     let deadline = Instant::now() + Duration::from_secs(3);
     while Instant::now() < deadline {
-        if http_get(&host, "/v1/health").starts_with("HTTP/1.1 200") {
-            return (child, host);
+        let resp = http_get(&host, "/v1/health", None);
+        if resp.starts_with("HTTP/1.1 200") || resp.starts_with("HTTP/1.1 401") {
+            // Read the token that the server wrote.
+            let token = std::fs::read_to_string(config_dir.path().join("token"))
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            return (child, host, token, config_dir);
         }
         std::thread::sleep(Duration::from_millis(50));
     }
     panic!("server did not come up at {host}");
 }
 
-fn http_get(host: &str, path: &str) -> String {
+fn http_get(host: &str, path: &str, token: Option<&str>) -> String {
     let addr: std::net::SocketAddr = host.parse().expect("host:port");
     let mut s = match TcpStream::connect_timeout(&addr, Duration::from_secs(1)) {
         Ok(s) => s,
         Err(_) => return String::new(),
     };
     s.set_read_timeout(Some(Duration::from_secs(5))).ok();
+    let auth_header = token
+        .map(|t| format!("Authorization: Bearer {t}\r\n"))
+        .unwrap_or_default();
     let req = format!(
-        "GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n",
+        "GET {path} HTTP/1.1\r\nHost: {host}\r\n{auth_header}Connection: close\r\n\r\n",
         path = path,
         host = host,
+        auth_header = auth_header,
     );
     s.write_all(req.as_bytes()).expect("write");
     let mut buf = Vec::new();
@@ -159,12 +174,14 @@ async fn paginate_backwards_reconstructs_full_session() {
     seed_db(db.path()).await;
 
     // 2. Spawn server.
-    let (mut child, host) = spawn_serve(db.path());
+    let (mut child, host, token, _cfg) = spawn_serve(db.path());
+    let tok = Some(token.as_str());
 
     // 3. Page-1 fetch (no cursors → newest PAGE_LIMIT).
     let resp = http_get(
         &host,
         &format!("/v1/sessions/{SESS}/events?limit={PAGE_LIMIT}"),
+        tok,
     );
     let mut data = json_body(&resp);
     let mut collected: BTreeSet<String> = BTreeSet::new();
@@ -198,7 +215,7 @@ async fn paginate_backwards_reconstructs_full_session() {
             "/v1/sessions/{SESS}/events?before={}&limit={PAGE_LIMIT}",
             urlencoding::encode(&cur)
         );
-        let r = http_get(&host, &url);
+        let r = http_get(&host, &url, tok);
         data = json_body(&r);
         let events = data["data"]["events"].as_array().expect("events array");
         if events.is_empty() {
@@ -247,6 +264,7 @@ async fn paginate_backwards_reconstructs_full_session() {
                 "/v1/sessions/{SESS}/events?after={}&limit={PAGE_LIMIT}",
                 urlencoding::encode(&cur)
             ),
+            tok,
         );
         let v = json_body(&r);
         assert_eq!(
@@ -291,12 +309,14 @@ fn http_post_json(host: &str, path: &str, body: &str) -> String {
 async fn paging_remains_consistent_through_live_activity() {
     let db = tempfile::NamedTempFile::new().expect("tempfile");
     seed_db(db.path()).await;
-    let (mut child, host) = spawn_serve(db.path());
+    let (mut child, host, token, _cfg) = spawn_serve(db.path());
+    let tok = Some(token.as_str());
 
     // 1. Page-1 capture
     let r1 = http_get(
         &host,
         &format!("/v1/sessions/{SESS}/events?limit={PAGE_LIMIT}"),
+        tok,
     );
     let v1 = json_body(&r1);
     let initial_first_cursor = {
@@ -334,6 +354,7 @@ async fn paging_remains_consistent_through_live_activity() {
             "/v1/sessions/{SESS}/events?after={}&limit=500",
             urlencoding::encode(&initial_newest)
         ),
+        tok,
     );
     let v_after = json_body(&r_after);
     let after_events = v_after["data"]["events"].as_array().expect("events array");
@@ -360,6 +381,7 @@ async fn paging_remains_consistent_through_live_activity() {
             "/v1/sessions/{SESS}/events?before={}&limit={PAGE_LIMIT}",
             urlencoding::encode(&initial_first_cursor)
         ),
+        tok,
     );
     let v_before = json_body(&r_before);
     let before_events = v_before["data"]["events"].as_array().expect("events array");
@@ -378,6 +400,7 @@ async fn paging_remains_consistent_through_live_activity() {
     let r_p1_after = http_get(
         &host,
         &format!("/v1/sessions/{SESS}/events?limit={PAGE_LIMIT}"),
+        tok,
     );
     let v_p1_after = json_body(&r_p1_after);
     let new_p1 = v_p1_after["data"]["events"].as_array().unwrap();

@@ -35,7 +35,23 @@ fn main() -> error::Result<()> {
                 judge,
                 judge_budget,
                 judge_fixture_path,
+                print_token,
+                rotate_token,
+                retention_profile,
             } => {
+                // Slice-19: --print-token and --rotate-token short-circuit server start.
+                if print_token {
+                    let token = witmcc::security::token::ensure_token()
+                        .map_err(anyhow::Error::from)?;
+                    eprintln!("{token}");
+                    return Ok(());
+                }
+                if rotate_token {
+                    let token = witmcc::security::token::rotate_token()
+                        .map_err(anyhow::Error::from)?;
+                    eprintln!("{token}");
+                    return Ok(());
+                }
                 serve_cmd(
                     &cli.db_path,
                     bind,
@@ -49,6 +65,7 @@ fn main() -> error::Result<()> {
                     judge,
                     judge_budget,
                     judge_fixture_path,
+                    retention_profile,
                 )
                 .await
             }
@@ -78,6 +95,7 @@ async fn serve_cmd(
     judge_mode: cli::JudgeMode,
     judge_budget: usize,
     judge_fixture_path: Option<std::path::PathBuf>,
+    retention_profile: String,
 ) -> error::Result<()> {
     // Loopback-only enforcement: accepts 127.0.0.0/8 and ::1 (is_loopback()).
     // Strict 127.0.0.1-only would use `bind == IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)`.
@@ -161,6 +179,22 @@ async fn serve_cmd(
     };
     tracing::info!(judge = %judge_runtime.kind, budget = judge_runtime.budget, "judge runtime ready");
 
+    // Slice-19: Ensure token exists, print on first boot.
+    let token = witmcc::security::token::ensure_token()
+        .map_err(anyhow::Error::from)?;
+    eprintln!("witmcc: serving with token {token}");
+
+    // Slice-19: Parse retention profile and spawn sweep if enabled.
+    let profile: witmcc::security::retention::Profile = retention_profile
+        .parse()
+        .map_err(anyhow::Error::from)?;
+    if profile != witmcc::security::retention::Profile::None {
+        let pool_cl = pool.clone();
+        let policy = witmcc::security::retention::RetentionPolicy { profile: profile.clone() };
+        bg_handles.push(witmcc::security::retention::spawn_sweep_task(pool_cl, policy));
+        tracing::info!(profile = retention_profile, "retention sweep enabled");
+    }
+
     let state = witmcc::api::AppState {
         pool: pool.clone(),
         live_tx: live_tx.clone(),
@@ -169,6 +203,9 @@ async fn serve_cmd(
         judge_runtime: std::sync::Arc::new(judge_runtime),
         // Slice-17: MCP session registry starts empty; sessions are created on initialize.
         mcp_sessions: witmcc::api::mcp::SessionRegistry::new(),
+        // Slice-19: bearer token + retention profile for health block.
+        token,
+        retention_profile,
     };
     let app = witmcc::api::router(state);
     let addr = std::net::SocketAddr::new(bind, port);

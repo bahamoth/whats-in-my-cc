@@ -17,10 +17,13 @@ fn pick_port() -> u16 {
 }
 
 /// Spawn `witmcc serve` against a tempfile DB on an ephemeral port. Returns
-/// the child, the host:port, and the DB file (keep alive until child exit).
-fn spawn_serve_with(extra_args: &[&str]) -> (Child, String, tempfile::NamedTempFile) {
+/// (child, host:port, db file, token, config_dir). Keep db + config_dir alive.
+fn spawn_serve_with(
+    extra_args: &[&str],
+) -> (Child, String, tempfile::NamedTempFile, String, tempfile::TempDir) {
     let port = pick_port();
     let db = tempfile::NamedTempFile::new().expect("tempfile");
+    let config_dir = tempfile::tempdir().expect("config tempdir");
     let bin = env!("CARGO_BIN_EXE_witmcc");
     let mut cmd = Command::new(bin);
     cmd.args([
@@ -37,7 +40,9 @@ fn spawn_serve_with(extra_args: &[&str]) -> (Child, String, tempfile::NamedTempF
     for a in extra_args {
         cmd.arg(a);
     }
-    cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    cmd.env("WITMCC_CONFIG_DIR", config_dir.path())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     let child = cmd.spawn().expect("spawn witmcc serve");
     let host = format!("127.0.0.1:{port}");
 
@@ -47,9 +52,12 @@ fn spawn_serve_with(extra_args: &[&str]) -> (Child, String, tempfile::NamedTempF
         if let Ok(s) = TcpStream::connect_timeout(&host.parse().unwrap(), Duration::from_millis(200))
         {
             drop(s);
-            // Now do a real HTTP probe.
             if http_health_ok(&host) {
-                return (child, host, db);
+                let token = std::fs::read_to_string(config_dir.path().join("token"))
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string();
+                return (child, host, db, token, config_dir);
             }
         }
         std::thread::sleep(Duration::from_millis(50));
@@ -70,7 +78,8 @@ fn http_health_ok(host: &str) -> bool {
     );
     let mut buf = String::new();
     let _ = s.take(256).read_to_string(&mut buf);
-    buf.starts_with("HTTP/1.1 200")
+    // Slice-19: 401 means the server is up but requires a token.
+    buf.starts_with("HTTP/1.1 200") || buf.starts_with("HTTP/1.1 401")
 }
 
 /// Open a streaming GET /v1/stream connection and return the TcpStream so the
@@ -140,7 +149,7 @@ fn http_post_json(host: &str, path: &str, body: &str) {
 /// SessionListPage live update on populated DBs.
 #[test]
 fn no_cursor_means_no_backfill() {
-    let (mut child, host, _db) = spawn_serve_with(&[]);
+    let (mut child, host, _db, _token, _cfg) = spawn_serve_with(&[]);
 
     // Seed the DB with one hook BEFORE the SSE client connects.
     let body = serde_json::json!({
@@ -181,7 +190,7 @@ fn no_cursor_means_no_backfill() {
 /// row inserted.
 #[test]
 fn binary_emits_sse_for_hooks() {
-    let (mut child, host, _db) = spawn_serve_with(&[]);
+    let (mut child, host, _db, _token, _cfg) = spawn_serve_with(&[]);
 
     // Open SSE listener in a worker thread; we read while the main thread
     // triggers the hook POST.
@@ -221,7 +230,7 @@ fn binary_emits_sse_for_hooks() {
 /// Anchored on the real slice-6 v01 fixture.
 #[test]
 fn binary_emits_sse_for_otel_metrics() {
-    let (mut child, host, _db) = spawn_serve_with(&[]);
+    let (mut child, host, _db, _token, _cfg) = spawn_serve_with(&[]);
 
     let host_for_sse = host.clone();
     let reader = std::thread::spawn(move || {
@@ -273,7 +282,7 @@ fn binary_emits_sse_for_otel_metrics() {
 /// a different session. Verifies the server-side filter at the SSE handler.
 #[test]
 fn sse_session_filter_does_not_leak_other_sessions() {
-    let (mut child, host, _db) = spawn_serve_with(&[]);
+    let (mut child, host, _db, _token, _cfg) = spawn_serve_with(&[]);
 
     // Subscribe with a session filter that won't match the hook we'll POST.
     let host_for_sse = host.clone();
