@@ -5,6 +5,7 @@ import type {
   SessionEventsResponse,
   GraphPayload,
   RawEventResponse,
+  FindingDto,
 } from './types';
 
 export class ApiError extends Error {
@@ -36,6 +37,13 @@ export const getSession   = (id: string) => jsonGet<SessionDetail>(`/v1/sessions
 export const getGraph     = (id: string) => jsonGet<GraphPayload>(`/v1/sessions/${encodeURIComponent(id)}/graph`);
 export const getEventRaw  = (eventId: string) =>
   jsonGet<RawEventResponse>(`/v1/events/${encodeURIComponent(eventId)}/raw`);
+
+/** Slice-11 — M5 findings list for a session. Unknown sessions return an
+ *  empty array (not 404), matching the diff-hunks endpoint convention. */
+export const getFindings = (id: string) =>
+  jsonGet<{ findings: FindingDto[] }>(
+    `/v1/sessions/${encodeURIComponent(id)}/findings`,
+  );
 
 /** Slice-9 — cursor-paged event window. `before`/`after` cursors have the
  *  shape `<observed_at_rfc3339>|<event_id>` and accept either ULIDs or the

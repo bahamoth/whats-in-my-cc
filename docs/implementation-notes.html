@@ -1999,10 +1999,33 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       <li>rule plugin system — slice-11은 hard-coded rule registry</li>
       <li>user-rejection vs tool-error subclassification</li>
     </ul>
+
+    <h3>Implementation notes (delta from design)</h3>
+    <ul>
+      <li><strong>DEV-S11-01 — atomic graph+findings.</strong> <code>rebuild_session</code>이 graph 커밋과 findings upsert를 <em>같은 transaction</em>에서 처리한다. slice-9 DEV-S8-12 atomicity 보장이 findings로 확장 — 동시 SELECT는 항상 graph와 findings의 일관된 스냅샷을 본다. <code>repo_finding::{delete_session_in_tx, insert_in_tx}</code>이 <code>repo_graph</code>와 대칭.</li>
+      <li><strong>DEV-S11-02 — pure rule body.</strong> rule은 in-memory <code>compute</code> 결과 nodes를 그대로 받는다. DB 재조회 없음 — <code>run_session_pure(session_id, events, graph_nodes) -&gt; Vec&lt;NewFinding&gt;</code>. 모든 ingest 경로 (transcript / OTel / hook / CLI rebuild)가 자동 wiring을 통해 finding refresh를 얻는다.</li>
+      <li><strong>DEV-S11-03 — finding_id prefix.</strong> <code>derive_node_id</code>가 반환한 <code>nd_</code> prefix를 <code>find_</code>로 갈아끼운다. read-time 가독성 + spec §08 명명과 일치.</li>
+      <li><strong>DEV-S11-04 — evidence_event_id를 finding_id keying에 포함.</strong> 같은 evidence가 두 번 발견되어도 같은 id가 나와 INSERT OR IGNORE가 dedupe. session에서 동일 tool_call이 두 번 fail해도 별개 finding (event_id가 다름).</li>
+      <li><strong>DEV-S11-05 — frontend wiring 단일 prop.</strong> <code>FindingsPanel</code>은 sessionId + onSelectNode만 받는다. SessionDetailPage의 <code>setSelectedNodeId</code>가 그대로 prop으로 내려가서 click → Timeline highlight + SourcePanel rerender. 별도 store / context 도입하지 않음.</li>
+    </ul>
+
+    <h3>Verification (2026-05-27 — branch slice11-tool-failure-finding)</h3>
+    <ul>
+      <li>cargo: <strong>198 / 198 green</strong> (slice-10a baseline 189 → +9: <code>insight_tool_failure</code> 4 + <code>repo_finding</code> 3 + <code>api_findings</code> 2).</li>
+      <li>vitest: <strong>71 / 71 green</strong> (slice-10a baseline 68 → +3: <code>FindingsPanel.test.tsx</code> 3건 — empty / single row / show-evidence click).</li>
+      <li>Browser smoke: 실세션 aac68973-... ingest 후 webUI / sessions / aac... 진입. Findings panel에 11 row 표시, 첫 row "show evidence" 클릭 시 SourcePanel이 evidence tool_call node의 transcript line (jsonl:2336) source 표시. 콘솔 에러/경고 0건. Unknown session → SessionDetail가 "not found"로 short-circuit (FindingsPanel mount 안 됨, 의도된 동작).</li>
+      <li>Real-data 표본 분포: <code>is_error:true</code> 검색 결과 — aac68973 (9 grep 매치 → 11 finding, 한 줄에 여러 tool_result item), 0a6e3bdc / 0ab981f6 (4-5건), optiflow / nc-design-system (1건). 표본이 작아 일반화 금지 (CLAUDE.md real-data anchoring).</li>
+    </ul>
+
+    <h3>Open questions / next slice</h3>
+    <ul>
+      <li>현재 표본의 모든 <code>is_error:true</code>가 user-rejection 형식 ("The user doesn't want to proceed…")인지, 진짜 tool error (Bash exit code ≠ 0 등)도 같은 플래그를 쓰는지 확인 필요. 슬라이스-12에서 content 패턴 또는 OTel <code>status_code</code> 신호로 sub-classification.</li>
+      <li>다음 카테고리 우선순위: <code>missing_verification</code> (mutation node + no test edge) vs <code>tool_failure</code> 후속 (error 분류) — 사용자 판단 대기.</li>
+    </ul>
   </section>
 
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 · 2026-05-26 · branch: slice11-tool-failure-finding</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 · 2026-05-27 · branch: slice11-tool-failure-finding</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>

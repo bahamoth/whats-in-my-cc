@@ -6,6 +6,7 @@ import type {
   ObservedEventDto,
   SessionDetail,
 } from '../api/types';
+import { FindingsPanel } from '../components/FindingsPanel';
 import { MetaStrip } from '../components/MetaStrip';
 import { SourcePanel } from '../components/SourcePanel';
 import { Timeline } from '../components/Timeline';
@@ -195,6 +196,7 @@ export default function SessionDetailPage() {
             </div>
             <SourcePanel eventId={selectedEventId} node={selectedNode} />
           </div>
+          <FindingsPanel sessionId={sessionId} onSelectNode={setSelectedNodeId} />
         </>
       )}
     </div>

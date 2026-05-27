@@ -74,6 +74,23 @@ export type GraphEdgeDto = {
 
 export type GraphPayload = { nodes: GraphNodeDto[]; edges: GraphEdgeDto[] };
 
+/** Slice-11 — M5 Finding row, surfaced by `GET /v1/sessions/:id/findings`.
+ *  Mirrors the `finding` SQLite row 1:1. `evidence_refs` is raw JSON because
+ *  different rule categories may attach different shapes. */
+export type FindingDto = {
+  finding_id: string;
+  schema_version: string;
+  session_id: string;
+  category: string;
+  severity: string;
+  claim: string;
+  confidence: number;
+  limitations: string[];
+  evidence_refs: Array<{ node_id: string; role: string }>;
+  generated_at: string;
+  rule_version: string;
+};
+
 export type RawEventResponse = {
   schema_version: string;
   event_id: string;
