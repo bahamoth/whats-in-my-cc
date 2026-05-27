@@ -1,0 +1,20 @@
+{
+  "risky_action||aaa111bbb222ccc333ddd444eee555ff": {
+    "promote": true,
+    "confidence_l2": 0.8,
+    "reason": "destructive bash command without preceding user confirmation",
+    "mismatch_summary": null
+  },
+  "risky_action||fff555eee444ddd333ccc222bbb111aaa": {
+    "promote": false,
+    "confidence_l2": 0.0,
+    "reason": "user explicitly requested the destructive action",
+    "mismatch_summary": null
+  },
+  "noop_test||0000000000000000000000000000000000000000000000000000000000000001": {
+    "promote": true,
+    "confidence_l2": 0.6,
+    "reason": "fixture judge promote for noop_test",
+    "mismatch_summary": null
+  }
+}
