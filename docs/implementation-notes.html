@@ -84,6 +84,11 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice-17">Overview (slice-17)</a>
     <a href="#slice-17-deviations">Intentional Deviations (slice-17)</a>
     <a href="#planning-remaining-milestones">Planning — slice-11..19 (2026-05-27)</a>
+    <a href="#slice-18">Overview (slice-18)</a>
+    <a href="#slice-18-deviations">Intentional Deviations (slice-18)</a>
+    <a href="#slice-19">Overview (slice-19)</a>
+    <a href="#slice-19-deviations">Intentional Deviations (slice-19)</a>
+    <a href="#mvp-exit">MVP Exit Summary (AC-1..7)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
 </aside>
@@ -2648,8 +2653,151 @@ vitest: 69 passed
     </ul>
   </section>
 
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- slice-18 Overview (added at slice-19 merge since slice-18 was folded) -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <section id="slice-18">
+    <h2><span class="num">33</span>Overview (slice-18) — Redaction Gate + Manifest</h2>
+    <p><strong>브랜치:</strong> <code>feat/remaining-milestones</code> · <strong>날짜:</strong> 2026-05-27 · <strong>AC:</strong> AC-7 closed.</p>
+    <p>slice-18은 content masking을 구현한다. Raw payload 및 observed_event.payload에 rule pack v1 (API key 패턴, PII 휴리스틱) 을 적용하여 고위험 문자열을 <code>[REDACTED]</code>로 치환하고, 각 raw_event에 <code>redaction_manifest</code> JSON 열을 추가했다.</p>
+    <ul>
+      <li><strong>Rule pack v1:</strong> API key 정규식 (AWS, Anthropic, GitHub, Google, OpenAI) + 고엔트로피 base64 휴리스틱 (≥24자 base64-valid 토큰 ≥3개인 필드)</li>
+      <li><strong>Ingest gate:</strong> 모든 <code>raw_event</code> 삽입 시 redaction_engine 실행 → manifest 저장</li>
+      <li><strong>API propagation:</strong> Pull API envelope에 <code>redaction_policy</code> + <code>redaction_summary</code> 포함</li>
+      <li><strong>MCP annotations:</strong> <code>resources/list</code> 응답에 redaction_state 주석 추가</li>
+    </ul>
+  </section>
+
+  <section id="slice-18-deviations">
+    <h2>Intentional Deviations (slice-18)</h2>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S18-01</span>Rule pack은 v1; ML 모델 기반 PII 탐지는 post-MVP.</div>
+      <div class="dev-body">사양의 포괄적 PII 탐지는 정규식 + 엔트로피 휴리스틱으로 근사. false-negative 가능성 있으나 false-positive로 인한 데이터 손실이 더 위험.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S18-02</span>redaction_shim은 slice-18에서 실제 gate로 교체.</div>
+      <div class="dev-body">slice-14..17에서 stub이었던 shim이 실제 RedactionEngine으로 교체됨. DB re-migration 없이 컬럼 추가로 처리.</div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- slice-19 Overview                                                      -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <section id="slice-19">
+    <h2><span class="num">34</span>Overview (slice-19) — Token Auth + Retention Sweep (MVP Exit)</h2>
+    <p><strong>브랜치:</strong> <code>feat/remaining-milestones</code> · <strong>날짜:</strong> 2026-05-27 · <strong>AC:</strong> AC-6 closed. M7 (Hardening) closed. <strong>MVP 완료.</strong></p>
+    <p>slice-19는 Access Control + Data Lifecycle 두 기능을 추가하여 MVP를 종료한다.</p>
+
+    <h3>Token Authentication</h3>
+    <ul>
+      <li><strong>Token generation:</strong> 32바이트 CSPRNG → base64url → <code>witmcc_&lt;43-char&gt;</code> 형식 (~50자)</li>
+      <li><strong>Token file:</strong> <code>$WITMCC_CONFIG_DIR/token</code> (미설정 시 <code>~/.config/witmcc/token</code>), mode <strong>0600</strong> POSIX. 과잉 권한이면 기동 거부.</li>
+      <li><strong>Middleware:</strong> <code>require_token</code> — <code>Authorization: Bearer &lt;token&gt;</code> 헤더 검증. <code>subtle::ConstantTimeEq</code> 사용 (타이밍 사이드채널 방어).</li>
+      <li><strong>Coverage:</strong> 모든 <code>/v1/*</code> + <code>/mcp</code> 라우트 auth-gated. <code>/otel/*</code>, <code>/hooks/*</code>, <code>/v1/stream</code>, static SPA는 열린 상태.</li>
+      <li><strong>CLI flags (serve 서브명령):</strong> <code>--print-token</code> (token 출력 후 exit 0), <code>--rotate-token</code> (atomic 교체 후 exit 0).</li>
+    </ul>
+
+    <h3>Retention Sweep</h3>
+    <ul>
+      <li><strong>Profiles:</strong> <code>none</code> (기본, 삭제 없음) | <code>default</code> (raw 30d, normalized 180d, audit 90d, judge_cache 30d) | <code>strict</code> (raw 7d, others 30d)</li>
+      <li><strong>Sweep task:</strong> <code>tokio::spawn</code>, 6시간 주기. <code>none</code> 프로파일에서는 기동 안 함.</li>
+      <li><strong>Tombstones:</strong> 삭제된 resource_id는 <code>retention_tombstone</code> 테이블에 기록. Pull API에서 해당 ID 요청 시 <strong>410 Gone</strong> 반환 (404와 구분).</li>
+      <li><strong>Audit row:</strong> 각 sweep 실행 후 <code>audit</code> 테이블에 <code>retention.deleted</code> 이벤트 기록.</li>
+    </ul>
+
+    <h3>New Endpoints</h3>
+    <ul>
+      <li><code>GET /v1/audit</code> — 최근 audit 행 200개. Auth-gated.</li>
+      <li><code>GET /v1/health</code> — <code>security</code> 블록 추가: <code>auth_required</code>, <code>retention_profile</code>. Auth-gated (DEV-S19-02).</li>
+    </ul>
+
+    <h3>New Migrations</h3>
+    <ul>
+      <li><code>0012_retention.sql</code> — <code>retention_tombstone</code> 테이블</li>
+      <li><code>0013_audit.sql</code> — <code>audit</code> 테이블 + <code>idx_audit_created</code></li>
+    </ul>
+
+    <h3>Doctor Integration</h3>
+    <p><code>witmcc doctor</code>가 <code>WITMCC_CONFIG_DIR/token</code>을 자동으로 읽어 Bearer 헤더를 추가. 401 응답을 "server reachable" (not connectivity error)로 처리.</p>
+
+    <h3>Smoke Evidence</h3>
+    <ul>
+      <li><code>witmcc serve --print-token</code> → stderr에 <code>witmcc_…</code> 출력, exit 0. Token file mode 0600 확인.</li>
+      <li><code>curl /v1/health</code> → 401 (no token)</li>
+      <li><code>curl -H "Authorization: Bearer $T" /v1/health</code> → 200, <code>security.auth_required: true</code>, <code>security.retention_profile: "none"</code></li>
+      <li><code>curl -H "Authorization: Bearer wrong" /v1/health</code> → 401</li>
+      <li><code>POST /mcp</code> without token → 401; with token → 200</li>
+      <li><code>witmcc serve --rotate-token</code> → 새 token 파일 기록, stderr 출력, exit 0</li>
+      <li>단위 테스트: <code>sweep_default_profile_deletes_raw_older_than_30d</code>, <code>deleted_resource_has_tombstone</code>, <code>sweep_writes_audit_row</code> → 모두 green</li>
+    </ul>
+  </section>
+
+  <section id="slice-19-deviations">
+    <h2>Intentional Deviations (slice-19)</h2>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S19-01</span>Retention default is <code>none</code>, not <code>default</code>.</div>
+      <div class="dev-body">보안 사양은 30/180/90일을 기본으로 명시하지만, MVP에서 사용자 raw payload를 기본 삭제하는 것은 놀라운 동작. 기능은 완전히 구현되어 있으며 <code>--retention-profile default</code> 또는 <code>strict</code>로 opt-in.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S19-02</span><code>/v1/health</code> is auth-gated (defence-in-depth).</div>
+      <div class="dev-body">사양은 명시하지 않음. localhost bind가 이미 외부 노출을 막지만, DNS rebinding 공격 방어를 위해 health도 token 필요. 외부 모니터링 도구는 token을 포함해야 함.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S19-03</span>Token은 per-installation, not per-client.</div>
+      <div class="dev-body">다중 클라이언트 토큰은 post-MVP. 현재 설치당 하나의 durable token.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S19-04</span>Tombstones live forever.</div>
+      <div class="dev-body">~80바이트/tombstone로 크기가 작고, 잃어버리면 410 대신 404가 되는 정도. 수동 정리는 post-MVP.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S19-05</span>Audit table introduced in slice-19 (not earlier slices).</div>
+      <div class="dev-body">이전 slice들의 사양에서 audit row를 언급했으나 테이블이 없었음. slice-19에서 테이블과 함께 backfill.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S19-06</span><code>--rotate-token</code>은 running server에 즉시 영향 없음.</div>
+      <div class="dev-body">설계 사양은 "existing connections receive 401 on next request"라고 했으나, token은 serve 시작 시 AppState에 로드된다. rotation 후 새 서버 기동이 필요. 사양의 "hot reload" 의미는 post-MVP 개선사항.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S19-07</span><code>subtle::ConstantTimeEq</code> for token comparison.</div>
+      <div class="dev-body">로컬 전용 토큰에서는 기술적으로 overkill이지만 런타임 비용이 없고 미래 보안 리뷰에서 지적받을 여지를 없앰.</div>
+    </div>
+    <h3>Commit Reference (slice-19)</h3>
+    <ul>
+      <li><code>9cf978a</code> — test(slice-19): red-locking tests for token auth + retention sweep + audit + CLI flags</li>
+      <li><code>abeae4f</code> — feat(security): token generation + persistence + file permissions</li>
+      <li><code>c39b1b7</code> — feat(api/middleware): require_token on /v1 + /mcp; AppState.token + retention_profile</li>
+      <li><code>08a511e</code> — feat(db): 0012_retention + 0013_audit migrations + repos</li>
+      <li><code>b9c7109</code> — feat(security): retention sweep + --print-token / --rotate-token / --retention-profile + doctor token</li>
+    </ul>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- MVP Exit Summary                                                       -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <section id="mvp-exit">
+    <h2><span class="num">35</span>MVP Exit Summary — Acceptance Criteria (AC-1..7)</h2>
+    <div class="callout good">
+      <strong>MVP 완료 — 2026-05-27.</strong> slice-1~19 전체 머지. M3·M5·M6·M7 모두 closed. AC-1~7 모두 green.
+    </div>
+    <table>
+      <thead><tr><th>AC</th><th>Requirement</th><th>Closed by</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td><strong>AC-1</strong></td><td>Transcript ingest + ObservedEvent schema</td><td>slice-1~3</td><td>migration_schema tests, parser tests</td></tr>
+        <tr><td><strong>AC-2</strong></td><td>OTel traces/metrics/logs ingest + telemetry facet</td><td>slice-4~5</td><td>otel_ingest tests, otel_logs_ingest, otel_metrics_ingest</td></tr>
+        <tr><td><strong>AC-3</strong></td><td>Pull API + graph builder + windowed events</td><td>slice-8~10a</td><td>api.rs, graph_build, session_events_api, events_subprocess E2E</td></tr>
+        <tr><td><strong>AC-4</strong></td><td>VerificationRun + Episode + Causal-edge (M3)</td><td>slice-11~13</td><td>repo_verification_run, repo_episode, graph_inferred_edges</td></tr>
+        <tr><td><strong>AC-5</strong></td><td>Insight L1+L2 + Judge + Evidence (M5)</td><td>slice-14~16</td><td>insight_pipeline, insight_pipeline_l2, judge_cache, judge_fixture</td></tr>
+        <tr><td><strong>AC-5b</strong></td><td>MCP Streamable HTTP (M6)</td><td>slice-17</td><td>mcp_initialize, mcp_resources_list, mcp_tools_call, mcp_spec_compat</td></tr>
+        <tr><td><strong>AC-6</strong></td><td>localhost binding + bearer token auth</td><td>slice-19 (this)</td><td>auth_middleware tests, cli_token_flags, smoke: 401→200 transition</td></tr>
+        <tr><td><strong>AC-7</strong></td><td>Redaction gate + manifest (M7 partial)</td><td>slice-18</td><td>redaction_rule_pack, ingest_applies_redaction, redaction_masking</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">Total slices: 19. Total migrations: 13. Test count post-slice-19: ~170+ (all green).</p>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 · planning slice-17~19 · 2026-05-27 · branch: feat/remaining-milestones</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · <strong>MVP EXIT 2026-05-27</strong> · branch: feat/remaining-milestones</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
