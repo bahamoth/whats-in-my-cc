@@ -3,7 +3,8 @@ use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 
 use crate::db::repo_diff_hunk::DiffHunkRow;
-use crate::db::{repo_diff_hunk, repo_graph, repo_observed};
+use crate::db::repo_verification_run::VerificationRunRow;
+use crate::db::{repo_diff_hunk, repo_graph, repo_observed, repo_verification_run};
 use crate::error::Result;
 use crate::ids::{derive_edge_id, derive_node_id};
 use crate::model::graph::{GraphEdge, GraphNode};
@@ -18,7 +19,8 @@ use crate::model::observed::{EventKind, ObservedEvent};
 pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usize, usize)> {
     let evs = repo_observed::list_session(pool, session_id, 100_000).await?;
     let hunks = repo_diff_hunk::list_session(pool, session_id).await?;
-    let (nodes, edges) = compute(session_id, &evs, &hunks);
+    let runs = repo_verification_run::list_session(pool, session_id).await?;
+    let (nodes, edges) = compute(session_id, &evs, &hunks, &runs);
     let n = nodes.len();
     let e = edges.len();
     let mut tx = pool.begin().await?;
@@ -32,6 +34,7 @@ pub fn compute(
     session_id: &str,
     events: &[ObservedEvent],
     hunks: &[DiffHunkRow],
+    runs: &[VerificationRunRow],
 ) -> (Vec<GraphNode>, Vec<GraphEdge>) {
     let mut nodes: Vec<GraphNode> = Vec::new();
     // node_id -> index in `nodes` for deduplication
@@ -255,6 +258,62 @@ pub fn compute(
         });
     }
 
+    // 1c. Slice-11 — materialise `verification_run` graph nodes from the
+    //     side-table. No new EventKind (DEV-S11-04).
+    //     node_id is keyed by (session_id, verification_run_id).
+    for r in runs {
+        let merge_keys = json!({
+            "session_id": session_id,
+            "verification_run_id": r.verification_run_id,
+        });
+        let keys_for_hash = canonical_pairs(&merge_keys);
+        let node_id = derive_node_id(
+            "verification_run",
+            &keys_for_hash
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect::<Vec<_>>(),
+        );
+        if node_index_by_id.contains_key(&node_id) {
+            continue;
+        }
+        // started_at from the VerificationRunRow's started_at field.
+        let started_at = r
+            .started_at
+            .parse::<chrono::DateTime<chrono::Utc>>()
+            .unwrap_or_else(|_| chrono::Utc::now());
+        let payload = json!({
+            "verification_run": {
+                "verification_run_id": r.verification_run_id,
+                "schema_version": r.schema_version,
+                "session_id": r.session_id,
+                "source": r.source,
+                "command": r.command,
+                "command_kind": r.command_kind,
+                "trigger_event_id": r.trigger_event_id,
+                "trigger_tool_use_id": r.trigger_tool_use_id,
+                "status": r.status,
+                "started_at": r.started_at,
+                "ended_at": r.ended_at,
+                "exit_code": r.exit_code,
+                "failure_summary": r.failure_summary,
+            }
+        });
+        node_index_by_id.insert(node_id.clone(), nodes.len());
+        nodes.push(GraphNode {
+            node_id,
+            schema_version: SCHEMA_VERSION.into(),
+            session_id: session_id.into(),
+            node_kind: "verification_run".into(),
+            started_at,
+            ended_at: None,
+            merge_keys,
+            source_event_ids: vec![r.trigger_event_id.clone()],
+            source_uris: vec![],
+            payload,
+        });
+    }
+
     // 2. Merge tool_result payload into matching tool_call node.
     //    Collect all mutations first to satisfy the borrow checker, then apply.
     //    After merge the result node is removed; we update by_event_uuid so that
@@ -450,10 +509,91 @@ pub fn compute(
         ));
     }
 
+    // 3d. Slice-11 — triggered_verification edges: tool_call → verification_run.
+    //     Key: trigger_tool_use_id on the run. If the tool_use_id is not in
+    //     tool_call_nid_by_tid (e.g., the call was not ingested), the edge is
+    //     skipped per spec §7 ("reconciliation on next graph rebuild").
+    for r in runs {
+        // Compute the verification_run node_id (same derivation as 1c above).
+        let vr_merge_keys = json!({
+            "session_id": session_id,
+            "verification_run_id": r.verification_run_id,
+        });
+        let vr_pairs = canonical_pairs(&vr_merge_keys);
+        let vr_nid = derive_node_id(
+            "verification_run",
+            &vr_pairs
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect::<Vec<_>>(),
+        );
+        if !valid_nodes.contains(vr_nid.as_str()) {
+            continue;
+        }
+        // triggered_verification: tool_call → verification_run
+        if let Some(tid) = r.trigger_tool_use_id.as_deref() {
+            if let Some(call_nid) = tool_call_nid_by_tid.get(tid) {
+                if valid_nodes.contains(call_nid.as_str()) {
+                    edges.push(make_edge(
+                        session_id,
+                        call_nid,
+                        &vr_nid,
+                        "triggered_verification",
+                        json!({"source": r.source}),
+                    ));
+                }
+            }
+        }
+
+        // covers_diff_hunk: verification_run → diff_hunk (temporal precedence).
+        // For every diff_hunk in the same session whose introducing event's
+        // observed_at is strictly before the verification run's started_at.
+        let run_started: Option<chrono::DateTime<chrono::Utc>> =
+            r.started_at.parse().ok();
+        for h in hunks {
+            if h.session_id != session_id {
+                continue;
+            }
+            // Check temporal precedence using observed_at of the introducing event.
+            let hunk_at = event_observed_at.get(h.introduced_by_event_id.as_str()).copied();
+            let precedes = match (hunk_at, run_started) {
+                (Some(ha), Some(rs)) => ha < rs,
+                _ => false,
+            };
+            if !precedes {
+                continue;
+            }
+            let dh_merge_keys = json!({
+                "session_id": session_id,
+                "diff_hunk_id": h.diff_hunk_id,
+            });
+            let dh_pairs = canonical_pairs(&dh_merge_keys);
+            let dh_nid = derive_node_id(
+                "diff_hunk",
+                &dh_pairs
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .collect::<Vec<_>>(),
+            );
+            if !valid_nodes.contains(dh_nid.as_str()) {
+                continue;
+            }
+            edges.push(make_edge(
+                session_id,
+                &vr_nid,
+                &dh_nid,
+                "covers_diff_hunk",
+                json!({"match": "temporal_session"}),
+            ));
+        }
+    }
+
     // 3c. turn_order — adjacent pairs of nodes ordered by (started_at, node_id).
     //     otel_span nodes are excluded: they are not conversation turns, and
     //     cross-kind turn_order edges will be wired in a later slice once
     //     transcript ↔ span correlation is established.
+    //     verification_run nodes excluded: not a conversation turn; they are
+    //     side-table nodes linked by triggered_verification edges.
     let mut ordered: Vec<&GraphNode> = nodes
         .iter()
         .filter(|n| {
@@ -465,6 +605,7 @@ pub fn compute(
                     | "diff_hunk"
                     | "metric_sample"
                     | "log_record"
+                    | "verification_run"
             )
         })
         .collect();
