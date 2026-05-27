@@ -6,6 +6,7 @@ pub mod error;
 pub mod graph;
 pub mod ids;
 pub mod ingest;
+pub mod insight;
 pub mod live;
 pub mod model;
 pub mod paths;
