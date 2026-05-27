@@ -1,7 +1,9 @@
 pub mod repo_diff_hunk;
 pub mod repo_episode;
 pub mod repo_finding;
+pub mod repo_findings_pending;
 pub mod repo_graph;
+pub mod repo_judge_cache;
 pub mod repo_observed;
 pub mod repo_raw;
 pub mod repo_runs;
