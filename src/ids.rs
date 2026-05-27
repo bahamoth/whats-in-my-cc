@@ -26,6 +26,20 @@ pub fn derive_edge_id(from_id: &str, to_id: &str, kind: &str) -> String {
     format!("eg_{}", hex::encode(&h.finalize()[..12]))
 }
 
+/// Derive a deterministic `finding_id` from category, session, and sorted evidence refs.
+/// Format: `"find_" + hex(sha256(category + "\0" + session_id + "\0" + sorted_refs.join(",")))[..24]`.
+pub fn derive_finding_id(category: &str, session_id: &str, evidence_refs: &[String]) -> String {
+    let mut refs: Vec<&str> = evidence_refs.iter().map(|s| s.as_str()).collect();
+    refs.sort_unstable();
+    let mut h = Sha256::new();
+    h.update(category.as_bytes());
+    h.update(b"\x00");
+    h.update(session_id.as_bytes());
+    h.update(b"\x00");
+    h.update(refs.join(",").as_bytes());
+    format!("find_{}", hex::encode(&h.finalize()[..12]))
+}
+
 /// Single-task monotonic ULID generator. Must NOT be shared across tasks
 /// without external synchronization — slice-1 keeps ingest single-task.
 pub struct MonotonicUlidGen {
