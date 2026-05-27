@@ -1,14 +1,20 @@
-//! Slice-14 — locks that the extractor registry contains exactly the two L1
-//! categories in the defined order. Adding / removing categories without
-//! updating this invariant fails the test.
+//! Locks that the extractor registry contains exactly the 5 MVP categories
+//! in the defined order. Adding/removing categories without updating this
+//! invariant fails the test (per architecture spec §4).
 
 #[test]
-fn registry_contains_l1_categories_only_for_slice14() {
+fn registry_contains_all_mvp_categories_in_locked_order() {
     let cats: Vec<&str> = witmcc::insight::registry::all_extractors()
         .iter()
         .map(|e| e.category())
         .collect();
-    let expected = vec!["missing_verification", "tool_failure"];
+    let expected = vec![
+        "missing_verification",
+        "tool_failure",
+        "risky_action",
+        "context_bloat",
+        "final_state_mismatch",
+    ];
     assert_eq!(cats, expected, "registry order/content must match expected");
 }
 
@@ -17,7 +23,13 @@ fn registry_floor_values() {
     let exts = witmcc::insight::registry::all_extractors();
     let mv = exts.iter().find(|e| e.category() == "missing_verification").unwrap();
     let tf = exts.iter().find(|e| e.category() == "tool_failure").unwrap();
-    // Architecture spec §3: missing_verification = 0.9, tool_failure = 1.0
+    let ra = exts.iter().find(|e| e.category() == "risky_action").unwrap();
+    let cb = exts.iter().find(|e| e.category() == "context_bloat").unwrap();
+    let fsm = exts.iter().find(|e| e.category() == "final_state_mismatch").unwrap();
+    // Architecture spec §3 confidence policy
     assert!((mv.floor() - 0.9).abs() < f32::EPSILON, "mv floor must be 0.9, got {}", mv.floor());
     assert!((tf.floor() - 1.0).abs() < f32::EPSILON, "tf floor must be 1.0, got {}", tf.floor());
+    assert!((ra.floor() - 0.7).abs() < f32::EPSILON, "ra floor must be 0.7, got {}", ra.floor());
+    assert!((cb.floor() - 0.5).abs() < f32::EPSILON, "cb floor must be 0.5, got {}", cb.floor());
+    assert!((fsm.floor() - 0.6).abs() < f32::EPSILON, "fsm floor must be 0.6, got {}", fsm.floor());
 }
