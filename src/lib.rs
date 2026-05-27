@@ -10,5 +10,6 @@ pub mod insight;
 pub mod live;
 pub mod model;
 pub mod paths;
+pub mod security;
 pub mod telemetry;
 pub mod transcript_tail;
