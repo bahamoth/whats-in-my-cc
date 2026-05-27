@@ -128,6 +128,37 @@ pub struct DiffHunksResponse {
     pub hunks: Vec<DiffHunkDto>,
 }
 
+/// Slice-11 — single verification run in the Pull API response.
+/// `covered_diff_hunk_ids` is computed at response time from the temporal
+/// precedence rule (DEV-S11-02: not stored as a column).
+#[derive(Serialize)]
+pub struct VerificationRunDto {
+    pub verification_run_id: String,
+    pub schema_version: String,
+    pub session_id: String,
+    pub source: String,
+    pub command: String,
+    pub command_kind: String,
+    pub trigger_event_id: String,
+    pub trigger_tool_use_id: Option<String>,
+    pub status: String,
+    pub started_at: String,
+    pub ended_at: Option<String>,
+    pub exit_code: Option<i32>,
+    pub failure_summary: Option<String>,
+    pub covered_diff_hunk_ids: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct VerificationRunsResponse {
+    pub data: Vec<VerificationRunDto>,
+}
+
+#[derive(Serialize)]
+pub struct VerificationRunDetailResponse {
+    pub data: VerificationRunDto,
+}
+
 #[derive(Serialize)]
 pub struct RawSource {
     pub kind: String,

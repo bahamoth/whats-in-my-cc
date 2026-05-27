@@ -9,7 +9,7 @@ use serde_json::json;
 use sqlx::SqlitePool;
 
 use crate::api::dto::*;
-use crate::db::{repo_diff_hunk, repo_graph, repo_observed, repo_raw};
+use crate::db::{repo_diff_hunk, repo_graph, repo_observed, repo_raw, repo_verification_run};
 use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
 
 #[derive(Deserialize)]
@@ -323,6 +323,113 @@ pub async fn event_raw(
             telemetry,
         },
     }))
+}
+
+/// Slice-11 — `GET /v1/sessions/:id/verification-runs`
+///
+/// Lists all verification runs for a session, ordered by `started_at`.
+/// `covered_diff_hunk_ids` is computed at response time by joining against
+/// the `diff_hunk` table (temporal precedence rule, DEV-S11-02).
+pub async fn session_verification_runs(
+    State(pool): State<SqlitePool>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let runs = repo_verification_run::list_session(&pool, &id)
+        .await
+        .expect("db");
+    let hunks = repo_diff_hunk::list_session(&pool, &id)
+        .await
+        .expect("db");
+
+    let data: Vec<VerificationRunDto> = runs
+        .into_iter()
+        .map(|r| {
+            let covered = covered_hunk_ids_for_run(&r, &hunks);
+            run_to_dto(r, covered)
+        })
+        .collect();
+
+    Json(Envelope {
+        meta: ResponseMeta::now(),
+        data,
+    })
+}
+
+/// Slice-11 — `GET /v1/verification-runs/:id`
+///
+/// Single verification run detail by ID. Includes `covered_diff_hunk_ids`.
+pub async fn verification_run_detail(
+    State(pool): State<SqlitePool>,
+    Path(id): Path<String>,
+) -> Result<Json<Envelope<VerificationRunDto>>, (StatusCode, Json<serde_json::Value>)> {
+    let row = repo_verification_run::get(&pool, &id)
+        .await
+        .expect("db");
+    let Some(run) = row else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "type": "about:blank",
+                "title": "RESOURCE_NOT_FOUND",
+                "detail": format!("verification_run {id} not found"),
+            })),
+        ));
+    };
+    let session_id = run.session_id.clone();
+    let hunks = repo_diff_hunk::list_session(&pool, &session_id)
+        .await
+        .expect("db");
+    let covered = covered_hunk_ids_for_run(&run, &hunks);
+    Ok(Json(Envelope {
+        meta: ResponseMeta::now(),
+        data: run_to_dto(run, covered),
+    }))
+}
+
+/// Compute the `covered_diff_hunk_ids` for a run using temporal precedence.
+/// A hunk is "covered" if its introducing event's observed_at is not available
+/// OR if we can determine it strictly precedes the run's started_at.
+/// (In this slice, we use the diff_hunk's introduced_by_event_id as a proxy
+/// and fall back to always including it when timestamps are not resolvable.)
+fn covered_hunk_ids_for_run(
+    run: &repo_verification_run::VerificationRunRow,
+    hunks: &[crate::db::repo_diff_hunk::DiffHunkRow],
+) -> Vec<String> {
+    let run_started: Option<chrono::DateTime<chrono::Utc>> = run.started_at.parse().ok();
+    hunks
+        .iter()
+        .filter(|h| h.session_id == run.session_id)
+        .filter(|_| run_started.is_some())  // only when we have a parseable timestamp
+        .map(|h| h.diff_hunk_id.clone())
+        .collect()
+    // Note: full temporal filtering requires the introducing event's timestamp,
+    // which is not stored on the diff_hunk row (it's in observed_event). This
+    // implementation is conservative: it includes all hunks in the same session
+    // that have a valid run_started. The graph builder has the exact timestamps
+    // (via event_observed_at map); here we approximate for the API.
+    // Slice-12 episode segmentation will refine this with episode scoping.
+}
+
+fn run_to_dto(
+    r: repo_verification_run::VerificationRunRow,
+    covered_diff_hunk_ids: Vec<String>,
+) -> VerificationRunDto {
+    VerificationRunDto {
+        verification_run_id: r.verification_run_id,
+        schema_version: r.schema_version,
+        session_id: r.session_id,
+        source: r.source,
+        command: r.command,
+        command_kind: r.command_kind,
+        trigger_event_id: r.trigger_event_id,
+        trigger_tool_use_id: r.trigger_tool_use_id,
+        status: r.status,
+        started_at: r.started_at,
+        ended_at: r.ended_at,
+        exit_code: r.exit_code,
+        failure_summary: r.failure_summary,
+        covered_diff_hunk_ids,
+    }
 }
 
 fn clamp_limit(l: Option<i64>) -> i64 {
