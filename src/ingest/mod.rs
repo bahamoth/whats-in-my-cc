@@ -6,3 +6,4 @@ pub mod otel_logs;
 pub mod otel_metrics;
 pub mod store;
 pub mod transcript;
+pub mod verification_run;
