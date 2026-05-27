@@ -1,3 +1,9 @@
 pub mod edge_inference;
 pub mod episode;
+pub mod extractor;
+pub mod extractors;
+pub mod pipeline;
+pub mod registry;
+pub mod types;
 pub mod verification_allowlist;
+pub mod view;
