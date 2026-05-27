@@ -75,7 +75,7 @@ async fn graph_has_otel_span_node_after_ingest() {
     otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink)
         .await
         .unwrap();
-    let (n, e) = build::rebuild_session(&pool, "sess-otel-B").await.unwrap();
+    let (n, e, _) = build::rebuild_session(&pool, "sess-otel-B").await.unwrap();
     assert_eq!(n, 2, "two otel_span nodes from parent_child fixture");
     assert_eq!(e, 0, "no edges emitted in slice-3");
 

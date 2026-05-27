@@ -71,7 +71,7 @@ async fn rebuild_session_is_atomic_under_concurrent_reads() {
     }
 
     // 2. Prime the graph so readers never legitimately see 0 rows.
-    let (initial_nodes, _) = rebuild_session(&pool, SESS).await.unwrap();
+    let (initial_nodes, _, _) = rebuild_session(&pool, SESS).await.unwrap();
     assert_eq!(
         initial_nodes, SEED_N,
         "seed should produce one user_message node per event"
