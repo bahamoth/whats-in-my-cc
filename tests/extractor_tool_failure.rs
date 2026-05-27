@@ -32,13 +32,20 @@ fn tool_call_ev(i: usize, tool_use_id: &str, tool_name: &str) -> ObservedEvent {
     }
 }
 
+/// Build a tool_result event using the real transcript payload shape:
+/// `{"content_ordinal": 0, "tool_result": {"tool_use_id": …, "is_error": …, "content": …}}`.
+/// Verified against real fixture: aac68973-729e-4014-a02b-28a556f5ff29.
 fn tool_result_ev(i: usize, tool_use_id: &str, is_error: bool) -> ObservedEvent {
     ObservedEvent {
         tool_use_id: Some(tool_use_id.into()),
         payload: json!({
-            "tool_use_id": tool_use_id,
-            "is_error": is_error,
-            "content": if is_error { "error output" } else { "ok" }
+            "content_ordinal": 0,
+            "tool_result": {
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "is_error": is_error,
+                "content": if is_error { "error output" } else { "ok" }
+            }
         }),
         ..base_event(i, Actor::Tool, EventKind::ToolResult)
     }
@@ -108,7 +115,8 @@ fn does_not_fire_if_no_is_error_field() {
         tool_call_ev(0, "tid_0", "Bash"),
         ObservedEvent {
             tool_use_id: Some("tid_0".into()),
-            payload: json!({ "tool_use_id": "tid_0", "content": "ok" }),
+            // No is_error key inside tool_result — default to false.
+            payload: json!({ "content_ordinal": 0, "tool_result": { "tool_use_id": "tid_0", "content": "ok" } }),
             ..base_event(1, Actor::Tool, EventKind::ToolResult)
         },
     ];

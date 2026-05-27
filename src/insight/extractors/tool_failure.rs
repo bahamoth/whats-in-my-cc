@@ -50,9 +50,11 @@ impl InsightExtractor for ToolFailure {
             }
 
             // Check is_error flag (spec §5 edge case: absent = false, no fire).
+            // Payload structure: {"tool_result": {"is_error": bool, ...}}
+            // (verified against real fixture: aac68973-729e-4014-a02b-28a556f5ff29).
             let is_error = ev
                 .payload
-                .get("is_error")
+                .pointer("/tool_result/is_error")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
@@ -89,7 +91,7 @@ impl InsightExtractor for ToolFailure {
                         .unwrap_or(false)
                     && !ev2
                         .payload
-                        .get("is_error")
+                        .pointer("/tool_result/is_error")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false)
             });
@@ -142,17 +144,19 @@ fn build_candidate(
     payload: &serde_json::Value,
     evidence_refs: Vec<String>,
 ) -> FindingCandidate {
-    // Truncate error content for projection (first 512 bytes).
-    let error_excerpt = payload
-        .get("content")
+    // Truncate error content for projection (first 512 chars).
+    // Payload: {"tool_result": {"content": "...", "tool_use_id": "...", "is_error": true}}
+    let tr = payload.pointer("/tool_result");
+    let error_excerpt = tr
+        .and_then(|p| p.get("content"))
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .chars()
         .take(512)
         .collect::<String>();
 
-    let tool_use_id = payload
-        .get("tool_use_id")
+    let tool_use_id = tr
+        .and_then(|p| p.get("tool_use_id"))
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
 
