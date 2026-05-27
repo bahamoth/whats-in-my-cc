@@ -1,4 +1,15 @@
 {
   "schema_version": "inferred_edge_counts.v1",
-  "by_session_and_rule": {}
+  "by_session_and_rule": {
+    "aac68973-729e-4014-a02b-28a556f5ff29": {
+      "caused_repair@v1": 0,
+      "large_output_to_next_action@v1": 0,
+      "triggered_by_user_message@v1": 0
+    },
+    "ed82aee9-62a7-4cfe-bf9a-565379765b1e": {
+      "caused_repair@v1": 0,
+      "large_output_to_next_action@v1": 0,
+      "triggered_by_user_message@v1": 0
+    }
+  }
 }
