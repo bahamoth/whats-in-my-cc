@@ -1,5 +1,5 @@
 use clap::Parser;
-use witmcc::{cli, db, doctor, error, paths, telemetry};
+use witmcc::{cli, db, doctor, error, insight::judge::runtime::JudgeRuntime, paths, telemetry};
 
 fn main() -> error::Result<()> {
     let cli = cli::Cli::parse();
@@ -32,6 +32,9 @@ fn main() -> error::Result<()> {
                 transcripts_root,
                 sse_keepalive_secs,
                 sse_channel_capacity,
+                judge,
+                judge_budget,
+                judge_fixture_path,
             } => {
                 serve_cmd(
                     &cli.db_path,
@@ -43,6 +46,9 @@ fn main() -> error::Result<()> {
                     transcripts_root,
                     sse_keepalive_secs,
                     sse_channel_capacity,
+                    judge,
+                    judge_budget,
+                    judge_fixture_path,
                 )
                 .await
             }
@@ -69,6 +75,9 @@ async fn serve_cmd(
     transcripts_root: Option<std::path::PathBuf>,
     sse_keepalive_secs: u64,
     sse_channel_capacity: u64,
+    judge_mode: cli::JudgeMode,
+    judge_budget: usize,
+    judge_fixture_path: Option<std::path::PathBuf>,
 ) -> error::Result<()> {
     // Loopback-only enforcement: accepts 127.0.0.0/8 and ::1 (is_loopback()).
     // Strict 127.0.0.1-only would use `bind == IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)`.
@@ -135,11 +144,29 @@ async fn serve_cmd(
         });
     }
 
+    // Slice-15: build judge runtime based on CLI flags.
+    let judge_runtime = match judge_mode {
+        cli::JudgeMode::None => JudgeRuntime::noop(),
+        cli::JudgeMode::Fixture => {
+            let path = judge_fixture_path.ok_or_else(|| {
+                error::WitmccError::Invalid(
+                    "--judge-fixture-path is required when --judge=fixture".into(),
+                )
+            })?;
+            JudgeRuntime::fixture(&path, judge_budget).map_err(anyhow::Error::from)?
+        }
+        cli::JudgeMode::Anthropic => {
+            JudgeRuntime::anthropic(pool.clone(), judge_budget).map_err(anyhow::Error::from)?
+        }
+    };
+    tracing::info!(judge = %judge_runtime.kind, budget = judge_runtime.budget, "judge runtime ready");
+
     let state = witmcc::api::AppState {
         pool: pool.clone(),
         live_tx: live_tx.clone(),
         sse_keepalive_secs,
         sse_channel_capacity: sse_channel_capacity as usize,
+        judge_runtime: std::sync::Arc::new(judge_runtime),
     };
     let app = witmcc::api::router(state);
     let addr = std::net::SocketAddr::new(bind, port);

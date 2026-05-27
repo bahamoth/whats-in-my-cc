@@ -1,6 +1,18 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+/// Which judge backend to use. Default is `None` (noop — L2 disabled).
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub enum JudgeMode {
+    /// No judge — L2 entirely disabled (default). No LLM calls.
+    #[value(name = "none", alias = "noop")]
+    None,
+    /// Fixture judge — reads verdicts from a JSON file. Requires --judge-fixture-path.
+    Fixture,
+    /// Anthropic judge — real LLM calls. Requires ANTHROPIC_API_KEY env var.
+    Anthropic,
+}
+
 #[derive(Debug, Parser)]
 #[command(name = "witmcc", version, about = "What's in My Claude Code — slice-1")]
 pub struct Cli {
@@ -87,5 +99,14 @@ pub enum Command {
         /// emit into and the SSE handler subscribes to.
         #[arg(long, default_value_t = 512, value_parser = clap::value_parser!(u64).range(64..=8192))]
         sse_channel_capacity: u64,
+        /// Slice-15: which L2 judge to activate. Default = none (L2 disabled).
+        #[arg(long, value_enum, default_value = "none")]
+        judge: JudgeMode,
+        /// Max judge API calls per rebuild pass. Default = 20.
+        #[arg(long, default_value_t = 20)]
+        judge_budget: usize,
+        /// Path to fixture verdict JSON (required when --judge=fixture).
+        #[arg(long)]
+        judge_fixture_path: Option<PathBuf>,
     },
 }

@@ -11,7 +11,7 @@
     "reason": "user explicitly requested the destructive action",
     "mismatch_summary": null
   },
-  "noop_test||0000000000000000000000000000000000000000000000000000000000000001": {
+  "noop_test||a8198524f58e72b56283ab71ebddada22840f108b46ef7165bb3fca9919c5558": {
     "promote": true,
     "confidence_l2": 0.6,
     "reason": "fixture judge promote for noop_test",
