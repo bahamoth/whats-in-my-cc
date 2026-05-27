@@ -77,6 +77,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice-13">Overview (slice-13)</a>
     <a href="#slice-14">Overview (slice-14)</a>
     <a href="#slice-14-deviations">Intentional Deviations (slice-14)</a>
+    <a href="#slice-15">Overview (slice-15)</a>
+    <a href="#slice-15-deviations">Intentional Deviations (slice-15)</a>
     <a href="#planning-remaining-milestones">Planning — slice-11..19 (2026-05-27)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
@@ -2230,6 +2232,107 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </ul>
   </section>
 
+  <section id="slice-15">
+    <h2><span class="num">37</span>slice-15 — Insight Engine L2 infra (judge infrastructure) (2026-05-27)</h2>
+
+    <h3 id="slice-15">Overview (slice-15)</h3>
+    <dl>
+      <dt>목표</dt>
+      <dd>LLM judge 인프라 (JudgeProvider trait + 세 가지 구현 + cache + budget guard + runtime)를 배선하고,
+          L2 경로를 테스트하되 production finding category는 추가하지 않는다.</dd>
+
+      <dt>JudgeProvider trait</dt>
+      <dd><code>async fn judge(&amp;self, prompt: JudgePrompt) -&gt; Result&lt;JudgeVerdict, JudgeError&gt;</code>.
+          <code>model_id()</code> + <code>prompt_template_version()</code>는 cache key 재료.
+          <code>async_trait</code> crate 사용 (object-safe async trait).</dd>
+
+      <dt>세 가지 구현</dt>
+      <dd>
+        <ul>
+          <li><code>NoopJudge</code>: 항상 <code>Err(Disabled)</code> 반환. 기본값. LLM 호출 없음.</li>
+          <li><code>FixtureJudge</code>: JSON 파일에서 <code>"category||evidence_hash"</code> 키로 verdict 조회.
+              <code>judge_with_hash()</code> helper — 테스트에서 미리 알려진 hash로 직접 조회.</li>
+          <li><code>AnthropicJudge</code>: hand-rolled reqwest (DEV-S15-05). prompt caching via
+              <code>cache_control: ephemeral</code>. <code>prompt_template_version()</code> = SHA-256 of
+              <code>src/insight/judge/prompts/judge_v1.txt</code>.</li>
+        </ul>
+      </dd>
+
+      <dt>CachedProvider&lt;P&gt;</dt>
+      <dd>SQLite 캐시. Cache key = <code>sha256(category||"\0"||model_id||"\0"||template_version||"\0"||evidence_hash)</code>
+          where <code>evidence_hash = sha256(canonical_json(evidence_projection))</code> (key-sorted JSON).
+          Cache hit → DB에서 serve, inner 호출 없음, budget 소비 없음 (DEV-S15-04/07).</dd>
+
+      <dt>BudgetGuard&lt;P&gt;</dt>
+      <dd>per-rebuild <code>AtomicUsize</code> counter. 0이 되면 <code>Err(BudgetExhausted)</code>.
+          Cache가 Budget 안쪽 — hit는 budget 소비 안 함.</dd>
+
+      <dt>JudgeRuntime</dt>
+      <dd>factory pattern: <code>Arc&lt;dyn Fn(metrics, budget) -&gt; Box&lt;dyn JudgeProvider&gt;&gt;</code>.
+          <code>build_for_rebuild()</code>이 매 rebuild마다 fresh <code>BudgetGuardDyn</code>을 생성 (DEV-S15-02).
+          concurrent rebuild = 각자 독립 budget.</dd>
+
+      <dt>findings_pending_judge</dt>
+      <dd>budget exhausted / disabled / transport error 시 candidate를 queue에 보존.
+          다음 rebuild 시 drain. monotone progress 보장 (절대 silently drop 없음).
+          <code>INSERT OR IGNORE</code>로 idempotent — 이미 pending인 candidate 덮어쓰지 않음.</dd>
+
+      <dt>PromotionPolicy routing</dt>
+      <dd>
+        <ul>
+          <li><code>Always</code> → L1 direct promote (judge 없음). <code>tool_failure</code>, <code>missing_verification</code>이 여기.</li>
+          <li><code>Never</code> → 항상 judge 통과. Disabled/Budget → pending queue.</li>
+          <li><code>IfAbove(t)</code> → confidence > t면 L1 promote; 이하면 judge 경로.</li>
+        </ul>
+      </dd>
+
+      <dt>test-helpers feature</dt>
+      <dd><code>NoopTestExtractor</code>는 <code>cfg(test)</code>가 아니라 <code>feature = "test-helpers"</code>로 guard.
+          이유: integration test binary는 lib을 test 모드로 컴파일하지 않아 <code>cfg(test)</code>가
+          lib code에서 inactive됨. <code>[[test]] required-features = ["test-helpers"]</code>로
+          해당 통합테스트만 opt-in.</dd>
+
+      <dt>/v1/health insight block</dt>
+      <dd><code>judge_kind</code>, <code>judge_calls_24h</code>, <code>judge_pending_count</code>,
+          <code>judge_cache_hits_24h</code>, <code>judge_cache_misses_24h</code>,
+          <code>judge_budget_exhaustions_24h</code>.
+          AtomicI64 counters — in-memory, server restart 시 reset (DEV-S15-03).</dd>
+
+      <dt>CLI</dt>
+      <dd><code>witmcc serve --judge {none|anthropic|fixture} --judge-budget N --judge-fixture-path &lt;path&gt;</code>.
+          <code>none</code>은 <code>noop</code>의 alias. Default = none (L2 OFF).</dd>
+    </dl>
+
+    <h3 id="slice-15-deviations">Intentional Deviations (slice-15)</h3>
+    <dl>
+      <dt>BudgetGuardDyn (internal) vs BudgetGuard&lt;P&gt; (generic)</dt>
+      <dd>JudgeRuntime은 <code>Box&lt;dyn JudgeProvider&gt;</code>를 factory로 생성하므로 generic
+          <code>BudgetGuard&lt;P&gt;</code>를 directly 쓸 수 없다 (P를 알 수 없음). 내부적으로
+          <code>BudgetGuardDyn</code>이라는 별도 struct를 사용. <code>BudgetGuard&lt;P&gt;</code>는
+          unit test용으로 유지.</dd>
+
+      <dt>repo_findings_pending enqueue 인터페이스</dt>
+      <dd>초기 구현은 개별 파라미터를 받았으나, 다른 repo들과 일관성을 위해 <code>PendingFindingRow</code>
+          struct를 받도록 변경. DB-generated 컬럼(queued_at, attempts 등)은 struct에서 분리하여
+          <code>PendingFindingRecord</code>가 full read-back에 사용.</dd>
+
+      <dt>scenario_a.json noop_test hash</dt>
+      <dd>초기 fixture는 placeholder hash (<code>000...001</code>). 실제 <code>sha256(canonical_json({"synthetic":true}))</code>
+          = <code>a8198524f58e72b56283ab71ebddada22840f108b46ef7165bb3fca9919c5558</code>로 교정.
+          canonical_json: key-sorted, no spaces — <code>{"synthetic":true}</code>.</dd>
+    </dl>
+
+    <h3>Commit Reference (slice-15)</h3>
+    <ul>
+      <li><code>7136a42</code> — test(slice-15): red-locking tests for judge pipeline, cache, budget, pending queue, health</li>
+      <li><code>8211d09</code> — feat(db): 0009_judge_cache + 0010_findings_pending migrations + repos</li>
+      <li><code>84bc6d3</code> — feat(insight): JudgeProvider trait + NoopJudge + FixtureJudge (slice-15)</li>
+      <li><code>d2801e6</code> — feat(insight): AnthropicJudge with hand-rolled reqwest + prompt caching (slice-15)</li>
+      <li><code>09142d8</code> — feat(insight): CachedProvider + BudgetGuard + JudgeRuntime composition (slice-15)</li>
+      <li><code>0770a7b</code> — feat(slice-15): wire L2 judge pipeline — AppState + health + CLI + routing</li>
+    </ul>
+  </section>
+
   <section id="planning-remaining-milestones">
     <h2><span class="num">32</span>Planning — slice-11 through slice-19 (2026-05-27)</h2>
     <p>잔여 마일스톤 M3 (slice-11/12/13) · M5 Insight (slice-14/15/16) · M6 MCP (slice-17) · M7 Hardening (slice-18/19)의
@@ -2264,7 +2367,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   </section>
 
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 · planning slice-15~19 · 2026-05-27 · branch: feat/remaining-milestones</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 · planning slice-16~19 · 2026-05-27 · branch: feat/remaining-milestones</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
