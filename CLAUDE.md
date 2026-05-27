@@ -12,25 +12,27 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
 
 ## Status
 
-- 현재 단계: **M3 완료** — slice-1~13 완료 (transcript / OTel / hook /
+- 현재 단계: **M3 완료 / M5 slice-14 완료** — slice-1~14 완료 (transcript / OTel / hook /
   ObservedEvent + telemetry facet · 기본 graph builder · WebUI replay ·
   SSE live updates · windowed event buffer · filesystem-source removal +
   transcript-only file lineage + Files lane graph linkage (slice-10a) ·
   VerificationRun ingest + graph edges + Pull API (slice-11) ·
   Episode segmentation state machine + golden + Pull API (slice-12) ·
-  **Causal-edge inference v1 — three inferred-edge rules (slice-13)**).
+  Causal-edge inference v1 — three inferred-edge rules (slice-13) ·
+  **Insight Engine v1 — L1 deterministic extractors + /v1/findings* API (slice-14)**).
 - 남은 작업의 **계획은 잠겼음**:
   `docs/superpowers/specs/2026-05-27-witmcc-remaining-milestones-roadmap.md` +
   per-slice design specs + per-slice TDD plans (`2026-05-27-witmcc-slice11..19-*`).
   Insight 엔진 L1/L2 분리 설계는
   `2026-05-27-witmcc-insight-engine-architecture.md`. UX 재설계는 마일스톤 밖
   별도 epic (`2026-05-27-witmcc-ux-redesign-epic.md`).
-- 잔여 마일스톤: M5 Insight (slice-14 L1 · slice-15 L2 infra · slice-16 L2
+- 잔여 마일스톤: M5 Insight (~~slice-14 L1~~ ✓ · slice-15 L2 infra · slice-16 L2
   categories), M6 MCP (slice-17), M7 Hardening (slice-18 Redaction · slice-19
   Auth/Retention).
   (M3 완료: ~~slice-11 VerificationRun~~ ✓ · ~~slice-12 Episode~~ ✓ · ~~slice-13 Causal-edge~~ ✓)
-- 구현 상세: `docs/implementation-notes.html` 의 slice별 섹션 (slice-14+ 섹션은
-  각 slice merge 시 추가됨).
+- 구현 상세: `docs/implementation-notes.html` 의 slice별 섹션.
+- **운영 주의 (slice-14):** `finding` 테이블 추가 (migration 0008). 기존 dev DB는
+  `witmcc init-db`로 재생성 후 재ingest 필요.
 - **운영 주의 (slice-13):** `graph_edge` 테이블에 `inference_rule_id`, `confidence` 컬럼 추가 (migration 0007). 기존 dev DB는 `witmcc init-db`로 재생성 후 재ingest 필요.
 - **운영 주의 (slice-12):** `episode` 테이블 추가 (migration 0006). 기존 dev DB는
   `witmcc init-db`로 재생성 후 재ingest 필요. rebuild_session이 자동으로 episode rows를 생성함.
