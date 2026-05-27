@@ -1,4 +1,53 @@
 {
   "session_id": "aac68973",
-  "expected_episodes": []
+  "expected_episodes": [
+    {
+      "phase": "action",
+      "start_event_offset_in_session": 0,
+      "end_event_offset_in_session": 0,
+      "classification_basis": [
+        "phase_action_first_mutation@v1"
+      ]
+    },
+    {
+      "phase": "verification",
+      "start_event_offset_in_session": 1,
+      "end_event_offset_in_session": 1,
+      "classification_basis": [
+        "phase_verification_run_window@v1"
+      ]
+    },
+    {
+      "phase": "action",
+      "start_event_offset_in_session": 2,
+      "end_event_offset_in_session": 2,
+      "classification_basis": [
+        "phase_action_first_mutation@v1"
+      ]
+    },
+    {
+      "phase": "verification",
+      "start_event_offset_in_session": 3,
+      "end_event_offset_in_session": 3,
+      "classification_basis": [
+        "phase_verification_run_window@v1"
+      ]
+    },
+    {
+      "phase": "action",
+      "start_event_offset_in_session": 4,
+      "end_event_offset_in_session": 4,
+      "classification_basis": [
+        "phase_action_first_mutation@v1"
+      ]
+    },
+    {
+      "phase": "verification",
+      "start_event_offset_in_session": 5,
+      "end_event_offset_in_session": 5,
+      "classification_basis": [
+        "phase_verification_run_window@v1"
+      ]
+    }
+  ]
 }
