@@ -99,8 +99,18 @@ pub async fn ingest_file(
                     _ => None,
                 };
                 let evs = mapping::map_record(&meta, &rec, &raw_id, &mut gen)?;
-                for ev in evs {
+                for mut ev in evs {
                     stats.sessions_touched.insert(ev.session_id.clone());
+                    // Slice-18: redact observed_event.payload too.
+                    // The payload is a JSON Value derived from the parsed record;
+                    // its string representation may contain the original secrets.
+                    // Apply the same gate so the normalized event is clean.
+                    if scan_result.applied {
+                        let payload_str = ev.payload.to_string();
+                        let redacted_str = scan(&payload_str).masked_text;
+                        ev.payload = serde_json::from_str(&redacted_str)
+                            .unwrap_or(ev.payload);
+                    }
                     repo_observed::insert(pool, &ev).await?;
                     stats.observed_inserted += 1;
                     sink.emit(LiveEvent {
