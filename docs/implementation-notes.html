@@ -72,6 +72,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice10a">Overview (slice-10a)</a>
     <a href="#slice10a-deviations">Intentional Deviations (slice-10a)</a>
     <a href="#slice10a-commits">Commit Reference (slice-10a)</a>
+    <a href="#slice-11">Overview (slice-11)</a>
+    <a href="#slice-12">Overview (slice-12)</a>
     <a href="#planning-remaining-milestones">Planning — slice-11..19 (2026-05-27)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
@@ -1998,6 +2000,54 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </ul>
   </section>
 
+  <section id="slice-12">
+    <h2><span class="num">34</span>slice-12 — Episode Segmentation (2026-05-27)</h2>
+
+    <h3>Overview</h3>
+    <p>세션 이벤트 스트림을 <strong>연속적인 phase span</strong>으로 분류해 <code>episode</code> 사이드 테이블에 저장하고 Pull API로 노출한다.
+       Phase: <code>intake | exploration | diagnosis | action | verification | repair | drift</code>.
+       분류기는 순수 함수(I/O 없음) — 동일 입력 → 동일 출력 (determinism test 잠금).</p>
+    <ul>
+      <li><strong>State machine</strong>: 3-event lookahead (LOOKAHEAD=3, DEV-S12-02). 7개 versioned rule-id로 <code>classification_basis</code> 기록.</li>
+      <li><strong>episode_id</strong>: <code>"ep_" + hex(sha256(session_id||phase||start_event_id||end_event_id))[..24]</code>. 결정론적·충돌회피.</li>
+      <li><strong>Confidence floors</strong>: spec §7 준수 (intake=1.0, action=0.95, verification=0.95, exploration=0.85, diagnosis=0.8, repair=0.7, drift=0.6).</li>
+      <li><strong>rebuild_session 연결</strong>: graph write 직후 classifier 호출 → <code>INSERT OR REPLACE</code>. catch_unwind wrapper(spec §8) — classifier panic은 graph rebuild를 중단시키지 않음.</li>
+      <li><strong>Golden bootstrap</strong>: 두 real transcript fixture에서 expected episodes 잠금.
+        <ul>
+          <li><code>aac68973.json</code>: verification_v01.jsonl (6 events, 3 runs) → 6 episodes (action+verification ×3)</li>
+          <li><code>ed82aee9.json</code>: structured_patch_v01.jsonl (2 events, 0 runs) → 1 episode (intake)</li>
+        </ul>
+      </li>
+      <li><strong>Pull API</strong>: <code>GET /v1/sessions/:id/episodes</code> · <code>GET /v1/episodes/:id</code>. 404 on missing episode.</li>
+      <li><strong>Smoke (aac68973 실 transcript)</strong>: 204 episodes · phase 분포 intake=12 / exploration=41 / action=90 / verification=45 / drift=16 · classification_basis 비어있지 않음 · detail endpoint 200.</li>
+    </ul>
+
+    <h3>Intentional Deviations (slice-12)</h3>
+    <dl>
+      <dt>DEV-S12-01</dt>
+      <dd>Episode는 <strong>side-table, graph node 아님</strong>. Graph node로 추가하려면 node shape 결정이 필요하고 그것은 UX 재설계 epic 관할.</dd>
+      <dt>DEV-S12-02</dt>
+      <dd>Lookahead = 3 events. 더 크면 rule set 복잡도 증가. 확장 시 <code>@v2</code> bump + golden 업데이트 필요.</dd>
+      <dt>DEV-S12-03</dt>
+      <dd>Drift threshold N=8 consecutive explorations는 추정값. slice-16 findings 이후 real data tuning 예정.</dd>
+      <dt>DEV-S12-04</dt>
+      <dd>Empty golden 먼저 commit → 첫 green run에서 auto-populate. 이후 모든 변경은 explicit (golden diff = review 단위).</dd>
+      <dt>DEV-S12-05</dt>
+      <dd><code>summary</code> 컬럼은 slice-12 내내 NULL. LLM fill-in은 post-MVP.</dd>
+      <dt>DEV-S12-06</dt>
+      <dd>Phase <code>drift</code>는 분류되지만 MVP에서 finding category에 사용되지 않음. UX용 label로 존재.</dd>
+    </dl>
+
+    <h3>Commit Reference (slice-12)</h3>
+    <ul>
+      <li><code>782e718</code> — test(slice-12): red-locking tests for episode classifier + schema + API</li>
+      <li><code>fc9cb40</code> — feat(db): 0006_episode migration + repo_episode</li>
+      <li><code>610ff67</code> — feat(insight): episode classifier state machine + rule registry</li>
+      <li><code>efe8a11</code> — feat(insight): populate episode_gold from real transcript run</li>
+      <li><code>b26e6d7</code> — feat(api): /v1/sessions/:id/episodes + /v1/episodes/:id</li>
+    </ul>
+  </section>
+
   <section id="planning-remaining-milestones">
     <h2><span class="num">32</span>Planning — slice-11 through slice-19 (2026-05-27)</h2>
     <p>잔여 마일스톤 M3 (slice-11/12/13) · M5 Insight (slice-14/15/16) · M6 MCP (slice-17) · M7 Hardening (slice-18/19)의
@@ -2032,7 +2082,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   </section>
 
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 · planning slice-12~19 · 2026-05-27 · branch: feat/remaining-milestones</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 · planning slice-13~19 · 2026-05-27 · branch: feat/remaining-milestones</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
