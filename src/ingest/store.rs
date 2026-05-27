@@ -7,6 +7,7 @@ use std::path::Path;
 
 use crate::db::{repo_diff_hunk, repo_observed, repo_raw, repo_runs, repo_verification_run};
 use crate::live::{LiveEvent, LiveSink};
+use crate::security::redaction::engine::scan;
 
 /// Row type for the turn_id backfill query: (event_uuid, parent_uuid, turn_id, event_id)
 type TurnBackfillRow = (String, Option<String>, Option<String>, Option<String>);
@@ -46,8 +47,20 @@ pub async fn ingest_file(
     while let Some(item) = stream.next().await {
         match item {
             Ok((meta, rec)) => {
-                let payload_sha = hex::encode(Sha256::digest(&meta.raw));
+                // Slice-18: apply redaction gate before storing. Payload is
+                // text (UTF-8 JSON), so we scan the lossy string representation.
+                let payload_text = String::from_utf8_lossy(&meta.raw);
+                let scan_result = scan(&payload_text);
+                let stored_payload: Vec<u8> = if scan_result.applied {
+                    scan_result.masked_text.into_bytes()
+                } else {
+                    meta.raw.clone()
+                };
+                let payload_sha = hex::encode(Sha256::digest(&stored_payload));
                 let raw_id = gen.generate();
+                let redaction_state = scan_result.manifest.redaction_state.as_str().to_owned();
+                let redaction_manifest =
+                    serde_json::to_string(&scan_result.manifest).ok();
                 let inserted = repo_raw::insert_dedup(
                     pool,
                     &repo_raw::NewRaw {
@@ -58,9 +71,11 @@ pub async fn ingest_file(
                         source_line_no: meta.line_no as i64,
                         source_byte_offset: meta.byte_offset as i64,
                         payload_sha256: payload_sha,
-                        payload: meta.raw.clone(),
+                        payload: stored_payload,
                         parse_error: None,
                         captured_at: Utc::now(),
+                        redaction_state,
+                        redaction_manifest,
                     },
                 )
                 .await?;
@@ -157,6 +172,8 @@ pub async fn ingest_file(
                         payload: b"".to_vec(),
                         parse_error: Some(message),
                         captured_at: Utc::now(),
+                        redaction_state: "not_applicable".into(),
+                        redaction_manifest: None,
                     },
                 )
                 .await?;

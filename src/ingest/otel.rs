@@ -10,6 +10,7 @@ use crate::error::Result;
 use crate::ids::MonotonicUlidGen;
 use crate::live::{LiveEvent, LiveSink};
 use crate::model::meta::{PARSER_VERSION_OTEL, SCHEMA_VERSION};
+use crate::security::redaction::engine::scan;
 use crate::model::observed::{Actor, EventKind, ObservedEvent, TelemetryFacet};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -276,6 +277,16 @@ pub async fn store(
         let source_uri = format!("otel://traces/{}/spans/{}", span.trace_id, span.span_id);
         let raw_id = gen.generate();
 
+        // Slice-18: scan OTel span payload for secrets.
+        let span_payload_str = String::from_utf8_lossy(&canonical_bytes);
+        let span_scan = scan(&span_payload_str);
+        let span_stored_bytes: Vec<u8> = if span_scan.applied {
+            span_scan.masked_text.as_bytes().to_vec()
+        } else {
+            canonical_bytes
+        };
+        let span_redaction_state = span_scan.manifest.redaction_state.as_str().to_owned();
+        let span_redaction_manifest = serde_json::to_string(&span_scan.manifest).ok();
         let inserted = repo_raw::insert_dedup(
             pool,
             &repo_raw::NewRaw {
@@ -286,9 +297,11 @@ pub async fn store(
                 source_line_no: 0,
                 source_byte_offset: 0,
                 payload_sha256: payload_sha,
-                payload: canonical_bytes,
+                payload: span_stored_bytes,
                 parse_error: None,
                 captured_at: received_at,
+                redaction_state: span_redaction_state,
+                redaction_manifest: span_redaction_manifest,
             },
         )
         .await?;
@@ -403,10 +416,20 @@ pub async fn store_raw(
 ) -> Result<(bool, String, String)> {
     let canonical = canonical_json(body_json);
     let canonical_bytes = canonical.into_bytes();
-    let payload_sha = hex::encode(Sha256::digest(&canonical_bytes));
+    // Slice-18: scan OTel metrics/logs payload for secrets.
+    let metrics_str = String::from_utf8_lossy(&canonical_bytes);
+    let metrics_scan = scan(&metrics_str);
+    let metrics_stored: Vec<u8> = if metrics_scan.applied {
+        metrics_scan.masked_text.as_bytes().to_vec()
+    } else {
+        canonical_bytes
+    };
+    let payload_sha = hex::encode(Sha256::digest(&metrics_stored));
     let source_uri = format!("{}://post/{}", source_uri_prefix, &payload_sha[..16]);
     let run_id = repo_runs::start(pool).await?;
     let raw_id = MonotonicUlidGen::new().generate();
+    let metrics_redaction_state = metrics_scan.manifest.redaction_state.as_str().to_owned();
+    let metrics_redaction_manifest = serde_json::to_string(&metrics_scan.manifest).ok();
     let inserted = repo_raw::insert_dedup(
         pool,
         &repo_raw::NewRaw {
@@ -417,9 +440,11 @@ pub async fn store_raw(
             source_line_no: 0,
             source_byte_offset: 0,
             payload_sha256: payload_sha.clone(),
-            payload: canonical_bytes,
+            payload: metrics_stored,
             parse_error: None,
             captured_at: received_at,
+            redaction_state: metrics_redaction_state,
+            redaction_manifest: metrics_redaction_manifest,
         },
     )
     .await?;
