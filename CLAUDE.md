@@ -12,7 +12,7 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
 
 ## Status
 
-- 현재 단계: **M3 완료 / M5 완료 / M6 완료** — slice-1~17 완료 (transcript / OTel / hook /
+- 현재 단계: **M3 완료 / M5 완료 / M6 완료 / M7 일부** — slice-1~18 완료 (transcript / OTel / hook /
   ObservedEvent + telemetry facet · 기본 graph builder · WebUI replay ·
   SSE live updates · windowed event buffer · filesystem-source removal +
   transcript-only file lineage + Files lane graph linkage (slice-10a) ·
@@ -26,9 +26,13 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
   Insight Engine L2 categories — risky_action + context_bloat + final_state_mismatch
   extractors + redaction shim (DEV-S16-05) + FixtureJudge gold fixtures + e2e tests.
   M5 (Insight engine) CLOSED. AC-4 fully covered. (slice-16) ·
-  **MCP Streamable HTTP — POST /mcp (JSON-RPC) + GET /mcp (SSE) + 6 read-only tools
+  MCP Streamable HTTP — POST /mcp (JSON-RPC) + GET /mcp (SSE) + 6 read-only tools
   + 6 resource URI templates + Origin validation + Mcp-Session-Id lifecycle +
-  protocol compat golden. M6 CLOSED. AC-5 fully covered. (slice-17)**).
+  protocol compat golden. M6 CLOSED. AC-5 fully covered. (slice-17) ·
+  **Redaction gate v1 — rule_pack@v1 (11 rules) + engine + manifest +
+  migration 0011 (raw_event.redaction_state + redaction_manifest) +
+  ingest wiring (all paths) + Pull API meta.redaction_policy/summary +
+  MCP annotations + redaction_shim → real gate. M7 partial. AC-7 CLOSED. (slice-18)**).
 - 남은 작업의 **계획은 잠겼음**:
   `docs/superpowers/specs/2026-05-27-witmcc-remaining-milestones-roadmap.md` +
   per-slice design specs + per-slice TDD plans (`2026-05-27-witmcc-slice11..19-*`).
