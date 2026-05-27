@@ -107,6 +107,16 @@ pub async fn list_sessions(
     let rows = repo_observed::list_sessions(&pool, limit)
         .await
         .expect("db");
+    // Slice-18: aggregate redaction summary across all listed sessions.
+    // For simplicity, we report aggregate across the first session or a global
+    // query. Per design §6, the summary covers the response's raw events.
+    // Here we aggregate across all sessions in the response (first 200 raw rows).
+    let summary = if !rows.is_empty() {
+        let sid = &rows[0].session_id;
+        repo_raw::aggregate_session_summary(&pool, sid).await.ok()
+    } else {
+        None
+    };
     let data: Vec<SessionListItem> = rows
         .into_iter()
         .map(|r| SessionListItem {
@@ -118,10 +128,11 @@ pub async fn list_sessions(
             by_kind: r.by_kind,
         })
         .collect();
-    Json(Envelope {
-        meta: ResponseMeta::now(),
-        data,
-    })
+    let mut meta = ResponseMeta::now();
+    if let Some(s) = summary {
+        meta = meta.with_summary(s);
+    }
+    Json(Envelope { meta, data })
 }
 
 pub async fn session_detail(
@@ -224,8 +235,16 @@ pub async fn session_events(
 
     let events: Vec<serde_json::Value> =
         evs.iter().map(|e| observed_to_dto(e)).collect();
+    // Slice-18: aggregate redaction summary for this session's raw events.
+    let summary = repo_raw::aggregate_session_summary(&pool, &id)
+        .await
+        .ok();
+    let mut meta = ResponseMeta::now();
+    if let Some(s) = summary {
+        meta = meta.with_summary(s);
+    }
     Ok(Json(Envelope {
-        meta: ResponseMeta::now(),
+        meta,
         data: SessionEventsResponse {
             events,
             prev_cursor,

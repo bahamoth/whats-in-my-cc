@@ -2,13 +2,16 @@
 //!
 //! Six URI templates. `resources/list` returns concrete URIs from DB.
 //! `resources/read` delegates to per-resource fetchers.
+//!
+//! Slice-18 addition: every `resources/read` content item carries
+//! `annotations.redaction_policy` and `annotations.redaction_summary`.
 
 pub mod parse;
 
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
 
-use crate::db::{repo_diff_hunk, repo_finding, repo_graph, repo_observed};
+use crate::db::{repo_diff_hunk, repo_finding, repo_graph, repo_observed, repo_raw};
 use crate::model::meta::SCHEMA_VERSION;
 
 /// The six resource URI templates per design §7.
@@ -91,17 +94,39 @@ pub async fn read_resource(uri: &str, pool: &SqlitePool) -> Result<Value, String
     }
 }
 
-fn make_contents(uri: &str, data: Value) -> Value {
+/// Build `resources/read` contents with Slice-18 redaction annotations.
+///
+/// `session_id` is used to aggregate the redaction summary from the DB.
+/// If `None` (e.g., finding or OTel trace resources), no summary is included.
+async fn make_contents(uri: &str, data: Value, session_id: Option<&str>, pool: &SqlitePool) -> Value {
     let text = serde_json::to_string(&json!({
         "meta": { "schema_version": SCHEMA_VERSION },
         "data": data
     }))
     .unwrap_or_else(|_| "{}".into());
+
+    // Slice-18: aggregate redaction summary for annotations.
+    let summary = if let Some(sid) = session_id {
+        repo_raw::aggregate_session_summary(pool, sid).await.ok()
+    } else {
+        None
+    };
+
+    let annotations = json!({
+        "redaction_policy": { "applied": true, "level": "standard" },
+        "redaction_summary": summary.map(|s| json!({
+            "total_items_redacted": s.total_items_redacted,
+            "rules_seen": s.rules_seen,
+            "any_unredacted_sensitive": s.any_unredacted_sensitive,
+        })).unwrap_or(json!({}))
+    });
+
     json!({
         "contents": [{
             "uri": uri,
             "mimeType": "application/json",
-            "text": text
+            "text": text,
+            "annotations": annotations
         }]
     })
 }
@@ -118,7 +143,7 @@ async fn read_session(session_id: &str, uri: &str, pool: &SqlitePool) -> Result<
                 "event_count": event_count,
                 "first_observed_at": first_obs,
                 "last_observed_at": last_obs
-            })))
+            }), Some(session_id), pool).await)
         }
     }
 }
@@ -130,7 +155,7 @@ async fn read_graph(session_id: &str, uri: &str, pool: &SqlitePool) -> Result<Va
     Ok(make_contents(uri, json!({
         "nodes": nodes.iter().map(|n| serde_json::to_value(n).unwrap_or(Value::Null)).collect::<Vec<_>>(),
         "edges": edges.iter().map(|e| serde_json::to_value(e).unwrap_or(Value::Null)).collect::<Vec<_>>()
-    })))
+    }), Some(session_id), pool).await)
 }
 
 async fn read_findings(session_id: &str, uri: &str, pool: &SqlitePool) -> Result<Value, String> {
@@ -151,7 +176,7 @@ async fn read_findings(session_id: &str, uri: &str, pool: &SqlitePool) -> Result
         "summary": r.summary,
         "status": r.status
     })).collect();
-    Ok(make_contents(uri, json!({ "findings": findings })))
+    Ok(make_contents(uri, json!({ "findings": findings }), Some(session_id), pool).await)
 }
 
 async fn read_finding(finding_id: &str, uri: &str, pool: &SqlitePool) -> Result<Value, String> {
@@ -161,6 +186,7 @@ async fn read_finding(finding_id: &str, uri: &str, pool: &SqlitePool) -> Result<
     match row {
         None => Err(format!("finding not found: {finding_id}")),
         Some(r) => {
+            let session_id = r.session_id.clone();
             let evidence_refs: Vec<Value> =
                 serde_json::from_str(&r.evidence_refs).unwrap_or_default();
             Ok(make_contents(uri, json!({
@@ -172,7 +198,7 @@ async fn read_finding(finding_id: &str, uri: &str, pool: &SqlitePool) -> Result<
                 "summary": r.summary,
                 "evidence_refs": evidence_refs,
                 "status": r.status
-            })))
+            }), Some(&session_id), pool).await)
         }
     }
 }
@@ -192,7 +218,7 @@ async fn read_file_lineage(session_id: &str, uri: &str, pool: &SqlitePool) -> Re
     Ok(make_contents(uri, json!({
         "session_id": session_id,
         "diff_hunks": hunks_json
-    })))
+    }), Some(session_id), pool).await)
 }
 
 async fn read_otel_trace(trace_id: &str, uri: &str, pool: &SqlitePool) -> Result<Value, String> {
@@ -209,12 +235,16 @@ async fn read_otel_trace(trace_id: &str, uri: &str, pool: &SqlitePool) -> Result
     .await
     .map_err(|e| e.to_string())?;
 
+    let mut first_session_id: Option<String> = None;
     let spans: Vec<Value> = rows.into_iter().map(|r| {
         let event_id: String = r.get("event_id");
         let session_id: String = r.get("session_id");
         let observed_at: String = r.get("observed_at");
         let span_id: Option<String> = r.try_get("span_id").ok().flatten();
         let parent_span_id: Option<String> = r.try_get("parent_span_id").ok().flatten();
+        if first_session_id.is_none() {
+            first_session_id = Some(session_id.clone());
+        }
         json!({
             "event_id": event_id,
             "session_id": session_id,
@@ -227,5 +257,5 @@ async fn read_otel_trace(trace_id: &str, uri: &str, pool: &SqlitePool) -> Result
     Ok(make_contents(uri, json!({
         "trace_id": trace_id,
         "spans": spans
-    })))
+    }), first_session_id.as_deref(), pool).await)
 }
