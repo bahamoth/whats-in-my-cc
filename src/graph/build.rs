@@ -10,6 +10,7 @@ use crate::error::Result;
 use crate::ids::{derive_edge_id, derive_node_id};
 use crate::insight::edge_inference::{all_rules, SessionGraphView};
 use crate::insight::episode::classifier::classify_session;
+use crate::insight::pipeline::run_extractors;
 use crate::model::graph::{GraphEdge, GraphNode};
 use crate::model::meta::SCHEMA_VERSION;
 use crate::model::observed::{EventKind, ObservedEvent};
@@ -24,7 +25,12 @@ use crate::model::observed::{EventKind, ObservedEvent};
 /// use `INSERT OR REPLACE` (idempotent). The episode classifier is wrapped
 /// in catch_unwind per spec §8: a classifier panic logs a warning and
 /// leaves existing episode rows unchanged (does NOT abort the graph rebuild).
-pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usize, usize)> {
+///
+/// Slice-14 — also runs the L1 insight extractor pipeline and persists
+/// finding rows. Runs in its own transaction AFTER the graph commit
+/// (DEV-S14-06). Finding writes use `INSERT OR REPLACE` (idempotent).
+/// Returns `(nodes, edges, findings)`.
+pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usize, usize, usize)> {
     let evs = repo_observed::list_session(pool, session_id, 100_000).await?;
     let hunks = repo_diff_hunk::list_session(pool, session_id).await?;
     let runs = repo_verification_run::list_session(pool, session_id).await?;
@@ -83,7 +89,19 @@ pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usi
         }
     }
 
-    Ok((n, e))
+    // Slice-14 — insight extractor pipeline (DEV-S14-06: separate transaction,
+    // runs after graph commit so extractors read the fresh graph).
+    let findings = run_extractors(pool, session_id).await.unwrap_or_else(|err| {
+        tracing::warn!(
+            session_id = session_id,
+            err = %err,
+            "insight extractor pipeline failed; findings not updated for this rebuild"
+        );
+        vec![]
+    });
+    let f = findings.len();
+
+    Ok((n, e, f))
 }
 
 pub fn compute(
