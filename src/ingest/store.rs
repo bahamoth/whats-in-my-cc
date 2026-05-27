@@ -5,14 +5,14 @@ use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use std::path::Path;
 
-use crate::db::{repo_diff_hunk, repo_observed, repo_raw, repo_runs};
+use crate::db::{repo_diff_hunk, repo_observed, repo_raw, repo_runs, repo_verification_run};
 use crate::live::{LiveEvent, LiveSink};
 
 /// Row type for the turn_id backfill query: (event_uuid, parent_uuid, turn_id, event_id)
 type TurnBackfillRow = (String, Option<String>, Option<String>, Option<String>);
 use crate::error::{Result, WitmccError};
 use crate::ids::MonotonicUlidGen;
-use crate::ingest::{diff_hunk, mapping, transcript};
+use crate::ingest::{diff_hunk, mapping, transcript, verification_run};
 use crate::model::observed::EventKind;
 use crate::model::meta::SCHEMA_VERSION;
 
@@ -167,6 +167,38 @@ pub async fn ingest_file(
 
     for session_id in &stats.sessions_touched {
         backfill_turn_ids(pool, session_id).await?;
+
+        // Slice-11 — extract verification runs for this session and persist
+        // them before rebuild_session reads them. This mirrors the diff_hunk
+        // pattern: side-table is written then the graph builder reads it.
+        if !session_id.is_empty() {
+            let evs = repo_observed::list_session(pool, session_id, 100_000).await?;
+            let vr_records = verification_run::extract_verification_runs(&evs);
+            for rec in vr_records {
+                repo_verification_run::insert(
+                    pool,
+                    &repo_verification_run::VerificationRunRow {
+                        verification_run_id: rec.verification_run_id,
+                        schema_version: rec.schema_version.to_string(),
+                        session_id: rec.session_id,
+                        source: rec.source,
+                        command: rec.command,
+                        command_kind: rec.command_kind,
+                        trigger_event_id: rec.trigger_event_id,
+                        trigger_tool_use_id: rec.trigger_tool_use_id,
+                        status: rec.status,
+                        started_at: rec.started_at,
+                        ended_at: rec.ended_at,
+                        exit_code: rec.exit_code,
+                        failure_summary: rec.failure_summary,
+                        raw_event_id: rec.raw_event_id,
+                        parser_version: rec.parser_version.to_string(),
+                    },
+                )
+                .await?;
+            }
+        }
+
         // slice-7 fix: every touched session must have its graph rebuilt so
         // the WebUI timeline renders markers. Without this, OTel ingest
         // paths populate graph_node but the transcript path does not —
