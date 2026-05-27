@@ -24,6 +24,7 @@ async fn test_server() -> TestServer {
         sse_keepalive_secs: 30,
         sse_channel_capacity: 512,
         judge_runtime: Arc::new(JudgeRuntime::noop()),
+        mcp_sessions: witmcc::api::mcp::SessionRegistry::new(),
     };
     TestServer::new(witmcc::api::router(state)).unwrap()
 }

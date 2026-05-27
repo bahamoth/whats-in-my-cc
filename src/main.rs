@@ -167,6 +167,8 @@ async fn serve_cmd(
         sse_keepalive_secs,
         sse_channel_capacity: sse_channel_capacity as usize,
         judge_runtime: std::sync::Arc::new(judge_runtime),
+        // Slice-17: MCP session registry starts empty; sessions are created on initialize.
+        mcp_sessions: witmcc::api::mcp::SessionRegistry::new(),
     };
     let app = witmcc::api::router(state);
     let addr = std::net::SocketAddr::new(bind, port);

@@ -1,0 +1,76 @@
+{
+  "tools": [
+    {
+      "name": "whats_in_my_cc.get_session_graph",
+      "description": "Return the execution graph (nodes + edges) for a Claude Code session.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string", "description": "Session ID" },
+          "include_sources": { "type": "boolean", "default": true, "description": "Include source event IDs on nodes" }
+        },
+        "required": ["session_id"]
+      }
+    },
+    {
+      "name": "whats_in_my_cc.search_sessions",
+      "description": "List recent Claude Code sessions observed locally.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "integer", "default": 20, "description": "Max sessions to return" }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "whats_in_my_cc.search_findings",
+      "description": "Search for insight findings (tool failures, missing verification, risky actions, etc.).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string", "description": "Filter by session ID" },
+          "category": { "type": "string", "description": "Filter by finding category" },
+          "severity": { "type": "string", "description": "Filter by severity" },
+          "limit": { "type": "integer", "default": 50 }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "whats_in_my_cc.explain_node",
+      "description": "Explain a specific graph node: what it is, what findings it relates to.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string", "description": "Session ID" },
+          "node_id": { "type": "string", "description": "Graph node ID" }
+        },
+        "required": ["session_id", "node_id"]
+      }
+    },
+    {
+      "name": "whats_in_my_cc.get_file_lineage",
+      "description": "Return the diff-hunk lineage for a specific file in a session.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": { "type": "string", "description": "Session ID" },
+          "file_path": { "type": "string", "description": "File path to trace lineage for" }
+        },
+        "required": ["session_id", "file_path"]
+      }
+    },
+    {
+      "name": "whats_in_my_cc.get_otel_trace",
+      "description": "Return OTel spans for a trace ID observed in this session.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "trace_id": { "type": "string", "description": "OTel trace ID (hex)" }
+        },
+        "required": ["trace_id"]
+      }
+    }
+  ]
+}
