@@ -59,7 +59,7 @@ fn external_hook_node_keys_by_hook_event_name_and_tool_use_id() {
         parser_version: "hook@0.1.0".into(),
         ..Default::default()
     };
-    let (nodes, _) = build::compute(session, &[ev], &[]);
+    let (nodes, _) = build::compute(session, &[ev], &[], &[]);
     assert_eq!(nodes.len(), 1);
     let n = &nodes[0];
     assert_eq!(n.node_kind, "hook_event");
@@ -96,7 +96,7 @@ fn transcript_internal_hook_keeps_event_uuid_merge_keys() {
         parser_version: "transcript@0.1.0".into(),
         ..Default::default()
     };
-    let (nodes, _) = build::compute(session, &[ev], &[]);
+    let (nodes, _) = build::compute(session, &[ev], &[], &[]);
     assert_eq!(nodes.len(), 1);
     assert_eq!(
         nodes[0].merge_keys.get("event_uuid").and_then(|v| v.as_str()),
