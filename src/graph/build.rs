@@ -3,10 +3,12 @@ use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 
 use crate::db::repo_diff_hunk::DiffHunkRow;
+use crate::db::repo_episode;
 use crate::db::repo_verification_run::VerificationRunRow;
 use crate::db::{repo_diff_hunk, repo_graph, repo_observed, repo_verification_run};
 use crate::error::Result;
 use crate::ids::{derive_edge_id, derive_node_id};
+use crate::insight::episode::classifier::classify_session;
 use crate::model::graph::{GraphEdge, GraphNode};
 use crate::model::meta::SCHEMA_VERSION;
 use crate::model::observed::{EventKind, ObservedEvent};
@@ -16,6 +18,11 @@ use crate::model::observed::{EventKind, ObservedEvent};
 /// transaction holds DELETE + INSERT. Concurrent SELECTs against
 /// `graph_node` either see the pre-rebuild rows or the post-rebuild rows,
 /// never the empty mid-rebuild state. Fixes DEV-S8-12.
+///
+/// Slice-12 — also classifies episodes and persists them. Episode writes
+/// use `INSERT OR REPLACE` (idempotent). The episode classifier is wrapped
+/// in catch_unwind per spec §8: a classifier panic logs a warning and
+/// leaves existing episode rows unchanged (does NOT abort the graph rebuild).
 pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usize, usize)> {
     let evs = repo_observed::list_session(pool, session_id, 100_000).await?;
     let hunks = repo_diff_hunk::list_session(pool, session_id).await?;
@@ -27,6 +34,54 @@ pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usi
     repo_graph::delete_session_in_tx(&mut tx, session_id).await?;
     repo_graph::insert_nodes_edges_in_tx(&mut tx, &nodes, &edges).await?;
     tx.commit().await?;
+
+    // Slice-12 — episode classification (side-table, not graph nodes per DEV-S12-01).
+    // Wrapped in catch_unwind so a classifier bug never aborts a graph rebuild.
+    let evs_clone = evs.clone();
+    let runs_clone = runs.clone();
+    let sid = session_id.to_string();
+    let episodes_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        classify_session(&sid, &evs_clone, &runs_clone)
+    }));
+    match episodes_result {
+        Ok(episodes) => {
+            for ep in &episodes {
+                let row = repo_episode::EpisodeRow {
+                    episode_id: ep.episode_id.clone(),
+                    schema_version: ep.schema_version.clone(),
+                    session_id: ep.session_id.clone(),
+                    phase: format!("{:?}", ep.phase).to_lowercase(),
+                    start_event_id: ep.start_event_id.clone(),
+                    end_event_id: ep.end_event_id.clone(),
+                    started_at: ep.started_at.to_rfc3339(),
+                    ended_at: ep.ended_at.to_rfc3339(),
+                    evidence_node_ids: serde_json::to_string(&ep.evidence_node_ids)
+                        .unwrap_or_else(|_| "[]".into()),
+                    classification_basis: serde_json::to_string(&ep.classification_basis)
+                        .unwrap_or_else(|_| "[]".into()),
+                    confidence: ep.confidence as f64,
+                    summary: ep.summary.clone(),
+                    classifier_version: ep.classifier_version.clone(),
+                    created_at: chrono::Utc::now().to_rfc3339(),
+                };
+                if let Err(err) = repo_episode::insert(pool, &row).await {
+                    tracing::warn!(
+                        session_id = session_id,
+                        episode_id = %row.episode_id,
+                        err = %err,
+                        "episode insert failed; continuing"
+                    );
+                }
+            }
+        }
+        Err(_) => {
+            tracing::warn!(
+                session_id = session_id,
+                "episode classifier panicked; episode rows not updated for this rebuild"
+            );
+        }
+    }
+
     Ok((n, e))
 }
 
