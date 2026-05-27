@@ -81,6 +81,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice-15-deviations">Intentional Deviations (slice-15)</a>
     <a href="#slice-16">Overview (slice-16)</a>
     <a href="#slice-16-deviations">Intentional Deviations (slice-16)</a>
+    <a href="#slice-17">Overview (slice-17)</a>
+    <a href="#slice-17-deviations">Intentional Deviations (slice-17)</a>
     <a href="#planning-remaining-milestones">Planning — slice-11..19 (2026-05-27)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
@@ -2407,6 +2409,98 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <ul>
       <li><code>2b29ffe</code> — test(slice-16): red-locking tests for risky_action, context_bloat, final_state_mismatch + registry update</li>
       <li><code>b4af610</code> — feat(slice-16): RiskyAction + ContextBloat + FinalStateMismatch extractors + redaction shim + e2e</li>
+    </ul>
+  </section>
+
+  <section id="slice-17">
+    <h2><span class="num">39</span>slice-17 — MCP Streamable HTTP (2026-05-27)</h2>
+    <h3>Overview (slice-17)</h3>
+    <p><code>POST /mcp</code> (JSON-RPC 2.0) + <code>GET /mcp</code> (SSE) 엔드포인트 추가. 프로토콜 버전 <code>2024-11-05</code> (DEV-S17-02). rmcp 등 SDK 없이 axum 위에 직접 구현 (DEV-S17-01).</p>
+    <p>6개 read-only 도구: <code>get_session_graph</code>, <code>search_sessions</code>, <code>search_findings</code>, <code>explain_node</code>, <code>get_file_lineage</code>, <code>get_otel_trace</code>.<br>
+    6개 resource URI template: <code>whats-in-my-cc://sessions/{session_id}</code>, <code>…/graph</code>, <code>…/findings</code>, <code>whats-in-my-cc://findings/{finding_id}</code>, <code>…/file-lineage/{session_id}</code>, <code>…/otel/traces/{trace_id}</code>.</p>
+    <p>도구 출력은 단일 <code>text</code> content block으로 JSON 직렬화 (DEV-S17-03). 세션 상태는 in-memory only (DEV-S17-04). SSE 채널: connect 시 <code>notifications/initialized</code> echo, rebuild 시 <code>notifications/resources/updated</code> fan-out. Origin 검증: non-localhost origin → 403.</p>
+    <p>Compat golden: <code>tests/fixtures/mcp/protocol_compat.json</code> — initialize 응답·tools/list·resource templates 형상 동결. <code>tests/mcp_spec_compat.rs</code>가 diff-assert. 변경 시 같은 commit에서 golden 업데이트 필수.</p>
+    <p><strong>AC-5 closed.</strong> M6 closed.</p>
+
+    <h3>구현 상세</h3>
+    <ul>
+      <li><code>src/api/mcp/jsonrpc.rs</code> — JSON-RPC 2.0 framing (Request, Response, ErrorResponse, AnyResponse).</li>
+      <li><code>src/api/mcp/session.rs</code> — <code>McpSession</code> + <code>SessionRegistry</code> (tokio::sync::RwLock&lt;HashMap&gt;). Per-session broadcast::Sender&lt;McpNotification&gt; for SSE fan-out.</li>
+      <li><code>src/api/mcp/methods.rs</code> — 메서드 디스패처. <code>initialize</code> 응답에 내부 <code>_sessionId</code> 필드를 담아 transport가 헤더로 꺼내 쓰고 wire payload에서 제거.</li>
+      <li><code>src/api/mcp/transport.rs</code> — POST handler (origin check → parse → dispatch → serialize + Mcp-Session-Id header). GET handler (SSE: oneshot first frame + live broadcast stream).</li>
+      <li><code>src/api/mcp/tools/</code> — 6개 도구 각각 Pull API 레이어 재사용.</li>
+      <li><code>src/api/mcp/resources/</code> — URI parser (<code>parse.rs</code>) + 6개 resource fetcher.</li>
+      <li><code>AppState</code>에 <code>mcp_sessions: SessionRegistry</code> 필드 추가. 기존 수동 초기화 테스트 2개 업데이트.</li>
+    </ul>
+
+    <h3 id="slice-17-deviations">Intentional Deviations (slice-17)</h3>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S17-01</span></div>
+      <div class="dev-body">rmcp / Rust MCP SDK 미사용. 필요한 프로토콜 표면이 좁고 안정적이며 dep 하나가 disproportionate. compat golden이 드리프트를 잡는다.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S17-02</span></div>
+      <div class="dev-body">protocolVersion <code>"2024-11-05"</code>로 pin. 버전 업은 새 slice + golden 업데이트 필요.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S17-03</span></div>
+      <div class="dev-body">도구 출력은 단일 <code>text</code> content block. 향후 <code>resource</code> content block으로 개선 가능이나 slice-17은 단순하게 시작.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S17-04</span></div>
+      <div class="dev-body">Mcp-Session-Id는 in-memory. 서버 재시작 시 모든 세션 무효화. 영구 세션은 post-MVP.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S17-05</span></div>
+      <div class="dev-body">세션당 SSE 채널 1개. 재연결 시 이전 채널 drop. multi-client subscription은 post-MVP.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S17-06</span></div>
+      <div class="dev-body">prompts/list는 빈 배열 반환. MCP prompt는 현재 미구현.</div>
+    </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S17-07</span></div>
+      <div class="dev-body">Auth는 slice-17 범위 외. slice-19에서 Bearer token 추가.</div>
+    </div>
+
+    <h3>Smoke Evidence (slice-17)</h3>
+    <pre>
+POST /mcp initialize
+  → protocolVersion: "2024-11-05"
+  → capabilities.resources.subscribe: true
+  → Mcp-Session-Id: mcps_01KSMJYVPMASPP8QX4JB3RQ9N6
+
+tools/list → 6 tools
+  whats_in_my_cc.get_session_graph
+  whats_in_my_cc.search_sessions
+  whats_in_my_cc.search_findings
+  whats_in_my_cc.explain_node
+  whats_in_my_cc.get_file_lineage
+  whats_in_my_cc.get_otel_trace
+
+resources/templates/list → 6 templates
+  whats-in-my-cc://sessions/{session_id}
+  whats-in-my-cc://sessions/{session_id}/graph
+  whats-in-my-cc://sessions/{session_id}/findings
+  whats-in-my-cc://findings/{finding_id}
+  whats-in-my-cc://file-lineage/{session_id}
+  whats-in-my-cc://otel/traces/{trace_id}
+
+tools/call get_session_graph(session_id="aac68973")
+  → isError: false, nodes: 0 (dev DB unmigrated for M5 — expected)
+
+GET /mcp (SSE) → Content-Type: text/event-stream ✓
+
+POST /mcp Origin: https://evil.example.com → HTTP 403 ✓
+
+cargo: 332 → 370 (+38), all green
+vitest: 69 passed
+    </pre>
+
+    <h3>Commit Reference (slice-17)</h3>
+    <ul>
+      <li><code>fad81d0</code> — test(slice-17): red-locking tests for MCP transport + methods + compat</li>
+      <li><code>4096731</code> — feat(api/mcp): MCP Streamable HTTP endpoint — POST + GET-SSE + 6 tools + 6 resources</li>
     </ul>
   </section>
 

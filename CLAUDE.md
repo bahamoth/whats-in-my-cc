@@ -12,7 +12,7 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
 
 ## Status
 
-- 현재 단계: **M3 완료 / M5 완료** — slice-1~16 완료 (transcript / OTel / hook /
+- 현재 단계: **M3 완료 / M5 완료 / M6 완료** — slice-1~17 완료 (transcript / OTel / hook /
   ObservedEvent + telemetry facet · 기본 graph builder · WebUI replay ·
   SSE live updates · windowed event buffer · filesystem-source removal +
   transcript-only file lineage + Files lane graph linkage (slice-10a) ·
@@ -23,16 +23,19 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
   Insight Engine L2 infra — JudgeProvider + CachedProvider + BudgetGuard +
   JudgeRuntime + findings_pending_judge queue + /v1/health insight block +
   `--judge {none|fixture|anthropic}` CLI (slice-15) ·
-  **Insight Engine L2 categories — risky_action + context_bloat + final_state_mismatch
+  Insight Engine L2 categories — risky_action + context_bloat + final_state_mismatch
   extractors + redaction shim (DEV-S16-05) + FixtureJudge gold fixtures + e2e tests.
-  M5 (Insight engine) CLOSED. AC-4 fully covered. (slice-16)**).
+  M5 (Insight engine) CLOSED. AC-4 fully covered. (slice-16) ·
+  **MCP Streamable HTTP — POST /mcp (JSON-RPC) + GET /mcp (SSE) + 6 read-only tools
+  + 6 resource URI templates + Origin validation + Mcp-Session-Id lifecycle +
+  protocol compat golden. M6 CLOSED. AC-5 fully covered. (slice-17)**).
 - 남은 작업의 **계획은 잠겼음**:
   `docs/superpowers/specs/2026-05-27-witmcc-remaining-milestones-roadmap.md` +
   per-slice design specs + per-slice TDD plans (`2026-05-27-witmcc-slice11..19-*`).
   Insight 엔진 L1/L2 분리 설계는
   `2026-05-27-witmcc-insight-engine-architecture.md`. UX 재설계는 마일스톤 밖
   별도 epic (`2026-05-27-witmcc-ux-redesign-epic.md`).
-- 잔여 마일스톤: ~~M5 Insight~~ ✓ (slice-14/15/16 완료), M6 MCP (slice-17),
+- 잔여 마일스톤: ~~M5 Insight~~ ✓ · ~~M6 MCP~~ ✓ (slice-17 완료),
   M7 Hardening (slice-18 Redaction · slice-19 Auth/Retention).
   (M3 완료: ~~slice-11 VerificationRun~~ ✓ · ~~slice-12 Episode~~ ✓ · ~~slice-13 Causal-edge~~ ✓)
 - 구현 상세: `docs/implementation-notes.html` 의 slice별 섹션.
