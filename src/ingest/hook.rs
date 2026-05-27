@@ -9,6 +9,7 @@ use crate::error::Result;
 use crate::ids::MonotonicUlidGen;
 use crate::live::{LiveEvent, LiveSink};
 use crate::model::meta::{PARSER_VERSION_HOOK, SCHEMA_VERSION};
+use crate::security::redaction::engine::scan;
 use crate::model::observed::{Actor, EventKind, ObservedEvent};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -143,6 +144,16 @@ pub async fn store(
         );
         let raw_id = gen.generate();
 
+        // Slice-18: scan hook payload for secrets before storing.
+        let payload_str = String::from_utf8_lossy(&canonical_bytes);
+        let hook_scan = scan(&payload_str);
+        let stored_bytes: Vec<u8> = if hook_scan.applied {
+            hook_scan.masked_text.as_bytes().to_vec()
+        } else {
+            canonical_bytes
+        };
+        let hook_redaction_state = hook_scan.manifest.redaction_state.as_str().to_owned();
+        let hook_redaction_manifest = serde_json::to_string(&hook_scan.manifest).ok();
         let inserted = repo_raw::insert_dedup(
             pool,
             &repo_raw::NewRaw {
@@ -153,9 +164,11 @@ pub async fn store(
                 source_line_no: 0,
                 source_byte_offset: 0,
                 payload_sha256: payload_sha,
-                payload: canonical_bytes,
+                payload: stored_bytes,
                 parse_error: None,
                 captured_at: received_at,
+                redaction_state: hook_redaction_state,
+                redaction_manifest: hook_redaction_manifest,
             },
         )
         .await?;
