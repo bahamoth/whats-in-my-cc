@@ -1,0 +1,40 @@
+{
+  "_comment": "MCP protocol compat golden. Pinned to protocolVersion 2024-11-05 (DEV-S17-02). Update when protocol changes; requires deviation note.",
+  "initialize_response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {
+        "tools": { "listChanged": false },
+        "resources": { "subscribe": true, "listChanged": false },
+        "prompts": { "listChanged": false },
+        "logging": {}
+      },
+      "serverInfo": {
+        "name": "whats-in-my-cc",
+        "_version_note": "version is dynamic (from CARGO_PKG_VERSION); not asserted here"
+      }
+    }
+  },
+  "tools_list_result": {
+    "tools": [
+      { "name": "whats_in_my_cc.get_session_graph" },
+      { "name": "whats_in_my_cc.search_sessions" },
+      { "name": "whats_in_my_cc.search_findings" },
+      { "name": "whats_in_my_cc.explain_node" },
+      { "name": "whats_in_my_cc.get_file_lineage" },
+      { "name": "whats_in_my_cc.get_otel_trace" }
+    ]
+  },
+  "resource_templates_result": {
+    "resourceTemplates": [
+      { "uriTemplate": "whats-in-my-cc://sessions/{session_id}", "name": "Session summary", "mimeType": "application/json" },
+      { "uriTemplate": "whats-in-my-cc://sessions/{session_id}/graph", "name": "Session graph", "mimeType": "application/json" },
+      { "uriTemplate": "whats-in-my-cc://sessions/{session_id}/findings", "name": "Session findings", "mimeType": "application/json" },
+      { "uriTemplate": "whats-in-my-cc://findings/{finding_id}", "name": "Finding detail", "mimeType": "application/json" },
+      { "uriTemplate": "whats-in-my-cc://file-lineage/{session_id}", "name": "File lineage", "mimeType": "application/json" },
+      { "uriTemplate": "whats-in-my-cc://otel/traces/{trace_id}", "name": "OTel trace", "mimeType": "application/json" }
+    ]
+  }
+}
