@@ -61,11 +61,14 @@ fn run_rule_by_id(
     panic!("unknown rule_id: {rule_id}");
 }
 
-/// Maps fixture file name (without .jsonl) to session_id prefix (first 8 chars).
+/// Maps session_id (full UUID or prefix) to fixture file name (without .jsonl).
 fn fixture_for_session(session_id: &str) -> Option<&'static str> {
-    match &session_id[..8.min(session_id.len())] {
-        "aac68973" => Some("verification_v01"),
-        _ => None,
+    if session_id.starts_with("aac68973") {
+        Some("verification_v01")
+    } else if session_id.starts_with("ed82aee9") {
+        Some("structured_patch_v01")
+    } else {
+        None
     }
 }
 

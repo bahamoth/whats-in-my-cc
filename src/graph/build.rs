@@ -8,6 +8,7 @@ use crate::db::repo_verification_run::VerificationRunRow;
 use crate::db::{repo_diff_hunk, repo_graph, repo_observed, repo_verification_run};
 use crate::error::Result;
 use crate::ids::{derive_edge_id, derive_node_id};
+use crate::insight::edge_inference::{all_rules, SessionGraphView};
 use crate::insight::episode::classifier::classify_session;
 use crate::model::graph::{GraphEdge, GraphNode};
 use crate::model::meta::SCHEMA_VERSION;
@@ -441,8 +442,9 @@ pub fn compute(
         nodes.remove(idx);
     }
 
-    // Build a set of valid (surviving) node_ids for edge validation
-    let valid_nodes: HashSet<&str> = nodes.iter().map(|n| n.node_id.as_str()).collect();
+    // Build a set of valid (surviving) node_ids for edge validation.
+    // Uses owned Strings so the borrow does not extend past the sort below.
+    let valid_nodes: HashSet<String> = nodes.iter().map(|n| n.node_id.clone()).collect();
 
     // 3. Edges
     let mut edges: Vec<GraphEdge> = Vec::new();
@@ -675,8 +677,85 @@ pub fn compute(
         ));
     }
 
-    // Stable output ordering
+    // Stable output ordering (deterministic edges sorted first so the inferred
+    // pass below can append without disrupting the sorted prefix — final sort
+    // happens after the full merge).
     nodes.sort_by(|a, b| (a.started_at, &a.node_id).cmp(&(b.started_at, &b.node_id)));
+    edges.sort_by(|a, b| a.edge_id.cmp(&b.edge_id));
+
+    // Slice-13 — append inferred edges from all registered rules (DEV-S13-01).
+    // Each rule runs inside catch_unwind so a rule panic never aborts a rebuild.
+    // We collect all inferred edges into a temporary vec first to satisfy the
+    // borrow checker (view borrows nodes/edges immutably; we cannot mutate edges
+    // while the view is alive).
+    let inferred: Vec<GraphEdge> = {
+        let view = SessionGraphView {
+            session_id,
+            events,
+            nodes: &nodes,
+            deterministic_edges: &edges,
+        };
+        let rules = all_rules();
+        let mut collected: Vec<GraphEdge> = Vec::new();
+        // Track (from_node_id, to_node_id, rule_id) for deduplication — keep the
+        // higher-confidence duplicate per spec §7.
+        let mut seen: std::collections::HashMap<(String, String, String), usize> =
+            std::collections::HashMap::new();
+
+        for rule in &rules {
+            let rule_id = rule.rule_id().to_string();
+            let candidate_edges =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| rule.infer(&view)));
+            let candidate_edges = match candidate_edges {
+                Ok(e) => e,
+                Err(_) => {
+                    tracing::warn!(
+                        session_id = session_id,
+                        rule_id = %rule_id,
+                        "inference rule panicked; skipping its edges for this session"
+                    );
+                    continue;
+                }
+            };
+
+            for e in candidate_edges {
+                // Validate: from_node_id and to_node_id must be in the graph.
+                if !valid_nodes.contains(e.from_node_id.as_str())
+                    || !valid_nodes.contains(e.to_node_id.as_str())
+                {
+                    tracing::debug!(
+                        session_id = session_id,
+                        edge_id = %e.edge_id,
+                        rule_id = %rule_id,
+                        "inferred edge references unknown node(s); dropped"
+                    );
+                    continue;
+                }
+
+                let key = (
+                    e.from_node_id.clone(),
+                    e.to_node_id.clone(),
+                    rule_id.clone(),
+                );
+                if let Some(&existing_idx) = seen.get(&key) {
+                    // Keep higher-confidence duplicate.
+                    let existing_conf = collected[existing_idx].confidence.unwrap_or(0.0);
+                    let new_conf = e.confidence.unwrap_or(0.0);
+                    if new_conf > existing_conf {
+                        collected[existing_idx] = e;
+                    }
+                } else {
+                    seen.insert(key, collected.len());
+                    collected.push(e);
+                }
+            }
+        }
+        collected
+    }; // view dropped here — edges is now exclusively owned again
+
+    edges.extend(inferred);
+
+    // Re-sort so inferred edges are interleaved with deterministic edges by edge_id.
     edges.sort_by(|a, b| a.edge_id.cmp(&b.edge_id));
     (nodes, edges)
 }
