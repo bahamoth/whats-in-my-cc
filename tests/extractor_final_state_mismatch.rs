@@ -107,7 +107,8 @@ fn fires_when_goal_unmet_and_no_completion_marker() {
         assistant_message(1, "I'll look into it"),
     ];
     let vr = failed_verification_run("sess_t", "ev_001");
-    let view = view_with_runs(&events, &[vr]);
+    let runs = vec![vr];
+    let view = view_with_runs(&events, &runs);
     let cands = FinalStateMismatch.extract(&view);
     assert_eq!(cands.len(), 1, "fix goal + failed verification must fire");
     let c = &cands[0];
@@ -124,7 +125,8 @@ fn fires_on_implement_goal_with_failed_verification() {
         assistant_message(1, "working on it"),
     ];
     let vr = failed_verification_run("sess_t", "ev_001");
-    let view = view_with_runs(&events, &[vr]);
+    let runs = vec![vr];
+    let view = view_with_runs(&events, &runs);
     let cands = FinalStateMismatch.extract(&view);
     assert_eq!(cands.len(), 1, "implement goal + failed verification must fire");
 }
@@ -137,7 +139,8 @@ fn does_not_fire_when_closing_verification_passed() {
         assistant_message(1, "tests are now passing"),
     ];
     let vr = passed_verification_run("sess_t", "ev_001");
-    let view = view_with_runs(&events, &[vr]);
+    let runs = vec![vr];
+    let view = view_with_runs(&events, &runs);
     let cands = FinalStateMismatch.extract(&view);
     assert!(cands.is_empty(), "passed verification must not fire final_state_mismatch");
 }
@@ -163,7 +166,8 @@ fn does_not_fire_when_no_goal_verb() {
         assistant_message(1, "some tests are failing"),
     ];
     let vr = failed_verification_run("sess_t", "ev_001");
-    let view = view_with_runs(&events, &[vr]);
+    let runs = vec![vr];
+    let view = view_with_runs(&events, &runs);
     let cands = FinalStateMismatch.extract(&view);
     assert!(cands.is_empty(), "no goal verb must not fire");
 }
@@ -180,7 +184,8 @@ fn fires_at_most_once_per_session() {
     let vr1 = failed_verification_run("sess_t", "ev_001");
     let mut vr2 = failed_verification_run("sess_t", "ev_003");
     vr2.verification_run_id = "vr_002".into();
-    let view = view_with_runs(&events, &[vr1, vr2]);
+    let runs = vec![vr1, vr2];
+    let view = view_with_runs(&events, &runs);
     let cands = FinalStateMismatch.extract(&view);
     assert!(cands.len() <= 1, "at most 1 finding per session, got {}", cands.len());
 }
@@ -218,7 +223,8 @@ fn projection_includes_required_fields() {
         assistant_message(1, "working on it"),
     ];
     let vr = failed_verification_run("sess_t", "ev_001");
-    let view = view_with_runs(&events, &[vr]);
+    let runs = vec![vr];
+    let view = view_with_runs(&events, &runs);
     let cands = FinalStateMismatch.extract(&view);
     assert_eq!(cands.len(), 1);
     let proj = &cands[0].evidence_projection;

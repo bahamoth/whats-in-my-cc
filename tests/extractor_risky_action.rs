@@ -155,7 +155,8 @@ fn does_not_fire_on_non_bash_tool() {
             "input": { "file_path": "/tmp/foo" }
         }
     });
-    let view = synth_view_with_bash(&[ev], &[]);
+    let events = vec![ev];
+    let view = synth_view_with_bash(&events, &[]);
     let cands = RiskyAction.extract(&view);
     assert!(cands.is_empty(), "non-Bash tool with destructive text must not fire");
 }

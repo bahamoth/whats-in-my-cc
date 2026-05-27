@@ -4,6 +4,7 @@ pub mod extractor;
 pub mod extractors;
 pub mod judge;
 pub mod pipeline;
+pub mod redaction_shim;
 pub mod registry;
 pub mod types;
 pub mod verification_allowlist;

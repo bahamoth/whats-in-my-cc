@@ -1,13 +1,21 @@
 //! Extractor implementations, one module per category.
-//! Slice-14 ships two L1 deterministic extractors:
+//! Slice-14: two L1 deterministic extractors:
 //!   - `missing_verification`: action episode with no following verification.
 //!   - `tool_failure`: is_error=true with no compensating retry within 5 events.
 //!
 //! Slice-15: `noop_test` extractor added under `cfg(test)` — exercises the full
 //! L2 code path (pending queue, cache, budget) without introducing a production
 //! finding category.
+//!
+//! Slice-16: three L1+L2 extractors (always-judge):
+//!   - `risky_action`: destructive Bash command or user_modified diff_hunk.
+//!   - `context_bloat`: large tool_result not reused in subsequent turn.
+//!   - `final_state_mismatch`: user goal not corroborated in final state.
 
+pub mod context_bloat;
+pub mod final_state_mismatch;
 pub mod missing_verification;
+pub mod risky_action;
 pub mod tool_failure;
 
 /// Test-only extractor that always emits one candidate with PromotionPolicy::Never,
