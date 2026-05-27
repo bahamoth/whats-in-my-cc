@@ -93,16 +93,16 @@ async fn cached_provider_calls_inner_once_then_serves_cache() {
 }
 
 #[tokio::test]
-async fn cache_key_differs_when_template_version_differs() {
+async fn cache_key_differs_when_evidence_differs() {
     let pool = mem_pool().await;
     let inner = ScriptedJudge::new(vec![ok_verdict(0.7), ok_verdict(0.6)]);
     let calls = inner.call_count.clone();
     let prov = CachedProvider::new(inner, pool);
 
     let mut p1 = synth_prompt();
-    p1.system_template = "judge@v1".to_string();
+    p1.evidence_projection = serde_json::json!({"cmd": "rm -rf /tmp/x"});
     let mut p2 = synth_prompt();
-    p2.system_template = "judge@v2".to_string(); // different template → different key
+    p2.evidence_projection = serde_json::json!({"cmd": "git push --force"});
 
     prov.judge(p1).await.unwrap();
     prov.judge(p2).await.unwrap();
@@ -110,6 +110,6 @@ async fn cache_key_differs_when_template_version_differs() {
     assert_eq!(
         calls.load(Ordering::SeqCst),
         2,
-        "different template = cache miss = 2 calls"
+        "different evidence = different cache key = 2 inner calls"
     );
 }

@@ -3622,6 +3622,7 @@ dependencies = [
  "anyhow",
  "assert-json-diff",
  "assert_cmd",
+ "async-trait",
  "axum",
  "axum-test",
  "chrono",
