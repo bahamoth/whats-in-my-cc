@@ -10,7 +10,7 @@ use sqlx::{Row, SqlitePool};
 use crate::error::Result;
 
 /// Row returned by `list_session` / `get`. All columns are present.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct VerificationRunRow {
     pub verification_run_id: String,
     pub schema_version: String,
