@@ -64,6 +64,7 @@ fn view_from_events(events: &[ObservedEvent]) -> SessionInsightView<'_> {
 }
 
 /// One is_error=true result with no retry within 5 events → 1 candidate.
+/// Also verifies that tool_name is taken from the paired call event, not the result.
 #[test]
 fn fires_on_is_error_true_with_no_retry() {
     let events = vec![
@@ -83,6 +84,12 @@ fn fires_on_is_error_true_with_no_retry() {
     assert!(
         !cands[0].evidence_refs.is_empty(),
         "evidence_refs must be non-empty"
+    );
+    // tool_name comes from the call event (tool_result has no tool_name column).
+    assert!(
+        cands[0].summary.contains("Bash"),
+        "summary must include tool_name from call event; got: {}",
+        cands[0].summary
     );
 }
 
