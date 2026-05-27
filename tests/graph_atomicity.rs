@@ -51,6 +51,8 @@ async fn rebuild_session_is_atomic_under_concurrent_reads() {
                 payload: b"{}".to_vec(),
                 parse_error: None,
                 captured_at: chrono::Utc::now(),
+                redaction_state: "not_applicable".into(),
+                redaction_manifest: None,
             },
         )
         .await
