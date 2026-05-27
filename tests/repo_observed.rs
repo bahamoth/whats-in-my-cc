@@ -25,6 +25,8 @@ async fn insert_and_list_session_events() {
         payload: b"{}".to_vec(),
         parse_error: None,
         captured_at: chrono::Utc::now(),
+        redaction_state: "not_applicable".into(),
+        redaction_manifest: None,
     };
     repo_raw::insert_dedup(&pool, &raw).await.unwrap();
 
@@ -72,6 +74,8 @@ async fn round_trip_preserves_telemetry_facet() {
             payload: b"{}".to_vec(),
             parse_error: None,
             captured_at: Utc::now(),
+            redaction_state: "not_applicable".into(),
+            redaction_manifest: None,
         },
     )
     .await

@@ -40,6 +40,8 @@ async fn seed_pool() -> SqlitePool {
                 payload: b"{}".to_vec(),
                 parse_error: None,
                 captured_at: chrono::Utc::now(),
+                redaction_state: "not_applicable".into(),
+                redaction_manifest: None,
             },
         )
         .await

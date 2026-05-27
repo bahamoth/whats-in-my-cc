@@ -36,6 +36,8 @@ async fn idempotent_insert() {
         payload: b"hello".to_vec(),
         parse_error: None,
         captured_at: Utc::now(),
+        redaction_state: "not_applicable".into(),
+        redaction_manifest: None,
     };
     let inserted_first = repo_raw::insert_dedup(&pool, &row).await.unwrap();
     let inserted_second = repo_raw::insert_dedup(&pool, &row).await.unwrap();
@@ -77,6 +79,8 @@ async fn get_for_event_id_returns_joined_row() {
         payload: br#"{"type":"user","content":"hi"}"#.to_vec(),
         parse_error: None,
         captured_at: chrono::Utc::now(),
+        redaction_state: "not_applicable".into(),
+        redaction_manifest: None,
     };
     witmcc::db::repo_raw::insert_dedup(&pool, &raw)
         .await
