@@ -16,11 +16,18 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
   ObservedEvent + telemetry facet · 기본 graph builder · WebUI replay ·
   SSE live updates · windowed event buffer · **filesystem-source removal +
   transcript-only file lineage + Files lane graph linkage (slice-10a)**).
-- 남은 작업: M3 잔여(episode segmentation, causal inference), M4 잔여 (Why
-  Panel, Source views, Resource drawer), **M5 Insight engine (0건 finding)**,
-  M6 MCP Streamable HTTP, M7 보안 강화 (Origin/token/redaction
-  manifest/retention).
-- 구현 상세: `docs/implementation-notes.html` 의 slice별 섹션.
+- 남은 작업의 **계획은 잠겼음**:
+  `docs/superpowers/specs/2026-05-27-witmcc-remaining-milestones-roadmap.md` +
+  per-slice design specs + per-slice TDD plans (`2026-05-27-witmcc-slice11..19-*`).
+  Insight 엔진 L1/L2 분리 설계는
+  `2026-05-27-witmcc-insight-engine-architecture.md`. UX 재설계는 마일스톤 밖
+  별도 epic (`2026-05-27-witmcc-ux-redesign-epic.md`).
+- 잔여 마일스톤: M3 (slice-11 VerificationRun · slice-12 Episode · slice-13
+  Causal-edge), M5 Insight (slice-14 L1 · slice-15 L2 infra · slice-16 L2
+  categories), M6 MCP (slice-17), M7 Hardening (slice-18 Redaction · slice-19
+  Auth/Retention).
+- 구현 상세: `docs/implementation-notes.html` 의 slice별 섹션 (slice-11+ 섹션은
+  각 slice merge 시 추가됨).
 - **운영 주의 (slice-10a):** 기존 dev DB (`.witmcc.sqlite*`)는 폐기 후
   `witmcc init-db`로 재생성 필요. sqlx migration hash 변경됨.
 

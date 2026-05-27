@@ -72,6 +72,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice10a">Overview (slice-10a)</a>
     <a href="#slice10a-deviations">Intentional Deviations (slice-10a)</a>
     <a href="#slice10a-commits">Commit Reference (slice-10a)</a>
+    <a href="#planning-remaining-milestones">Planning — slice-11..19 (2026-05-27)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
 </aside>
@@ -1945,8 +1946,41 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <p>Follow-up (Files lane wiring + diff-hunks endpoint) 커밋 SHA는 push 후 결정.</p>
   </section>
 
+  <section id="planning-remaining-milestones">
+    <h2><span class="num">32</span>Planning — slice-11 through slice-19 (2026-05-27)</h2>
+    <p>잔여 마일스톤 M3 (slice-11/12/13) · M5 Insight (slice-14/15/16) · M6 MCP (slice-17) · M7 Hardening (slice-18/19)의
+       구현 계획·TDD 계획·스모크 계획이 일괄적으로 잠겼다. 이 섹션은 그 계획 산출물 인덱스다.</p>
+
+    <h3>Roadmap + 핵심 설계</h3>
+    <ul>
+      <li><code>docs/superpowers/specs/2026-05-27-witmcc-remaining-milestones-roadmap.md</code> — 슬라이스 그래프, AC 매핑, 표준 검증 구조(L1–L6), 리스크 레지스터, 정의-of-done.</li>
+      <li><code>docs/superpowers/specs/2026-05-27-witmcc-insight-engine-architecture.md</code> — L1 deterministic + L2 LLM judge 분리. 비용 모델, 캐시 키, 예산 가드, 카테고리 라우팅 표.</li>
+      <li><code>docs/superpowers/specs/2026-05-27-witmcc-ux-redesign-epic.md</code> — UI 재설계 deferral 차터 + 데이터 컨트랙트 전제조건 (C1..C10).</li>
+    </ul>
+
+    <h3>Slice별 spec + TDD plan</h3>
+    <ul>
+      <li>slice-11 VerificationRun ingest — <code>specs/2026-05-27-witmcc-slice11-verification-run-design.md</code> + <code>plans/2026-05-27-witmcc-slice11-verification-run.md</code></li>
+      <li>slice-12 Episode segmentation — <code>specs/.../slice12-episode-segmentation-design.md</code> + <code>plans/.../slice12-episode-segmentation.md</code></li>
+      <li>slice-13 Causal-edge inference — <code>specs/.../slice13-causal-edge-inference-design.md</code> + <code>plans/.../slice13-causal-edge-inference.md</code></li>
+      <li>slice-14 Insight L1 — <code>specs/.../slice14-insight-l1-design.md</code> + <code>plans/.../slice14-insight-l1.md</code></li>
+      <li>slice-15 Insight L2 infra — <code>specs/.../slice15-insight-l2-infra-design.md</code> + <code>plans/.../slice15-insight-l2-infra.md</code></li>
+      <li>slice-16 Insight L2 categories — <code>specs/.../slice16-insight-l2-categories-design.md</code> + <code>plans/.../slice16-insight-l2-categories.md</code></li>
+      <li>slice-17 MCP Streamable HTTP — <code>specs/.../slice17-mcp-streamable-http-design.md</code> + <code>plans/.../slice17-mcp-streamable-http.md</code></li>
+      <li>slice-18 Redaction gate + manifest — <code>specs/.../slice18-redaction-gate-design.md</code> + <code>plans/.../slice18-redaction-gate.md</code></li>
+      <li>slice-19 Auth + retention (MVP exit) — <code>specs/.../slice19-auth-retention-design.md</code> + <code>plans/.../slice19-auth-retention.md</code></li>
+    </ul>
+
+    <h3>주의</h3>
+    <ul>
+      <li>모든 plan은 슬라이스별 PR로 결국 머지됨. 각 머지 시 본 문서에 해당 slice의 Overview/Deviations/Commit Reference 섹션이 추가된다 (slice-1..10a 패턴 동일).</li>
+      <li>UX 재설계는 마일스톤 트랙 <em>밖</em>이다. 마일스톤 PR이 UI 패널을 추가하려고 하면 거절하고 UX epic으로 회부한다.</li>
+      <li>Insight 엔진은 LLM judge가 <strong>기본 off</strong>다 (NoopJudge). <code>--judge anthropic</code>로 opt-in. 예산 기본 20 calls/session.</li>
+    </ul>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a · 2026-05-22 · branch: slice10a-filesystem-removal</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a · planning slice-11~19 · 2026-05-27 · branch: planning-remaining-milestones</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
