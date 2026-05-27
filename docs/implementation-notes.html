@@ -74,6 +74,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <a href="#slice10a-commits">Commit Reference (slice-10a)</a>
     <a href="#slice-11">Overview (slice-11)</a>
     <a href="#slice-12">Overview (slice-12)</a>
+    <a href="#slice-13">Overview (slice-13)</a>
     <a href="#planning-remaining-milestones">Planning — slice-11..19 (2026-05-27)</a>
   </nav>
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
@@ -2048,6 +2049,74 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     </ul>
   </section>
 
+  <section id="slice-13">
+    <h2><span class="num">35</span>slice-13 — Causal-edge Inference (2026-05-27)</h2>
+    <p>M3을 닫는 slice. 그래프에 <strong>inferred</strong> 엣지를 추가한다.
+       각 엣지는 <code>inference_rule_id</code> (버전-접미사) + 수치 <code>confidence</code>를 가진다.
+       기존 deterministic 엣지는 변경 없음; NULL 컬럼으로 구분.</p>
+
+    <h3>Overview (slice-13)</h3>
+    <dl>
+      <dt>Migration <code>0007_graph_edge_inference.sql</code></dt>
+      <dd><code>graph_edge</code>에 <code>inference_rule_id TEXT</code> + <code>confidence REAL</code>
+          컬럼 추가. <code>idx_graph_edge_rule</code> 인덱스 생성. Deterministic 엣지는 두 컬럼 모두 NULL.</dd>
+      <dt><code>GraphEdge</code> 구조체 변경</dt>
+      <dd><code>inference_rule_id: Option&lt;String&gt;</code>, <code>confidence: Option&lt;f32&gt;</code>
+          추가. <code>serde(skip_serializing_if = "Option::is_none")</code>으로 JSON 생략.</dd>
+      <dt>세 개 추론 규칙 (v1)</dt>
+      <dd>
+        <ul>
+          <li><code>caused_repair@v1</code>: is_error=true tool_call → 60초 이내 다음 tool_call.
+              Jaccard 토큰 겹침 K≥2. confidence = 0.7×overlap + 0.3×time_decay.</li>
+          <li><code>triggered_by_user_message@v1</code>: user_message → 바로 다음 tool_call
+              (사이에 assistant_message 없을 때). fixed confidence 0.85.</li>
+          <li><code>large_output_to_next_action@v1</code>: tool_result 페이로드 ≥50 KB →
+              다음 assistant_message. confidence = 0.6 + 0.4×(size/max). Finding 생성 안 함 (DEV-S13-05).</li>
+        </ul>
+      </dd>
+      <dt><code>compute()</code> 통합</dt>
+      <dd>deterministic 엣지 빌드 후 <code>all_rules()</code>를 순회. 각 규칙은
+          <code>catch_unwind</code> 안에서 실행. 고아 엣지(존재하지 않는 node_id) 드롭.
+          동일 (from, to, rule_id) 중복 중 높은 confidence 유지.</dd>
+      <dt>Smoke (aac68973 실제 데이터)</dt>
+      <dd>전체 세션 (1523 노드, 4723 엣지 총합): <code>triggered_by_user_message@v1</code> = 2개,
+          <code>caused_repair@v1</code> = 0, <code>large_output_to_next_action@v1</code> = 0.
+          Curated 픽스처 (6-line, 모두 성공 verify run) 에서는 세 규칙 모두 0개 — golden에 기록.</dd>
+    </dl>
+
+    <h3>Intentional Deviations (slice-13)</h3>
+    <dl>
+      <dt>DEV-S13-01</dt>
+      <dd>Inferred 엣지는 deterministic 엣지 <em>이후</em>에 추가. 최종 정렬은 edge_id 기준.</dd>
+      <dt>DEV-S13-02</dt>
+      <dd>모든 임계값(N=60s, K=2, T=50KB)은 규칙 파일 안의 상수. 런타임 설정 없음.</dd>
+      <dt>DEV-S13-03</dt>
+      <dd><code>caused_repair@v1</code>은 어휘적(lexical) 토큰 겹침을 사용. 모델 호출 없음.
+          시맨틱 매칭은 v2 후보.</dd>
+      <dt>DEV-S13-04</dt>
+      <dd><code>triggered_by_user_message@v1</code>은 user → assistant text → tool_call 경로는
+          불발. 이 경로는 deterministic <code>message_reply</code> 엣지가 이미 커버.</dd>
+      <dt>DEV-S13-05</dt>
+      <dd><code>large_output_to_next_action@v1</code>은 Finding을 생성하지 않음.
+          <code>context_bloat</code> finding category (slice-16)가 이 엣지를 근거로 사용.</dd>
+      <dt>DEV-S13-06</dt>
+      <dd>페이로드 크기는 result 하위 오브젝트의 JSON 직렬화 바이트수로 측정 (근사값).
+          confidence는 f32; 테스트는 ±0.01 epsilon.</dd>
+      <dt>DEV-S13-07 (bootstrap)</dt>
+      <dd>Curated 픽스처 2개(verification_v01, structured_patch_v01)의 golden 카운트는
+          모두 0 — 두 픽스처 모두 오류 결과·대용량 출력·직접 user→tool 패턴이 없는
+          소형 성공 세션이기 때문. 규칙 동작은 합성 단위 테스트로 검증됨.</dd>
+    </dl>
+
+    <h3>Commit Reference (slice-13)</h3>
+    <ul>
+      <li><code>fbd4ade</code> — test(slice-13): red-locking tests for inferred edges + rule registry + schema</li>
+      <li><code>ad7cd1b</code> — feat(db): 0007 inference columns on graph_edge</li>
+      <li><code>0163ee7</code> — feat(insight): three edge inference rules v1</li>
+      <li><code>8755aae</code> — feat(graph): wire inferred edges into compute() + inferred_edge_counts golden</li>
+    </ul>
+  </section>
+
   <section id="planning-remaining-milestones">
     <h2><span class="num">32</span>Planning — slice-11 through slice-19 (2026-05-27)</h2>
     <p>잔여 마일스톤 M3 (slice-11/12/13) · M5 Insight (slice-14/15/16) · M6 MCP (slice-17) · M7 Hardening (slice-18/19)의
@@ -2082,7 +2151,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   </section>
 
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 · planning slice-13~19 · 2026-05-27 · branch: feat/remaining-milestones</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 · planning slice-14~19 · 2026-05-27 · branch: feat/remaining-milestones</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
