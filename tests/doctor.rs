@@ -12,10 +12,16 @@ fn pick_port() -> u16 {
 }
 
 /// Spawn a witmcc server bound to an ephemeral port + tempfile DB. Returns the
-/// child + the URL so the caller can probe and then kill on drop.
-fn spawn_server(extra_env: &[(&str, &str)]) -> (std::process::Child, String, tempfile::NamedTempFile) {
+/// child + the URL + the config dir tempdir (held to keep the dir alive).
+fn spawn_server(
+    extra_env: &[(&str, &str)],
+) -> (std::process::Child, String, tempfile::NamedTempFile, tempfile::TempDir) {
     let port = pick_port();
     let db = tempfile::NamedTempFile::new().expect("tempfile");
+    // Slice-19: give the server its own config dir so the token file is isolated
+    // from the real ~/.config/witmcc. We keep the TempDir alive until the caller
+    // drops it so the token file persists for the doctor subcommand.
+    let config_dir = tempfile::tempdir().expect("config tempdir");
     let bin = env!("CARGO_BIN_EXE_witmcc");
     let mut cmd = Command::new(bin);
     cmd.args([
@@ -31,6 +37,7 @@ fn spawn_server(extra_env: &[(&str, &str)]) -> (std::process::Child, String, tem
         // host's real ~/.claude/projects contents.
         "--no-watch-transcripts",
     ])
+    .env("WITMCC_CONFIG_DIR", config_dir.path())
     .stdout(Stdio::null())
     .stderr(Stdio::null());
     for (k, v) in extra_env {
@@ -54,7 +61,7 @@ fn spawn_server(extra_env: &[(&str, &str)]) -> (std::process::Child, String, tem
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    (child, url, db)
+    (child, url, db, config_dir)
 }
 
 fn ureq_get(url: &str) -> std::io::Result<bool> {
@@ -73,15 +80,18 @@ fn ureq_get(url: &str) -> std::io::Result<bool> {
     write!(s, "GET /{rest} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n")?;
     let mut buf = String::new();
     let _ = s.take(256).read_to_string(&mut buf);
-    Ok(buf.starts_with("HTTP/1.1 200"))
+    // Slice-19: 401 means the server is up but token auth is required.
+    // Both 200 and 401 mean the server is ready.
+    Ok(buf.starts_with("HTTP/1.1 200") || buf.starts_with("HTTP/1.1 401"))
 }
 
 #[test]
 fn doctor_pretty_against_live_server_lists_taxonomy_and_exits_0() {
-    let (mut child, url, _db) = spawn_server(&[]);
+    let (mut child, url, _db, config_dir) = spawn_server(&[]);
     let out = AssertCmd::cargo_bin("witmcc")
         .unwrap()
         .args(["doctor", "--server", &url])
+        .env("WITMCC_CONFIG_DIR", config_dir.path())
         .env_remove("CLAUDE_CODE_ENABLE_TELEMETRY")
         .env_remove("OTEL_EXPORTER_OTLP_ENDPOINT")
         .output()
@@ -98,10 +108,11 @@ fn doctor_pretty_against_live_server_lists_taxonomy_and_exits_0() {
 
 #[test]
 fn doctor_json_mode_emits_parseable_report() {
-    let (mut child, url, _db) = spawn_server(&[]);
+    let (mut child, url, _db, config_dir) = spawn_server(&[]);
     let out = AssertCmd::cargo_bin("witmcc")
         .unwrap()
         .args(["doctor", "--json", "--server", &url])
+        .env("WITMCC_CONFIG_DIR", config_dir.path())
         .env_remove("CLAUDE_CODE_ENABLE_TELEMETRY")
         .output()
         .expect("doctor");
@@ -132,7 +143,7 @@ fn write_json(path: &std::path::Path, body: &serde_json::Value) {
 
 #[test]
 fn doctor_v02_project_scope_env_attribution() {
-    let (mut child, url, _db) = spawn_server(&[]);
+    let (mut child, url, _db, _cfg) = spawn_server(&[]);
     let project = tempfile::tempdir().unwrap();
     // .git so the walk stops here; .claude/settings.json with OTel env.
     std::fs::create_dir_all(project.path().join(".git")).unwrap();
@@ -175,7 +186,7 @@ fn doctor_v02_project_scope_env_attribution() {
 
 #[test]
 fn doctor_v02_local_overrides_project_scope() {
-    let (mut child, url, _db) = spawn_server(&[]);
+    let (mut child, url, _db, _cfg) = spawn_server(&[]);
     let project = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(project.path().join(".git")).unwrap();
     write_json(
@@ -210,7 +221,7 @@ fn doctor_v02_local_overrides_project_scope() {
 
 #[test]
 fn doctor_v02_plugin_manifest_hook_picked_up() {
-    let (mut child, url, _db) = spawn_server(&[]);
+    let (mut child, url, _db, _cfg) = spawn_server(&[]);
     let tmp = tempfile::tempdir().unwrap();
     let plugins_root = tmp.path().join("plugins");
     let plugin_dir = plugins_root.join("my-plugin");
@@ -255,7 +266,7 @@ fn doctor_v02_plugin_manifest_hook_picked_up() {
 
 #[test]
 fn doctor_v02_env_divergence_when_settings_has_more_than_shell() {
-    let (mut child, url, _db) = spawn_server(&[]);
+    let (mut child, url, _db, _cfg) = spawn_server(&[]);
     let project = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(project.path().join(".git")).unwrap();
     write_json(
@@ -296,7 +307,7 @@ fn doctor_v02_env_divergence_when_settings_has_more_than_shell() {
 /// "no data, do X" recommendation block.
 #[test]
 fn doctor_recommendations_omit_hook_and_file_git() {
-    let (mut child, url, _db) = spawn_server(&[]);
+    let (mut child, url, _db, _cfg) = spawn_server(&[]);
     let out = AssertCmd::cargo_bin("witmcc")
         .unwrap()
         .args(["doctor", "--server", &url])

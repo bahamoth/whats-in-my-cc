@@ -14,13 +14,26 @@ async fn test_pool() -> sqlx::SqlitePool {
 /// Seed a raw_event with `captured_at` set to `days_old` days in the past.
 /// Returns the raw_event_id.
 async fn seed_old_raw_event(pool: &sqlx::SqlitePool, days_old: i64) -> String {
-    let id = format!("raw_{days_old}d_{}", ulid::Ulid::new());
+    // First ensure an ingest_run exists (raw_event has FK on ingest_run).
+    let run_id = format!("run_{days_old}d_{}", ulid::Ulid::new());
     sqlx::query(
-        "INSERT INTO raw_event (raw_event_id, session_id, source_type, source_uri, source_line_no, kind, payload, observed_payload, captured_at)
-         VALUES (?, 'sess_test', 'claude_transcript', 'test.jsonl', 0, 'message', '{}', '{}', datetime('now', ? || ' days'))"
+        "INSERT OR IGNORE INTO ingest_run (run_id, started_at, status) VALUES (?, datetime('now'), 'done')"
+    )
+    .bind(&run_id)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let id = format!("raw_{days_old}d_{}", ulid::Ulid::new());
+    let sha = format!("sha_{id}");
+    sqlx::query(
+        "INSERT INTO raw_event (raw_event_id, ingest_run_id, source_type, source_uri, source_line_no, source_byte_offset, payload_sha256, payload, captured_at)
+         VALUES (?, ?, 'claude_transcript', 'test.jsonl', 0, 0, ?, '{}', datetime('now', ?))"
     )
     .bind(&id)
-    .bind(format!("-{days_old}"))
+    .bind(&run_id)
+    .bind(&sha)
+    .bind(format!("-{days_old} days"))
     .execute(pool)
     .await
     .unwrap();
