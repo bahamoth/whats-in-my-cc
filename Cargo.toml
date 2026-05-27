@@ -43,6 +43,9 @@ reqwest            = { version = "0.12", default-features = false, features = ["
 strum              = { version = "0.26", features = ["derive"] }
 regex              = "1"
 async-trait        = "0.1"
+rand               = "0.9"
+base64             = "0.22"
+subtle             = "2"
 
 [features]
 # Enables test-helper types (NoopTestExtractor) for integration tests.
