@@ -25,6 +25,9 @@ async fn test_server() -> TestServer {
         sse_channel_capacity: 512,
         judge_runtime: Arc::new(JudgeRuntime::noop()),
         mcp_sessions: witmcc::api::mcp::SessionRegistry::new(),
+        // Slice-19: empty token disables auth check in test mode.
+        token: String::new(),
+        retention_profile: "none".to_string(),
     };
     TestServer::new(witmcc::api::router(state)).unwrap()
 }

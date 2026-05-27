@@ -11,8 +11,8 @@ use sqlx::SqlitePool;
 use crate::api::dto::*;
 use crate::api::AppState;
 use crate::db::{
-    repo_diff_hunk, repo_episode, repo_finding, repo_findings_pending, repo_graph, repo_observed,
-    repo_raw, repo_verification_run,
+    repo_audit, repo_diff_hunk, repo_episode, repo_finding, repo_findings_pending, repo_graph,
+    repo_observed, repo_raw, repo_retention, repo_verification_run,
 };
 use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
 
@@ -24,6 +24,9 @@ pub struct ListQuery {
 /// Slice-15: health now includes an `insight` block with judge counters.
 /// `judge_pending_count` is a live DB query (cheap); all `_24h` counters are
 /// in-memory atomics reset on server restart (DEV-S15-03).
+///
+/// Slice-19: adds a `security` block with `auth_required` and `retention_profile`.
+/// `/v1/health` is auth-gated (DEV-S19-02).
 pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
     let snap = state.judge_runtime.metrics_snapshot();
     let pending: i64 = repo_findings_pending::count_all(&state.pool)
@@ -39,6 +42,10 @@ pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
             "judge_cache_hits_24h": snap.cache_hits_24h,
             "judge_cache_misses_24h": snap.cache_misses_24h,
             "judge_budget_exhaustions_24h": snap.budget_exhaustions_24h,
+        },
+        "security": {
+            "auth_required": !state.token.is_empty(),
+            "retention_profile": state.retention_profile,
         }
     }))
 }
@@ -658,10 +665,34 @@ pub async fn list_findings(
 }
 
 /// `GET /v1/findings/:id` — single finding detail.
+///
+/// Slice-19: if the finding has been deleted by retention sweep, the tombstone
+/// table will have a record for it and this handler returns `410 Gone` instead
+/// of `404 Not Found`, so clients can distinguish "never existed" from "expired".
 pub async fn finding_detail(
     State(pool): State<SqlitePool>,
     Path(finding_id): Path<String>,
 ) -> impl IntoResponse {
+    // Check tombstone first (slice-19).
+    match repo_retention::is_tombstoned(&pool, &finding_id).await {
+        Ok(true) => {
+            return (
+                StatusCode::GONE,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "RESOURCE_GONE",
+                    "detail": format!("finding {finding_id} was deleted by retention sweep"),
+                    "resource_id": finding_id
+                })),
+            )
+                .into_response();
+        }
+        Ok(false) => {}
+        Err(err) => {
+            tracing::warn!(finding_id = %finding_id, err = %err, "tombstone check failed");
+        }
+    }
+
     match repo_finding::get(&pool, &finding_id).await {
         Ok(Some(row)) => Json(FindingDetailResponse {
             data: finding_row_to_dto(row),
@@ -791,6 +822,43 @@ pub async fn session_findings(
         }
         Err(err) => {
             tracing::error!(err = %err, "session_findings failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Slice-19 — Audit endpoint
+// ---------------------------------------------------------------------------
+
+/// `GET /v1/audit` — list recent audit rows.
+///
+/// Returns up to 200 recent audit rows, ordered by `created_at DESC`.
+/// Auth-gated (bearer token required).
+pub async fn list_audit(State(pool): State<SqlitePool>) -> impl IntoResponse {
+    match repo_audit::list_recent(&pool, 200).await {
+        Ok(rows) => {
+            let data: Vec<serde_json::Value> = rows
+                .into_iter()
+                .map(|r| {
+                    json!({
+                        "audit_id": r.audit_id,
+                        "event": r.event,
+                        "actor": r.actor,
+                        "payload": serde_json::from_str::<serde_json::Value>(&r.payload)
+                            .unwrap_or(serde_json::Value::Null),
+                        "created_at": r.created_at,
+                    })
+                })
+                .collect();
+            Json(json!({ "data": data })).into_response()
+        }
+        Err(err) => {
+            tracing::error!(err = %err, "list_audit failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "internal server error"})),

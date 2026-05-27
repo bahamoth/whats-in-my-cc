@@ -8,11 +8,10 @@ use serde_json::json;
 
 /// Build a test server with auth enabled.
 /// The returned string is the bearer token to use.
+/// Token is generated in-process (no file I/O) to avoid env-var races.
 async fn build_auth_test_server() -> (TestServer, String) {
-    let dir = tempfile::tempdir().unwrap();
-    std::env::set_var("WITMCC_CONFIG_DIR", dir.path());
-    let token = witmcc::security::token::ensure_token().unwrap();
-    std::env::remove_var("WITMCC_CONFIG_DIR");
+    // Use generate_token() directly — no file system interaction.
+    let token = witmcc::security::token::generate_token();
 
     let pool = witmcc::db::connect(":memory:").await.unwrap();
     witmcc::db::migrate(&pool).await.unwrap();

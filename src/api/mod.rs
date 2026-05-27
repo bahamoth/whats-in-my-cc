@@ -7,6 +7,7 @@ pub mod routes;
 pub mod sse;
 pub mod static_assets;
 
+
 use std::sync::Arc;
 
 use axum::{
@@ -35,6 +36,9 @@ const MAX_REQUEST_BODY: usize = 4 * 1024 * 1024;
 ///
 /// Slice-17 adds `mcp_sessions` — the in-memory MCP session registry.
 ///
+/// Slice-19 adds `token` — bearer token for auth-gated endpoints.
+/// Also adds `retention_profile` — the active retention profile name.
+///
 /// `FromRef<AppState> for SqlitePool` is provided so existing handlers that
 /// declare `State<SqlitePool>` continue to compile without source change; only
 /// handlers that actually need `live_tx` (currently the SSE handler) take
@@ -49,12 +53,19 @@ pub struct AppState {
     pub judge_runtime: Arc<JudgeRuntime>,
     /// Slice-17: MCP session registry (in-memory, DEV-S17-04).
     pub mcp_sessions: SessionRegistry,
+    /// Slice-19: bearer token for API authentication.
+    /// Empty string = auth disabled (only in legacy tests that haven't migrated).
+    pub token: String,
+    /// Slice-19: active retention profile name ("none" | "default" | "strict").
+    pub retention_profile: String,
 }
 
 impl AppState {
     /// Test-only constructor. Builds a fresh broadcast channel with default
     /// capacity. `live_tx::receiver_count()` will be 0 at first; `BroadcastSink`
     /// tolerates that. Judge runtime defaults to noop. MCP sessions start empty.
+    /// Token defaults to empty string (auth middleware accepts any request when
+    /// token is empty — callers that test auth must set `state.token`).
     pub fn new_for_tests(pool: SqlitePool) -> Self {
         let (tx, _) = broadcast::channel(512);
         Self {
@@ -64,6 +75,8 @@ impl AppState {
             sse_channel_capacity: 512,
             judge_runtime: Arc::new(JudgeRuntime::noop()),
             mcp_sessions: SessionRegistry::new(),
+            token: String::new(),
+            retention_profile: "none".to_string(),
         }
     }
 }
@@ -75,7 +88,12 @@ impl FromRef<AppState> for SqlitePool {
 }
 
 pub fn router(state: AppState) -> Router {
-    Router::new()
+    // Routes that require bearer-token authentication (all /v1/* and /mcp).
+    // Non-auth routes: /otel/*, /hooks/*, static SPA.
+    // The AppState is added as a request extension so the auth middleware
+    // can extract the expected token without a separate axum::extract::State call.
+    let auth_state = state.clone();
+    let authed = Router::new()
         .route("/mcp", post(mcp::transport::post_handler))
         .route("/mcp", get(mcp::transport::get_handler))
         .route("/v1/health", get(routes::health))
@@ -106,6 +124,14 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/findings/:id/evidence", get(routes::finding_evidence))
         .route("/v1/sessions/:id/findings", get(routes::session_findings))
         .route("/v1/events/:event_id/raw", get(routes::event_raw))
+        .route("/v1/audit", get(routes::list_audit))
+        .layer(axum_mw::from_fn_with_state(
+            auth_state,
+            middleware::auth::require_token,
+        ));
+
+    Router::new()
+        .merge(authed)
         .route("/otel/v1/traces", post(otel::ingest_traces))
         .route("/otel/v1/metrics", post(otel::ingest_metrics))
         .route("/otel/v1/logs", post(otel::ingest_logs))

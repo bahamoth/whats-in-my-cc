@@ -6,10 +6,7 @@
 use axum_test::TestServer;
 
 async fn build_auth_server_with_pool() -> (TestServer, sqlx::SqlitePool, String) {
-    let dir = tempfile::tempdir().unwrap();
-    std::env::set_var("WITMCC_CONFIG_DIR", dir.path());
-    let token = witmcc::security::token::ensure_token().unwrap();
-    std::env::remove_var("WITMCC_CONFIG_DIR");
+    let token = witmcc::security::token::generate_token();
 
     let pool = witmcc::db::connect(":memory:").await.unwrap();
     witmcc::db::migrate(&pool).await.unwrap();
