@@ -103,7 +103,8 @@ impl InsightExtractor for ToolFailure {
             }
 
             // Find the paired tool_call event for this tool_use_id.
-            let call_event_id = events[..i]
+            // tool_name lives on the call event, not the result event.
+            let call_ev = events[..i]
                 .iter()
                 .rev()
                 .find(|ev2| {
@@ -113,8 +114,11 @@ impl InsightExtractor for ToolFailure {
                             .as_deref()
                             .map(|id| id == tool_use_id.as_str())
                             .unwrap_or(false)
-                })
-                .map(|ev2| ev2.event_id.clone());
+                });
+            let call_event_id = call_ev.map(|ev2| ev2.event_id.clone());
+            let tool_name = call_ev
+                .and_then(|ev2| ev2.tool_name.as_deref())
+                .unwrap_or("unknown");
 
             let mut evidence_refs = vec![ev.event_id.clone()];
             if let Some(ref call_id) = call_event_id {
@@ -125,7 +129,7 @@ impl InsightExtractor for ToolFailure {
                 view.session_id,
                 &ev.event_id,
                 call_event_id.as_deref(),
-                ev.tool_name.as_deref().unwrap_or("unknown"),
+                tool_name,
                 &ev.payload,
                 evidence_refs,
             ));
