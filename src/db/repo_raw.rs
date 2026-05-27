@@ -13,6 +13,11 @@ pub struct NewRaw {
     pub payload: Vec<u8>,
     pub parse_error: Option<String>,
     pub captured_at: DateTime<Utc>,
+    /// Slice-18: redacted state string ("redacted" | "not_redacted" | "not_applicable").
+    /// Replaces the previous placeholder "unredacted".
+    pub redaction_state: String,
+    /// Slice-18: JSON-serialised RedactionManifest, or None for unparseable rows.
+    pub redaction_manifest: Option<String>,
 }
 
 pub struct RawForEventRow {
@@ -69,8 +74,8 @@ pub async fn insert_dedup(pool: &SqlitePool, r: &NewRaw) -> Result<bool> {
         "INSERT INTO raw_event(
             raw_event_id, ingest_run_id, source_type, source_uri,
             source_line_no, source_byte_offset, payload_sha256, payload,
-            parse_error, captured_at)
-         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            parse_error, captured_at, redaction_state, redaction_manifest)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(source_uri, source_line_no, payload_sha256) DO NOTHING",
     )
     .bind(&r.raw_event_id)
@@ -83,6 +88,8 @@ pub async fn insert_dedup(pool: &SqlitePool, r: &NewRaw) -> Result<bool> {
     .bind(&r.payload)
     .bind(&r.parse_error)
     .bind(r.captured_at.to_rfc3339())
+    .bind(&r.redaction_state)
+    .bind(&r.redaction_manifest)
     .execute(pool)
     .await?;
     Ok(res.rows_affected() > 0)
