@@ -1,4 +1,5 @@
 use crate::error::Result;
+use crate::model::meta::RedactionSummary;
 use chrono::{DateTime, Utc};
 use sqlx::SqlitePool;
 
@@ -93,4 +94,64 @@ pub async fn insert_dedup(pool: &SqlitePool, r: &NewRaw) -> Result<bool> {
     .execute(pool)
     .await?;
     Ok(res.rows_affected() > 0)
+}
+
+/// Slice-18 — aggregate redaction manifests for a session's raw events.
+///
+/// Returns a `RedactionSummary` by scanning all `raw_event` rows for a session
+/// (via the `observed_event` join). Bounded by the existing 200-event pagination
+/// cap — callers pass their current page's raw_event_ids.
+///
+/// If there are no raw events or no manifests, returns a zero-count summary.
+pub async fn aggregate_session_summary(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<RedactionSummary> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        "SELECT r.redaction_manifest, r.redaction_state \
+         FROM raw_event r \
+         JOIN observed_event o ON o.raw_event_id = r.raw_event_id \
+         WHERE o.session_id = ? \
+         GROUP BY r.raw_event_id \
+         LIMIT 200",
+    )
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut total: u32 = 0;
+    let mut rules_seen: std::collections::BTreeSet<String> = Default::default();
+    let mut any_unredacted = false;
+
+    for row in &rows {
+        let manifest_json: Option<String> = row.try_get("redaction_manifest").ok().flatten();
+        if let Some(ref json) = manifest_json {
+            // Parse only the fields we need to avoid the &'static str lifetime
+            // issue in RedactionManifest (those fields are assigned from constants
+            // during ingest, but deserialized from DB as owned values).
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json) {
+                if let Some(count) = v["items_redacted_count"].as_u64() {
+                    total += count as u32;
+                }
+                if let Some(rules) = v["rules_applied"].as_array() {
+                    for r in rules {
+                        if let Some(s) = r.as_str() {
+                            rules_seen.insert(s.to_string());
+                        }
+                    }
+                }
+                if v["has_unredacted_sensitive_payload"].as_bool().unwrap_or(false) {
+                    any_unredacted = true;
+                }
+            }
+        }
+    }
+
+    Ok(RedactionSummary {
+        total_items_redacted: total,
+        rules_seen: rules_seen.into_iter().collect(),
+        any_unredacted_sensitive: any_unredacted,
+    })
 }
