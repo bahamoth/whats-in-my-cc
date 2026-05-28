@@ -6,21 +6,24 @@
 //! # Algorithm
 //!
 //! Left-to-right pass over the ordered event stream. At each position the
-//! state machine consults the current state + a 3-event lookahead to decide
-//! whether to:
+//! state machine consults only backward state (recent exploration streak,
+//! had_failure flag, last_error_at / last_verification_at) to decide whether
+//! to:
 //!   (a) continue the current episode, or
 //!   (b) emit a boundary and start a new episode.
 //!
-//! The lookahead size is `LOOKAHEAD = 3` (DEV-S12-02). Bumping it requires a
-//! `_v2` version bump on affected rules and a golden-update commit.
+//! DEV-S12-02 (revised): the spec originally called for a 3-event lookahead
+//! window. Implementation converged on backward-only state instead; the
+//! lookahead helper was removed when the dead-code warning surfaced and the
+//! deviation was rewritten to reflect actual behaviour.
 //!
 //! # Phase transition table
 //!
 //! | Event signal | New phase |
 //! |---|---|
 //! | user_message from User actor | Intake |
-//! | read-only tool_call, no mutation ahead, after error | Diagnosis |
-//! | read-only tool_call, no mutation ahead | Exploration |
+//! | read-only tool_call, after recent error | Diagnosis |
+//! | read-only tool_call | Exploration |
 //! | mutating tool_call (Edit/Write/MultiEdit/Bash-non-verify) after failure | Repair |
 //! | mutating tool_call (Edit/Write/MultiEdit/Bash-non-verify) | Action |
 //! | VerificationRun row starts in this window | Verification |
@@ -42,24 +45,11 @@ pub const CLASSIFIER_VERSION: &str = "episode_classifier@v1";
 /// Consecutive exploration events that trigger `Drift`.
 const DRIFT_THRESHOLD: usize = 8;
 
-/// How many events ahead the state machine looks to decide boundaries.
-const LOOKAHEAD: usize = 3;
-
 // --- helpers -----------------------------------------------------------------
 
-/// Read-only tool names: seeing one of these means we're in
-/// exploration (or diagnosis if an error was recently seen).
-const READ_TOOLS: &[&str] = &[
-    "Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch",
-    "Bash",  // Bash counts as read-only only if the command is on the
-             // verification allowlist; the classifier does NOT have the command
-             // text here (only the tool_name). So Bash is treated as potentially
-             // mutating — NOT in READ_TOOLS.
-             // See MUTATION_TOOLS for the full list.
-];
-
-/// Read-only tool names (Bash excluded; Bash is mutating unless classified
-/// separately).
+/// Read-only tool names (Bash excluded — Bash is mutating unless its command
+/// is on the verification allowlist, which the classifier does not see here.
+/// VerificationRun row injection handles the verification case separately).
 const READ_ONLY_TOOLS: &[&str] = &[
     "Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch",
 ];
@@ -74,18 +64,6 @@ fn is_read_only_tool(tool: &str) -> bool {
 
 fn is_mutation_tool(tool: &str) -> bool {
     MUTATION_TOOLS.contains(&tool)
-}
-
-/// Returns true if any of `events[start..start+LOOKAHEAD]` is a mutation call.
-fn lookahead_has_mutation(events: &[ObservedEvent], start: usize) -> bool {
-    let end = (start + LOOKAHEAD).min(events.len());
-    events[start..end].iter().any(|e| {
-        e.kind == EventKind::ToolCall
-            && e.tool_name
-                .as_deref()
-                .map(is_mutation_tool)
-                .unwrap_or(false)
-    })
 }
 
 /// Returns true if the event's payload carries `is_error == true`.

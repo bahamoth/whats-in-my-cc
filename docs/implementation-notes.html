@@ -2022,7 +2022,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
        Phase: <code>intake | exploration | diagnosis | action | verification | repair | drift</code>.
        분류기는 순수 함수(I/O 없음) — 동일 입력 → 동일 출력 (determinism test 잠금).</p>
     <ul>
-      <li><strong>State machine</strong>: 3-event lookahead (LOOKAHEAD=3, DEV-S12-02). 7개 versioned rule-id로 <code>classification_basis</code> 기록.</li>
+      <li><strong>State machine</strong>: backward-only — <code>exploration_streak</code>, <code>had_failure</code>, <code>last_error_at</code>, <code>last_verification_at</code>로 phase 전환 결정 (DEV-S12-02 revised). 7개 versioned rule-id로 <code>classification_basis</code> 기록.</li>
       <li><strong>episode_id</strong>: <code>"ep_" + hex(sha256(session_id||phase||start_event_id||end_event_id))[..24]</code>. 결정론적·충돌회피.</li>
       <li><strong>Confidence floors</strong>: spec §7 준수 (intake=1.0, action=0.95, verification=0.95, exploration=0.85, diagnosis=0.8, repair=0.7, drift=0.6).</li>
       <li><strong>rebuild_session 연결</strong>: graph write 직후 classifier 호출 → <code>INSERT OR REPLACE</code>. catch_unwind wrapper(spec §8) — classifier panic은 graph rebuild를 중단시키지 않음.</li>
@@ -2040,8 +2040,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <dl>
       <dt>DEV-S12-01</dt>
       <dd>Episode는 <strong>side-table, graph node 아님</strong>. Graph node로 추가하려면 node shape 결정이 필요하고 그것은 UX 재설계 epic 관할.</dd>
-      <dt>DEV-S12-02</dt>
-      <dd>Lookahead = 3 events. 더 크면 rule set 복잡도 증가. 확장 시 <code>@v2</code> bump + golden 업데이트 필요.</dd>
+      <dt>DEV-S12-02 (revised, 2026-05-28)</dt>
+      <dd>사양은 3-event lookahead state machine을 명시했으나 실 구현은 backward-only로 수렴 — <code>exploration_streak</code> / <code>had_failure</code> / <code>last_error_at</code>만으로 두 골든 fixture에서 정합 분류 달성. lookahead helper(<code>LOOKAHEAD</code>, <code>READ_TOOLS</code>, <code>lookahead_has_mutation</code>)는 정의만 남아 dead-code 워닝을 발생시켜 제거. 향후 lookahead 도입 시 <code>episode_classifier@v2</code> bump + golden 업데이트 필요.</dd>
       <dt>DEV-S12-03</dt>
       <dd>Drift threshold N=8 consecutive explorations는 추정값. slice-16 findings 이후 real data tuning 예정.</dd>
       <dt>DEV-S12-04</dt>
