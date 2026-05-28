@@ -116,7 +116,15 @@ pub async fn stream_handler(
 
     let combined = resync_stream.chain(backfill_stream).chain(live_stream);
 
-    Ok(Sse::new(combined).keep_alive(
+    // Server-side cancellation: when the AppState.shutdown token fires
+    // (Ctrl+C / graceful shutdown), terminate the stream so the
+    // connection closes and axum can finish draining other handlers.
+    // SSE has no DB writes — strictly read-only forwarding, so cutting
+    // mid-stream is safe.
+    let shutdown = state.shutdown.clone();
+    let cancellable = combined.take_until(async move { shutdown.cancelled().await });
+
+    Ok(Sse::new(cancellable).keep_alive(
         KeepAlive::new()
             .interval(Duration::from_secs(state.sse_keepalive_secs))
             .text("keepalive"),

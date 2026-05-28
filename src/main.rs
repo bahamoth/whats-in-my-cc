@@ -204,7 +204,11 @@ async fn serve_cmd(
     if profile != witmcc::security::retention::Profile::None {
         let pool_cl = pool.clone();
         let policy = witmcc::security::retention::RetentionPolicy { profile: profile.clone() };
-        bg_handles.push(witmcc::security::retention::spawn_sweep_task(pool_cl, policy));
+        bg_handles.push(witmcc::security::retention::spawn_sweep_task(
+            pool_cl,
+            policy,
+            cancel.clone(),
+        ));
         tracing::info!(profile = retention_profile, "retention sweep enabled");
     }
 
@@ -219,6 +223,8 @@ async fn serve_cmd(
         // Slice-19: bearer token + retention profile for health block.
         token,
         retention_profile,
+        // Post-slice-19: same token long-lived stream handlers observe.
+        shutdown: cancel.clone(),
     };
     let app = witmcc::api::router(state);
     let addr = std::net::SocketAddr::new(bind, port);
@@ -226,18 +232,24 @@ async fn serve_cmd(
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .map_err(anyhow::Error::from)?;
-    let shutdown_signal = witmcc::serve::shutdown_with_grace(
+    let shutdown_signal = witmcc::serve::shutdown_with_grace(cancel.clone());
+    let serve_fut = axum::serve(listener, app).with_graceful_shutdown(shutdown_signal);
+    // Grace window counts from cancel — never aborts a still-active server.
+    witmcc::serve::run_serve_with_grace(
+        serve_fut,
         cancel.clone(),
         witmcc::serve::DEFAULT_SHUTDOWN_GRACE,
-    );
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal)
-        .await
-        .map_err(anyhow::Error::from)?;
+    )
+    .await;
     cancel.cancel();
-    for h in bg_handles {
-        let _ = h.await;
-    }
+    // bg_handles join is also bounded by grace; tokens have been cancelled
+    // so well-behaved tasks return immediately. anything stuck is dropped.
+    let _ = tokio::time::timeout(witmcc::serve::DEFAULT_SHUTDOWN_GRACE, async {
+        for h in bg_handles {
+            let _ = h.await;
+        }
+    })
+    .await;
     Ok(())
 }
 

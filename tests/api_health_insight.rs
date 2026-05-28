@@ -28,6 +28,7 @@ async fn test_server() -> TestServer {
         // Slice-19: empty token disables auth check in test mode.
         token: String::new(),
         retention_profile: "none".to_string(),
+        shutdown: tokio_util::sync::CancellationToken::new(),
     };
     TestServer::new(witmcc::api::router(state)).unwrap()
 }
