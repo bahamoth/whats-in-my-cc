@@ -16,6 +16,26 @@
   border-left-color: var(--witmcc-danger);
 }
 
+/* PR-8 — floating mode for half/narrow viewports. */
+.panel[data-layout='floating'] {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 40;
+  height: 100vh;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.4);
+  animation: slide-in-right var(--witmcc-motion-base) var(--witmcc-easing-spring);
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel[data-layout='floating'] { animation: none; }
+}
+
 .header {
   display: flex;
   align-items: center;

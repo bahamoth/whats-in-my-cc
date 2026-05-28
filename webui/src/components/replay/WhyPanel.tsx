@@ -7,6 +7,7 @@
  */
 import { useEffect } from 'react';
 import { formatPct } from '../../lib/format';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import type {
   FindingDto,
   FindingEvidenceResponse,
@@ -39,6 +40,11 @@ function evidenceLabel(e: EvidenceRef): string {
 }
 
 export function WhyPanel({ open, finding, evidence, onClose, onEvidenceHover }: WhyPanelProps) {
+  // PR-8 — layout mode. ≥1400 px ⇒ inline (third grid column); narrower
+  // viewports use a floating overlay so the main canvas stays usable.
+  const isWide = useMediaQuery('(min-width: 1400px)');
+  const layoutMode: 'inline' | 'floating' = isWide ? 'inline' : 'floating';
+
   // Esc closes the panel. Effect is unconditional so the listener
   // tears down even if the parent flips `open` to false.
   useEffect(() => {
@@ -66,6 +72,7 @@ export function WhyPanel({ open, finding, evidence, onClose, onEvidenceHover }: 
       data-severity={finding.severity}
       data-category={finding.category}
       data-warning={noEvidence ? 'no-evidence' : undefined}
+      data-layout={layoutMode}
       role="region"
       aria-label="Why panel"
     >
