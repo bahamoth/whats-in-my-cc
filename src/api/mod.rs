@@ -19,6 +19,7 @@ use axum::{
 };
 use sqlx::SqlitePool;
 use tokio::sync::broadcast;
+use tokio_util::sync::CancellationToken;
 use tower_http::decompression::RequestDecompressionLayer;
 
 use crate::api::mcp::SessionRegistry;
@@ -58,6 +59,9 @@ pub struct AppState {
     pub token: String,
     /// Slice-19: active retention profile name ("none" | "default" | "strict").
     pub retention_profile: String,
+    /// Post-slice-19: cancellation token observed by long-lived stream
+    /// handlers (SSE, MCP-GET) so they self-terminate on shutdown signal.
+    pub shutdown: CancellationToken,
 }
 
 impl AppState {
@@ -77,6 +81,7 @@ impl AppState {
             mcp_sessions: SessionRegistry::new(),
             token: String::new(),
             retention_profile: "none".to_string(),
+            shutdown: CancellationToken::new(),
         }
     }
 }

@@ -153,9 +153,14 @@ pub async fn run_sweep(pool: &SqlitePool, policy: &RetentionPolicy) -> Result<Sw
 
 /// Spawn a background sweep task that wakes every 6 hours.
 /// No-op when `policy.profile == Profile::None`.
+///
+/// `cancel` is observed at every loop iteration AND during `run_sweep`:
+/// if cancellation fires mid-sweep the in-progress sqlx Transaction is
+/// dropped (auto rollback), no partial deletion is committed.
 pub fn spawn_sweep_task(
     pool: SqlitePool,
     policy: RetentionPolicy,
+    cancel: tokio_util::sync::CancellationToken,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         if policy.profile == Profile::None {
@@ -164,9 +169,23 @@ pub fn spawn_sweep_task(
         let mut interval =
             tokio::time::interval(std::time::Duration::from_secs(6 * 60 * 60));
         loop {
-            interval.tick().await;
-            if let Err(e) = run_sweep(&pool, &policy).await {
-                tracing::warn!(error = ?e, "retention sweep failed");
+            tokio::select! {
+                _ = cancel.cancelled() => {
+                    tracing::info!("retention sweep shutting down");
+                    return;
+                }
+                _ = interval.tick() => {}
+            }
+            tokio::select! {
+                _ = cancel.cancelled() => {
+                    tracing::info!("retention sweep cancelled mid-cycle; pending transaction will rollback");
+                    return;
+                }
+                res = run_sweep(&pool, &policy) => {
+                    if let Err(e) = res {
+                        tracing::warn!(error = ?e, "retention sweep failed");
+                    }
+                }
             }
         }
     })

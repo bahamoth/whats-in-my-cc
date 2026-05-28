@@ -210,7 +210,11 @@ pub async fn get_handler(
 
     let combined = first.chain(live);
 
-    Sse::new(combined)
+    // Server-side cancellation on shutdown — same pattern as /v1/stream.
+    let shutdown = state.shutdown.clone();
+    let cancellable = combined.take_until(async move { shutdown.cancelled().await });
+
+    Sse::new(cancellable)
         .keep_alive(
             KeepAlive::new()
                 .interval(Duration::from_secs(30))
