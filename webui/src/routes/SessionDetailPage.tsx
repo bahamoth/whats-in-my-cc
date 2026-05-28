@@ -1,10 +1,16 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import type { GraphPayload, ObservedEventDto } from '../api/types';
 import { MetaStrip } from '../components/MetaStrip';
 import { SourcePanel } from '../components/SourcePanel';
 import { Waterfall } from '../components/replay/Waterfall';
+// React Flow + dagre add ~250 kB minified. Lazy-load so the default
+// Waterfall view stays cheap and only Graph users pay the cost.
+const CausalGraph = lazy(() =>
+  import('../components/replay/CausalGraph').then((m) => ({ default: m.CausalGraph })),
+);
+import { ViewToggle, useReplayView } from '../components/replay/ViewToggle';
 import { KpiStrip } from '../components/replay/KpiStrip';
 import { EpisodeStrip } from '../components/replay/EpisodeStrip';
 import { WhyPanel } from '../components/replay/WhyPanel';
@@ -50,6 +56,7 @@ const EMPTY_GRAPH: GraphPayload = { nodes: [], edges: [] };
 
 function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const sel = useReplaySelection();
+  const view = useReplayView();
 
   const detail = useSessionDetailQuery(sessionId);
   const graph = useSessionGraphQuery(sessionId);
@@ -152,6 +159,9 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
           />
           <EpisodeStrip episodes={episodes.data ?? []} />
           <MetaStrip session={detail.data} events={window_.events} />
+          <div className={styles.viewToggleRow}>
+            <ViewToggle />
+          </div>
           <div className={styles.split}>
             <div>
               <div
@@ -160,11 +170,21 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
                 style={{ height: 1 }}
                 data-testid="scroll-sentinel"
               />
-              <Waterfall
-                graph={effectiveGraph}
-                selectedNodeId={sel.selectedNodeId}
-                onSelect={(id) => sel.setSelectedNodeId(id)}
-              />
+              {view === 'graph' ? (
+                <Suspense fallback={<p>Loading graph…</p>}>
+                  <CausalGraph
+                    graph={effectiveGraph}
+                    selectedNodeId={sel.selectedNodeId}
+                    onSelect={(id) => sel.setSelectedNodeId(id)}
+                  />
+                </Suspense>
+              ) : (
+                <Waterfall
+                  graph={effectiveGraph}
+                  selectedNodeId={sel.selectedNodeId}
+                  onSelect={(id) => sel.setSelectedNodeId(id)}
+                />
+              )}
             </div>
             <SourcePanel eventId={selectedEventId} node={selectedNode} />
           </div>

@@ -1,3 +1,4 @@
 .page { padding: 24px; }
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.viewToggleRow { display: flex; justify-content: flex-end; margin-top: 10px; margin-bottom: 6px; }
 .split { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-top: 16px; }

@@ -34,3 +34,30 @@ if (typeof (globalThis as unknown as { IntersectionObserver?: unknown }).Interse
   }
   (globalThis as Record<string, unknown>).IntersectionObserver = NoopIO;
 }
+
+// PR-7 — React Flow uses ResizeObserver. jsdom does not implement it; a
+// no-op shim is enough since we never assert layout dimensions in tests.
+if (typeof (globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver === 'undefined') {
+  class NoopRO {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  (globalThis as Record<string, unknown>).ResizeObserver = NoopRO;
+}
+
+// PR-7 — React Flow also reads `window.matchMedia` for prefers-reduced-motion.
+// Provide a default mock that reports "no match" so tests behave like a
+// normal-motion environment.
+if (typeof window !== 'undefined' && !window.matchMedia) {
+  window.matchMedia = ((q: string) => ({
+    matches: false,
+    media: q,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })) as typeof window.matchMedia;
+}
