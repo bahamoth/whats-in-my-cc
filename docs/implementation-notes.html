@@ -2762,6 +2762,10 @@ vitest: 69 passed
       <div class="dev-head"><span class="dev-id">DEV-S19-07</span><code>subtle::ConstantTimeEq</code> for token comparison.</div>
       <div class="dev-body">로컬 전용 토큰에서는 기술적으로 overkill이지만 런타임 비용이 없고 미래 보안 리뷰에서 지적받을 여지를 없앰.</div>
     </div>
+    <div class="dev-item">
+      <div class="dev-head"><span class="dev-id">DEV-S19-08</span><code>--auth</code> flag, default <code>off</code> (post-slice-19 follow-up).</div>
+      <div class="dev-body">단일 사용자 dev 환경에서 브라우저 WebUI 접근 시 401이 빈번하여 사용성이 깨졌다. <code>--auth on|off</code> 플래그를 신설, default <code>off</code>로 두어 token 기반 미들웨어가 자동 bypass되도록 함. token capability는 코드에 그대로 남아 <code>--auth on</code>으로 opt-in 가능 — AC-6은 capability 기준으로 여전히 green. retention default(<code>none</code>, DEV-S19-01)와 동일 정책. 미들웨어는 <code>state.token.is_empty()</code>에서 이미 분기를 갖고 있어 추가 변경 없음 — CLI/main에서 token을 만들지 말지만 선택.</div>
+    </div>
     <h3>Commit Reference (slice-19)</h3>
     <ul>
       <li><code>9cf978a</code> — test(slice-19): red-locking tests for token auth + retention sweep + audit + CLI flags</li>
