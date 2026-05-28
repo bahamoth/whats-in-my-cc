@@ -1,17 +1,22 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import SessionDetailPage from '../SessionDetailPage';
 import { MockEventSource } from '../../test/MockEventSource';
+import { createQueryClient } from '../../lib/queryClient';
 
 function rendered(sessionId: string) {
+  const qc = createQueryClient();
   return render(
-    <MemoryRouter initialEntries={[`/sessions/${sessionId}`]}>
-      <Routes>
-        <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={[`/sessions/${sessionId}`]}>
+        <Routes>
+          <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
