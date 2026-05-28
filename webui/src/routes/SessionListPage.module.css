@@ -1,14 +1,36 @@
+/* PR-9 — design token application. Behaviour unchanged. */
+
 .page { padding: 24px; }
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.hint { color: #6b7280; font-size: 12px; margin: 0 0 8px; }
+.hint { color: var(--witmcc-fg-muted); font-size: 12px; margin: 0 0 8px; }
+
 .table { width: 100%; border-collapse: collapse; }
-.table th, .table td { padding: 8px; border-bottom: 1px solid #e3e6eb; text-align: left; vertical-align: top; }
-.empty { padding: 32px; background: #fff; border: 1px dashed #b9bfca; border-radius: 8px; }
+.table th, .table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--witmcc-border);
+  text-align: left;
+  vertical-align: top;
+}
+.table th {
+  color: var(--witmcc-fg-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.empty {
+  padding: 32px;
+  background: var(--witmcc-surface-2);
+  border: 1px dashed var(--witmcc-border-strong);
+  border-radius: 8px;
+  color: var(--witmcc-fg-muted);
+}
 
 .sortable { cursor: pointer; user-select: none; }
-.sortable:hover { background: #f6f8fb; }
-.sortInactive { color: #cbd0d8; }
-.sortActive { color: #2c5cc5; }
+.sortable:hover { background: var(--witmcc-surface-2); }
+.sortInactive { color: var(--witmcc-fg-subtle); }
+.sortActive { color: var(--witmcc-accent); }
 
 .mix { display: flex; flex-wrap: wrap; gap: 4px; }
 .tag {
@@ -17,20 +39,38 @@
   font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, monospace;
   border-radius: 6px;
-  border: 1px solid transparent;
+  border: 1px solid var(--witmcc-border);
+  background: var(--witmcc-surface-3);
+  color: var(--witmcc-fg-muted);
 }
-.tagTranscript { background: #fef3e7; color: #b85c11; border-color: #f4d3b0; }
-.tagOtel       { background: #e6edff; color: #2c4ba0; border-color: #c4d2f5; }
-.tagHook       { background: #e8f4ee; color: #1d6b46; border-color: #c0e0d2; }
-.tagFile       { background: #f1e8fb; color: #6a3eaa; border-color: #d8c5ec; }
-.tagDim        { color: #9aa1ad; font-size: 11px; }
 
-/* Sessions for which only OTel events landed — i.e. a Claude Code conversation
- * that emitted at least one OTel signal (SessionStart hook log, etc.) but
- * never wrote a transcript JSONL line. OTel `session.id` IS the transcript
- * conversation UUID (verified against ~/.claude/projects + session-env), so
- * this is NOT a correlation gap. The row is tinted subtly so users can
- * recognise "empty conversation" sessions at a glance. */
+.tagTranscript {
+  background: var(--witmcc-surface-3);
+  color: var(--witmcc-lane-quality);
+  border-color: var(--witmcc-border-strong);
+}
+.tagOtel {
+  background: var(--witmcc-surface-3);
+  color: var(--witmcc-lane-otel);
+  border-color: var(--witmcc-border-strong);
+}
+.tagHook {
+  background: var(--witmcc-surface-3);
+  color: var(--witmcc-lane-hook);
+  border-color: var(--witmcc-border-strong);
+}
+.tagFile {
+  background: var(--witmcc-surface-3);
+  color: var(--witmcc-lane-files);
+  border-color: var(--witmcc-border-strong);
+}
+.tagDim {
+  color: var(--witmcc-fg-subtle);
+  font-size: 11px;
+}
+
+/* Sessions for which only OTel events landed (see PR-9 retains the slice-7
+ * comment for context). */
 .liveBadge {
   display: inline-block;
   margin-left: 6px;
@@ -39,8 +79,8 @@
   font-weight: 700;
   font-family: ui-monospace, SFMono-Regular, monospace;
   letter-spacing: 0.05em;
-  color: #fff;
-  background: #1aa37a;
+  color: var(--witmcc-fg-on-accent);
+  background: var(--witmcc-success);
   border-radius: 4px;
   vertical-align: middle;
   animation: livePulse 1.5s ease-in-out infinite;
@@ -49,7 +89,10 @@
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.55; }
 }
+@media (prefers-reduced-motion: reduce) {
+  .liveBadge { animation: none; }
+}
 
-.otelOnly { background: #fcfbf6; }
-.otelOnly td { color: #6b7280; }
-.otelOnly td a { color: #5d4eab; }
+.otelOnly { background: var(--witmcc-surface-2); }
+.otelOnly td { color: var(--witmcc-fg-muted); }
+.otelOnly td a { color: var(--witmcc-lane-otel); }
