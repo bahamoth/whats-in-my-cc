@@ -5,6 +5,11 @@ import type {
   SessionEventsResponse,
   GraphPayload,
   RawEventResponse,
+  EpisodeDto,
+  FindingDto,
+  VerificationRunDto,
+  DiffHunkDto,
+  FindingEvidenceResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -53,3 +58,34 @@ export function getSessionEvents(
     `/v1/sessions/${encodeURIComponent(id)}/events` + (qs ? `?${qs}` : '');
   return jsonGet<SessionEventsResponse>(path);
 }
+
+// ---- PR-2: new Pull API helpers --------------------------------------
+// All endpoints below are read-only. The backend wraps each payload in
+// either `{ data: T }` (most) or `{ hunks: T[] }` (diff-hunks legacy)
+// inside the standard `{ meta, data }` envelope. We unwrap once here so
+// callers handle plain typed values.
+
+export const getEpisodes = (id: string): Promise<EpisodeDto[]> =>
+  jsonGet<{ data: EpisodeDto[] }>(`/v1/sessions/${encodeURIComponent(id)}/episodes`).then(
+    (r) => r.data,
+  );
+
+export const getFindings = (id: string): Promise<FindingDto[]> =>
+  jsonGet<{ data: FindingDto[] }>(`/v1/sessions/${encodeURIComponent(id)}/findings`).then(
+    (r) => r.data,
+  );
+
+export const getFindingEvidence = (findingId: string): Promise<FindingEvidenceResponse> =>
+  jsonGet<{ data: FindingEvidenceResponse }>(
+    `/v1/findings/${encodeURIComponent(findingId)}/evidence`,
+  ).then((r) => r.data);
+
+export const getVerificationRuns = (id: string): Promise<VerificationRunDto[]> =>
+  jsonGet<{ data: VerificationRunDto[] }>(
+    `/v1/sessions/${encodeURIComponent(id)}/verification-runs`,
+  ).then((r) => r.data);
+
+export const getDiffHunks = (id: string): Promise<DiffHunkDto[]> =>
+  jsonGet<{ hunks: DiffHunkDto[] }>(`/v1/sessions/${encodeURIComponent(id)}/diff-hunks`).then(
+    (r) => r.hunks,
+  );
