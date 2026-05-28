@@ -1,30 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ApiError, getGraph, getSession } from '../api/client';
-import type {
-  GraphPayload,
-  ObservedEventDto,
-  SessionDetail,
-} from '../api/types';
+import { ApiError } from '../api/client';
+import type { GraphPayload, ObservedEventDto } from '../api/types';
 import { MetaStrip } from '../components/MetaStrip';
 import { SourcePanel } from '../components/SourcePanel';
 import { Timeline } from '../components/Timeline';
-import { useLiveStream, type LiveEnvelope } from '../hooks/useLiveStream';
+import { KpiStrip } from '../components/replay/KpiStrip';
+import { EpisodeStrip } from '../components/replay/EpisodeStrip';
+import { useLiveStreamBridge } from '../lib/sse';
+import {
+  useSessionDetailQuery,
+  useSessionGraphQuery,
+  useEpisodesQuery,
+  useFindingsQuery,
+  useVerificationRunsQuery,
+  useDiffHunksQuery,
+} from '../lib/queries';
 import { useSessionWindow } from '../hooks/useSessionWindow';
+import type { LiveEnvelope } from '../hooks/useLiveStream';
 import styles from './SessionDetailPage.module.css';
-
-// Slice-9 — graph refetch throttle. Replaces the slice-8 1000ms debounce on
-// "refetch everything" (DEV-S8-13). Now only the graph is re-fetched; the
-// summary refetch is interval-driven (see GRAPH_REFETCH_TICK_MS), and the
-// per-event marker arrives via SSE without any backend round-trip.
-const GRAPH_REFETCH_DEBOUNCE_MS = 800;
-const SUMMARY_REFETCH_TICK_MS = 10_000;
-
-type PageState =
-  | { kind: 'loading' }
-  | { kind: 'ok'; session: SessionDetail; graph: GraphPayload }
-  | { kind: 'not_found' }
-  | { kind: 'error'; message: string };
 
 function envelopeToObserved(env: LiveEnvelope): ObservedEventDto {
   return {
@@ -46,107 +40,31 @@ function envelopeToObserved(env: LiveEnvelope): ObservedEventDto {
   };
 }
 
+const EMPTY_GRAPH: GraphPayload = { nodes: [], edges: [] };
+
 export default function SessionDetailPage() {
   const { sessionId = '' } = useParams();
-  const [state, setState] = useState<PageState>({ kind: 'loading' });
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  const detail = useSessionDetailQuery(sessionId);
+  const graph = useSessionGraphQuery(sessionId);
+  const episodes = useEpisodesQuery(sessionId);
+  const findings = useFindingsQuery(sessionId);
+  const verificationRuns = useVerificationRunsQuery(sessionId);
+  const diffHunks = useDiffHunksQuery(sessionId);
 
   const window_ = useSessionWindow(sessionId);
 
-  // Mount: fetch summary + graph in parallel. 404 on summary → not_found.
-  // 404 on graph alone falls back to an empty graph (slice-8 DEV-S8-12 — the
-  // empty-graph race during rebuild is now atomic but the *empty session*
-  // case still legitimately returns an empty graph).
-  const fetchAll = useCallback(async () => {
-    try {
-      const session = await getSession(sessionId);
-      let graph: GraphPayload;
-      try {
-        graph = await getGraph(sessionId);
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 404) graph = { nodes: [], edges: [] };
-        else throw e;
-      }
-      setState({ kind: 'ok', session, graph });
-    } catch (e: unknown) {
-      if (e instanceof ApiError && e.status === 404) setState({ kind: 'not_found' });
-      else setState({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
-    }
-  }, [sessionId]);
-
-  useEffect(() => {
-    setState({ kind: 'loading' });
-    void fetchAll();
-  }, [fetchAll]);
-
-  // Lightweight graph refetch on envelope arrival. We never re-fetch the
-  // session detail or the full event window — those land via summary tick
-  // and SSE-driven `appendOne` respectively. The debounce avoids stacking
-  // graph fetches during a rapid envelope burst (claude code mid-tool-call
-  // can emit dozens per second).
-  const graphTimer = useRef<number | null>(null);
-  const queueGraphRefetch = useCallback(() => {
-    if (graphTimer.current !== null) return;
-    graphTimer.current = window.setTimeout(() => {
-      graphTimer.current = null;
-      void getGraph(sessionId)
-        .then((graph) =>
-          setState((prev) => (prev.kind === 'ok' ? { ...prev, graph } : prev)),
-        )
-        .catch((e) => {
-          if (!(e instanceof ApiError && e.status === 404)) {
-            // transient — leave previous graph on screen
-          }
-        });
-    }, GRAPH_REFETCH_DEBOUNCE_MS);
-  }, [sessionId]);
-
-  // Summary refetch on a slow interval so MetaStrip (event_count, last_observed_at,
-  // per-kind counts) stays accurate without a backend round trip per envelope.
-  useEffect(() => {
-    if (state.kind !== 'ok') return;
-    const id = window.setInterval(() => {
-      void getSession(sessionId)
-        .then((session) =>
-          setState((prev) => (prev.kind === 'ok' ? { ...prev, session } : prev)),
-        )
-        .catch(() => {
-          /* swallow transient */
-        });
-    }, SUMMARY_REFETCH_TICK_MS);
-    return () => window.clearInterval(id);
-  }, [sessionId, state.kind]);
-
-  useEffect(() => {
-    return () => {
-      if (graphTimer.current !== null) {
-        window.clearTimeout(graphTimer.current);
-        graphTimer.current = null;
-      }
-    };
-  }, []);
-
-  useLiveStream({
-    url: `/v1/stream?session=${encodeURIComponent(sessionId)}`,
-    scope: sessionId,
-    onEnvelope: (env) => {
-      window_.appendOne(envelopeToObserved(env));
-      queueGraphRefetch();
-    },
-    onResync: () => {
-      void window_.reload();
-      queueGraphRefetch();
-    },
-    onGap: () => {
-      void window_.reload();
-      queueGraphRefetch();
-    },
+  useLiveStreamBridge(sessionId, {
+    onEnvelope: (env) => window_.appendOne(envelopeToObserved(env)),
+    onGap: () => void window_.reload(),
+    onResync: () => void window_.reload(),
   });
 
-  // IntersectionObserver on the left-edge sentinel triggers `loadOlder` when
-  // the user scrolls (or the Timeline's container brings the sentinel into
-  // view). 0.5 intersection ratio keeps us from firing on hairline overlap
-  // during initial render.
+  // Slice-9 — IntersectionObserver-driven scroll-back paging. Carried over
+  // from the pre-redesign implementation so the regression test still
+  // passes; lives here rather than in useSessionWindow so the sentinel
+  // node can be co-located with the timeline.
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const el = sentinelRef.current;
@@ -164,9 +82,40 @@ export default function SessionDetailPage() {
     return () => io.disconnect();
   }, [window_]);
 
+  // --- derived: KPI strip inputs ---
+  const findingsData = findings.data ?? [];
+  const riskCount = useMemo(
+    () => findingsData.filter((f) => f.severity === 'high').length,
+    [findingsData],
+  );
+  const verificationCoverage = useMemo(() => {
+    const total = diffHunks.data?.length ?? 0;
+    const covered = new Set<string>();
+    for (const vr of verificationRuns.data ?? []) {
+      for (const h of vr.covered_diff_hunk_ids) covered.add(h);
+    }
+    return total === 0 ? null : { covered: covered.size, total };
+  }, [diffHunks.data, verificationRuns.data]);
+
+  const outcome: 'clean' | 'attention' | 'problem' | 'unknown' = useMemo(() => {
+    if (findingsData.length === 0) return 'clean';
+    if (findingsData.some((f) => f.severity === 'high')) return 'problem';
+    if (findingsData.some((f) => f.severity === 'medium')) return 'attention';
+    return 'clean';
+  }, [findingsData]);
+
+  // --- derived: render branches ---
+  const detailError = detail.error as ApiError | null;
+  const is404 = detailError instanceof ApiError && detailError.status === 404;
+  const isLoading = detail.isLoading;
+
+  // Treat a 404 graph as an empty graph (legitimate empty-session case);
+  // any other graph error simply leaves the placeholder visible.
+  const effectiveGraph = graph.data ?? EMPTY_GRAPH;
+
   const selectedNode =
-    state.kind === 'ok' && selectedNodeId
-      ? state.graph.nodes.find((n) => n.node_id === selectedNodeId) ?? null
+    selectedNodeId && effectiveGraph
+      ? effectiveGraph.nodes.find((n) => n.node_id === selectedNodeId) ?? null
       : null;
   const selectedEventId = selectedNode?.source_event_ids[0] ?? null;
 
@@ -176,19 +125,35 @@ export default function SessionDetailPage() {
         <Link to="/sessions">← Sessions</Link>
         <code>{sessionId}</code>
       </header>
-      {state.kind === 'loading' && <p>Loading…</p>}
-      {state.kind === 'not_found' && (
-        <p>Session not found. <Link to="/sessions">Back to list</Link></p>
+
+      {isLoading && <p>Loading…</p>}
+
+      {is404 && (
+        <p>
+          Session not found. <Link to="/sessions">Back to list</Link>
+        </p>
       )}
-      {state.kind === 'error' && <p role="alert">{state.message}</p>}
-      {state.kind === 'ok' && (
+
+      {!isLoading && !is404 && detail.data && (
         <>
-          <MetaStrip session={state.session} events={window_.events} />
+          <KpiStrip
+            outcome={outcome}
+            verificationCoverage={verificationCoverage}
+            episodeCount={episodes.data?.length ?? 0}
+            riskCount={riskCount}
+          />
+          <EpisodeStrip episodes={episodes.data ?? []} />
+          <MetaStrip session={detail.data} events={window_.events} />
           <div className={styles.split}>
             <div>
-              <div ref={sentinelRef} aria-hidden style={{ height: 1 }} data-testid="scroll-sentinel" />
+              <div
+                ref={sentinelRef}
+                aria-hidden
+                style={{ height: 1 }}
+                data-testid="scroll-sentinel"
+              />
               <Timeline
-                graph={state.graph}
+                graph={effectiveGraph}
                 selectedNodeId={selectedNodeId}
                 onSelect={setSelectedNodeId}
               />
@@ -196,6 +161,10 @@ export default function SessionDetailPage() {
             <SourcePanel eventId={selectedEventId} node={selectedNode} />
           </div>
         </>
+      )}
+
+      {!isLoading && !is404 && !detail.data && detail.isError && (
+        <p role="alert">{detail.error?.message ?? 'failed'}</p>
       )}
     </div>
   );
