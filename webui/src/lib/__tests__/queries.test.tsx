@@ -84,7 +84,8 @@ describe('useSessionGraphQuery', () => {
 describe('useEpisodesQuery', () => {
   it('caches the episodes array under sessionKeys.episodes(id)', async () => {
     const payload = [{ episode_id: 'ep1', phase: 'action', confidence: 0.7 }];
-    fetchSpy.mockResolvedValue(mockOk(ENVELOPE({ data: payload })));
+    // Backend returns the array directly under `data` (no `meta` envelope).
+    fetchSpy.mockResolvedValue(mockOk({ data: payload }));
     const qc = createQueryClient();
     const { result } = renderHook(() => useEpisodesQuery('S1'), { wrapper: wrap(qc) });
     await waitFor(() => expect(result.current.data).toEqual(payload));
@@ -99,7 +100,8 @@ describe('useFindingsQuery', () => {
         category: 'risky_action',
         severity: 'high',
         confidence: 0.9,
-        evidence_refs: [{ kind: 'node', node_id: 'n1' }],
+        // Slice-14 deterministic extractors emit bare ULID strings here.
+        evidence_refs: ['01KSQKD5CT8BHH1DAS4YNKJBVB'],
         evidence_projection: {},
         provenance: {},
         summary: 'ok',
@@ -117,7 +119,7 @@ describe('useFindingsQuery', () => {
         status: 'active',
       },
     ];
-    fetchSpy.mockResolvedValue(mockOk(ENVELOPE({ data: payload })));
+    fetchSpy.mockResolvedValue(mockOk({ data: payload }));
     const qc = createQueryClient();
     const { result } = renderHook(() => useFindingsQuery('S1'), { wrapper: wrap(qc) });
     await waitFor(() => expect(result.current.data?.length).toBe(1));

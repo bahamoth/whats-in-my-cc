@@ -46,9 +46,10 @@ describe('getDiffHunks', () => {
 });
 
 describe('getEpisodes', () => {
-  it('hits GET /v1/sessions/:id/episodes and unwraps `data`', async () => {
+  it('hits GET /v1/sessions/:id/episodes (backend has no meta envelope here)', async () => {
     const expected = [{ episode_id: 'ep1', phase: 'action', confidence: 0.8 }];
-    fetchSpy.mockImplementation(mockJson(ENVELOPE({ data: expected })));
+    // Backend response shape: { data: [...] } — no `meta` field.
+    fetchSpy.mockImplementation(mockJson({ data: expected }));
     const out = await getEpisodes('SES-2');
     expect(fetchSpy).toHaveBeenCalledWith('/v1/sessions/SES-2/episodes', expect.any(Object));
     expect(out).toEqual(expected);
@@ -56,17 +57,18 @@ describe('getEpisodes', () => {
 });
 
 describe('getFindings', () => {
-  it('hits GET /v1/sessions/:id/findings and unwraps `data`', async () => {
+  it('hits GET /v1/sessions/:id/findings (no meta envelope; evidence_refs may be ULID strings)', async () => {
     const expected = [
       {
         finding_id: 'f1',
         category: 'risky_action',
         severity: 'high',
         confidence: 0.9,
-        evidence_refs: [{ kind: 'node', node_id: 'n1' }],
+        // Slice-14 deterministic extractors emit bare ULIDs here, not objects.
+        evidence_refs: ['01KSQKD5CT8BHH1DAS4YNKJBVB'],
       },
     ];
-    fetchSpy.mockImplementation(mockJson(ENVELOPE({ data: expected })));
+    fetchSpy.mockImplementation(mockJson({ data: expected }));
     const out = await getFindings('SES-3');
     expect(fetchSpy).toHaveBeenCalledWith('/v1/sessions/SES-3/findings', expect.any(Object));
     expect(out).toEqual(expected);
@@ -74,9 +76,9 @@ describe('getFindings', () => {
 });
 
 describe('getFindingEvidence', () => {
-  it('hits GET /v1/findings/:id/evidence and unwraps `data`', async () => {
+  it('hits GET /v1/findings/:id/evidence and unwraps the meta envelope `data`', async () => {
     const expected = { finding: { finding_id: 'f1' }, subgraph: { nodes: [], edges: [] }, raw_source_refs: [] };
-    fetchSpy.mockImplementation(mockJson(ENVELOPE({ data: expected })));
+    fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
     const out = await getFindingEvidence('f1');
     expect(fetchSpy).toHaveBeenCalledWith('/v1/findings/f1/evidence', expect.any(Object));
     expect(out).toEqual(expected);

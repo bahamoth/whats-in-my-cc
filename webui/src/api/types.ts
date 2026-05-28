@@ -78,13 +78,19 @@ export type GraphEdgeDto = {
 
 export type GraphPayload = { nodes: GraphNodeDto[]; edges: GraphEdgeDto[] };
 
-export type EvidenceRef = {
-  kind: 'node' | 'edge' | 'event' | string;
-  node_id?: string;
-  edge_id?: string;
-  event_id?: string;
-  [key: string]: unknown;
-};
+/** Backend serialises evidence refs in two shapes today: bare ULID
+ *  strings (the common case, used by slice-14 deterministic extractors)
+ *  and structured `{ kind, node_id|edge_id|event_id }` objects (slice-15+
+ *  judges). Client code must handle both. */
+export type EvidenceRef =
+  | string
+  | {
+      kind: 'node' | 'edge' | 'event' | string;
+      node_id?: string;
+      edge_id?: string;
+      event_id?: string;
+      [key: string]: unknown;
+    };
 
 export type FindingDto = {
   finding_id: string;

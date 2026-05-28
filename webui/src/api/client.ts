@@ -59,26 +59,26 @@ export function getSessionEvents(
   return jsonGet<SessionEventsResponse>(path);
 }
 
-// ---- PR-2: new Pull API helpers --------------------------------------
-// All endpoints below are read-only. The backend wraps each payload in
-// either `{ data: T }` (most) or `{ hunks: T[] }` (diff-hunks legacy)
-// inside the standard `{ meta, data }` envelope. We unwrap once here so
-// callers handle plain typed values.
+// ---- PR-2/PR-6: read-only Pull API helpers ---------------------------
+// Backend response shapes are NOT consistent today:
+//   /episodes   -> { data: [...] }                  (no meta envelope)
+//   /findings   -> { data: [...] }                  (no meta envelope)
+//   /verification-runs -> { meta, data: { data: [...] } }
+//   /diff-hunks        -> { meta, data: { hunks: [...] } }
+//   /findings/:id/evidence -> { meta, data: { ... } }   (envelope envelope)
+//
+// `jsonGet` already returns `body.data` for us, so the *one* unwrap below
+// targets the inner shape only. PR-6 fixed the original PR-2 helpers
+// that assumed every endpoint was double-wrapped.
 
 export const getEpisodes = (id: string): Promise<EpisodeDto[]> =>
-  jsonGet<{ data: EpisodeDto[] }>(`/v1/sessions/${encodeURIComponent(id)}/episodes`).then(
-    (r) => r.data,
-  );
+  jsonGet<EpisodeDto[]>(`/v1/sessions/${encodeURIComponent(id)}/episodes`);
 
 export const getFindings = (id: string): Promise<FindingDto[]> =>
-  jsonGet<{ data: FindingDto[] }>(`/v1/sessions/${encodeURIComponent(id)}/findings`).then(
-    (r) => r.data,
-  );
+  jsonGet<FindingDto[]>(`/v1/sessions/${encodeURIComponent(id)}/findings`);
 
 export const getFindingEvidence = (findingId: string): Promise<FindingEvidenceResponse> =>
-  jsonGet<{ data: FindingEvidenceResponse }>(
-    `/v1/findings/${encodeURIComponent(findingId)}/evidence`,
-  ).then((r) => r.data);
+  jsonGet<FindingEvidenceResponse>(`/v1/findings/${encodeURIComponent(findingId)}/evidence`);
 
 export const getVerificationRuns = (id: string): Promise<VerificationRunDto[]> =>
   jsonGet<{ data: VerificationRunDto[] }>(
