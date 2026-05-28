@@ -4,7 +4,7 @@ import { ApiError } from '../api/client';
 import type { GraphPayload, ObservedEventDto } from '../api/types';
 import { MetaStrip } from '../components/MetaStrip';
 import { SourcePanel } from '../components/SourcePanel';
-import { Timeline } from '../components/Timeline';
+import { Waterfall } from '../components/replay/Waterfall';
 import { KpiStrip } from '../components/replay/KpiStrip';
 import { EpisodeStrip } from '../components/replay/EpisodeStrip';
 import { useLiveStreamBridge } from '../lib/sse';
@@ -152,7 +152,7 @@ export default function SessionDetailPage() {
                 style={{ height: 1 }}
                 data-testid="scroll-sentinel"
               />
-              <Timeline
+              <Waterfall
                 graph={effectiveGraph}
                 selectedNodeId={selectedNodeId}
                 onSelect={setSelectedNodeId}
