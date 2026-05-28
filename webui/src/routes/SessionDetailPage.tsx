@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import type { GraphPayload, ObservedEventDto } from '../api/types';
@@ -7,6 +7,11 @@ import { SourcePanel } from '../components/SourcePanel';
 import { Waterfall } from '../components/replay/Waterfall';
 import { KpiStrip } from '../components/replay/KpiStrip';
 import { EpisodeStrip } from '../components/replay/EpisodeStrip';
+import { WhyPanel } from '../components/replay/WhyPanel';
+import {
+  ReplaySelectionProvider,
+  useReplaySelection,
+} from '../components/replay/selection/ReplaySelection';
 import { useLiveStreamBridge } from '../lib/sse';
 import {
   useSessionDetailQuery,
@@ -15,6 +20,7 @@ import {
   useFindingsQuery,
   useVerificationRunsQuery,
   useDiffHunksQuery,
+  useFindingEvidenceQuery,
 } from '../lib/queries';
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import type { LiveEnvelope } from '../hooks/useLiveStream';
@@ -42,9 +48,8 @@ function envelopeToObserved(env: LiveEnvelope): ObservedEventDto {
 
 const EMPTY_GRAPH: GraphPayload = { nodes: [], edges: [] };
 
-export default function SessionDetailPage() {
-  const { sessionId = '' } = useParams();
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+function SessionDetailInner({ sessionId }: { sessionId: string }) {
+  const sel = useReplaySelection();
 
   const detail = useSessionDetailQuery(sessionId);
   const graph = useSessionGraphQuery(sessionId);
@@ -61,10 +66,6 @@ export default function SessionDetailPage() {
     onResync: () => void window_.reload(),
   });
 
-  // Slice-9 — IntersectionObserver-driven scroll-back paging. Carried over
-  // from the pre-redesign implementation so the regression test still
-  // passes; lives here rather than in useSessionWindow so the sentinel
-  // node can be co-located with the timeline.
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const el = sentinelRef.current;
@@ -82,7 +83,7 @@ export default function SessionDetailPage() {
     return () => io.disconnect();
   }, [window_]);
 
-  // --- derived: KPI strip inputs ---
+  // --- KPI strip inputs ---
   const findingsData = findings.data ?? [];
   const riskCount = useMemo(
     () => findingsData.filter((f) => f.severity === 'high').length,
@@ -104,18 +105,25 @@ export default function SessionDetailPage() {
     return 'clean';
   }, [findingsData]);
 
-  // --- derived: render branches ---
+  // --- WhyPanel inputs ---
+  const selectedFinding = useMemo(() => {
+    if (!sel.selectedFindingId) return null;
+    return findingsData.find((f) => f.finding_id === sel.selectedFindingId) ?? null;
+  }, [sel.selectedFindingId, findingsData]);
+
+  const evidenceQuery = useFindingEvidenceQuery(sel.selectedFindingId ?? '', {
+    enabled: !!sel.selectedFindingId && sel.whyPanelOpen,
+  });
+
+  // --- render branches ---
   const detailError = detail.error as ApiError | null;
   const is404 = detailError instanceof ApiError && detailError.status === 404;
   const isLoading = detail.isLoading;
-
-  // Treat a 404 graph as an empty graph (legitimate empty-session case);
-  // any other graph error simply leaves the placeholder visible.
   const effectiveGraph = graph.data ?? EMPTY_GRAPH;
 
   const selectedNode =
-    selectedNodeId && effectiveGraph
-      ? effectiveGraph.nodes.find((n) => n.node_id === selectedNodeId) ?? null
+    sel.selectedNodeId && effectiveGraph
+      ? effectiveGraph.nodes.find((n) => n.node_id === sel.selectedNodeId) ?? null
       : null;
   const selectedEventId = selectedNode?.source_event_ids[0] ?? null;
 
@@ -154,8 +162,8 @@ export default function SessionDetailPage() {
               />
               <Waterfall
                 graph={effectiveGraph}
-                selectedNodeId={selectedNodeId}
-                onSelect={setSelectedNodeId}
+                selectedNodeId={sel.selectedNodeId}
+                onSelect={(id) => sel.setSelectedNodeId(id)}
               />
             </div>
             <SourcePanel eventId={selectedEventId} node={selectedNode} />
@@ -166,6 +174,23 @@ export default function SessionDetailPage() {
       {!isLoading && !is404 && !detail.data && detail.isError && (
         <p role="alert">{detail.error?.message ?? 'failed'}</p>
       )}
+
+      <WhyPanel
+        open={sel.whyPanelOpen}
+        finding={selectedFinding}
+        evidence={evidenceQuery.data}
+        onClose={sel.closeWhyPanel}
+        onEvidenceHover={sel.setHoveredNodeId}
+      />
     </div>
+  );
+}
+
+export default function SessionDetailPage() {
+  const { sessionId = '' } = useParams();
+  return (
+    <ReplaySelectionProvider>
+      <SessionDetailInner sessionId={sessionId} />
+    </ReplaySelectionProvider>
   );
 }
