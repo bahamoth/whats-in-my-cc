@@ -26,7 +26,7 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
 - **남은 계획:** UX 재설계 epic (`2026-05-27-witmcc-ux-redesign-epic.md`) — 마일스톤 밖 별도 트랙.
 - **모든 마일스톤 closed:** ~~M3~~ ✓ · ~~M5~~ ✓ · ~~M6~~ ✓ · ~~M7~~ ✓
 - 구현 상세: `docs/implementation-notes.html` §33(slice-18) · §34(slice-19) · §35(MVP Exit Summary).
-- **운영 주의 (slice-19):** Bearer token auth 추가. 첫 기동 시 token이 stderr에 출력되고 `~/.config/witmcc/token`(mode 0600)에 저장됨. 모든 `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요. `witmcc serve --retention-profile default`로 retention sweep 활성화. 신규 migration 0012 + 0013; `witmcc init-db` 필요.
+- **운영 주의 (slice-19):** Bearer token auth 추가. **Default는 `--auth off` (DEV-S19-08)** — 단일 사용자 dev에서 브라우저로 그대로 접속 가능. token 인증을 켜려면 `witmcc serve --auth on`. Token 위치는 macOS `~/Library/Application Support/witmcc/token`, Linux `~/.config/witmcc/token` (mode 0600). `--auth on`일 때 모든 `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요. `witmcc serve --retention-profile default`로 retention sweep 활성화. 신규 migration 0012 + 0013; `witmcc init-db` 필요.
 - **운영 주의 (slice-14):** `finding` 테이블 추가 (migration 0008). 기존 dev DB는
   `witmcc init-db`로 재생성 후 재ingest 필요.
 - **운영 주의 (slice-13):** `graph_edge` 테이블에 `inference_rule_id`, `confidence` 컬럼 추가 (migration 0007). 기존 dev DB는 `witmcc init-db`로 재생성 후 재ingest 필요.

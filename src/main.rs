@@ -38,6 +38,7 @@ fn main() -> error::Result<()> {
                 print_token,
                 rotate_token,
                 retention_profile,
+                auth,
             } => {
                 // Slice-19: --print-token and --rotate-token short-circuit server start.
                 if print_token {
@@ -66,6 +67,7 @@ fn main() -> error::Result<()> {
                     judge_budget,
                     judge_fixture_path,
                     retention_profile,
+                    auth,
                 )
                 .await
             }
@@ -96,6 +98,7 @@ async fn serve_cmd(
     judge_budget: usize,
     judge_fixture_path: Option<std::path::PathBuf>,
     retention_profile: String,
+    auth: cli::AuthMode,
 ) -> error::Result<()> {
     // Loopback-only enforcement: accepts 127.0.0.0/8 and ::1 (is_loopback()).
     // Strict 127.0.0.1-only would use `bind == IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)`.
@@ -179,10 +182,20 @@ async fn serve_cmd(
     };
     tracing::info!(judge = %judge_runtime.kind, budget = judge_runtime.budget, "judge runtime ready");
 
-    // Slice-19: Ensure token exists, print on first boot.
-    let token = witmcc::security::token::ensure_token()
-        .map_err(anyhow::Error::from)?;
-    eprintln!("witmcc: serving with token {token}");
+    // DEV-S19-08: --auth off (default) → token empty string, middleware bypasses.
+    // --auth on → ensure token exists, print on first boot.
+    let token = match auth {
+        cli::AuthMode::Off => {
+            tracing::info!("auth disabled (single-user dev); pass --auth on to enforce bearer token");
+            String::new()
+        }
+        cli::AuthMode::On => {
+            let t = witmcc::security::token::ensure_token()
+                .map_err(anyhow::Error::from)?;
+            eprintln!("witmcc: serving with token {t}");
+            t
+        }
+    };
 
     // Slice-19: Parse retention profile and spawn sweep if enabled.
     let profile: witmcc::security::retention::Profile = retention_profile

@@ -1,6 +1,16 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+/// Whether to require bearer-token authentication on Pull API + MCP.
+/// Default is `Off` for single-user local dev — `On` to enforce the slice-19
+/// bearer scheme (token in `~/Library/Application Support/witmcc/token` on
+/// macOS, `~/.config/witmcc/token` on Linux). DEV-S19-08.
+#[derive(Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
+pub enum AuthMode {
+    Off,
+    On,
+}
+
 /// Which judge backend to use. Default is `None` (noop — L2 disabled).
 #[derive(Debug, Clone, clap::ValueEnum)]
 pub enum JudgeMode {
@@ -119,5 +129,9 @@ pub enum Command {
         /// Use "default" (30d/180d/90d) or "strict" (7d/30d/30d) to enable sweeps.
         #[arg(long, default_value = "none", value_parser = ["none", "default", "strict"])]
         retention_profile: String,
+        /// Whether to require bearer-token auth on /v1 + /mcp. Default: off (single-user dev).
+        /// `on` activates slice-19 token middleware. DEV-S19-08.
+        #[arg(long, value_enum, default_value_t = AuthMode::Off)]
+        auth: AuthMode,
     },
 }
