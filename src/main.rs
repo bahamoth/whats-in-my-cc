@@ -226,15 +226,10 @@ async fn serve_cmd(
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .map_err(anyhow::Error::from)?;
-    let shutdown_signal = {
-        let tok = cancel.clone();
-        async move {
-            tokio::select! {
-                _ = tok.cancelled() => {}
-                _ = tokio::signal::ctrl_c() => {}
-            }
-        }
-    };
+    let shutdown_signal = witmcc::serve::shutdown_with_grace(
+        cancel.clone(),
+        witmcc::serve::DEFAULT_SHUTDOWN_GRACE,
+    );
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal)
         .await
