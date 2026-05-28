@@ -2,7 +2,17 @@
 // every test that mounts a component using `useLiveStream` (directly or
 // transitively) needs a controllable mock. Installing it globally keeps
 // existing tests passing without per-file installation.
+import '@testing-library/jest-dom/vitest';
+import { cleanup } from '@testing-library/react';
+import { afterEach } from 'vitest';
 import { MockEventSource } from './MockEventSource';
+
+// vitest.config.ts uses `globals: false`, so RTL's auto-cleanup hook
+// is not registered automatically. Register it here so every test gets
+// a clean DOM (otherwise multi-render assertions fail with "found N").
+afterEach(() => {
+  cleanup();
+});
 
 if (typeof (globalThis as unknown as { EventSource?: unknown }).EventSource === 'undefined') {
   MockEventSource.install();

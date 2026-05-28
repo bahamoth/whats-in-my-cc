@@ -1,0 +1,73 @@
+/* PR-1 design tokens. Dark-first. Light-mode override lives at
+ * `@media (prefers-color-scheme: light)`. Tokens are read by:
+ *  - AppShell.module.css (layout)
+ *  - PR-3 onwards (charts, KPI strip, EpisodeStrip)
+ *  - PR-5 cards
+ *  - PR-7 graph edges
+ *
+ * Naming: --witmcc-<role>[-<variant>]. Avoid raw colour names so we can
+ * theme without touching component CSS. */
+
+:root {
+  /* Layout */
+  --witmcc-nav-rail-w: 56px;
+  --witmcc-right-slot-w: 380px;
+
+  /* Surfaces (dark) */
+  --witmcc-bg: #0b0d12;
+  --witmcc-surface-1: #11141b;
+  --witmcc-surface-2: #161a23;
+  --witmcc-surface-3: #1b202a;
+
+  /* Borders */
+  --witmcc-border: #1d212c;
+  --witmcc-border-strong: #2a3040;
+
+  /* Text */
+  --witmcc-fg: #e6e8ee;
+  --witmcc-fg-muted: #aab0bd;
+  --witmcc-fg-subtle: #6a7180;
+  --witmcc-fg-on-accent: #0b0d12;
+
+  /* Accent + semantic */
+  --witmcc-accent: #4f8cff;
+  --witmcc-accent-soft: #1f3a78;
+  --witmcc-success: #41c285;
+  --witmcc-warning: #f0b429;
+  --witmcc-danger: #ef4747;
+  --witmcc-info: #7da7ff;
+
+  /* Lane / node_kind palette — driven by PR-4 Waterfall.
+   * Keep deterministic ↔ light, inferred ↔ dim. */
+  --witmcc-lane-intent: #7da7ff;
+  --witmcc-lane-context: #b07dff;
+  --witmcc-lane-action: #41c285;
+  --witmcc-lane-state: #f0b429;
+  --witmcc-lane-files: #ef4747;
+  --witmcc-lane-hook: #2bd0d0;
+  --witmcc-lane-otel: #d97aff;
+  --witmcc-lane-quality: #ff8a4c;
+
+  /* Episode phase palette */
+  --witmcc-phase-intake: #4f8cff;
+  --witmcc-phase-exploration: #b07dff;
+  --witmcc-phase-diagnosis: #f0b429;
+  --witmcc-phase-action: #41c285;
+  --witmcc-phase-verification: #2bd0d0;
+  --witmcc-phase-repair: #ff8a4c;
+  --witmcc-phase-drift: #ef4747;
+
+  /* Motion */
+  --witmcc-motion-fast: 150ms;
+  --witmcc-motion-base: 220ms;
+  --witmcc-motion-slow: 400ms;
+  --witmcc-easing-spring: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --witmcc-motion-fast: 0ms;
+    --witmcc-motion-base: 0ms;
+    --witmcc-motion-slow: 0ms;
+  }
+}
