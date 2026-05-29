@@ -207,10 +207,10 @@ describe('Timeline', () => {
 
   it('fires onSelect(null) when clicking the SVG background', () => {
     const onSelect = vi.fn();
-    const { container } = renderTL({ onSelect });
-    // Click the svg element itself (background)
-    const svg = container.querySelector('svg');
-    fireEvent.click(svg!);
+    renderTL({ onSelect });
+    // Click the main timeline canvas (not the minimap-track svg)
+    const svg = screen.getByTestId('timeline-canvas');
+    fireEvent.click(svg);
     expect(onSelect).toHaveBeenCalledWith(null);
   });
 

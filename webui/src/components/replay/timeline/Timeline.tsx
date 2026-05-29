@@ -12,6 +12,7 @@ import { useMediaQuery } from '../../../hooks/useMediaQuery';
 import { makeTimeScale } from './timeScale';
 import { fit, zoomAt, pan, clamp, type Viewport } from './viewport';
 import { nodesByLane } from './nodeLane';
+import { Minimap } from './Minimap';
 import styles from './Timeline.module.css';
 
 export interface TimelineProps {
@@ -249,9 +250,18 @@ export function Timeline({
         </button>
       </div>
 
+      {/* Minimap brush — overview of the full extent, drives viewport */}
+      <Minimap
+        extent={extent}
+        viewport={viewport}
+        onChange={(v) => setViewport(clamp(v, extent))}
+        width={svgW}
+      />
+
       {/* SVG canvas */}
       <div className={styles.svgWrapper} style={{ width: svgW, height: svgH }}>
         <svg
+          data-testid="timeline-canvas"
           className={styles.svg}
           width={svgW}
           height={svgH}

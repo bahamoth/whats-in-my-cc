@@ -4,7 +4,7 @@ import { ApiError } from '../api/client';
 import type { GraphPayload, ObservedEventDto } from '../api/types';
 import { MetaStrip } from '../components/MetaStrip';
 import { DetailPanel } from '../components/replay/detail/DetailPanel';
-import { Waterfall } from '../components/replay/Waterfall';
+import { Timeline } from '../components/replay/timeline/Timeline';
 import { TopBar } from '../components/layout/TopBar';
 import { KpiStrip } from '../components/replay/KpiStrip';
 import { EpisodeStrip } from '../components/replay/EpisodeStrip';
@@ -260,8 +260,10 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
           </div>
 
           <div className={styles.timeline} data-slot="timeline">
-            <Waterfall
-              graph={effectiveGraph}
+            <Timeline
+              nodes={effectiveGraph.nodes}
+              edges={effectiveGraph.edges}
+              episodes={episodes.data ?? []}
               selectedNodeId={sel.selectedNodeId}
               onSelect={(id) => sel.setSelectedNodeId(id)}
             />
