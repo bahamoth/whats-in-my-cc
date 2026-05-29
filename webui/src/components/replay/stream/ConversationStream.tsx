@@ -41,6 +41,10 @@ export function ConversationStream({
     count: items.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 64,
+    // Key the measured-size cache by stable item id. Without this the cache is
+    // index-based, and loadOlder PREPENDS pages (shifting every index) → cached
+    // heights map to the wrong items → rows overlap. Stable ids remap correctly.
+    getItemKey: (index) => items[index]?.id ?? index,
     overscan: 8,
   });
 

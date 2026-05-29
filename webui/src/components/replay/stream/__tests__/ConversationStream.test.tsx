@@ -10,6 +10,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConversationStream } from '../ConversationStream';
 import type { MessageItem, ActivityRun, ActivityEvent } from '../streamModel';
 
+// Capture the options ConversationStream passes to useVirtualizer so we can
+// assert it keys the row-size cache by stable item id (see overlap regression
+// test below). The wrapper calls through, so all other tests are unaffected.
+const hoisted = vi.hoisted(() => ({ captured: { opts: null as any } }));
+vi.mock('@tanstack/react-virtual', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tanstack/react-virtual')>();
+  return {
+    ...actual,
+    useVirtualizer: (opts: any) => {
+      hoisted.captured.opts = opts;
+      return (actual as any).useVirtualizer(opts);
+    },
+  };
+});
+
 function msg(id: string, text: string, over: Partial<MessageItem> = {}): MessageItem {
   return {
     type: 'message',
@@ -54,6 +69,32 @@ function run(id: string, events: ActivityEvent[]): ActivityRun {
 const noPhase = () => null;
 
 describe('ConversationStream', () => {
+  // Regression: rows overlapped because the virtualizer cached measured row
+  // heights by INDEX, but useSessionWindow.loadOlder PREPENDS pages — shifting
+  // every index — which desynced the size cache from the items (a tall row got
+  // a short cached size → next row's offset landed inside it). Keying the cache
+  // by stable item id makes prepend/reorder remap correctly. jsdom has no
+  // layout (virtual path never runs), so we lock the contract here.
+  it('keys the virtualizer size-cache by stable item id (prepend overlap regression)', () => {
+    hoisted.captured.opts = null;
+    const items = [msg('e1', 'a'), run('r1', [ae('c1', 'Read')]), msg('e2', 'b', { role: 'assistant' })];
+    render(
+      <ConversationStream
+        items={items}
+        phaseOf={noPhase}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    const opts = hoisted.captured.opts;
+    expect(opts).not.toBeNull();
+    expect(typeof opts.getItemKey).toBe('function');
+    expect(opts.getItemKey(0)).toBe('e1');
+    expect(opts.getItemKey(1)).toBe('r1');
+    expect(opts.getItemKey(2)).toBe('e2');
+  });
+
   it('renders messages and activity stacks in source order', () => {
     render(
       <ConversationStream
