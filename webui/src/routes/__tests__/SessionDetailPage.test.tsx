@@ -279,3 +279,50 @@ describe('SessionDetailPage', () => {
     });
   });
 });
+
+describe('R1 layout shell', () => {
+  beforeEach(() => {
+    if (!(globalThis as { EventSource?: unknown }).EventSource) {
+      (globalThis as Record<string, unknown>).EventSource = class FakeES {
+        url: string;
+        readyState = 0;
+        onmessage: ((ev: MessageEvent) => void) | null = null;
+        constructor(u: string) { this.url = u; }
+        addEventListener() {}
+        close() {}
+      };
+    }
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it('renders exactly one link to /sessions (no duplicate header link)', async () => {
+    setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
+    rendered('aac68973');
+    await waitFor(() => {
+      const sessionLinks = screen
+        .getAllByRole('link')
+        .filter((a) => a.getAttribute('href') === '/sessions');
+      expect(sessionLinks).toHaveLength(1);
+    });
+  });
+
+  it('exposes named grid slots for stream, detail, and timeline', async () => {
+    setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
+    const { container } = rendered('aac68973');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+    expect(container.querySelector('[data-slot="stream"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="detail"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="timeline"]')).not.toBeNull();
+  });
+
+  it('does not render the Waterfall/Graph ViewToggle', async () => {
+    setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
+    rendered('aac68973');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /graph/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /graph/i })).toBeNull();
+  });
+});
