@@ -309,10 +309,11 @@ describe('R1 layout shell', () => {
     });
   });
 
-  it('exposes named grid slots for stream, detail, and timeline', async () => {
+  it('exposes named grid slots for kpi, stream, detail, and timeline', async () => {
     setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
     const { container } = rendered('aac68973');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+    expect(container.querySelector('[data-slot="kpi"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="stream"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="detail"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="timeline"]')).not.toBeNull();

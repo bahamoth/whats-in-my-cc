@@ -154,6 +154,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
           </div>
 
           <div className={styles.stream} data-slot="stream">
+            {/* Sentinel parked at the top of the stream slot: R2's ConversationStream is the scrollable list, and scrolling up to here triggers loadOlder. Until R2 lands the slot holds only the placeholder below. */}
             <div
               ref={sentinelRef}
               aria-hidden
