@@ -311,6 +311,30 @@ describe('Timeline', () => {
     expect(isHidden).toBe(true);
   });
 
+  // --- Reduced-motion gating ---
+  it('does not animate inferred edges when prefers-reduced-motion is set', () => {
+    // Force window.matchMedia to report reduced-motion = true so useMediaQuery
+    // returns true → reducedMotion = true → inferredEdge class is NOT applied.
+    const mql = {
+      matches: true,
+      media: '(prefers-reduced-motion: reduce)',
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      onchange: null,
+      dispatchEvent: () => false,
+    } as unknown as MediaQueryList;
+    const spy = vi.spyOn(window, 'matchMedia').mockImplementation(() => mql);
+    const { container } = renderTL();
+    const inferred = container.querySelector('[data-edge-id="e1"]');
+    expect(inferred).not.toBeNull();
+    // Under reduced motion the inferredEdge animation class must be absent
+    const className = inferred?.getAttribute('class') ?? '';
+    expect(className).not.toContain('inferredEdge');
+    spy.mockRestore();
+  });
+
   // --- Wheel zoom ---
   it('attaches a non-passive wheel listener that calls preventDefault', () => {
     renderTL();
