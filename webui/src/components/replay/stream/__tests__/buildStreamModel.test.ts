@@ -1,0 +1,61 @@
+import { describe, it, expect } from 'vitest';
+import { buildStreamModel } from '../streamModel';
+import type { ObservedEventDto } from '../../../../api/types';
+
+function ev(p: Partial<ObservedEventDto> & { event_id: string; kind: string }): ObservedEventDto {
+  return { raw_event_id: '', session_id: 's', event_uuid: null, parent_uuid: null,
+    observed_at: '2026-05-28T00:00:00Z', actor: 'user', subkind: null, tool_use_id: null,
+    tool_name: null, turn_id: null, is_sidechain: false, is_meta: false, payload: {}, ...p } as ObservedEventDto;
+}
+
+describe('buildStreamModel', () => {
+  it('reads user text from BOTH content and text fields (#bug: 7971 empty cards)', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'a', kind: 'user_message', payload: { content: '질문1' } }),
+      ev({ event_id: 'b', kind: 'user_message', payload: { content_ordinal: 0, text: '질문2' } }),
+    ]);
+    const msgs = items.filter((i) => i.type === 'message');
+    expect(msgs.map((m: any) => m.text)).toEqual(['질문1', '질문2']);
+  });
+
+  it('excludes empty and scaffolding user messages from first-class cards', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'a', kind: 'user_message', payload: { text: '' } }),
+      ev({ event_id: 'b', kind: 'user_message', payload: { content: '<command-name>/clear</command-name>' } }),
+      ev({ event_id: 'c', kind: 'user_message', payload: { content: 'Base directory for this skill: /x' } }),
+    ]);
+    expect(items.filter((i) => i.type === 'message')).toHaveLength(0);
+    expect(items.some((i) => i.type === 'activity-run')).toBe(true);
+  });
+
+  it('keeps readable thinking as a message, redacted thinking goes to activity', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 't1', kind: 'thinking', actor: 'assistant', payload: { thinking: '먼저 확인하자' } }),
+      ev({ event_id: 't2', kind: 'thinking', actor: 'assistant', payload: { thinking: '' } }),
+    ]);
+    const msgs = items.filter((i: any) => i.type === 'message' && i.role === 'thinking');
+    expect(msgs).toHaveLength(1);
+    expect((msgs[0] as any).text).toBe('먼저 확인하자');
+  });
+
+  it('groups a contiguous run of non-message events into one activity-run with its events', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'u', kind: 'user_message', payload: { content: 'go' } }),
+      ev({ event_id: 'c1', kind: 'tool_call', actor: 'assistant', tool_name: 'Read', payload: { tool_name: 'Read', input: { file_path: '/a' } } }),
+      ev({ event_id: 'h1', kind: 'hook_event', actor: 'hook', payload: { hookName: 'PreToolUse' } }),
+      ev({ event_id: 'a', kind: 'assistant_message', actor: 'assistant', payload: { text: 'done', model: 'claude-opus-4-8' } }),
+    ]);
+    expect(items.map((i: any) => i.type)).toEqual(['message', 'activity-run', 'message']);
+    expect((items[1] as any).events.map((e: any) => e.event.event_id)).toEqual(['c1', 'h1']);
+  });
+
+  it('merges tool_result into its tool_call (ok/error) inside the run events', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'c1', kind: 'tool_call', tool_use_id: 'x', tool_name: 'Read', payload: { tool_name: 'Read', input: {} } }),
+      ev({ event_id: 'r1', kind: 'tool_result', actor: 'system', tool_use_id: 'x', payload: { tool_result: { is_error: true } } }),
+    ]);
+    const run: any = items.find((i: any) => i.type === 'activity-run');
+    expect(run.events).toHaveLength(1);
+    expect(run.events[0].result).toEqual({ isError: true });
+  });
+});
