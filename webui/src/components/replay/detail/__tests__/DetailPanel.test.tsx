@@ -59,6 +59,16 @@ describe('DetailPanel', () => {
     expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('emphasizes the Raw tab when a raw record is available (#2 discoverability)', () => {
+    render(<DetailPanel node={someNode} record={{ actor: 'user', is_sidechain: true }} findings={[]} episodePhase={null} nodes={[someNode]} edges={[]} onSelectNode={() => {}} />);
+    expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('data-has-record', 'true');
+  });
+
+  it('does not emphasize the Raw tab when there is no raw record', () => {
+    render(<DetailPanel node={someNode} record={null} findings={[]} episodePhase={null} nodes={[someNode]} edges={[]} onSelectNode={() => {}} />);
+    expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('data-has-record', 'false');
+  });
+
   it('shows an empty hint when no node is selected', () => {
     render(<DetailPanel node={null} record={null} findings={[]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
     expect(screen.getByText(/select a node/i)).toBeInTheDocument();

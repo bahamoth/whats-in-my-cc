@@ -57,6 +57,18 @@
   font-weight: 600;
 }
 
+/* origin chip — small, muted, monospace; reveals raw role (external/subagent/agent) */
+.sourceBadge {
+  font-family: var(--witmcc-mono, ui-monospace, monospace);
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--witmcc-fg-subtle, #6a7180);
+  background: var(--witmcc-surface-3, #1b202a);
+  border: 1px solid var(--witmcc-border, #1d212c);
+}
+
 .time {
   color: var(--witmcc-fg-subtle, #6a7180);
 }
