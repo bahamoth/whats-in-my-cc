@@ -66,7 +66,8 @@
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
-  max-width: 100%;
+  width: 100%;
+  text-align: center;
 }
 
 .nodeInner.center .primary {
@@ -80,22 +81,8 @@
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
-  max-width: 100%;
-}
-
-/* .kind now used as de-emphasised node_kind tag (kept for data-node-kind display) */
-.kind {
-  font-size: 10px;
-  font-family: var(--witmcc-mono, ui-monospace, monospace);
-  color: var(--witmcc-fg-muted, #aab0bd);
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-.nodeInner.center .kind {
-  color: var(--witmcc-accent, #4f8cff);
+  width: 100%;
+  text-align: center;
 }
 
 /* .nodeId is now used for the de-emphasised node_kind tag */
