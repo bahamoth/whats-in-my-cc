@@ -6,7 +6,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { InsightTab } from '../InsightTab';
-import type { FindingDto } from '../../../api/types';
+import type { FindingDto } from '../../../../api/types';
 
 function finding(p: Partial<FindingDto>): FindingDto {
   return {

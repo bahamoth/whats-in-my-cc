@@ -7,7 +7,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { DetailPanel } from '../DetailPanel';
-import type { FindingDto, GraphNodeDto } from '../../../api/types';
+import type { FindingDto, GraphNodeDto } from '../../../../api/types';
 
 const node = { node_kind: 'tool_call', started_at: '2026-05-28T09:14:08Z', ended_at: null } as GraphNodeDto;
 function finding(): FindingDto {
