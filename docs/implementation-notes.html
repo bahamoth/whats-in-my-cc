@@ -2831,6 +2831,37 @@ vitest: 69 passed
     </ul>
   </section>
 
+  <!-- UX S2-S6 — Stream readability redesign (frontend)                       -->
+  <section>
+    <h2><span class="num">37</span>UX S2–S6 — Stream Readability Redesign (frontend)</h2>
+    <p>좌측 대화 스트림을 채팅 구조로, 노드/카드를 휴먼 리더블 라벨로, 우측 패널을
+      2탭(Insight 상세 + Raw)으로 재설계. Spec:
+      <code>docs/superpowers/specs/2026-05-29-witmcc-stream-readability-design.md</code>,
+      Plan: <code>docs/superpowers/plans/2026-05-29-witmcc-stream-readability.md</code>.</p>
+    <h3>설계 결정 / 편차</h3>
+    <ul>
+      <li><strong>버그 수정:</strong> 기존 <code>buildStreamCards</code>는 user_message preview를
+        <code>payload.content</code>만 읽어, <code>{content_ordinal,text}</code> 형태의 user_message
+        7,971건이 전부 빈 카드로 렌더됐다. 새 <code>buildStreamModel</code>은 content/text 양쪽을 읽고
+        회귀 테스트로 잠금.</li>
+      <li><strong>분류기:</strong> 이벤트를 message(사람 user·assistant·읽히는 thinking) /
+        activity(tool·hook·state·redacted thinking) / drop(빈·scaffolding user_message·system_summary)으로
+        분류. scaffolding은 drop이 아니라 activity 스택에 흡수.</li>
+      <li><strong>라벨 단일 출처(편차):</strong> spec §6은 백엔드 <code>label</code> 필드를 제안했으나,
+        프론트 <code>nodeLabel()</code> 순수 함수 하나를 stream·activity 항목·focused subgraph 노드·
+        timeline 툴팁·NodeDetail 헤더가 공용으로 쓰는 방식 채택(DRY, serve-time 비용 0, spec의
+        fallback-derivation 허용 범위). 백엔드는 payload enrichment(§36)만 담당.</li>
+      <li><strong>activity 그룹핑:</strong> 메시지 사이 비-메시지 런을 episode phase 경계로 1~2개
+        스택으로 분할(<code>splitRunByPhase</code>, 상한 2). 분할 규칙을 한 함수로 격리해 "런당 1개"로
+        전환 쉽게(spec 열린 질문).</li>
+      <li><strong>2탭 패널:</strong> Detail 탭을 Insight 하단 <code>NodeDetail</code>로 흡수
+        (tool 파라미터 전체·결과·토큰·finding). Raw(JSON 트리)는 유지.</li>
+      <li><strong>알려진 한계:</strong> (1) 이미지 placeholder(<code>[Image: …]</code>) user_message는
+        scaffolding으로 분류하지 않아 사용자 버블로 렌더됨(사용자 제공 콘텐츠로 간주). (2) activity 스택이
+        현재 선택된 이벤트를 포함하면 자동 펼침이 유지되어 수동 접기가 일시적으로 막힘(비치명적 UX).</li>
+    </ul>
+  </section>
+
   <footer class="footer">
     <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · <strong>MVP EXIT 2026-05-27</strong> · branch: feat/remaining-milestones</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
