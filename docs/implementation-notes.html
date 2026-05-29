@@ -2800,6 +2800,37 @@ vitest: 69 passed
     <p class="muted">Total slices: 19. Total migrations: 13. Test count post-slice-19: ~170+ (all green).</p>
   </section>
 
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- UX S1 — Payload Enrichment (stream-readability)                        -->
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <section id="ux-s1-payload-enrichment">
+    <h2><span class="num">36</span>UX S1 — Payload Enrichment (stream-readability)</h2>
+    <p><strong>브랜치:</strong> <code>webui/stream-readability</code> · <strong>날짜:</strong> 2026-05-29 · <strong>트랙:</strong> UX 재설계 epic (마일스톤 외).</p>
+    <p>GraphNode는 <code>e.payload.clone()</code>으로 ObservedEvent payload를 그대로 복사한다.
+    노드에 human-readable label을 붙이기 위해 두 가지 필드를 payload에 추가했다.</p>
+    <ul>
+      <li><strong>tool_call payload에 <code>tool_name</code> 추가:</strong>
+        <code>tool_use</code> 블록 매핑 시 <code>e.tool_name</code>(이미 <code>item["name"]</code>에서 추출됨)을
+        payload에도 포함한다.
+        그래프 노드가 <code>payload["tool_name"]</code>을 읽어 "Bash", "Read" 등의 레이블을 표시할 수 있다.</li>
+      <li><strong>assistant_message payload에 <code>model</code> 추가:</strong>
+        <code>map_assistant</code>에서 <code>message.model</code>(예: <code>"claude-opus-4-7"</code>)을 추출하고
+        <code>text</code> 타입 content 블록의 payload에 포함한다.
+        <code>tool_use</code> 블록에는 model을 포함하지 않는다.</li>
+    </ul>
+    <h3>Migration 불필요</h3>
+    <p>payload는 <code>observed_event</code> 테이블의 JSON BLOB 컬럼이다. 스키마 변경 없이 payload JSON에 새 키만 추가한다.
+    단, 기존 dev DB에 이미 수집된 이벤트는 새 키가 없으므로 <code>witmcc init-db</code> + 재ingest가 필요하다.</p>
+    <h3>실 데이터 고정</h3>
+    <p>모든 assertion은 <code>tests/fixtures/transcripts/minimal_session.jsonl</code> 실 fixture에 고정:
+    assistant 메시지의 <code>model:"claude-opus-4-7"</code>, tool_use 블록의 <code>name:"Bash"</code>.</p>
+    <h3>Commit Reference (UX S1)</h3>
+    <ul>
+      <li><code>1b30baf</code> — ingest: carry tool_name into tool_call payload for node labels</li>
+      <li><code>368c6b1</code> — ingest: carry model into assistant_message payload for role labels</li>
+    </ul>
+  </section>
+
   <footer class="footer">
     <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · <strong>MVP EXIT 2026-05-27</strong> · branch: feat/remaining-milestones</p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
