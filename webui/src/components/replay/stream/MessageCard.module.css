@@ -14,15 +14,24 @@
   outline: 1px solid var(--witmcc-accent, #4f8cff);
 }
 
-/* ---- alignment ---- */
+/* ---- alignment ----
+ * The card's parent is the virtualizer row wrapper (position:absolute,
+ * width:100%) or, on the fallback path, a plain block <div> — neither is a
+ * flex container, so `align-self` is inert and the card stayed pinned left.
+ * `margin-*: auto` pushes the constrained-width (max-width:80%) card to the
+ * correct edge in BOTH wrapper kinds. align-self/items kept for the flex case. */
 .alignRight {
   align-self: flex-end;
   align-items: flex-end;
+  margin-left: auto;
+  margin-right: 0;
 }
 
 .alignLeft {
   align-self: flex-start;
   align-items: flex-start;
+  margin-left: 0;
+  margin-right: auto;
 }
 
 /* ---- header row (avatar + label + time) ---- */
