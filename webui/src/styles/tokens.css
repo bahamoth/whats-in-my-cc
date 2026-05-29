@@ -59,6 +59,7 @@
   --witmcc-phase-verification: #2bd0d0;
   --witmcc-phase-repair: #ff8a4c;
   --witmcc-phase-drift: #ef4747;
+  --witmcc-phase-stall: #9a6b73;
 
   /* Motion */
   --witmcc-motion-fast: 150ms;

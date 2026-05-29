@@ -122,6 +122,28 @@ describe('Timeline', () => {
     expect(e.getAttribute('stroke-dasharray')).toBeTruthy();
   });
 
+  it('exposes confidence on inferred edges (data-confidence + title)', () => {
+    const { container } = renderTL();
+    const e = container.querySelector('[data-edge-id="e1"]') as SVGElement;
+    expect(e.getAttribute('data-confidence')).toBe('0.7');
+    // Native tooltip carries both rule id and confidence
+    const title = e.querySelector('title');
+    expect(title?.textContent).toBe('triggered_by_user_message@v1 (0.7)');
+  });
+
+  it('renders a visible edge label with rule id + confidence when the edge is emphasized', () => {
+    // Selecting node 'a' emphasizes incident edge e1 → its label becomes visible
+    renderTL({ selectedNodeId: 'a' });
+    const label = screen.getByTestId('edge-label');
+    expect(label.textContent).toMatch(/triggered_by_user_message@v1/);
+    expect(label.textContent).toMatch(/0\.7/);
+  });
+
+  it('does not render a visible edge label when no node is selected', () => {
+    renderTL();
+    expect(screen.queryByTestId('edge-label')).toBeNull();
+  });
+
   it('renders deterministic edges as solid (no stroke-dasharray)', () => {
     const { container } = render(
       <Timeline
@@ -290,12 +312,17 @@ describe('Timeline', () => {
   });
 
   // --- Wheel zoom ---
-  it('handles wheel events without throwing', () => {
-    const { container } = renderTL();
-    const svg = container.querySelector('svg')!;
-    expect(() => fireEvent.wheel(svg, { deltaY: -100, clientX: 400 })).not.toThrow();
-    // After a wheel event, SVG is still rendered; at least one node element exists
-    expect(container.querySelectorAll('[data-node-id]').length).toBeGreaterThanOrEqual(0);
-    expect(container.querySelector('svg')).not.toBeNull();
+  it('attaches a non-passive wheel listener that calls preventDefault', () => {
+    renderTL();
+    // The timeline canvas SVG (distinct from the Minimap track SVG).
+    const svg = screen.getByTestId('timeline-canvas');
+    // Dispatch a real, cancelable WheelEvent on the canvas element. The
+    // handler is attached imperatively with { passive: false }, so
+    // preventDefault must take effect (defaultPrevented === true).
+    const ev = new WheelEvent('wheel', { deltaY: -100, clientX: 400, bubbles: true, cancelable: true });
+    svg.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+    // SVG is still rendered after the zoom.
+    expect(screen.getByTestId('timeline-canvas')).toBeInTheDocument();
   });
 });

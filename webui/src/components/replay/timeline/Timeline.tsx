@@ -4,7 +4,7 @@
  * Plan: docs/superpowers/plans/2026-05-29-witmcc-redesign-v2-R4-timeline.md Task 4.
  * Spec: §5 (time-series UI), §7 (memory / density cap).
  */
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNodeDto, GraphEdgeDto, EpisodeDto } from '../../../api/types';
 import { LANES } from '../../../api/laneMapping';
 import { causalEdgeStyle } from '../causalEdgeStyle';
@@ -62,7 +62,7 @@ const PHASE_COLORS: Record<string, string> = {
   verification: 'var(--witmcc-phase-verification, #2bd0d0)',
   repair:       'var(--witmcc-phase-repair,       #ff8a4c)',
   drift:        'var(--witmcc-phase-drift,        #ef4747)',
-  stall:        'var(--witmcc-phase-stall,        #6a7180)',
+  stall:        'var(--witmcc-phase-stall,        #9a6b73)',
 };
 
 interface TooltipState {
@@ -177,18 +177,32 @@ export function Timeline({
     dragRef.current.dragging = false;
   }, []);
 
-  // Wheel zoom
-  const onWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
-    e.preventDefault();
-    // Map cursor x to time
-    const rect = e.currentTarget.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const pxInDraw = Math.max(0, px - LANE_LABEL_W);
-    const frac = drawW > 0 ? pxInDraw / drawW : 0.5;
-    const focusT = viewport.t0 + frac * (viewport.t1 - viewport.t0);
-    const factor = e.deltaY < 0 ? 0.7 : 1 / 0.7;
-    setViewport((v) => clamp(zoomAt(v, factor, focusT), extent));
-  }, [viewport.t0, viewport.t1, drawW, extent]);
+  // Wheel zoom — attached imperatively (non-passive) so preventDefault can
+  // actually suppress page scroll. React's onWheel prop registers a passive
+  // listener, where preventDefault is a silent no-op.
+  const svgRef = useRef<SVGSVGElement>(null);
+  // Keep the latest geometry/viewport in a ref so the native listener stays
+  // stable (attached once) yet always reads current values.
+  const wheelStateRef = useRef({ drawW, extent, t0: viewport.t0, t1: viewport.t1 });
+  wheelStateRef.current = { drawW, extent, t0: viewport.t0, t1: viewport.t1 };
+
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const { drawW: dw, extent: ext, t0, t1 } = wheelStateRef.current;
+      const rect = el.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const pxInDraw = Math.max(0, px - LANE_LABEL_W);
+      const frac = dw > 0 ? pxInDraw / dw : 0.5;
+      const focusT = t0 + frac * (t1 - t0);
+      const factor = e.deltaY < 0 ? 0.7 : 1 / 0.7;
+      setViewport((v) => clamp(zoomAt(v, factor, focusT), ext));
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []);
 
   // SVG background click → deselect
   const onSvgClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
@@ -261,6 +275,7 @@ export function Timeline({
       {/* SVG canvas */}
       <div className={styles.svgWrapper} style={{ width: svgW, height: svgH }}>
         <svg
+          ref={svgRef}
           data-testid="timeline-canvas"
           className={styles.svg}
           width={svgW}
@@ -270,7 +285,6 @@ export function Timeline({
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
           onMouseLeave={onMouseUp}
-          onWheel={onWheel}
           onClick={onSvgClick}
         >
           {/* ── Episode band ── */}
@@ -456,22 +470,54 @@ export function Timeline({
               // Simple cubic bezier
               const d = `M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2}, ${x2} ${(y1 + y2) / 2}, ${x2} ${y2}`;
 
+              // Spec §5.6 — inferred edges expose BOTH the rule id and the
+              // confidence. Confidence falls back to the server default (0.5)
+              // when no judge has scored the edge, matching causalEdgeStyle.
+              const conf = typeof e.confidence === 'number' ? e.confidence : 0.5;
+              const ruleLabel = isInferred
+                ? `${e.inference_rule_id ?? 'inferred'} (${conf.toFixed(1)})`
+                : null;
+              // Show the label only when this edge is emphasized (a node is
+              // selected and incident) — keeps the surface uncluttered.
+              const showLabel = isInferred && emphasized === true && ruleLabel;
+              const midX = (x1 + x2) / 2;
+              const midY = (y1 + y2) / 2;
+
               return (
-                <path
-                  key={e.edge_id}
-                  data-edge-id={e.edge_id}
-                  data-origin={e.origin}
-                  data-rule-id={e.inference_rule_id ?? undefined}
-                  data-emphasized={emphasized ? 'true' : undefined}
-                  data-dimmed={dimmed ? 'true' : undefined}
-                  d={d}
-                  fill="none"
-                  stroke="var(--witmcc-fg-subtle, #6a7180)"
-                  strokeDasharray={style.strokeDasharray}
-                  strokeWidth={style.strokeWidth}
-                  opacity={style.opacity}
-                  className={isInferred && !reducedMotion ? styles.inferredEdge : undefined}
-                />
+                <g key={e.edge_id}>
+                  <path
+                    data-edge-id={e.edge_id}
+                    data-origin={e.origin}
+                    data-rule-id={e.inference_rule_id ?? undefined}
+                    data-confidence={isInferred ? conf : undefined}
+                    data-emphasized={emphasized ? 'true' : undefined}
+                    data-dimmed={dimmed ? 'true' : undefined}
+                    d={d}
+                    fill="none"
+                    stroke="var(--witmcc-fg-subtle, #6a7180)"
+                    strokeDasharray={style.strokeDasharray}
+                    strokeWidth={style.strokeWidth}
+                    opacity={style.opacity}
+                    className={isInferred && !reducedMotion ? styles.inferredEdge : undefined}
+                  >
+                    {/* Native tooltip carrying rule id + confidence on every inferred edge */}
+                    {ruleLabel && <title>{ruleLabel}</title>}
+                  </path>
+                  {showLabel && (
+                    <text
+                      data-testid="edge-label"
+                      data-edge-label-for={e.edge_id}
+                      x={midX}
+                      y={midY - 3}
+                      textAnchor="middle"
+                      fontSize={9}
+                      fill="var(--witmcc-fg-muted, #aab0bd)"
+                      style={{ pointerEvents: 'none' }}
+                    >
+                      {ruleLabel}
+                    </text>
+                  )}
+                </g>
               );
             })}
           </g>
