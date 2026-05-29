@@ -58,6 +58,32 @@
   font-weight: 600;
 }
 
+.primary {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--witmcc-mono, ui-monospace, monospace);
+  color: var(--witmcc-fg, #e6e8ee);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.nodeInner.center .primary {
+  color: var(--witmcc-accent, #4f8cff);
+}
+
+.secondary {
+  font-size: 9px;
+  font-family: var(--witmcc-mono, ui-monospace, monospace);
+  color: var(--witmcc-fg-muted, #aab0bd);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* .kind now used as de-emphasised node_kind tag (kept for data-node-kind display) */
 .kind {
   font-size: 10px;
   font-family: var(--witmcc-mono, ui-monospace, monospace);
@@ -72,6 +98,7 @@
   color: var(--witmcc-accent, #4f8cff);
 }
 
+/* .nodeId is now used for the de-emphasised node_kind tag */
 .nodeId {
   font-size: 9px;
   font-family: var(--witmcc-mono, ui-monospace, monospace);

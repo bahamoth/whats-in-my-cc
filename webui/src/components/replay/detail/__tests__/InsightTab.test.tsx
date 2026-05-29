@@ -79,6 +79,8 @@ describe('InsightTab', () => {
       <InsightTab findings={[]} nodes={[toolNode]} edges={[]} selectedNodeId="b"
         onSelectNode={() => {}} node={toolNode} record={null} episodePhase={null} />,
     );
-    expect(screen.getByText('Bash')).toBeInTheDocument();
+    // 'Bash' now appears both in NodeDetail and in the focused subgraph node label
+    // (nodeLabel primary for tool_call with tool_name:'Bash'). At least one must be present.
+    expect(screen.getAllByText('Bash').length).toBeGreaterThan(0);
   });
 });

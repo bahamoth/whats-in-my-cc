@@ -6,8 +6,8 @@ import { Timeline } from '../Timeline';
 import type { GraphNodeDto, GraphEdgeDto, EpisodeDto } from '../../../../api/types';
 
 const T = (s: string) => new Date(s).toISOString();
-function node(id: string, kind: string, start: string, end: string | null): GraphNodeDto {
-  return { node_id: id, schema_version: '1', session_id: 's', node_kind: kind, started_at: T(start), ended_at: end ? T(end) : null, merge_keys: {}, source_event_ids: [], source_uris: [], payload: {} };
+function node(id: string, kind: string, start: string, end: string | null, payload: unknown = {}): GraphNodeDto {
+  return { node_id: id, schema_version: '1', session_id: 's', node_kind: kind, started_at: T(start), ended_at: end ? T(end) : null, merge_keys: {}, source_event_ids: [], source_uris: [], payload };
 }
 function edge(id: string, from: string, to: string, origin: string, ruleId?: string): GraphEdgeDto {
   return { edge_id: id, schema_version: '1', session_id: 's', from_node_id: from, to_node_id: to, edge_kind: 'x', origin, attributes: {}, inference_rule_id: ruleId ?? null, confidence: origin === 'inferred' ? 0.7 : null };
@@ -326,6 +326,29 @@ describe('Timeline', () => {
     // tooltip may hide by becoming invisible or removed
     const isHidden = !tooltip || tooltip.getAttribute('data-visible') === 'false' || (tooltip as HTMLElement).hidden;
     expect(isHidden).toBe(true);
+  });
+
+  it('tooltip shows nodeLabel primary for a tool_call node (not just raw node id)', () => {
+    // node 'b' is tool_call with tool_name:'Read' → nodeLabel primary = 'Read'
+    const bWithPayload = node('b', 'tool_call', '2026-05-28T00:01:00Z', '2026-05-28T00:01:05Z', { tool_name: 'Read', input: { file_path: '/a/x.jpg' } });
+    const { container } = render(
+      <Timeline
+        nodes={[nodes[0], bWithPayload]}
+        edges={edges}
+        episodes={episodes}
+        selectedNodeId={null}
+        onSelect={() => {}}
+        width={800}
+        height={300}
+      />
+    );
+    const nodeEl = container.querySelector('[data-node-id="b"]')!;
+    fireEvent.mouseEnter(nodeEl);
+    const tooltip = screen.getByTestId('node-tooltip');
+    // primary label 'Read' must appear in the tooltip
+    expect(tooltip.textContent).toContain('Read');
+    // secondary (file basename) 'x.jpg' must appear
+    expect(tooltip.textContent).toContain('x.jpg');
   });
 
   // --- Reduced-motion gating ---

@@ -5,13 +5,18 @@ import { describe, expect, it } from 'vitest';
 import { FocusedInsightGraph } from '../FocusedInsightGraph';
 import type { GraphNodeDto, GraphEdgeDto } from '../../../../api/types';
 
-function n(id: string, kind = 'tool_call'): GraphNodeDto {
-  return { node_id: id, schema_version: '1', session_id: 's', node_kind: kind, started_at: '', ended_at: null, merge_keys: {}, source_event_ids: [], source_uris: [], payload: {} };
+function n(id: string, kind = 'tool_call', payload: unknown = {}): GraphNodeDto {
+  return { node_id: id, schema_version: '1', session_id: 's', node_kind: kind, started_at: '', ended_at: null, merge_keys: {}, source_event_ids: [], source_uris: [], payload };
 }
 function e(id: string, from: string, to: string, origin = 'deterministic'): GraphEdgeDto {
   return { edge_id: id, schema_version: '1', session_id: 's', from_node_id: from, to_node_id: to, edge_kind: 'x', origin, attributes: {}, inference_rule_id: origin === 'inferred' ? 'caused_repair@v1' : null, confidence: origin === 'inferred' ? 0.6 : null };
 }
-const nodes = [n('a', 'user_message'), n('b'), n('c')];
+// node 'b' is a tool_call with tool_name:'Bash' so nodeLabel yields primary='Bash'
+const nodes = [
+  n('a', 'user_message'),
+  n('b', 'tool_call', { tool_name: 'Bash', input: { command: 'ls -la' } }),
+  n('c'),
+];
 const edges = [e('e1', 'a', 'b', 'inferred'), e('e2', 'b', 'c')];
 
 describe('FocusedInsightGraph', () => {
@@ -43,8 +48,24 @@ describe('FocusedInsightGraph', () => {
     expect(container.querySelectorAll('[data-center="true"]')).toHaveLength(1);
     expect(container.querySelectorAll('[data-center="false"]')).toHaveLength(2);
     const center = container.querySelector('[data-center="true"]');
-    // b's id is rendered (last 6 chars) inside the centered node label.
-    expect(center?.textContent).toContain('b');
+    // node b is a tool_call with tool_name:'Bash' → nodeLabel primary = 'Bash'
+    // The hash id must NOT be the main text; 'Bash' must appear.
+    expect(center?.textContent).toContain('Bash');
+  });
+
+  it('renders nodeLabel primary+secondary in node body (not raw hash id as headline)', () => {
+    const { container } = render(
+      <FocusedInsightGraph nodes={nodes} edges={edges} selectedNodeId="b" onSelectNode={() => {}} />,
+    );
+    const center = container.querySelector('[data-center="true"]');
+    // primary label 'Bash' present
+    expect(center?.textContent).toContain('Bash');
+    // secondary arg 'ls -la' present (truncated, but full value fits here)
+    expect(center?.textContent).toContain('ls -la');
+    // The 6-char hash tail of 'b' (which is just 'b' itself) must not be the
+    // prominent text — we verify by checking 'Bash' is present instead.
+    // (We don't forbid the id appearing in a de-emphasised tag, but it is no
+    //  longer the *only* label.)
   });
   // NOTE: edge styling/labels (inferred → dashed + rule-id label) are not
   // asserted here — @xyflow/react does not render edges in jsdom (no node

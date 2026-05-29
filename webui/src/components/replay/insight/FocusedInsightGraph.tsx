@@ -10,6 +10,7 @@ import '@xyflow/react/dist/style.css';
 import type { GraphNodeDto, GraphEdgeDto } from '../../../api/types';
 import { neighborhood } from './neighborhood';
 import { causalEdgeStyle } from '../causalEdgeStyle';
+import { nodeLabel } from '../stream/nodeLabel';
 import styles from './FocusedInsightGraph.module.css';
 
 const NODE_WIDTH = 150;
@@ -48,16 +49,22 @@ function buildLayout(
       id: node.node_id,
       position: { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 },
       data: {
-        label: (
-          <div
-            className={`${styles.nodeInner} ${isCenter ? styles.center : ''}`}
-            data-node-kind={node.node_kind}
-            data-center={isCenter ? 'true' : 'false'}
-          >
-            <span className={styles.kind}>{node.node_kind}</span>
-            <span className={styles.nodeId}>{node.node_id.slice(-6)}</span>
-          </div>
-        ),
+        label: (() => {
+          const lbl = nodeLabel({ node_kind: node.node_kind, payload: node.payload });
+          return (
+            <div
+              className={`${styles.nodeInner} ${isCenter ? styles.center : ''}`}
+              data-node-kind={node.node_kind}
+              data-center={isCenter ? 'true' : 'false'}
+            >
+              <span className={styles.primary}>{lbl.primary}</span>
+              {lbl.secondary && (
+                <span className={styles.secondary}>{lbl.secondary}</span>
+              )}
+              <span className={styles.nodeId}>{node.node_kind}</span>
+            </div>
+          );
+        })(),
       },
       style: {
         width: NODE_WIDTH,

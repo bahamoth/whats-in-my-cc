@@ -13,6 +13,7 @@ import { makeTimeScale } from './timeScale';
 import { fit, zoomAt, pan, clamp, type Viewport } from './viewport';
 import { nodesByLane } from './nodeLane';
 import { Minimap } from './Minimap';
+import { nodeLabel } from '../stream/nodeLabel';
 import styles from './Timeline.module.css';
 
 export interface TimelineProps {
@@ -72,6 +73,8 @@ interface TooltipState {
   nodeId: string;
   nodeKind: string;
   startedAt: string;
+  labelPrimary: string;
+  labelSecondary: string;
 }
 
 export function Timeline({
@@ -113,7 +116,7 @@ export function Timeline({
     setViewport(fit(extent));
   }
 
-  const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, nodeId: '', nodeKind: '', startedAt: '' });
+  const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, nodeId: '', nodeKind: '', startedAt: '', labelPrimary: '', labelSecondary: '' });
 
   // SVG drawable area
   const svgW = width;
@@ -220,6 +223,7 @@ export function Timeline({
   // Node hover
   const onNodeEnter = useCallback((e: React.MouseEvent, n: GraphNodeDto) => {
     const el = e.currentTarget as SVGElement;
+    const lbl = nodeLabel({ node_kind: n.node_kind, payload: n.payload });
     setTooltip({
       visible: true,
       x: parseFloat(el.getAttribute('cx') ?? el.getAttribute('x') ?? '0') + LANE_LABEL_W,
@@ -227,6 +231,8 @@ export function Timeline({
       nodeId: n.node_id,
       nodeKind: n.node_kind,
       startedAt: n.started_at,
+      labelPrimary: lbl.primary,
+      labelSecondary: lbl.secondary,
     });
   }, []);
 
@@ -565,7 +571,18 @@ export function Timeline({
               top: Math.max(0, tooltip.y - 32),
             }}
           >
-            <strong>{tooltip.nodeKind}</strong> — {tooltip.nodeId}
+            <strong>{tooltip.labelPrimary}</strong>
+            {tooltip.labelSecondary && (
+              <span style={{ marginLeft: 4, color: 'var(--witmcc-fg-muted, #aab0bd)' }}>
+                {tooltip.labelSecondary.length > 40
+                  ? tooltip.labelSecondary.slice(0, 40) + '…'
+                  : tooltip.labelSecondary}
+              </span>
+            )}
+            <br />
+            <span style={{ color: 'var(--witmcc-fg-subtle, #6a7180)', fontSize: 9 }}>
+              {tooltip.nodeId}
+            </span>
             <br />
             <span style={{ color: 'var(--witmcc-fg-muted, #aab0bd)', fontSize: 10 }}>
               {new Date(tooltip.startedAt).toISOString()}
