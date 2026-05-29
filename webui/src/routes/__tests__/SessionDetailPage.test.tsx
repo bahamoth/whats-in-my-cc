@@ -177,8 +177,8 @@ describe('SessionDetailPage', () => {
     fireEvent.click(marker);
     await waitFor(() => expect(screen.getByRole('tablist')).toBeInTheDocument());
     expect(screen.getByRole('tab', { name: /insight/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /detail/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /raw/i })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /^detail$/i })).toBeNull();
   });
 
   // The headline cross-sync requirement (spec §2/§3/§5.7): selection is

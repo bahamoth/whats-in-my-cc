@@ -2,11 +2,10 @@
 import { useState } from 'react';
 import type { FindingDto, GraphNodeDto, GraphEdgeDto } from '../../../api/types';
 import { InsightTab } from './InsightTab';
-import { DetailTab } from './DetailTab';
 import { RawTab } from './RawTab';
 import styles from './DetailPanel.module.css';
 
-type TabId = 'insight' | 'detail' | 'raw';
+type TabId = 'insight' | 'raw';
 
 interface DetailPanelProps {
   node: GraphNodeDto | null;
@@ -19,10 +18,8 @@ interface DetailPanelProps {
 }
 
 export function DetailPanel({ node, record, findings, episodePhase, nodes, edges, onSelectNode }: DetailPanelProps) {
-  // null = "follow the default rule"; a value = an explicit user choice that sticks.
   const [chosen, setChosen] = useState<TabId | null>(null);
-  const fallback: TabId = findings.length > 0 ? 'insight' : 'detail';
-  const active = chosen ?? fallback;
+  const active = chosen ?? 'insight';
 
   if (!node) {
     return <aside className={styles.panel}><p className={styles.empty}>Select a node to inspect it.</p></aside>;
@@ -44,7 +41,6 @@ export function DetailPanel({ node, record, findings, episodePhase, nodes, edges
     <aside className={styles.panel}>
       <div className={styles.tabs} role="tablist">
         {tab('insight', 'Insight')}
-        {tab('detail', 'Detail')}
         {tab('raw', 'Raw')}
       </div>
       <div className={styles.body} role="tabpanel">
@@ -53,11 +49,13 @@ export function DetailPanel({ node, record, findings, episodePhase, nodes, edges
             findings={findings}
             nodes={nodes}
             edges={edges}
-            selectedNodeId={node?.node_id ?? null}
+            selectedNodeId={node.node_id}
             onSelectNode={onSelectNode}
+            node={node}
+            record={record}
+            episodePhase={episodePhase}
           />
         )}
-        {active === 'detail' && <DetailTab node={node} record={record} episodePhase={episodePhase} />}
         {active === 'raw' && <RawTab nodeId={node.node_id} record={record} />}
       </div>
     </aside>
