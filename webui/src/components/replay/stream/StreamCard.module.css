@@ -1,10 +1,10 @@
 /* webui/src/components/replay/stream/StreamCard.module.css */
-.card { border-left: 3px solid var(--witmcc-border-strong, #2a3040); background: var(--witmcc-surface, #161a22); padding: 6px 10px; margin: 6px 0; border-radius: 4px; cursor: pointer; }
+.card { border-left: 3px solid var(--witmcc-border-strong, #2a3040); background: var(--witmcc-surface-2, #161a23); padding: 6px 10px; margin: 6px 0; border-radius: 4px; cursor: pointer; }
 .card[data-selected='true'], .selected { outline: 1px solid var(--witmcc-accent, #4f8cff); }
-.user { border-left-color: #4f8cff; }
-.assistant { border-left-color: #4ec98a; }
-.thinking { border-left-color: #b483f0; }
-.tool { border-left-color: #e2b148; }
+.user { border-left-color: var(--witmcc-lane-intent, #7da7ff); }
+.assistant { border-left-color: var(--witmcc-lane-context, #b07dff); }
+.thinking { border-left-color: var(--witmcc-accent, #4f8cff); }
+.tool { border-left-color: var(--witmcc-lane-action, #41c285); }
 .head { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--witmcc-fg-muted, #aab0bd); }
 .kind { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
 .icon { flex: none; }
@@ -15,5 +15,5 @@
 .toolBody { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 .toolName { font-weight: 600; color: var(--witmcc-fg, #e6e8ee); }
 .toolArg { font-family: var(--witmcc-mono, ui-monospace, monospace); font-size: 11px; color: var(--witmcc-fg-muted, #aab0bd); overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.badgeOk { font-size: 10px; padding: 1px 5px; border-radius: 2px; background: #1f5135; color: #9fe7bf; }
-.badgeError { font-size: 10px; padding: 1px 5px; border-radius: 2px; background: #5a1f23; color: #ffb3b8; }
+.badgeOk { font-size: 10px; padding: 1px 5px; border-radius: 2px; border: 1px solid var(--witmcc-success, #41c285); color: var(--witmcc-success, #41c285); }
+.badgeError { font-size: 10px; padding: 1px 5px; border-radius: 2px; border: 1px solid var(--witmcc-danger, #ef4747); color: var(--witmcc-danger, #ef4747); }

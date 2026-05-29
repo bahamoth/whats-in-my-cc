@@ -129,23 +129,35 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     return m;
   }, [effectiveGraph]);
 
-  // event ids that have a finding (finding.evidence_refs -> node -> source events)
+  // event ids that have a finding. Evidence refs (slice-14/15+) live in two
+  // namespaces; resolve each through its own path:
+  //   - candidateNodeIds: refs that may be node ids (bare-string ULID refs and
+  //     { node_id } refs) → mapped via the graph to their source event ids;
+  //   - directEventIds: ids that are already event ids (bare-string refs and
+  //     { event_id } refs) → used as-is.
+  // A bare string ref is ambiguous, so it is treated as both.
   const findingEventIds = useMemo(() => {
-    const nodeIdsWithFinding = new Set<string>();
+    const candidateNodeIds = new Set<string>();
+    const directEventIds = new Set<string>();
     for (const f of findingsData) {
       for (const ref of f.evidence_refs) {
-        const id = typeof ref === 'string' ? ref : ref.node_id ?? ref.event_id;
-        if (typeof id === 'string') nodeIdsWithFinding.add(id);
+        if (typeof ref === 'string') {
+          candidateNodeIds.add(ref);
+          directEventIds.add(ref);
+        } else {
+          if (typeof ref.node_id === 'string') candidateNodeIds.add(ref.node_id);
+          if (typeof ref.event_id === 'string') {
+            directEventIds.add(ref.event_id);
+            // object refs with only an event_id were historically matched
+            // against node ids too; preserve that.
+            if (typeof ref.node_id !== 'string') candidateNodeIds.add(ref.event_id);
+          }
+        }
       }
     }
-    const eids = new Set<string>();
+    const eids = new Set<string>(directEventIds);
     for (const n of effectiveGraph.nodes) {
-      if (nodeIdsWithFinding.has(n.node_id)) for (const eid of n.source_event_ids) eids.add(eid);
-    }
-    // some refs are event ids directly
-    for (const f of findingsData) for (const ref of f.evidence_refs) {
-      const id = typeof ref === 'string' ? ref : ref.event_id;
-      if (typeof id === 'string') eids.add(id);
+      if (candidateNodeIds.has(n.node_id)) for (const eid of n.source_event_ids) eids.add(eid);
     }
     return eids;
   }, [findingsData, effectiveGraph]);

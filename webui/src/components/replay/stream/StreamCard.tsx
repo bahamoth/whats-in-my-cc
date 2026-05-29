@@ -32,8 +32,16 @@ export function StreamCard({ card, selected, episodePhase, hasFinding, onSelect 
       data-testid="stream-card"
       data-kind={card.kind}
       data-selected={selected ? 'true' : 'false'}
+      role="button"
+      tabIndex={0}
       className={`${styles.card} ${styles[card.kind]} ${selected ? styles.selected : ''}`}
       onClick={() => onSelect(card.eventId)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect(card.eventId);
+        }
+      }}
     >
       <div className={styles.head}>
         <span className={styles.kind}>
