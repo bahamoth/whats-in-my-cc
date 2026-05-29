@@ -22,6 +22,24 @@ describe('RawTab', () => {
     expect(screen.getByText('inner')).toBeInTheDocument();
   });
 
+  it('keeps a DEEP nested path expanded across repeated refetches (SSE churn)', () => {
+    // The #2 complaint was "collapses on every screen refresh". This drives a
+    // two-level expansion ($.message → $.message.usage) and then simulates an
+    // SSE tick storm: three successive rerenders, each handing a brand-new
+    // object of the same shape. The deep path must stay open the whole time.
+    const fresh = () => ({ message: { usage: { input_tokens: 7 } } });
+    const { rerender } = render(<RawTab nodeId="n1" record={fresh()} />);
+    fireEvent.click(screen.getByText('message')); // expand $.message
+    fireEvent.click(screen.getByText('usage')); // expand $.message.usage
+    expect(screen.getByText('input_tokens')).toBeInTheDocument();
+
+    for (let tick = 0; tick < 3; tick++) {
+      rerender(<RawTab nodeId="n1" record={fresh()} />);
+      expect(screen.getByText('usage')).toBeInTheDocument();
+      expect(screen.getByText('input_tokens')).toBeInTheDocument();
+    }
+  });
+
   it('shows an empty hint when there is no record', () => {
     render(<RawTab nodeId={null} record={null} />);
     expect(screen.getByText(/no raw record|select/i)).toBeInTheDocument();

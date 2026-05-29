@@ -3,7 +3,7 @@
  * R2 RED — ConversationStream renders cards oldest→newest (newest at the
  * DOM bottom), forwards clicks, and reflects selection. Spec §3.
  */
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConversationStream } from '../ConversationStream';
 import type { StreamCard } from '../streamModel';
@@ -101,12 +101,53 @@ describe('ConversationStream', () => {
 
   it('mounts a bounded number of cards for a large input (does not render all 2000)', () => {
     const many = Array.from({ length: 2000 }, (_, i) => c(`n${i}`, `msg ${i}`));
-    render(
+    const { container } = render(
       <ConversationStream cards={many} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
     );
     // In jsdom the virtualizer yields 0 items and we fall back to rendering all;
     // guard the §7 bound by asserting the fallback is itself capped.
     const mounted = screen.getAllByTestId('stream-card').length;
     expect(mounted).toBeLessThanOrEqual(200);
+    // ...and the truncation is surfaced for diagnostics.
+    expect(
+      container.querySelector('[data-testid="conversation-stream"]')?.getAttribute('data-fallback-capped'),
+    ).toBe('true');
+  });
+
+  // §3 — live appends pin to the tip ONLY when the reader is already at the
+  // bottom. jsdom has no layout, so we install scrollHeight/clientHeight on the
+  // scroll container instance and assert the layout-effect's scrollTop write.
+  it('autoscrolls to the bottom when a card is appended and the user is at the tip', () => {
+    const cards = [c('a', 'first'), c('b', 'second')];
+    const { container, rerender } = render(
+      <ConversationStream cards={cards} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+    );
+    const scroller = container.querySelector('[data-testid="conversation-stream"]') as HTMLElement;
+    Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true });
+    Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true });
+    // atBottomRef starts true; appending one card fires the layout effect.
+    rerender(
+      <ConversationStream cards={[...cards, c('z', 'third')]} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+    );
+    expect(scroller.scrollTop).toBe(1000);
+  });
+
+  it('does NOT autoscroll on append when the user has scrolled up', () => {
+    const cards = [c('a', 'first'), c('b', 'second')];
+    const { container, rerender } = render(
+      <ConversationStream cards={cards} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+    );
+    const scroller = container.querySelector('[data-testid="conversation-stream"]') as HTMLElement;
+    Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true });
+    Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true });
+    // Reader scrolls up: distance from bottom = 1000-100-300 = 600 (>= 40) →
+    // atBottomRef becomes false on the scroll event.
+    scroller.scrollTop = 100;
+    fireEvent.scroll(scroller);
+    rerender(
+      <ConversationStream cards={[...cards, c('z', 'third')]} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+    );
+    // scrollTop is left where the reader put it — no yank to the bottom.
+    expect(scroller.scrollTop).toBe(100);
   });
 });

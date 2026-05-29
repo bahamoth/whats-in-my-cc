@@ -34,4 +34,20 @@ describe('FocusedInsightGraph', () => {
     fireEvent.click(screen.getByTestId('hop-toggle'));
     expect(screen.getByTestId('focused-graph').getAttribute('data-hops')).toBe('2');
   });
+
+  it('marks exactly the selected node as the neighborhood center', () => {
+    const { container } = render(
+      <FocusedInsightGraph nodes={nodes} edges={edges} selectedNodeId="b" onSelectNode={() => {}} />,
+    );
+    // The selected node b is the single center; a and c are present but not.
+    expect(container.querySelectorAll('[data-center="true"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-center="false"]')).toHaveLength(2);
+    const center = container.querySelector('[data-center="true"]');
+    // b's id is rendered (last 6 chars) inside the centered node label.
+    expect(center?.textContent).toContain('b');
+  });
+  // NOTE: edge styling/labels (inferred → dashed + rule-id label) are not
+  // asserted here — @xyflow/react does not render edges in jsdom (no node
+  // measurements). The style mapping is locked at the unit level in
+  // causalEdgeStyle.test.ts, and buildLayout wires label = inference_rule_id.
 });

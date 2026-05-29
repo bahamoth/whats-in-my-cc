@@ -75,12 +75,19 @@ describe('Timeline', () => {
     expect(el!.tagName.toLowerCase()).toBe('rect');
   });
 
-  it('does not render off-window nodes', () => {
-    // Give a far-future viewport by passing only off-window nodes
-    const farNode = node('far', 'tool_call', '2030-01-01T00:00:00Z', '2030-01-01T00:01:00Z');
+  it('does not render off-window nodes (filters by viewport after zoom-in)', () => {
+    // Three instant nodes at the extent's start / center / end. On mount the
+    // viewport fits the full extent [0, 120s], so all three are visible.
+    // Zoom-in halves the viewport around its center → [30s, 90s], which
+    // deterministically excludes the start (0s) and end (120s) nodes while
+    // keeping the center (60s) node. This locks the visibleByLane filter
+    // (Timeline.tsx) rather than asserting the opposite of the test's name.
+    const left = node('left', 'tool_call', '2026-05-28T00:00:00Z', null);
+    const mid = node('mid', 'tool_call', '2026-05-28T00:01:00Z', null);
+    const right = node('right', 'tool_call', '2026-05-28T00:02:00Z', null);
     const { container } = render(
       <Timeline
-        nodes={[farNode]}
+        nodes={[left, mid, right]}
         edges={[]}
         episodes={[]}
         selectedNodeId={null}
@@ -89,8 +96,16 @@ describe('Timeline', () => {
         height={300}
       />
     );
-    // farNode is the only node, so the viewport fits it — it should be visible
-    expect(container.querySelector('[data-node-id="far"]')).not.toBeNull();
+    // All visible at the fitted extent.
+    expect(container.querySelector('[data-node-id="left"]')).not.toBeNull();
+    expect(container.querySelector('[data-node-id="mid"]')).not.toBeNull();
+    expect(container.querySelector('[data-node-id="right"]')).not.toBeNull();
+
+    // Zoom in once → window narrows to the middle half, dropping the edges.
+    fireEvent.click(screen.getByTestId('zoom-in'));
+    expect(container.querySelector('[data-node-id="mid"]')).not.toBeNull();
+    expect(container.querySelector('[data-node-id="left"]')).toBeNull();
+    expect(container.querySelector('[data-node-id="right"]')).toBeNull();
   });
 
   // --- Time axis ---
@@ -244,12 +259,14 @@ describe('Timeline', () => {
     expect(screen.getByTestId('fit')).toBeInTheDocument();
   });
 
-  it('zoom-in narrows the viewport (render stays intact after zoom)', () => {
-    renderTL();
-    // After zoom-in, at least one node should remain in the viewport (the one near center)
+  it('zoom-in narrows the viewport (drops a node at the extent edge)', () => {
+    const { container } = renderTL();
+    // Default nodes: 'a' sits at the extent's start (t=0). On mount it is
+    // visible; after a single zoom-in (window halves around center) the edge
+    // node 'a' falls outside the viewport and is no longer rendered.
+    expect(container.querySelector('[data-node-id="a"]')).not.toBeNull();
     fireEvent.click(screen.getByTestId('zoom-in'));
-    // At minimum the SVG is still rendered without crashing
-    expect(screen.getByTestId('time-axis')).toBeInTheDocument();
+    expect(container.querySelector('[data-node-id="a"]')).toBeNull();
   });
 
   it('zoom-out broadens the viewport', () => {

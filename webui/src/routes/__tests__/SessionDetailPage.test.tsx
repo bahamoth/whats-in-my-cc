@@ -97,6 +97,31 @@ const eventsPayload = {
   next_cursor: null,
 };
 
+// Real conversation rows whose event_ids match the graph nodes'
+// source_event_ids (n1→ev1, n2→ev2). Used to exercise timeline↔stream
+// cross-sync end-to-end (empty `eventsPayload` mounts zero StreamCards and
+// therefore cannot prove the wiring).
+const eventsWithRows = {
+  events: [
+    {
+      event_id: 'ev1', raw_event_id: 'r1', session_id: 's1', event_uuid: null,
+      parent_uuid: null, observed_at: '2026-05-19T10:00:00Z', actor: 'user',
+      kind: 'user_message', subkind: null, tool_use_id: null, tool_name: null,
+      turn_id: null, is_sidechain: false, is_meta: false,
+      payload: { content: 'hello from user' },
+    },
+    {
+      event_id: 'ev2', raw_event_id: 'r2', session_id: 's1', event_uuid: null,
+      parent_uuid: null, observed_at: '2026-05-19T10:00:05Z', actor: 'assistant',
+      kind: 'assistant_message', subkind: null, tool_use_id: null, tool_name: null,
+      turn_id: null, is_sidechain: false, is_meta: false,
+      payload: { text: 'hi from assistant' },
+    },
+  ],
+  prev_cursor: null,
+  next_cursor: null,
+};
+
 const raw = {
   schema_version: '1.0', event_id: 'ev1', session_id: 's1',
   source: { kind: 'claude_transcript', file_path: '/tmp/a.jsonl', line_no: 1, ingested_at: 'n' },
@@ -154,6 +179,64 @@ describe('SessionDetailPage', () => {
     expect(screen.getByRole('tab', { name: /insight/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /detail/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /raw/i })).toBeInTheDocument();
+  });
+
+  // The headline cross-sync requirement (spec §2/§3/§5.7): selection is
+  // bidirectionally synced across the timeline and the conversation stream,
+  // and a node click brings the matching stream card into view. Every other
+  // integration test uses an empty events payload, so this is the ONLY place
+  // the timeline↔stream wiring is proven end-to-end with real cards mounted.
+  it('cross-syncs selection between timeline nodes and stream cards', async () => {
+    const scrollSpy = vi
+      .spyOn(Element.prototype, 'scrollIntoView')
+      .mockImplementation(() => {});
+    setupFetch({
+      detail: env(sessionDetail),
+      graph: env(graph),
+      events: env(eventsWithRows),
+      raw: env(raw),
+    });
+    const { container } = rendered('s1');
+
+    // Real events mount StreamCards keyed by event id.
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-event-id="ev1"] [data-testid="stream-card"]'),
+      ).not.toBeNull();
+    });
+
+    // Timeline node → stream: clicking node n1 selects the ev1 card AND
+    // scrolls it into view.
+    const node1 = container.querySelector('[data-node-id="n1"]');
+    expect(node1).not.toBeNull();
+    fireEvent.click(node1!);
+    await waitFor(() => {
+      const card1 = container.querySelector(
+        '[data-event-id="ev1"] [data-testid="stream-card"]',
+      );
+      expect(card1?.getAttribute('data-selected')).toBe('true');
+    });
+    expect(scrollSpy).toHaveBeenCalled();
+
+    // Stream → timeline: clicking the ev2 card moves selection to node n2.
+    const card2 = container.querySelector(
+      '[data-event-id="ev2"] [data-testid="stream-card"]',
+    );
+    expect(card2).not.toBeNull();
+    fireEvent.click(card2!);
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-node-id="n2"][data-selected="true"]'),
+      ).not.toBeNull();
+    });
+    // ...and selection has moved off ev1.
+    expect(
+      container
+        .querySelector('[data-event-id="ev1"] [data-testid="stream-card"]')
+        ?.getAttribute('data-selected'),
+    ).toBe('false');
+
+    scrollSpy.mockRestore();
   });
 
   it('shows 404 when session detail missing', async () => {

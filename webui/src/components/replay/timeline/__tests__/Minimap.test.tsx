@@ -26,6 +26,18 @@ describe('Minimap', () => {
     expect(onChange).toHaveBeenCalled();
   });
 
+  it('recenters the window on the clicked time (exact inverse mapping)', () => {
+    const onChange = vi.fn();
+    // extent [0,1000], width 400 → 1px = 2.5 time units. viewport width 200
+    // (half = 100). Click at clientX=200 → focusT = (200/400)*1000 = 500 →
+    // window centered there = [400, 600], within extent so unclamped.
+    render(<Minimap extent={[0, 1000]} viewport={{ t0: 0, t1: 200 }} onChange={onChange} width={400} />);
+    fireEvent.mouseDown(screen.getByTestId('minimap-track'), { clientX: 200 });
+    const v = onChange.mock.calls[0][0];
+    expect(v.t0).toBeCloseTo(400, 0);
+    expect(v.t1).toBeCloseTo(600, 0);
+  });
+
   it('onChange receives a Viewport with t0 < t1', () => {
     const onChange = vi.fn();
     render(<Minimap extent={[0, 1000]} viewport={{ t0: 0, t1: 200 }} onChange={onChange} width={400} />);
@@ -67,8 +79,11 @@ describe('Minimap', () => {
     fireEvent.mouseMove(track, { clientX: 150 });
     fireEvent.mouseMove(track, { clientX: 200 });
     fireEvent.mouseUp(track);
-    // at least the mousedown triggered once
-    expect(onChange.mock.calls.length).toBeGreaterThanOrEqual(1);
+    // mousedown + two drag moves each recenter → 3 calls. (A move after
+    // mouseup must NOT fire — see next assertion.)
+    expect(onChange.mock.calls.length).toBe(3);
+    fireEvent.mouseMove(track, { clientX: 250 });
+    expect(onChange.mock.calls.length).toBe(3);
   });
 
   it('uses the width prop for geometry (not getBoundingClientRect)', () => {
