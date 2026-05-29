@@ -86,9 +86,14 @@ describe('getFindingEvidence', () => {
 });
 
 describe('getVerificationRuns', () => {
-  it('hits GET /v1/sessions/:id/verification-runs and unwraps `data`', async () => {
+  it('hits GET /v1/sessions/:id/verification-runs and unwraps `data` (single-wrapped array)', async () => {
     const expected = [{ verification_run_id: 'vr1', status: 'passed', covered_diff_hunk_ids: ['dh1'] }];
-    fetchSpy.mockImplementation(mockJson(ENVELOPE({ data: expected })));
+    // The backend returns { meta, data: [...] } — `data` IS the array, NOT a
+    // further { data: [...] } wrapper. Verified against the running server:
+    // `GET /v1/sessions/:id/verification-runs` → top keys [meta, data], data is a list.
+    // The previous test mocked the double-wrapped shape, hiding a real bug where
+    // the client over-unwrapped and returned undefined (broke KPI coverage).
+    fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
     const out = await getVerificationRuns('SES-4');
     expect(fetchSpy).toHaveBeenCalledWith(
       '/v1/sessions/SES-4/verification-runs',

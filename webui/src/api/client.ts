@@ -63,7 +63,7 @@ export function getSessionEvents(
 // Backend response shapes are NOT consistent today:
 //   /episodes   -> { data: [...] }                  (no meta envelope)
 //   /findings   -> { data: [...] }                  (no meta envelope)
-//   /verification-runs -> { meta, data: { data: [...] } }
+//   /verification-runs -> { meta, data: [...] }      (data IS the array)
 //   /diff-hunks        -> { meta, data: { hunks: [...] } }
 //   /findings/:id/evidence -> { meta, data: { ... } }   (envelope envelope)
 //
@@ -81,9 +81,8 @@ export const getFindingEvidence = (findingId: string): Promise<FindingEvidenceRe
   jsonGet<FindingEvidenceResponse>(`/v1/findings/${encodeURIComponent(findingId)}/evidence`);
 
 export const getVerificationRuns = (id: string): Promise<VerificationRunDto[]> =>
-  jsonGet<{ data: VerificationRunDto[] }>(
-    `/v1/sessions/${encodeURIComponent(id)}/verification-runs`,
-  ).then((r) => r.data);
+  // jsonGet already returns the envelope's `data`, which here IS the array.
+  jsonGet<VerificationRunDto[]>(`/v1/sessions/${encodeURIComponent(id)}/verification-runs`);
 
 export const getDiffHunks = (id: string): Promise<DiffHunkDto[]> =>
   jsonGet<{ hunks: DiffHunkDto[] }>(`/v1/sessions/${encodeURIComponent(id)}/diff-hunks`).then(
