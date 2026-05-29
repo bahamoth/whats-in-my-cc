@@ -1,0 +1,12 @@
+/* webui/src/components/replay/detail/InsightTab.module.css */
+.empty { color: var(--witmcc-fg-subtle, #6a7180); padding: 12px; }
+.list { list-style: none; margin: 0; padding: 0; }
+.item { border: 1px solid var(--witmcc-border, #1d212c); border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; }
+.head { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.sev { padding: 1px 6px; border-radius: 3px; text-transform: uppercase; font-weight: 600; }
+.sevHigh { background: var(--witmcc-danger, #ef4747); color: #fff; }
+.sevMed { background: var(--witmcc-warning, #f0b429); color: #14181f; }
+.sevLow { background: var(--witmcc-surface-3, #1b202a); color: var(--witmcc-fg-muted, #aab0bd); }
+.category { color: var(--witmcc-fg-muted, #aab0bd); font-family: var(--witmcc-mono, ui-monospace, monospace); }
+.confidence { margin-left: auto; color: var(--witmcc-fg-subtle, #6a7180); }
+.summary { margin: 6px 0 0; color: var(--witmcc-fg, #e6e8ee); }
