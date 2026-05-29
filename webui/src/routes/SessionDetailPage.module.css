@@ -1,4 +1,28 @@
 .page { padding: 24px; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.viewToggleRow { display: flex; justify-content: flex-end; margin-top: 10px; margin-bottom: 6px; }
-.split { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-top: 16px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    "kpi      kpi"
+    "stream   detail"
+    "timeline timeline";
+  gap: 16px;
+  margin-top: 8px;
+}
+.kpi { grid-area: kpi; }
+.stream { grid-area: stream; min-height: 320px; overflow: auto; }
+.detail { grid-area: detail; min-height: 320px; overflow: auto; }
+.timeline { grid-area: timeline; }
+.placeholder { color: var(--witmcc-fg-subtle, #6a7180); }
+
+@media (max-width: 860px) {
+  .grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "kpi"
+      "stream"
+      "detail"
+      "timeline";
+  }
+}

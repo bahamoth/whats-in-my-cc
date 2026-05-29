@@ -1,16 +1,11 @@
-import { Suspense, lazy, useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import type { GraphPayload, ObservedEventDto } from '../api/types';
 import { MetaStrip } from '../components/MetaStrip';
 import { SourcePanel } from '../components/SourcePanel';
 import { Waterfall } from '../components/replay/Waterfall';
-// React Flow + dagre add ~250 kB minified. Lazy-load so the default
-// Waterfall view stays cheap and only Graph users pay the cost.
-const CausalGraph = lazy(() =>
-  import('../components/replay/CausalGraph').then((m) => ({ default: m.CausalGraph })),
-);
-import { ViewToggle, useReplayView } from '../components/replay/ViewToggle';
+import { TopBar } from '../components/layout/TopBar';
 import { KpiStrip } from '../components/replay/KpiStrip';
 import { EpisodeStrip } from '../components/replay/EpisodeStrip';
 import { WhyPanel } from '../components/replay/WhyPanel';
@@ -56,7 +51,6 @@ const EMPTY_GRAPH: GraphPayload = { nodes: [], edges: [] };
 
 function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const sel = useReplaySelection();
-  const view = useReplayView();
 
   const detail = useSessionDetailQuery(sessionId);
   const graph = useSessionGraphQuery(sessionId);
@@ -136,10 +130,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <Link to="/sessions">← Sessions</Link>
-        <code>{sessionId}</code>
-      </header>
+      <TopBar sessionId={sessionId} />
 
       {isLoading && <p>Loading…</p>}
 
@@ -150,45 +141,42 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
       )}
 
       {!isLoading && !is404 && detail.data && (
-        <>
-          <KpiStrip
-            outcome={outcome}
-            verificationCoverage={verificationCoverage}
-            episodeCount={episodes.data?.length ?? 0}
-            riskCount={riskCount}
-          />
-          <EpisodeStrip episodes={episodes.data ?? []} />
-          <MetaStrip session={detail.data} events={window_.events} />
-          <div className={styles.viewToggleRow}>
-            <ViewToggle />
+        <div className={styles.grid} data-witmcc-detail-grid>
+          <div className={styles.kpi} data-slot="kpi">
+            <KpiStrip
+              outcome={outcome}
+              verificationCoverage={verificationCoverage}
+              episodeCount={episodes.data?.length ?? 0}
+              riskCount={riskCount}
+            />
+            <EpisodeStrip episodes={episodes.data ?? []} />
+            <MetaStrip session={detail.data} events={window_.events} />
           </div>
-          <div className={styles.split}>
-            <div>
-              <div
-                ref={sentinelRef}
-                aria-hidden
-                style={{ height: 1 }}
-                data-testid="scroll-sentinel"
-              />
-              {view === 'graph' ? (
-                <Suspense fallback={<p>Loading graph…</p>}>
-                  <CausalGraph
-                    graph={effectiveGraph}
-                    selectedNodeId={sel.selectedNodeId}
-                    onSelect={(id) => sel.setSelectedNodeId(id)}
-                  />
-                </Suspense>
-              ) : (
-                <Waterfall
-                  graph={effectiveGraph}
-                  selectedNodeId={sel.selectedNodeId}
-                  onSelect={(id) => sel.setSelectedNodeId(id)}
-                />
-              )}
-            </div>
+
+          <div className={styles.stream} data-slot="stream">
+            <div
+              ref={sentinelRef}
+              aria-hidden
+              style={{ height: 1 }}
+              data-testid="scroll-sentinel"
+            />
+            {/* R2 replaces this slot with ConversationStream. */}
+            <p className={styles.placeholder}>Conversation stream (R2)</p>
+          </div>
+
+          <div className={styles.detail} data-slot="detail">
+            {/* R3 replaces this slot with the tabbed DetailPanel. */}
             <SourcePanel eventId={selectedEventId} node={selectedNode} />
           </div>
-        </>
+
+          <div className={styles.timeline} data-slot="timeline">
+            <Waterfall
+              graph={effectiveGraph}
+              selectedNodeId={sel.selectedNodeId}
+              onSelect={(id) => sel.setSelectedNodeId(id)}
+            />
+          </div>
+        </div>
       )}
 
       {!isLoading && !is404 && !detail.data && detail.isError && (
