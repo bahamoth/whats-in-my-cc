@@ -258,7 +258,9 @@ describe('SessionDetailPage', () => {
     rendered('s1');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
     expect(screen.queryByText(/session not found/i)).not.toBeInTheDocument();
-    expect(screen.getByText('Intent')).toBeInTheDocument();
+    // Timeline still renders (its SVG canvas) even with an empty graph; lane
+    // rows are now hidden when empty (#4), so assert the canvas, not a lane.
+    expect(screen.getByTestId('timeline-canvas')).toBeInTheDocument();
   });
 
   // Slice-9 — envelope-driven append + debounced graph refetch. Verifies

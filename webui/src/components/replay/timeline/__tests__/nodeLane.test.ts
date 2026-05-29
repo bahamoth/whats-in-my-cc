@@ -1,7 +1,7 @@
 // webui/src/components/replay/timeline/__tests__/nodeLane.test.ts
 /** R4 RED — node→lane mapping reuses laneMapping. Plan R4 Task 3. */
 import { describe, expect, it } from 'vitest';
-import { laneOfNodeKind, nodesByLane } from '../nodeLane';
+import { laneOfNodeKind, nodesByLane, nonEmptyLanes } from '../nodeLane';
 import { LANES } from '../../../../api/laneMapping';
 
 describe('nodeLane', () => {
@@ -22,5 +22,17 @@ describe('nodeLane', () => {
     expect(byLane.get('Intent')?.map((n: any) => n.node_id)).toEqual(['a']);
     expect(byLane.get('Action')?.map((n: any) => n.node_id)).toEqual(['b']);
     expect(LANES).toContain('Intent');
+  });
+
+  it('nonEmptyLanes returns only lanes that have ≥1 node, preserving LANES order', () => {
+    const nodes = [
+      { node_id: 'a', node_kind: 'user_message' }, // Intent
+      { node_id: 'b', node_kind: 'tool_call' },     // Action
+    ] as any;
+    expect(nonEmptyLanes(nodes)).toEqual(['Intent', 'Action']);
+  });
+
+  it('nonEmptyLanes is empty when there are no nodes', () => {
+    expect(nonEmptyLanes([])).toEqual([]);
   });
 });
