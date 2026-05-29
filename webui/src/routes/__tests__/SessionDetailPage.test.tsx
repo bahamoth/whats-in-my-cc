@@ -28,6 +28,8 @@ type Routes = {
   graph?: Response;
   events?: Response;
   raw?: Response;
+  episodes?: Response;
+  findings?: Response;
 };
 
 function setupFetch(routes: Routes) {
@@ -43,6 +45,12 @@ function setupFetch(routes: Routes) {
     }
     if (url.match(/\/v1\/events\//) && url.endsWith('/raw')) {
       if (routes.raw) return Promise.resolve(routes.raw.clone());
+    }
+    if (url.includes('/episodes')) {
+      if (routes.episodes) return Promise.resolve(routes.episodes.clone());
+    }
+    if (url.includes('/findings')) {
+      if (routes.findings) return Promise.resolve(routes.findings.clone());
     }
     if (url.match(/\/v1\/sessions\/[^/]+$/)) {
       if (routes.detail) return Promise.resolve(routes.detail.clone());
@@ -121,14 +129,14 @@ describe('SessionDetailPage', () => {
     cleanup();
   });
 
-  it('renders meta strip + timeline + empty SourcePanel hint', async () => {
+  it('renders meta strip + timeline + DetailPanel empty hint before node selection', async () => {
     setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
     rendered('s1');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
-    expect(screen.getByText(/Click a node/i)).toBeInTheDocument();
+    expect(screen.getByText(/select a node to inspect it/i)).toBeInTheDocument();
   });
 
-  it('clicking a node fetches raw and renders SourcePanel content', async () => {
+  it('clicking a node shows the DetailPanel tablist', async () => {
     setupFetch({
       detail: env(sessionDetail),
       graph: env(graph),
@@ -142,7 +150,10 @@ describe('SessionDetailPage', () => {
       return el;
     });
     fireEvent.click(marker);
-    await waitFor(() => expect(screen.getByText('/tmp/a.jsonl')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('tablist')).toBeInTheDocument());
+    expect(screen.getByRole('tab', { name: /insight/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /detail/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /raw/i })).toBeInTheDocument();
   });
 
   it('shows 404 when session detail missing', async () => {

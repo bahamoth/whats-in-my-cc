@@ -16,6 +16,7 @@ import {
   getFindingEvidence,
   getVerificationRuns,
   getDiffHunks,
+  getEventRaw,
 } from '../api/client';
 import type {
   SessionDetail,
@@ -25,6 +26,7 @@ import type {
   VerificationRunDto,
   DiffHunkDto,
   FindingEvidenceResponse,
+  RawEventResponse,
 } from '../api/types';
 
 export const sessionKeys = {
@@ -110,5 +112,14 @@ export function useDiffHunksQuery(id: string, opts?: QOpts<DiffHunkDto[]>) {
     queryFn: () => getDiffHunks(id),
     enabled: !!id,
     ...opts,
+  });
+}
+
+export function useEventRawQuery(eventId: string | null) {
+  return useQuery<RawEventResponse>({
+    queryKey: ['eventRaw', eventId],
+    queryFn: () => getEventRaw(eventId as string),
+    enabled: !!eventId,
+    staleTime: 60_000,
   });
 }

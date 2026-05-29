@@ -3,12 +3,11 @@ import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import type { GraphPayload, ObservedEventDto } from '../api/types';
 import { MetaStrip } from '../components/MetaStrip';
-import { SourcePanel } from '../components/SourcePanel';
+import { DetailPanel } from '../components/replay/detail/DetailPanel';
 import { Waterfall } from '../components/replay/Waterfall';
 import { TopBar } from '../components/layout/TopBar';
 import { KpiStrip } from '../components/replay/KpiStrip';
 import { EpisodeStrip } from '../components/replay/EpisodeStrip';
-import { WhyPanel } from '../components/replay/WhyPanel';
 import {
   ReplaySelectionProvider,
   useReplaySelection,
@@ -21,7 +20,7 @@ import {
   useFindingsQuery,
   useVerificationRunsQuery,
   useDiffHunksQuery,
-  useFindingEvidenceQuery,
+  useEventRawQuery,
 } from '../lib/queries';
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import type { LiveEnvelope } from '../hooks/useLiveStream';
@@ -110,16 +109,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     return 'clean';
   }, [findingsData]);
 
-  // --- WhyPanel inputs ---
-  const selectedFinding = useMemo(() => {
-    if (!sel.selectedFindingId) return null;
-    return findingsData.find((f) => f.finding_id === sel.selectedFindingId) ?? null;
-  }, [sel.selectedFindingId, findingsData]);
-
-  const evidenceQuery = useFindingEvidenceQuery(sel.selectedFindingId ?? '', {
-    enabled: !!sel.selectedFindingId && sel.whyPanelOpen,
-  });
-
   const streamCards = useMemo(() => buildStreamCards(window_.events), [window_.events]);
 
   // event_id -> node_id (graph nodes carry source_event_ids)
@@ -185,16 +174,39 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     sel.setSelectedNodeId(nid ?? null);
   };
 
-  // --- render branches ---
-  const detailError = detail.error as ApiError | null;
-  const is404 = detailError instanceof ApiError && detailError.status === 404;
-  const isLoading = detail.isLoading;
-
+  // --- DetailPanel inputs ---
   const selectedNode =
     sel.selectedNodeId && effectiveGraph
       ? effectiveGraph.nodes.find((n) => n.node_id === sel.selectedNodeId) ?? null
       : null;
   const selectedEventId = selectedNode?.source_event_ids[0] ?? null;
+
+  const rawQuery = useEventRawQuery(selectedEventId);
+
+  const selectedNodeFindings = useMemo(() => {
+    if (!sel.selectedNodeId) return [];
+    const nid = sel.selectedNodeId;
+    const node = effectiveGraph.nodes.find((n) => n.node_id === nid);
+    const sourceEventIds = new Set(node?.source_event_ids ?? []);
+    return findingsData.filter((f) =>
+      f.evidence_refs.some((ref) => {
+        if (typeof ref === 'string') return ref === nid || sourceEventIds.has(ref);
+        return ref.node_id === nid || (typeof ref.event_id === 'string' && sourceEventIds.has(ref.event_id));
+      }),
+    );
+  }, [sel.selectedNodeId, effectiveGraph, findingsData]);
+
+  const selectedNodePhase = useMemo(() => {
+    if (!selectedNode) return null;
+    const eps = episodes.data ?? [];
+    const t = selectedNode.started_at;
+    return eps.find((e) => e.started_at <= t && t <= e.ended_at)?.phase ?? null;
+  }, [selectedNode, episodes.data]);
+
+  // --- render branches ---
+  const detailError = detail.error as ApiError | null;
+  const is404 = detailError instanceof ApiError && detailError.status === 404;
+  const isLoading = detail.isLoading;
 
   return (
     <div className={styles.page}>
@@ -239,8 +251,12 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
           </div>
 
           <div className={styles.detail} data-slot="detail">
-            {/* R3 replaces this slot with the tabbed DetailPanel. */}
-            <SourcePanel eventId={selectedEventId} node={selectedNode} />
+            <DetailPanel
+              node={selectedNode}
+              record={rawQuery.data?.record ?? null}
+              findings={selectedNodeFindings}
+              episodePhase={selectedNodePhase}
+            />
           </div>
 
           <div className={styles.timeline} data-slot="timeline">
@@ -256,14 +272,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
       {!isLoading && !is404 && !detail.data && detail.isError && (
         <p role="alert">{detail.error?.message ?? 'failed'}</p>
       )}
-
-      <WhyPanel
-        open={sel.whyPanelOpen}
-        finding={selectedFinding}
-        evidence={evidenceQuery.data}
-        onClose={sel.closeWhyPanel}
-        onEvidenceHover={sel.setHoveredNodeId}
-      />
     </div>
   );
 }
