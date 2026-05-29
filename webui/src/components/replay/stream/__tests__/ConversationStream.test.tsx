@@ -73,4 +73,38 @@ describe('ConversationStream', () => {
     screen.getByTestId('stream-card').click();
     expect(onSelect).toHaveBeenCalledWith('a');
   });
+
+  it('scrolls the selected card into view when selectedEventId changes', () => {
+    const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+    const cards = [c('a', 'first'), c('b', 'second'), c('z', 'last')];
+    const { rerender } = render(
+      <ConversationStream cards={cards} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+    );
+    rerender(
+      <ConversationStream cards={cards} selectedEventId="b" phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+    );
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('does not scroll when selectedEventId is null', () => {
+    const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+    const cards = [c('a', 'first')];
+    render(
+      <ConversationStream cards={cards} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+    );
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('mounts a bounded number of cards for a large input (does not render all 2000)', () => {
+    const many = Array.from({ length: 2000 }, (_, i) => c(`n${i}`, `msg ${i}`));
+    render(
+      <ConversationStream cards={many} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+    );
+    // In jsdom the virtualizer yields 0 items and we fall back to rendering all;
+    // guard the §7 bound by asserting the fallback is itself capped.
+    const mounted = screen.getAllByTestId('stream-card').length;
+    expect(mounted).toBeLessThanOrEqual(300);
+  });
 });
