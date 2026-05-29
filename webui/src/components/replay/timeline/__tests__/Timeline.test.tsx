@@ -1,6 +1,6 @@
 // webui/src/components/replay/timeline/__tests__/Timeline.test.tsx
 /** R4 RED — Timeline SVG surface. Plan R4 Task 4 / spec §5. */
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Timeline } from '../Timeline';
 import type { GraphNodeDto, GraphEdgeDto, EpisodeDto } from '../../../../api/types';
@@ -100,14 +100,14 @@ describe('Timeline', () => {
   });
 
   it('time axis contains text tick labels', () => {
-    const { container } = renderTL();
+    renderTL();
     const axis = screen.getByTestId('time-axis');
     expect(axis.querySelectorAll('text').length).toBeGreaterThan(0);
   });
 
   // --- Episode band ---
   it('renders an episode band with a rect per episode phase', () => {
-    const { container } = renderTL();
+    renderTL();
     const band = screen.getByTestId('episode-band');
     expect(band.querySelector('[data-phase="action"]')).not.toBeNull();
   });
@@ -161,7 +161,7 @@ describe('Timeline', () => {
 
   it('dims non-incident edges when a node is selected', () => {
     const extraEdge = edge('e3', 'b', 'b', 'deterministic');
-    const { container } = render(
+    const { container: c } = render(
       <Timeline
         nodes={nodes}
         edges={[...edges, extraEdge]}
@@ -170,12 +170,10 @@ describe('Timeline', () => {
         onSelect={() => {}}
         width={800}
         height={300}
-        // select node 'b'; edge e1 is incident (a→b); e3 is self-loop on b → also incident
-        // but add another node/edge not incident to test dim
       />
     );
     // Without selection, nothing is dimmed
-    expect(container.querySelector('[data-edge-id="e1"]')?.getAttribute('data-dimmed')).not.toBe('true');
+    expect(c.querySelector('[data-edge-id="e1"]')?.getAttribute('data-dimmed')).not.toBe('true');
   });
 
   it('dims non-incident edges when a node is selected (part 2)', () => {
@@ -225,11 +223,11 @@ describe('Timeline', () => {
   });
 
   it('zoom-in narrows the viewport (render stays intact after zoom)', () => {
-    const { container } = renderTL();
+    renderTL();
     // After zoom-in, at least one node should remain in the viewport (the one near center)
     fireEvent.click(screen.getByTestId('zoom-in'));
     // At minimum the SVG is still rendered without crashing
-    expect(container.querySelector('svg')).not.toBeNull();
+    expect(screen.getByTestId('time-axis')).toBeInTheDocument();
   });
 
   it('zoom-out broadens the viewport', () => {

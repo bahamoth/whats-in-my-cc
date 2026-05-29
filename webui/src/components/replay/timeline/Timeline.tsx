@@ -4,7 +4,7 @@
  * Plan: docs/superpowers/plans/2026-05-29-witmcc-redesign-v2-R4-timeline.md Task 4.
  * Spec: §5 (time-series UI), §7 (memory / density cap).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { GraphNodeDto, GraphEdgeDto, EpisodeDto } from '../../../api/types';
 import { LANES } from '../../../api/laneMapping';
 import { causalEdgeStyle } from '../causalEdgeStyle';
@@ -33,7 +33,6 @@ const LANE_LABEL_W = 52;     // px for lane label column
 const CTRL_HEIGHT = 30;      // px for control bar (rendered as HTML, not SVG)
 const NODE_RADIUS = 5;       // circle radius for instant nodes
 const NODE_BAR_H = 8;        // bar height for span nodes
-const AGGREGATED_H = 14;     // height of aggregated marker row
 
 // Lane row height
 function laneHeight(svgHeight: number): number {
@@ -121,7 +120,6 @@ export function Timeline({
   const drawW = svgW - LANE_LABEL_W;
   const laneH = laneHeight(svgH);
   const axisY = svgH - AXIS_HEIGHT;
-  const episodeY = 0; // episode band at top
 
   // Time scale over current viewport
   const scale = useMemo(
@@ -153,18 +151,6 @@ export function Timeline({
     }
     return result;
   }, [byLane, viewport.t0, viewport.t1]);
-
-  // Incident edge sets for selected node
-  const incidentEdgeIds = useMemo(() => {
-    if (!selectedNodeId) return new Set<string>();
-    const ids = new Set<string>();
-    for (const e of edges) {
-      if (e.from_node_id === selectedNodeId || e.to_node_id === selectedNodeId) {
-        ids.add(e.edge_id);
-      }
-    }
-    return ids;
-  }, [edges, selectedNodeId]);
 
   // Drag pan
   const dragRef = useRef<{ dragging: boolean; lastX: number; lastT: number }>({
