@@ -3,6 +3,7 @@
  * R3 RED — DetailPanel hosts Insight/Detail/Raw tabs, defaults to Insight
  * (Detail when no findings), and keeps the chosen tab across re-render.
  * Plan R3 Task 5 / spec §4.
+ * R5 — updated: DetailPanel now threads nodes/edges/onSelectNode to InsightTab.
  */
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
@@ -16,32 +17,32 @@ function finding(): FindingDto {
 
 describe('DetailPanel', () => {
   it('renders three tabs', () => {
-    render(<DetailPanel node={node} record={null} findings={[]} episodePhase={null} />);
+    render(<DetailPanel node={node} record={null} findings={[]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
     expect(screen.getByRole('tab', { name: /insight/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /detail/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /raw/i })).toBeInTheDocument();
   });
 
   it('defaults to the Insight tab when there are findings', () => {
-    render(<DetailPanel node={node} record={null} findings={[finding()]} episodePhase={null} />);
+    render(<DetailPanel node={node} record={null} findings={[finding()]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
     expect(screen.getByRole('tab', { name: /insight/i })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('defaults to Detail when the node has no findings', () => {
-    render(<DetailPanel node={node} record={null} findings={[]} episodePhase={null} />);
+    render(<DetailPanel node={node} record={null} findings={[]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
     expect(screen.getByRole('tab', { name: /detail/i })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('switches tab on click and keeps it across a re-render', () => {
-    const { rerender } = render(<DetailPanel node={node} record={{ a: 1 }} findings={[finding()]} episodePhase={null} />);
+    const { rerender } = render(<DetailPanel node={node} record={{ a: 1 }} findings={[finding()]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
     fireEvent.click(screen.getByRole('tab', { name: /raw/i }));
     expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('aria-selected', 'true');
-    rerender(<DetailPanel node={node} record={{ a: 1 }} findings={[finding()]} episodePhase={null} />);
+    rerender(<DetailPanel node={node} record={{ a: 1 }} findings={[finding()]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
     expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('shows an empty hint when no node is selected', () => {
-    render(<DetailPanel node={null} record={null} findings={[]} episodePhase={null} />);
+    render(<DetailPanel node={null} record={null} findings={[]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
     expect(screen.getByText(/select a node/i)).toBeInTheDocument();
   });
 });

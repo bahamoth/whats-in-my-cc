@@ -256,6 +256,9 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               record={rawQuery.data?.record ?? null}
               findings={selectedNodeFindings}
               episodePhase={selectedNodePhase}
+              nodes={effectiveGraph.nodes}
+              edges={effectiveGraph.edges}
+              onSelectNode={(id) => sel.setSelectedNodeId(id)}
             />
           </div>
 

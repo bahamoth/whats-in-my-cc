@@ -1,6 +1,6 @@
 // webui/src/components/replay/detail/DetailPanel.tsx
 import { useState } from 'react';
-import type { FindingDto, GraphNodeDto } from '../../../api/types';
+import type { FindingDto, GraphNodeDto, GraphEdgeDto } from '../../../api/types';
 import { InsightTab } from './InsightTab';
 import { DetailTab } from './DetailTab';
 import { RawTab } from './RawTab';
@@ -13,9 +13,12 @@ interface DetailPanelProps {
   record: unknown;
   findings: FindingDto[];
   episodePhase: string | null;
+  nodes: GraphNodeDto[];
+  edges: GraphEdgeDto[];
+  onSelectNode: (id: string) => void;
 }
 
-export function DetailPanel({ node, record, findings, episodePhase }: DetailPanelProps) {
+export function DetailPanel({ node, record, findings, episodePhase, nodes, edges, onSelectNode }: DetailPanelProps) {
   // null = "follow the default rule"; a value = an explicit user choice that sticks.
   const [chosen, setChosen] = useState<TabId | null>(null);
   const fallback: TabId = findings.length > 0 ? 'insight' : 'detail';
@@ -45,7 +48,15 @@ export function DetailPanel({ node, record, findings, episodePhase }: DetailPane
         {tab('raw', 'Raw')}
       </div>
       <div className={styles.body} role="tabpanel">
-        {active === 'insight' && <InsightTab findings={findings} />}
+        {active === 'insight' && (
+          <InsightTab
+            findings={findings}
+            nodes={nodes}
+            edges={edges}
+            selectedNodeId={node?.node_id ?? null}
+            onSelectNode={onSelectNode}
+          />
+        )}
         {active === 'detail' && <DetailTab node={node} record={record} episodePhase={episodePhase} />}
         {active === 'raw' && <RawTab nodeId={node.node_id} record={record} />}
       </div>

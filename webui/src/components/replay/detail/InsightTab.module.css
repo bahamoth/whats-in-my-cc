@@ -1,4 +1,5 @@
 /* webui/src/components/replay/detail/InsightTab.module.css */
+.root { display: flex; flex-direction: column; gap: 8px; }
 .empty { color: var(--witmcc-fg-subtle, #6a7180); padding: 12px; }
 .list { list-style: none; margin: 0; padding: 0; }
 .item { border: 1px solid var(--witmcc-border, #1d212c); border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; }
