@@ -228,6 +228,9 @@ describe('ConversationStream', () => {
     const scroller = container.querySelector('[data-testid="conversation-stream"]') as HTMLElement;
     Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true });
     Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true });
+    // A genuine user gesture (wheel) marks the ensuing scroll as user-driven, so
+    // it disengages stick-to-bottom. (Measurement-only scrolls are ignored.)
+    fireEvent.wheel(scroller, { deltaY: -120 });
     scroller.scrollTop = 100;
     fireEvent.scroll(scroller);
     rerender(
@@ -240,5 +243,39 @@ describe('ConversationStream', () => {
       />,
     );
     expect(scroller.scrollTop).toBe(100);
+  });
+
+  // Regression lock for the "can't focus while streaming" bug: after the user
+  // scrolls up, a later MEASUREMENT-driven scroll event (no user gesture, fired
+  // by the virtualizer as it measures rows) must NOT re-engage stick-to-bottom,
+  // even if it momentarily reports the viewport at the bottom.
+  it('ignores measurement-driven scroll events when deciding stick-to-bottom', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    const items = [msg('a', 'first'), msg('b', 'second')];
+    const { container, rerender } = render(
+      <ConversationStream items={items} phaseOf={noPhase} selectedEventId={null} findingEventIds={new Set()} onSelect={() => {}} />,
+    );
+    const scroller = container.querySelector('[data-testid="conversation-stream"]') as HTMLElement;
+    Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true });
+    Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true });
+
+    // t=1000ms: user scrolls up via wheel → stick disengages.
+    nowSpy.mockReturnValue(1000);
+    fireEvent.wheel(scroller, { deltaY: -120 });
+    scroller.scrollTop = 100;
+    fireEvent.scroll(scroller);
+
+    // t=2000ms (>200ms later): a measurement scroll reports the viewport at the
+    // bottom. With no recent user gesture it must be ignored, so stick stays off.
+    nowSpy.mockReturnValue(2000);
+    scroller.scrollTop = 700; // dist = 1000-700-300 = 0 (looks "at bottom")
+    fireEvent.scroll(scroller);
+
+    rerender(
+      <ConversationStream items={[...items, msg('z', 'third')]} phaseOf={noPhase} selectedEventId={null} findingEventIds={new Set()} onSelect={() => {}} />,
+    );
+    // If the measurement scroll had wrongly re-stuck, append would pin to 1000.
+    expect(scroller.scrollTop).toBe(700);
+    nowSpy.mockRestore();
   });
 });

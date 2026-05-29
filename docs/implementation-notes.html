@@ -2856,6 +2856,13 @@ vitest: 69 passed
         전환 쉽게(spec 열린 질문).</li>
       <li><strong>2탭 패널:</strong> Detail 탭을 Insight 하단 <code>NodeDetail</code>로 흡수
         (tool 파라미터 전체·결과·토큰·finding). Raw(JSON 트리)는 유지.</li>
+      <li><strong>스트림 스크롤(스트리밍 중 포커스 버그 수정):</strong> 활성 세션에서 라이브 append가
+        들어올 때 스크롤이 계속 바닥을 따라가 클릭/포커스가 불가능했다. 원인은 (a) 수동
+        <code>scrollTop=scrollHeight</code>와 <code>virtualizer.scrollToIndex</code> 두 자동스크롤이
+        충돌, (b) 가상화 measurement가 유발한 synthetic scroll 이벤트가 stick 판정을 다시 true로
+        뒤집음. 수정: 경쟁 <code>scrollToIndex</code> 제거 + stick 판정을 <strong>사용자 제스처
+        (wheel/pointer/key) 직후 200ms 내 scroll에만</strong> 반영(measurement scroll 무시). 회귀
+        테스트 + 브라우저 측정(스크롤 업이 스트리밍 중에도 고정)으로 검증.</li>
       <li><strong>알려진 한계:</strong> (1) 이미지 placeholder(<code>[Image: …]</code>) user_message는
         scaffolding으로 분류하지 않아 사용자 버블로 렌더됨(사용자 제공 콘텐츠로 간주). (2) activity 스택이
         현재 선택된 이벤트를 포함하면 자동 펼침이 유지되어 수동 접기가 일시적으로 막힘(비치명적 UX).</li>

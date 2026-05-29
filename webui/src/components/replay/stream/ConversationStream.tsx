@@ -8,6 +8,7 @@ import type { StreamItem } from './streamModel';
 import styles from './ConversationStream.module.css';
 
 const FALLBACK_CAP = 200;
+const STICK_THRESHOLD = 48;
 
 interface ConversationStreamProps {
   items: StreamItem[];
@@ -32,7 +33,7 @@ export function ConversationStream({
   findingEventIds,
 }: ConversationStreamProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
-  const atBottomRef = useRef(true);
+  const stickRef = useRef(true);
 
   const virtualizer = useVirtualizer({
     count: items.length,
@@ -46,23 +47,32 @@ export function ConversationStream({
   // items so behavior is observable in tests and on first paint before measure.
   const useVirtual = virtualItems.length > 0;
 
-  // Track whether the user is pinned to the bottom so live appends autoscroll
-  // only when they haven't scrolled up to read history.
+  // "Stick to bottom" follows live appends ONLY while the reader is parked at
+  // the tip. The hard part: the virtualizer fires synthetic scroll events as it
+  // measures rows, and those must NOT flip the stick decision (that re-engaged
+  // autoscroll and yanked the viewport — the "can't focus while streaming"
+  // bug). So we only let a scroll that closely follows a genuine user gesture
+  // (wheel / pointer / key) change `stickRef`; measurement-driven scrolls are
+  // ignored.
+  const lastUserScrollRef = useRef(0);
+  const markUserScroll = () => {
+    lastUserScrollRef.current = performance.now();
+  };
   const onScroll = () => {
     const el = parentRef.current;
     if (!el) return;
-    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    if (performance.now() - lastUserScrollRef.current > 200) return; // measurement/programmatic → ignore
+    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD;
   };
 
+  // Single source of autoscroll: when new items arrive and the reader is stuck
+  // to the tip, jump to the bottom via native scrollTop. We deliberately do NOT
+  // also call virtualizer.scrollToIndex — driving the same scroll position from
+  // two mechanisms fights the virtualizer's measurement pass and oscillates.
   useLayoutEffect(() => {
     const el = parentRef.current;
-    if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
   }, [items.length]);
-
-  useEffect(() => {
-    // keep virtualizer range fresh when the set grows
-    if (atBottomRef.current && items.length > 0) virtualizer.scrollToIndex(items.length - 1);
-  }, [items.length, virtualizer]);
 
   // Scroll the selected item into view when selection changes from an external
   // source (e.g. timeline or subgraph click). Keyed on selectedEventId only so
@@ -150,6 +160,9 @@ export function ConversationStream({
       ref={parentRef}
       className={styles.scroll}
       onScroll={onScroll}
+      onWheel={markUserScroll}
+      onPointerDown={markUserScroll}
+      onKeyDown={markUserScroll}
       data-testid="conversation-stream"
       {...(!useVirtual && fallbackCapped ? { 'data-fallback-capped': 'true' } : {})}
     >
