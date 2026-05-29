@@ -72,6 +72,7 @@ export function ConversationStream({ cards, selectedEventId, phaseByEventId, fin
         (el as HTMLElement).scrollIntoView({ block: 'nearest' });
       }
     }
+  // Deliberately keyed on selectedEventId only — must fire on selection change, not on every card append.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEventId]);
 
