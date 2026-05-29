@@ -18,8 +18,15 @@ function formatDuration(ms: number): string {
 }
 
 export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStackProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [userExpanded, setUserExpanded] = useState(false);
   const summary = useMemo(() => summarizeStack(stack), [stack]);
+
+  // Auto-expand when the host selects one of our events (e.g. timeline /
+  // subgraph click): the host needs the selected activity item mounted so it
+  // can scroll it into view. Manual toggling still works on top of this.
+  const containsSelected =
+    selectedEventId != null && stack.events.some((ae) => ae.event.event_id === selectedEventId);
+  const expanded = userExpanded || containsSelected;
 
   const phase = summary.phase ?? '';
 
@@ -34,7 +41,7 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
       <button
         data-testid="activity-stack-toggle"
         className={styles.toggle}
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => setUserExpanded((v) => !v)}
         aria-expanded={expanded}
       >
         {expanded

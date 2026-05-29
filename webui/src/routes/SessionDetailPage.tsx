@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import type { GraphPayload, ObservedEventDto } from '../api/types';
@@ -25,7 +25,7 @@ import {
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import type { LiveEnvelope } from '../hooks/useLiveStream';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
-import { buildStreamCards } from '../components/replay/stream/streamModel';
+import { buildStreamModel } from '../components/replay/stream/streamModel';
 import styles from './SessionDetailPage.module.css';
 
 function envelopeToObserved(env: LiveEnvelope): ObservedEventDto {
@@ -109,7 +109,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     return 'clean';
   }, [findingsData]);
 
-  const streamCards = useMemo(() => buildStreamCards(window_.events), [window_.events]);
+  const streamItems = useMemo(() => buildStreamModel(window_.events), [window_.events]);
 
   // event_id -> node_id (graph nodes carry source_event_ids)
   const nodeIdByEventId = useMemo(() => {
@@ -151,17 +151,24 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     return eids;
   }, [findingsData, effectiveGraph]);
 
-  // event_id -> episode phase (by observed_at within [started_at, ended_at])
+  // event_id -> episode phase (by observed_at within [started_at, ended_at]).
+  // Computed over ALL window events — activity events (not just messages) need
+  // phases now so ActivityStack can split runs by phase.
   const phaseByEventId = useMemo(() => {
     const eps = episodes.data ?? [];
-    const out: Record<string, string> = {};
-    for (const card of streamCards) {
-      const t = card.timestamp;
+    const out = new Map<string, string>();
+    for (const ev of window_.events) {
+      const t = ev.observed_at;
       const ep = eps.find((e) => e.started_at <= t && t <= e.ended_at);
-      if (ep) out[card.eventId] = ep.phase;
+      if (ep) out.set(ev.event_id, ep.phase);
     }
     return out;
-  }, [streamCards, episodes.data]);
+  }, [window_.events, episodes.data]);
+
+  const phaseOf = useCallback(
+    (eventId: string) => phaseByEventId.get(eventId) ?? null,
+    [phaseByEventId],
+  );
 
   const selectedStreamEventId = useMemo(() => {
     if (!sel.selectedNodeId) return null;
@@ -242,9 +249,9 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               data-testid="scroll-sentinel"
             />
             <ConversationStream
-              cards={streamCards}
+              items={streamItems}
+              phaseOf={phaseOf}
               selectedEventId={selectedStreamEventId}
-              phaseByEventId={phaseByEventId}
               findingEventIds={findingEventIds}
               onSelect={selectStreamCard}
             />

@@ -36,4 +36,18 @@ describe('ActivityStack', () => {
     const items = screen.getAllByTestId('activity-item');
     expect(items[0].getAttribute('data-selected')).toBe('true');
   });
+
+  it('auto-expands when selectedEventId matches one of its events', () => {
+    // No manual toggle click — the stack opens because c2 is selected so the
+    // host can scroll the selected activity item into view.
+    render(<ActivityStack stack={stack} selectedEventId="c2" onSelect={() => {}} />);
+    const items = screen.getAllByTestId('activity-item');
+    expect(items).toHaveLength(2);
+    expect(items[1].getAttribute('data-selected')).toBe('true');
+  });
+
+  it('stays collapsed when selectedEventId is for a different stack', () => {
+    render(<ActivityStack stack={stack} selectedEventId="other" onSelect={() => {}} />);
+    expect(screen.queryByTestId('activity-item')).toBeNull();
+  });
 });

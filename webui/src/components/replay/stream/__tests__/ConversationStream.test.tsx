@@ -1,89 +1,155 @@
 // webui/src/components/replay/stream/__tests__/ConversationStream.test.tsx
 /**
- * R2 RED — ConversationStream renders cards oldest→newest (newest at the
- * DOM bottom), forwards clicks, and reflects selection. Spec §3.
+ * ConversationStream renders a StreamItem[] (MessageCard for messages,
+ * ActivityStack(s) for activity-runs via splitRunByPhase), oldest→newest
+ * (newest at the DOM bottom), forwards clicks, reflects selection, and
+ * preserves virtualization / scroll-into-view / autoscroll. Spec §3.
  */
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConversationStream } from '../ConversationStream';
-import type { StreamCard } from '../streamModel';
+import type { MessageItem, ActivityRun, ActivityEvent } from '../streamModel';
 
-function c(id: string, preview: string): StreamCard {
-  return { id, eventId: id, kind: 'user', actor: 'user', timestamp: '2026-05-28T09:14:02Z', preview, tool: null };
+function msg(id: string, text: string, over: Partial<MessageItem> = {}): MessageItem {
+  return {
+    type: 'message',
+    id,
+    eventId: id,
+    role: 'user',
+    model: null,
+    text,
+    timestamp: '2026-05-28T09:14:02Z',
+    ...over,
+  };
 }
 
+function ae(eventId: string, toolName: string, isError = false): ActivityEvent {
+  return {
+    event: {
+      event_id: eventId,
+      raw_event_id: '',
+      session_id: 's1',
+      event_uuid: null,
+      parent_uuid: null,
+      observed_at: '2026-05-28T09:14:02Z',
+      actor: 'assistant',
+      kind: 'tool_call',
+      subkind: null,
+      tool_use_id: eventId,
+      tool_name: toolName,
+      turn_id: null,
+      is_sidechain: false,
+      is_meta: false,
+      payload: { tool_name: toolName, input: {} },
+    },
+    result: { isError },
+  };
+}
+
+function run(id: string, events: ActivityEvent[]): ActivityRun {
+  return { type: 'activity-run', id, events };
+}
+
+const noPhase = () => null;
+
 describe('ConversationStream', () => {
-  it('renders one card per item in source order (newest last in the DOM)', () => {
+  it('renders messages and activity stacks in source order', () => {
     render(
       <ConversationStream
-        cards={[c('a', 'first'), c('b', 'second')]}
+        items={[
+          msg('a', 'first'),
+          run('r1', [ae('c1', 'Read'), ae('c2', 'Bash')]),
+          msg('b', 'second', { role: 'assistant' }),
+        ]}
+        phaseOf={noPhase}
         selectedEventId={null}
-        phaseByEventId={{}}
         findingEventIds={new Set()}
         onSelect={() => {}}
       />,
     );
-    const cards = screen.getAllByTestId('stream-card');
-    expect(cards).toHaveLength(2);
-    expect(within(cards[0]).getByText('first')).toBeInTheDocument();
-    expect(within(cards[1]).getByText('second')).toBeInTheDocument();
+    expect(screen.getAllByTestId('message-card')).toHaveLength(2);
+    expect(screen.getAllByTestId('activity-stack')).toHaveLength(1);
+    expect(screen.getByText('first')).toBeInTheDocument();
+    expect(screen.getByText('second')).toBeInTheDocument();
   });
 
-  it('marks the selected card', () => {
+  it('marks the selected message', () => {
     render(
       <ConversationStream
-        cards={[c('a', 'first'), c('b', 'second')]}
+        items={[msg('a', 'first'), msg('b', 'second')]}
+        phaseOf={noPhase}
         selectedEventId="b"
-        phaseByEventId={{}}
         findingEventIds={new Set()}
         onSelect={() => {}}
       />,
     );
-    const cards = screen.getAllByTestId('stream-card');
+    const cards = screen.getAllByTestId('message-card');
     expect(cards[1].getAttribute('data-selected')).toBe('true');
     expect(cards[0].getAttribute('data-selected')).toBe('false');
   });
 
-  it('passes the episode phase and finding marker through to the card', () => {
+  it('shows a finding marker for messages whose eventId is a finding', () => {
     render(
       <ConversationStream
-        cards={[c('a', 'first')]}
+        items={[msg('a', 'first')]}
+        phaseOf={noPhase}
         selectedEventId={null}
-        phaseByEventId={{ a: 'repair' }}
         findingEventIds={new Set(['a'])}
         onSelect={() => {}}
       />,
     );
-    expect(screen.getByText('repair')).toBeInTheDocument();
     expect(screen.getByLabelText(/finding/i)).toBeInTheDocument();
   });
 
-  it('renders an empty hint when there are no cards', () => {
+  it('renders an empty hint when there are no items', () => {
     render(
-      <ConversationStream cards={[]} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+      <ConversationStream
+        items={[]}
+        phaseOf={noPhase}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
     );
     expect(screen.getByText(/no conversation/i)).toBeInTheDocument();
   });
 
-  it('forwards clicks with the event id', () => {
+  it('forwards clicks from a message card with the event id', () => {
     const onSelect = vi.fn();
     render(
-      <ConversationStream cards={[c('a', 'first')]} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={onSelect} />,
+      <ConversationStream
+        items={[msg('a', 'first')]}
+        phaseOf={noPhase}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={onSelect}
+      />,
     );
-    screen.getByTestId('stream-card').click();
+    screen.getByTestId('message-card').click();
     expect(onSelect).toHaveBeenCalledWith('a');
   });
 
-  it('scrolls the selected card into view when selectedEventId changes', () => {
+  it('scrolls the selected message into view when selectedEventId changes', () => {
     const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
-    const cards = [c('a', 'first'), c('b', 'second'), c('z', 'last')];
+    const items = [msg('a', 'first'), msg('b', 'second'), msg('z', 'last')];
     const { container, rerender } = render(
-      <ConversationStream cards={cards} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+      <ConversationStream
+        items={items}
+        phaseOf={noPhase}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
     );
     rerender(
-      <ConversationStream cards={cards} selectedEventId="b" phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+      <ConversationStream
+        items={items}
+        phaseOf={noPhase}
+        selectedEventId="b"
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
     );
-    // Verify the CORRECT element was scrolled, not just any element.
     const target = container.querySelector('[data-event-id="b"]');
     expect(spy.mock.instances).toContain(target);
     spy.mockRestore();
@@ -91,63 +157,88 @@ describe('ConversationStream', () => {
 
   it('does not scroll when selectedEventId is null', () => {
     const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
-    const cards = [c('a', 'first')];
     render(
-      <ConversationStream cards={cards} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+      <ConversationStream
+        items={[msg('a', 'first')]}
+        phaseOf={noPhase}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
     );
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 
-  it('mounts a bounded number of cards for a large input (does not render all 2000)', () => {
-    const many = Array.from({ length: 2000 }, (_, i) => c(`n${i}`, `msg ${i}`));
+  it('mounts a bounded number of items for a large input (does not render all 2000)', () => {
+    const many = Array.from({ length: 2000 }, (_, i) => msg(`n${i}`, `msg ${i}`));
     const { container } = render(
-      <ConversationStream cards={many} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+      <ConversationStream
+        items={many}
+        phaseOf={noPhase}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
     );
-    // In jsdom the virtualizer yields 0 items and we fall back to rendering all;
-    // guard the §7 bound by asserting the fallback is itself capped.
-    const mounted = screen.getAllByTestId('stream-card').length;
+    const mounted = screen.getAllByTestId('message-card').length;
     expect(mounted).toBeLessThanOrEqual(200);
-    // ...and the truncation is surfaced for diagnostics.
     expect(
       container.querySelector('[data-testid="conversation-stream"]')?.getAttribute('data-fallback-capped'),
     ).toBe('true');
   });
 
-  // §3 — live appends pin to the tip ONLY when the reader is already at the
-  // bottom. jsdom has no layout, so we install scrollHeight/clientHeight on the
-  // scroll container instance and assert the layout-effect's scrollTop write.
-  it('autoscrolls to the bottom when a card is appended and the user is at the tip', () => {
-    const cards = [c('a', 'first'), c('b', 'second')];
+  it('autoscrolls to the bottom when an item is appended and the user is at the tip', () => {
+    const items = [msg('a', 'first'), msg('b', 'second')];
     const { container, rerender } = render(
-      <ConversationStream cards={cards} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+      <ConversationStream
+        items={items}
+        phaseOf={noPhase}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
     );
     const scroller = container.querySelector('[data-testid="conversation-stream"]') as HTMLElement;
     Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true });
     Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true });
-    // atBottomRef starts true; appending one card fires the layout effect.
     rerender(
-      <ConversationStream cards={[...cards, c('z', 'third')]} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+      <ConversationStream
+        items={[...items, msg('z', 'third')]}
+        phaseOf={noPhase}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
     );
     expect(scroller.scrollTop).toBe(1000);
   });
 
   it('does NOT autoscroll on append when the user has scrolled up', () => {
-    const cards = [c('a', 'first'), c('b', 'second')];
+    const items = [msg('a', 'first'), msg('b', 'second')];
     const { container, rerender } = render(
-      <ConversationStream cards={cards} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+      <ConversationStream
+        items={items}
+        phaseOf={noPhase}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
     );
     const scroller = container.querySelector('[data-testid="conversation-stream"]') as HTMLElement;
     Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true });
     Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true });
-    // Reader scrolls up: distance from bottom = 1000-100-300 = 600 (>= 40) →
-    // atBottomRef becomes false on the scroll event.
     scroller.scrollTop = 100;
     fireEvent.scroll(scroller);
     rerender(
-      <ConversationStream cards={[...cards, c('z', 'third')]} selectedEventId={null} phaseByEventId={{}} findingEventIds={new Set()} onSelect={() => {}} />,
+      <ConversationStream
+        items={[...items, msg('z', 'third')]}
+        phaseOf={noPhase}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
     );
-    // scrollTop is left where the reader put it — no yank to the bottom.
     expect(scroller.scrollTop).toBe(100);
   });
 });

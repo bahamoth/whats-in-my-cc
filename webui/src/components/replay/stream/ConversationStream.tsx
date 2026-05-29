@@ -1,26 +1,41 @@
 // webui/src/components/replay/stream/ConversationStream.tsx
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { StreamCard } from './StreamCard';
-import type { StreamCard as Card } from './streamModel';
+import { MessageCard } from './MessageCard';
+import { ActivityStack } from './ActivityStack';
+import { splitRunByPhase } from './activityGroup';
+import type { StreamItem } from './streamModel';
 import styles from './ConversationStream.module.css';
 
 const FALLBACK_CAP = 200;
 
 interface ConversationStreamProps {
-  cards: Card[];
+  items: StreamItem[];
+  phaseOf: (eventId: string) => string | null;
   selectedEventId: string | null;
-  phaseByEventId: Record<string, string>;
-  findingEventIds: Set<string>;
   onSelect: (eventId: string) => void;
+  findingEventIds: Set<string>;
 }
 
-export function ConversationStream({ cards, selectedEventId, phaseByEventId, findingEventIds, onSelect }: ConversationStreamProps) {
+/** True when the item is a message with the given eventId, or an activity-run
+ * containing an event with that id. Used for scroll-into-view targeting. */
+function itemContainsEvent(item: StreamItem, eventId: string): boolean {
+  if (item.type === 'message') return item.eventId === eventId;
+  return item.events.some((ae) => ae.event.event_id === eventId);
+}
+
+export function ConversationStream({
+  items,
+  phaseOf,
+  selectedEventId,
+  onSelect,
+  findingEventIds,
+}: ConversationStreamProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const atBottomRef = useRef(true);
 
   const virtualizer = useVirtualizer({
-    count: cards.length,
+    count: items.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 64,
     overscan: 8,
@@ -28,7 +43,7 @@ export function ConversationStream({ cards, selectedEventId, phaseByEventId, fin
 
   const virtualItems = virtualizer.getVirtualItems();
   // jsdom / zero-height container: the virtualizer yields no items. Render all
-  // cards so behavior is observable in tests and on first paint before measure.
+  // items so behavior is observable in tests and on first paint before measure.
   const useVirtual = virtualItems.length > 0;
 
   // Track whether the user is pinned to the bottom so live appends autoscroll
@@ -42,19 +57,22 @@ export function ConversationStream({ cards, selectedEventId, phaseByEventId, fin
   useLayoutEffect(() => {
     const el = parentRef.current;
     if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
-  }, [cards.length]);
+  }, [items.length]);
 
   useEffect(() => {
     // keep virtualizer range fresh when the set grows
-    if (atBottomRef.current && cards.length > 0) virtualizer.scrollToIndex(cards.length - 1);
-  }, [cards.length, virtualizer]);
+    if (atBottomRef.current && items.length > 0) virtualizer.scrollToIndex(items.length - 1);
+  }, [items.length, virtualizer]);
 
-  // Scroll the selected card into view when selection changes from an external
+  // Scroll the selected item into view when selection changes from an external
   // source (e.g. timeline or subgraph click). Keyed on selectedEventId only so
-  // it does not conflict with the bottom-autoscroll effect above.
+  // it does not conflict with the bottom-autoscroll effect above. When the
+  // selected event lives inside an activity-run, ActivityStack auto-expands on
+  // its own (it receives selectedEventId), so the row is mounted by the time
+  // the fallback querySelector runs.
   useEffect(() => {
     if (!selectedEventId) return;
-    const idx = cards.findIndex((c) => c.eventId === selectedEventId);
+    const idx = items.findIndex((it) => itemContainsEvent(it, selectedEventId));
     if (idx < 0) return;
     // Virtual path: scroll the virtualizer to that index
     if (virtualizer.getVirtualItems().length > 0) {
@@ -62,7 +80,8 @@ export function ConversationStream({ cards, selectedEventId, phaseByEventId, fin
     }
     // Fallback path (jsdom / zero-height): find the element by data-event-id
     // and call scrollIntoView. In a real browser this works; in jsdom the stub
-    // is a no-op but the spy can observe the call.
+    // is a no-op but the spy can observe the call. Only message rows carry
+    // data-event-id; activity rows rely on the virtual scrollToIndex above.
     if (typeof parentRef.current?.querySelector === 'function') {
       const escapedId = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
         ? CSS.escape(selectedEventId)
@@ -72,28 +91,59 @@ export function ConversationStream({ cards, selectedEventId, phaseByEventId, fin
         (el as HTMLElement).scrollIntoView({ block: 'nearest' });
       }
     }
-  // Deliberately keyed on selectedEventId only — must fire on selection change, not on every card append.
+  // Deliberately keyed on selectedEventId only — must fire on selection change, not on every append.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEventId]);
 
-  if (cards.length === 0) {
+  // Memoize phase-split stacks per activity-run so splitRunByPhase isn't
+  // recomputed for every unaffected row on each render.
+  const stacksByRunId = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof splitRunByPhase>>();
+    for (const it of items) {
+      if (it.type === 'activity-run') m.set(it.id, splitRunByPhase(it.events, phaseOf));
+    }
+    return m;
+  }, [items, phaseOf]);
+
+  if (items.length === 0) {
     return <p className={styles.empty}>No conversation events yet.</p>;
   }
 
-  const renderCard = (card: Card) => (
-    <StreamCard
-      key={card.id}
-      card={card}
-      selected={card.eventId === selectedEventId}
-      episodePhase={phaseByEventId[card.eventId] ?? null}
-      hasFinding={findingEventIds.has(card.eventId)}
-      onSelect={onSelect}
-    />
-  );
+  const renderItem = (item: StreamItem) => {
+    if (item.type === 'message') {
+      return (
+        <MessageCard
+          item={item}
+          selected={item.eventId === selectedEventId}
+          onSelect={onSelect}
+          hasFinding={findingEventIds.has(item.eventId)}
+        />
+      );
+    }
+    const stacks = stacksByRunId.get(item.id) ?? splitRunByPhase(item.events, phaseOf);
+    return (
+      <>
+        {stacks.map((stack, i) => (
+          <ActivityStack
+            key={`${item.id}-${i}`}
+            stack={stack}
+            selectedEventId={selectedEventId}
+            onSelect={onSelect}
+          />
+        ))}
+      </>
+    );
+  };
 
-  // Fallback path: cap to the last FALLBACK_CAP cards (newest at bottom).
-  const fallbackCards = cards.length > FALLBACK_CAP ? cards.slice(-FALLBACK_CAP) : cards;
-  const fallbackCapped = cards.length > FALLBACK_CAP;
+  // Message rows carry data-event-id for scroll-into-view + cross-sync tests.
+  // Activity rows have multiple events, so they carry none and rely on
+  // scrollToIndex (virtual) + ActivityStack auto-expand for visibility.
+  const rowEventId = (item: StreamItem): string | undefined =>
+    item.type === 'message' ? item.eventId : undefined;
+
+  // Fallback path: cap to the last FALLBACK_CAP items (newest at bottom).
+  const fallbackItems = items.length > FALLBACK_CAP ? items.slice(-FALLBACK_CAP) : items;
+  const fallbackCapped = items.length > FALLBACK_CAP;
 
   return (
     <div
@@ -106,24 +156,24 @@ export function ConversationStream({ cards, selectedEventId, phaseByEventId, fin
       {useVirtual ? (
         <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
           {virtualItems.map((vi) => {
-            const card = cards[vi.index];
+            const item = items[vi.index];
             return (
               <div
-                key={card.id}
+                key={item.id}
                 ref={virtualizer.measureElement}
                 data-index={vi.index}
-                data-event-id={card.eventId}
+                {...(rowEventId(item) ? { 'data-event-id': rowEventId(item) } : {})}
                 style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start}px)` }}
               >
-                {renderCard(card)}
+                {renderItem(item)}
               </div>
             );
           })}
         </div>
       ) : (
-        fallbackCards.map((card) => (
-          <div key={card.id} data-event-id={card.eventId}>
-            {renderCard(card)}
+        fallbackItems.map((item) => (
+          <div key={item.id} {...(rowEventId(item) ? { 'data-event-id': rowEventId(item) } : {})}>
+            {renderItem(item)}
           </div>
         ))
       )}

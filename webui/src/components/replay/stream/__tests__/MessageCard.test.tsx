@@ -31,4 +31,10 @@ describe('MessageCard', () => {
     screen.getByTestId('message-card').click();
     expect(onSelect).toHaveBeenCalledWith('e1');
   });
+  it('shows a finding marker only when hasFinding', () => {
+    const { rerender } = render(<MessageCard item={m({})} selected={false} onSelect={() => {}} />);
+    expect(screen.queryByLabelText(/finding/i)).toBeNull();
+    rerender(<MessageCard item={m({})} selected={false} onSelect={() => {}} hasFinding />);
+    expect(screen.getByLabelText(/finding/i)).toBeInTheDocument();
+  });
 });

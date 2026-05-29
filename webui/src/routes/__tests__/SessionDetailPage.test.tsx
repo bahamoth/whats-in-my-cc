@@ -198,10 +198,10 @@ describe('SessionDetailPage', () => {
     });
     const { container } = rendered('s1');
 
-    // Real events mount StreamCards keyed by event id.
+    // Real events mount MessageCards keyed by event id.
     await waitFor(() => {
       expect(
-        container.querySelector('[data-event-id="ev1"] [data-testid="stream-card"]'),
+        container.querySelector('[data-event-id="ev1"] [data-testid="message-card"]'),
       ).not.toBeNull();
     });
 
@@ -212,7 +212,7 @@ describe('SessionDetailPage', () => {
     fireEvent.click(node1!);
     await waitFor(() => {
       const card1 = container.querySelector(
-        '[data-event-id="ev1"] [data-testid="stream-card"]',
+        '[data-event-id="ev1"] [data-testid="message-card"]',
       );
       expect(card1?.getAttribute('data-selected')).toBe('true');
     });
@@ -220,7 +220,7 @@ describe('SessionDetailPage', () => {
 
     // Stream → timeline: clicking the ev2 card moves selection to node n2.
     const card2 = container.querySelector(
-      '[data-event-id="ev2"] [data-testid="stream-card"]',
+      '[data-event-id="ev2"] [data-testid="message-card"]',
     );
     expect(card2).not.toBeNull();
     fireEvent.click(card2!);
@@ -232,7 +232,7 @@ describe('SessionDetailPage', () => {
     // ...and selection has moved off ev1.
     expect(
       container
-        .querySelector('[data-event-id="ev1"] [data-testid="stream-card"]')
+        .querySelector('[data-event-id="ev1"] [data-testid="message-card"]')
         ?.getAttribute('data-selected'),
     ).toBe('false');
 

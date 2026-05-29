@@ -1,5 +1,5 @@
 // webui/src/components/replay/stream/MessageCard.tsx
-import { User, Bot, BrainCog } from 'lucide-react';
+import { User, Bot, BrainCog, Lightbulb } from 'lucide-react';
 import type { MessageItem } from './streamModel';
 import { formatModel } from './nodeLabel';
 import styles from './MessageCard.module.css';
@@ -14,9 +14,10 @@ interface MessageCardProps {
   item: MessageItem;
   selected: boolean;
   onSelect: (eventId: string) => void;
+  hasFinding?: boolean;
 }
 
-export function MessageCard({ item, selected, onSelect }: MessageCardProps) {
+export function MessageCard({ item, selected, onSelect, hasFinding = false }: MessageCardProps) {
   const isRight = item.role === 'user';
   const align = isRight ? 'right' : 'left';
 
@@ -59,6 +60,13 @@ export function MessageCard({ item, selected, onSelect }: MessageCardProps) {
       <div className={styles.head}>
         <Icon size={14} aria-hidden className={styles.icon} />
         <span className={styles.label}>{label}</span>
+        {hasFinding && (
+          <Lightbulb
+            size={12}
+            aria-label="has finding"
+            className={styles.finding}
+          />
+        )}
         <span className={styles.time}>{timeLabel(item.timestamp)}</span>
       </div>
       <div className={`${styles.bubble} ${bubbleClass}`}>

@@ -52,6 +52,11 @@
   color: var(--witmcc-fg-subtle, #6a7180);
 }
 
+.finding {
+  flex: none;
+  color: var(--witmcc-warning, #e0b341);
+}
+
 /* ---- bubble ---- */
 .bubble {
   padding: 8px 12px;
