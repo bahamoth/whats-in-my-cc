@@ -13,8 +13,8 @@ import { causalEdgeStyle } from '../causalEdgeStyle';
 import { nodeLabel } from '../stream/nodeLabel';
 import styles from './FocusedInsightGraph.module.css';
 
-const NODE_WIDTH = 150;
-const NODE_HEIGHT = 40;
+const NODE_WIDTH = 168;
+const NODE_HEIGHT = 56;
 
 export interface FocusedInsightGraphProps {
   nodes: GraphNodeDto[];
