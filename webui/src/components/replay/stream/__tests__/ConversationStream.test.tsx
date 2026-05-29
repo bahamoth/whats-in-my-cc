@@ -19,6 +19,7 @@ function msg(id: string, text: string, over: Partial<MessageItem> = {}): Message
     model: null,
     text,
     timestamp: '2026-05-28T09:14:02Z',
+    sidechain: false,
     ...over,
   };
 }

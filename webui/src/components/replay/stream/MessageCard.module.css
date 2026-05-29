@@ -90,6 +90,13 @@
   border-bottom-left-radius: 3px;
 }
 
+/* subagent prompt (Task sidechain): left, clearly not the human user */
+.subagentBubble {
+  background: var(--witmcc-surface-2, #161a23);
+  color: var(--witmcc-fg-muted, #aab0bd);
+  border-bottom-left-radius: 3px;
+}
+
 /* thinking: left, visually distinct */
 .thinkingBubble {
   background: var(--witmcc-surface-1, #11141b);
