@@ -46,6 +46,12 @@ if (typeof (globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserve
   (globalThis as Record<string, unknown>).ResizeObserver = NoopRO;
 }
 
+// R6 — jsdom does not implement Element.prototype.scrollIntoView.
+// Install a no-op stub so vi.spyOn can intercept it.
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function () {};
+}
+
 // PR-7 — React Flow also reads `window.matchMedia` for prefers-reduced-motion.
 // Provide a default mock that reports "no match" so tests behave like a
 // normal-motion environment.

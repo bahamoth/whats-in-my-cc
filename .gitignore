@@ -9,3 +9,6 @@ webui/dist/
 # Node + Vite caches (root-level vitest, webui, anywhere)
 node_modules/
 .vite/
+
+# superpowers brainstorm mockups
+.superpowers/

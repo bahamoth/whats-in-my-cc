@@ -25,7 +25,8 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
   - slice-19: Bearer token auth + retention sweep + audit table + /v1/audit + 410 Gone (M7 CLOSED, AC-6 CLOSED)
 - **남은 계획:** UX 재설계 epic (`2026-05-27-witmcc-ux-redesign-epic.md`) — 마일스톤 밖 별도 트랙.
 - **모든 마일스톤 closed:** ~~M3~~ ✓ · ~~M5~~ ✓ · ~~M6~~ ✓ · ~~M7~~ ✓
-- 구현 상세: `docs/implementation-notes.html` §33(slice-18) · §34(slice-19) · §35(MVP Exit Summary).
+- 구현 상세: `docs/implementation-notes.html` §33(slice-18) · §34(slice-19) · §35(MVP Exit Summary) · §36(UX S1 payload enrichment).
+- **운영 주의 (UX S1 — payload enrichment):** `tool_call` payload에 `tool_name`, `assistant_message` payload에 `model` 추가. schema migration 없음 (JSON BLOB). 기존 dev DB 이벤트는 새 필드 없음 — `witmcc init-db` + 재ingest 필요.
 - **운영 주의 (slice-19):** Bearer token auth 추가. **Default는 `--auth off` (DEV-S19-08)** — 단일 사용자 dev에서 브라우저로 그대로 접속 가능. token 인증을 켜려면 `witmcc serve --auth on`. Token 위치는 macOS `~/Library/Application Support/witmcc/token`, Linux `~/.config/witmcc/token` (mode 0600). `--auth on`일 때 모든 `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요. `witmcc serve --retention-profile default`로 retention sweep 활성화. 신규 migration 0012 + 0013; `witmcc init-db` 필요.
 - **운영 주의 (slice-14):** `finding` 테이블 추가 (migration 0008). 기존 dev DB는
   `witmcc init-db`로 재생성 후 재ingest 필요.

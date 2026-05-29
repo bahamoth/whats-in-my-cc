@@ -28,6 +28,8 @@ type Routes = {
   graph?: Response;
   events?: Response;
   raw?: Response;
+  episodes?: Response;
+  findings?: Response;
 };
 
 function setupFetch(routes: Routes) {
@@ -43,6 +45,12 @@ function setupFetch(routes: Routes) {
     }
     if (url.match(/\/v1\/events\//) && url.endsWith('/raw')) {
       if (routes.raw) return Promise.resolve(routes.raw.clone());
+    }
+    if (url.includes('/episodes')) {
+      if (routes.episodes) return Promise.resolve(routes.episodes.clone());
+    }
+    if (url.includes('/findings')) {
+      if (routes.findings) return Promise.resolve(routes.findings.clone());
     }
     if (url.match(/\/v1\/sessions\/[^/]+$/)) {
       if (routes.detail) return Promise.resolve(routes.detail.clone());
@@ -89,6 +97,31 @@ const eventsPayload = {
   next_cursor: null,
 };
 
+// Real conversation rows whose event_ids match the graph nodes'
+// source_event_ids (n1→ev1, n2→ev2). Used to exercise timeline↔stream
+// cross-sync end-to-end (empty `eventsPayload` mounts zero StreamCards and
+// therefore cannot prove the wiring).
+const eventsWithRows = {
+  events: [
+    {
+      event_id: 'ev1', raw_event_id: 'r1', session_id: 's1', event_uuid: null,
+      parent_uuid: null, observed_at: '2026-05-19T10:00:00Z', actor: 'user',
+      kind: 'user_message', subkind: null, tool_use_id: null, tool_name: null,
+      turn_id: null, is_sidechain: false, is_meta: false,
+      payload: { content: 'hello from user' },
+    },
+    {
+      event_id: 'ev2', raw_event_id: 'r2', session_id: 's1', event_uuid: null,
+      parent_uuid: null, observed_at: '2026-05-19T10:00:05Z', actor: 'assistant',
+      kind: 'assistant_message', subkind: null, tool_use_id: null, tool_name: null,
+      turn_id: null, is_sidechain: false, is_meta: false,
+      payload: { text: 'hi from assistant' },
+    },
+  ],
+  prev_cursor: null,
+  next_cursor: null,
+};
+
 const raw = {
   schema_version: '1.0', event_id: 'ev1', session_id: 's1',
   source: { kind: 'claude_transcript', file_path: '/tmp/a.jsonl', line_no: 1, ingested_at: 'n' },
@@ -121,14 +154,14 @@ describe('SessionDetailPage', () => {
     cleanup();
   });
 
-  it('renders meta strip + timeline + empty SourcePanel hint', async () => {
+  it('renders meta strip + timeline + DetailPanel empty hint before node selection', async () => {
     setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
     rendered('s1');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
-    expect(screen.getByText(/Click a node/i)).toBeInTheDocument();
+    expect(screen.getByText(/select a node to inspect it/i)).toBeInTheDocument();
   });
 
-  it('clicking a node fetches raw and renders SourcePanel content', async () => {
+  it('clicking a node shows the DetailPanel tablist', async () => {
     setupFetch({
       detail: env(sessionDetail),
       graph: env(graph),
@@ -142,7 +175,68 @@ describe('SessionDetailPage', () => {
       return el;
     });
     fireEvent.click(marker);
-    await waitFor(() => expect(screen.getByText('/tmp/a.jsonl')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('tablist')).toBeInTheDocument());
+    expect(screen.getByRole('tab', { name: /insight/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /raw/i })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /^detail$/i })).toBeNull();
+  });
+
+  // The headline cross-sync requirement (spec §2/§3/§5.7): selection is
+  // bidirectionally synced across the timeline and the conversation stream,
+  // and a node click brings the matching stream card into view. Every other
+  // integration test uses an empty events payload, so this is the ONLY place
+  // the timeline↔stream wiring is proven end-to-end with real cards mounted.
+  it('cross-syncs selection between timeline nodes and stream cards', async () => {
+    const scrollSpy = vi
+      .spyOn(Element.prototype, 'scrollIntoView')
+      .mockImplementation(() => {});
+    setupFetch({
+      detail: env(sessionDetail),
+      graph: env(graph),
+      events: env(eventsWithRows),
+      raw: env(raw),
+    });
+    const { container } = rendered('s1');
+
+    // Real events mount MessageCards keyed by event id.
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-event-id="ev1"] [data-testid="message-card"]'),
+      ).not.toBeNull();
+    });
+
+    // Timeline node → stream: clicking node n1 selects the ev1 card AND
+    // scrolls it into view.
+    const node1 = container.querySelector('[data-node-id="n1"]');
+    expect(node1).not.toBeNull();
+    fireEvent.click(node1!);
+    await waitFor(() => {
+      const card1 = container.querySelector(
+        '[data-event-id="ev1"] [data-testid="message-card"]',
+      );
+      expect(card1?.getAttribute('data-selected')).toBe('true');
+    });
+    expect(scrollSpy).toHaveBeenCalled();
+
+    // Stream → timeline: clicking the ev2 card moves selection to node n2.
+    const card2 = container.querySelector(
+      '[data-event-id="ev2"] [data-testid="message-card"]',
+    );
+    expect(card2).not.toBeNull();
+    fireEvent.click(card2!);
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-node-id="n2"][data-selected="true"]'),
+      ).not.toBeNull();
+    });
+    // ...and selection has moved off ev1.
+    expect(
+      container
+        .querySelector('[data-event-id="ev1"] [data-testid="message-card"]')
+        ?.getAttribute('data-selected'),
+    ).toBe('false');
+
+    scrollSpy.mockRestore();
   });
 
   it('shows 404 when session detail missing', async () => {
@@ -277,5 +371,53 @@ describe('SessionDetailPage', () => {
       const calls = f.mock.calls.map((c) => String(c[0]));
       expect(calls.some((u) => u.includes('/events?before='))).toBe(true);
     });
+  });
+});
+
+describe('R1 layout shell', () => {
+  beforeEach(() => {
+    if (!(globalThis as { EventSource?: unknown }).EventSource) {
+      (globalThis as Record<string, unknown>).EventSource = class FakeES {
+        url: string;
+        readyState = 0;
+        onmessage: ((ev: MessageEvent) => void) | null = null;
+        constructor(u: string) { this.url = u; }
+        addEventListener() {}
+        close() {}
+      };
+    }
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it('renders exactly one link to /sessions (no duplicate header link)', async () => {
+    setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
+    rendered('aac68973');
+    await waitFor(() => {
+      const sessionLinks = screen
+        .getAllByRole('link')
+        .filter((a) => a.getAttribute('href') === '/sessions');
+      expect(sessionLinks).toHaveLength(1);
+    });
+  });
+
+  it('exposes named grid slots for kpi, stream, detail, and timeline', async () => {
+    setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
+    const { container } = rendered('aac68973');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+    expect(container.querySelector('[data-slot="kpi"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="stream"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="detail"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="timeline"]')).not.toBeNull();
+  });
+
+  it('does not render the Waterfall/Graph ViewToggle', async () => {
+    setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
+    rendered('aac68973');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /graph/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /graph/i })).toBeNull();
   });
 });

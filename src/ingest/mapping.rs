@@ -156,6 +156,11 @@ fn map_assistant(
         .get("id")
         .and_then(|x| x.as_str())
         .map(String::from);
+    let model = a
+        .message
+        .get("model")
+        .and_then(|x| x.as_str())
+        .map(String::from);
     for (ord, item) in arr.iter().enumerate() {
         let ty = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
         let mut e = base(meta, raw_event_id, gen);
@@ -175,7 +180,7 @@ fn map_assistant(
         match ty {
             "text" => {
                 e.kind = EventKind::AssistantMessage;
-                e.payload = json!({"content_ordinal": ord, "text": item.get("text")});
+                e.payload = json!({"content_ordinal": ord, "text": item.get("text"), "model": model});
             }
             "thinking" => {
                 e.kind = EventKind::Thinking;
@@ -185,7 +190,7 @@ fn map_assistant(
                 e.kind = EventKind::ToolCall;
                 e.tool_use_id = item.get("id").and_then(|x| x.as_str()).map(String::from);
                 e.tool_name = item.get("name").and_then(|x| x.as_str()).map(String::from);
-                e.payload = json!({"content_ordinal": ord, "input": item.get("input")});
+                e.payload = json!({"content_ordinal": ord, "tool_name": e.tool_name, "input": item.get("input")});
             }
             _ => {
                 e.kind = EventKind::Unknown;

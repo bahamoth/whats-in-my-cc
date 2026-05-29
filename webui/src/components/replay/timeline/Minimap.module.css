@@ -1,0 +1,27 @@
+/* R4 — Minimap brush. Tokens from tokens.css. */
+
+.root {
+  position: relative;
+  width: 100%;
+  background: var(--witmcc-surface-2, #161a23);
+  border-bottom: 1px solid var(--witmcc-border, #1d212c);
+  user-select: none;
+}
+
+.track {
+  display: block;
+  width: 100%;
+  cursor: crosshair;
+}
+
+.trackBg {
+  fill: var(--witmcc-surface-1, #11141b);
+}
+
+.window {
+  fill: var(--witmcc-accent-soft, #1f3a78);
+  stroke: var(--witmcc-accent, #4f8cff);
+  stroke-width: 1;
+  opacity: 0.7;
+  cursor: ew-resize;
+}

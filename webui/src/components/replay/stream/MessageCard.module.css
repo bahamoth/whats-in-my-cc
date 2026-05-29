@@ -1,0 +1,92 @@
+/* webui/src/components/replay/stream/MessageCard.module.css */
+
+/* ---- wrapper ---- */
+.card {
+  display: flex;
+  flex-direction: column;
+  max-width: 80%;
+  margin: 8px 0;
+  cursor: pointer;
+  outline: none;
+}
+
+.card[data-selected='true'] .bubble {
+  outline: 1px solid var(--witmcc-accent, #4f8cff);
+}
+
+/* ---- alignment ---- */
+.alignRight {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.alignLeft {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+/* ---- header row (avatar + label + time) ---- */
+.head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--witmcc-fg-muted, #aab0bd);
+  margin-bottom: 4px;
+}
+
+.alignRight .head {
+  flex-direction: row-reverse;
+}
+
+.icon {
+  flex: none;
+  color: var(--witmcc-fg-muted, #aab0bd);
+}
+
+.label {
+  font-weight: 600;
+}
+
+.time {
+  color: var(--witmcc-fg-subtle, #6a7180);
+}
+
+.finding {
+  flex: none;
+  color: var(--witmcc-warning, #f0b429);
+}
+
+/* ---- bubble ---- */
+.bubble {
+  padding: 8px 12px;
+  border-radius: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* user: right-aligned accent bubble */
+.userBubble {
+  background: var(--witmcc-accent, #4f8cff);
+  color: var(--witmcc-fg-on-accent, #0b0d12);
+  border-bottom-right-radius: 3px;
+}
+
+/* assistant: left surface bubble */
+.assistantBubble {
+  background: var(--witmcc-surface-2, #161a23);
+  color: var(--witmcc-fg, #e6e8ee);
+  border-bottom-left-radius: 3px;
+}
+
+/* thinking: left, visually distinct */
+.thinkingBubble {
+  background: var(--witmcc-surface-1, #11141b);
+  color: var(--witmcc-fg-muted, #aab0bd);
+  font-style: italic;
+  border-left: 2px dashed var(--witmcc-accent, #4f8cff);
+  border-radius: 4px;
+  border-bottom-left-radius: 3px;
+}

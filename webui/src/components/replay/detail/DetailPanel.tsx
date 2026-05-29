@@ -1,0 +1,63 @@
+// webui/src/components/replay/detail/DetailPanel.tsx
+import { useState } from 'react';
+import type { FindingDto, GraphNodeDto, GraphEdgeDto } from '../../../api/types';
+import { InsightTab } from './InsightTab';
+import { RawTab } from './RawTab';
+import styles from './DetailPanel.module.css';
+
+type TabId = 'insight' | 'raw';
+
+interface DetailPanelProps {
+  node: GraphNodeDto | null;
+  record: unknown;
+  findings: FindingDto[];
+  episodePhase: string | null;
+  nodes: GraphNodeDto[];
+  edges: GraphEdgeDto[];
+  onSelectNode: (id: string) => void;
+}
+
+export function DetailPanel({ node, record, findings, episodePhase, nodes, edges, onSelectNode }: DetailPanelProps) {
+  const [chosen, setChosen] = useState<TabId | null>(null);
+  const active = chosen ?? 'insight';
+
+  if (!node) {
+    return <aside className={styles.panel}><p className={styles.empty}>Select a node to inspect it.</p></aside>;
+  }
+
+  const tab = (id: TabId, label: string) => (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active === id}
+      className={`${styles.tab} ${active === id ? styles.active : ''}`}
+      onClick={() => setChosen(id)}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <aside className={styles.panel}>
+      <div className={styles.tabs} role="tablist">
+        {tab('insight', 'Insight')}
+        {tab('raw', 'Raw')}
+      </div>
+      <div className={styles.body} role="tabpanel">
+        {active === 'insight' && (
+          <InsightTab
+            findings={findings}
+            nodes={nodes}
+            edges={edges}
+            selectedNodeId={node.node_id}
+            onSelectNode={onSelectNode}
+            node={node}
+            record={record}
+            episodePhase={episodePhase}
+          />
+        )}
+        {active === 'raw' && <RawTab nodeId={node.node_id} record={record} />}
+      </div>
+    </aside>
+  );
+}

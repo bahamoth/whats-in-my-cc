@@ -1,4 +1,35 @@
 .page { padding: 24px; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.viewToggleRow { display: flex; justify-content: flex-end; margin-top: 10px; margin-bottom: 6px; }
-.split { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-top: 16px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  /* Middle row flexes and scrolls internally so the stream doesn't push the
+     timeline off-screen; minmax(0,1fr) lets the slots shrink below content. */
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "kpi      kpi"
+    "stream   detail"
+    "timeline timeline";
+  gap: 16px;
+  margin-top: 8px;
+  height: calc(100vh - 56px);
+}
+.kpi { grid-area: kpi; }
+/* min-height:0 is required for grid children to allow their own overflow. */
+.stream { grid-area: stream; min-height: 0; overflow: auto; }
+.detail { grid-area: detail; min-height: 0; overflow: auto; }
+.timeline { grid-area: timeline; }
+.placeholder { color: var(--witmcc-fg-subtle, #6a7180); }
+
+@media (max-width: 860px) {
+  .grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    height: auto;
+    grid-template-areas:
+      "kpi"
+      "stream"
+      "detail"
+      "timeline";
+  }
+}

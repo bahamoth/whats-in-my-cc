@@ -29,6 +29,9 @@
   --witmcc-fg-subtle: #6a7180;
   --witmcc-fg-on-accent: #0b0d12;
 
+  /* Typography */
+  --witmcc-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
   /* Accent + semantic */
   --witmcc-accent: #4f8cff;
   --witmcc-accent-soft: #1f3a78;
@@ -56,6 +59,7 @@
   --witmcc-phase-verification: #2bd0d0;
   --witmcc-phase-repair: #ff8a4c;
   --witmcc-phase-drift: #ef4747;
+  --witmcc-phase-stall: #9a6b73;
 
   /* Motion */
   --witmcc-motion-fast: 150ms;

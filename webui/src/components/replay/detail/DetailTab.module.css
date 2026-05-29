@@ -1,0 +1,10 @@
+/* webui/src/components/replay/detail/DetailTab.module.css */
+.detail { padding: 4px; }
+.empty { color: var(--witmcc-fg-subtle, #6a7180); padding: 12px; }
+.table { border-collapse: collapse; width: 100%; }
+.k { color: var(--witmcc-fg-subtle, #6a7180); padding: 3px 12px 3px 0; vertical-align: top; width: 90px; }
+.v { color: var(--witmcc-fg, #e6e8ee); padding: 3px 0; font-family: var(--witmcc-mono, ui-monospace, monospace); }
+.phase { padding: 1px 6px; border-radius: 3px; background: var(--witmcc-accent-soft, #1f3a78); }
+.error { padding: 1px 6px; border-radius: 3px; border: 1px solid var(--witmcc-danger, #ef4747); color: var(--witmcc-danger, #ef4747); }
+.usage { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.badge { font-size: 11px; padding: 2px 7px; border-radius: 3px; background: var(--witmcc-surface-3, #1b202a); color: var(--witmcc-fg-muted, #aab0bd); }

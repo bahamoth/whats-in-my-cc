@@ -1,12 +1,12 @@
 /**
  * PR-6 RED — ReplaySelection is the single source of truth for who is
- * "selected" in the replay view. It backs Waterfall, Graph (PR-7),
- * WhyPanel, and BottomDrawer with one state, and mirrors the state into
- * URL search params so deep-links round-trip.
+ * "selected" in the replay view. It backs Waterfall and Graph (PR-7) with one
+ * state, and mirrors the state into URL search params so deep-links round-trip.
  *
- * Keys we lock in (plan §10.1 PR-6):
- *   ?selected=<nodeId>  ?finding=<findingId>  ?why=open|closed
- *   ?raw=open|closed
+ * R3 — the `why`/`raw` params were removed with the WhyPanel + raw drawer.
+ *
+ * Keys we lock in (plan §10.1 PR-6, trimmed by R3):
+ *   ?selected=<nodeId>  ?finding=<findingId>
  */
 import { describe, expect, it } from 'vitest';
 import { act, render, renderHook, screen } from '@testing-library/react';
@@ -32,20 +32,18 @@ function wrap(initialUrl: string) {
 describe('ReplaySelectionProvider', () => {
   it('exposes selection state from the URL on initial render', () => {
     const { result } = renderHook(() => useReplaySelection(), {
-      wrapper: wrap('/sessions/s1?selected=node-a&why=open'),
+      wrapper: wrap('/sessions/s1?selected=node-a&finding=f-1'),
     });
     expect(result.current.selectedNodeId).toBe('node-a');
-    expect(result.current.whyPanelOpen).toBe(true);
+    expect(result.current.selectedFindingId).toBe('f-1');
   });
 
-  it('defaults to no selection and closed panels when params absent', () => {
+  it('defaults to no selection when params absent', () => {
     const { result } = renderHook(() => useReplaySelection(), {
       wrapper: wrap('/sessions/s1'),
     });
     expect(result.current.selectedNodeId).toBeNull();
     expect(result.current.selectedFindingId).toBeNull();
-    expect(result.current.whyPanelOpen).toBe(false);
-    expect(result.current.rawDrawerOpen).toBe(false);
     expect(result.current.hoveredNodeId).toBeNull();
   });
 
@@ -78,38 +76,6 @@ describe('ReplaySelectionProvider', () => {
       screen.getByText('set').click();
     });
     expect(screen.getByTestId('search').textContent).toContain('selected=node-b');
-  });
-
-  it('openWhyPanel and closeWhyPanel toggle the URL param', () => {
-    function Probe() {
-      const sel = useReplaySelection();
-      const loc = useLocation();
-      return (
-        <div>
-          <button onClick={sel.openWhyPanel}>open</button>
-          <button onClick={sel.closeWhyPanel}>close</button>
-          <span data-testid="search">{loc.search}</span>
-        </div>
-      );
-    }
-    render(
-      <MemoryRouter initialEntries={['/sessions/s1']}>
-        <Routes>
-          <Route
-            path="/sessions/:id"
-            element={
-              <ReplaySelectionProvider>
-                <Probe />
-              </ReplaySelectionProvider>
-            }
-          />
-        </Routes>
-      </MemoryRouter>,
-    );
-    act(() => screen.getByText('open').click());
-    expect(screen.getByTestId('search').textContent).toContain('why=open');
-    act(() => screen.getByText('close').click());
-    expect(screen.getByTestId('search').textContent).not.toContain('why=open');
   });
 
   it('clearing selection removes the URL param entirely', () => {

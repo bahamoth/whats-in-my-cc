@@ -1,0 +1,89 @@
+/* R4 — Timeline SVG surface. Tokens from tokens.css. */
+
+.root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--witmcc-surface-1, #11141b);
+  border: 1px solid var(--witmcc-border, #1d212c);
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: var(--witmcc-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.controls {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--witmcc-surface-2, #161a23);
+  border-bottom: 1px solid var(--witmcc-border, #1d212c);
+  align-items: center;
+}
+
+.controlBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--witmcc-fg-muted, #aab0bd);
+  background: var(--witmcc-surface-3, #1b202a);
+  border: 1px solid var(--witmcc-border, #1d212c);
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--witmcc-motion-fast, 150ms);
+}
+
+.controlBtn:hover {
+  background: var(--witmcc-border-strong, #2a3040);
+  color: var(--witmcc-fg, #e6e8ee);
+}
+
+.svgWrapper {
+  flex: 1;
+  overflow: hidden;
+  cursor: grab;
+  position: relative;
+}
+
+.svgWrapper:active {
+  cursor: grabbing;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Tooltip */
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--witmcc-surface-3, #1b202a);
+  border: 1px solid var(--witmcc-border-strong, #2a3040);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--witmcc-fg, #e6e8ee);
+  white-space: nowrap;
+  z-index: 10;
+  max-width: 280px;
+}
+
+/* Inferred edge dash animation */
+@keyframes dashFlow {
+  from { stroke-dashoffset: 14; }
+  to   { stroke-dashoffset: 0; }
+}
+
+.inferredEdge {
+  animation: dashFlow 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inferredEdge {
+    animation: none;
+  }
+}

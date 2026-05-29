@@ -1,0 +1,10 @@
+/* webui/src/components/replay/detail/JsonTree.module.css */
+.tree { font-family: var(--witmcc-mono, ui-monospace, monospace); font-size: 12px; line-height: 1.6; }
+.row { display: flex; align-items: center; gap: 4px; }
+.toggle { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; color: inherit; cursor: pointer; padding: 0; font: inherit; }
+.children { padding-left: 14px; border-left: 1px solid var(--witmcc-border, #1d212c); margin-left: 5px; }
+.key { color: var(--witmcc-accent, #4f8cff); }
+.colon { color: var(--witmcc-fg-subtle, #6a7180); }
+.value { color: var(--witmcc-fg, #e6e8ee); white-space: pre-wrap; word-break: break-word; }
+.preview { color: var(--witmcc-fg-subtle, #6a7180); }
+.empty { color: var(--witmcc-fg-subtle, #6a7180); padding: 12px; }

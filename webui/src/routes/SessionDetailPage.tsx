@@ -1,19 +1,13 @@
-import { Suspense, lazy, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import type { GraphPayload, ObservedEventDto } from '../api/types';
 import { MetaStrip } from '../components/MetaStrip';
-import { SourcePanel } from '../components/SourcePanel';
-import { Waterfall } from '../components/replay/Waterfall';
-// React Flow + dagre add ~250 kB minified. Lazy-load so the default
-// Waterfall view stays cheap and only Graph users pay the cost.
-const CausalGraph = lazy(() =>
-  import('../components/replay/CausalGraph').then((m) => ({ default: m.CausalGraph })),
-);
-import { ViewToggle, useReplayView } from '../components/replay/ViewToggle';
+import { DetailPanel } from '../components/replay/detail/DetailPanel';
+import { Timeline } from '../components/replay/timeline/Timeline';
+import { TopBar } from '../components/layout/TopBar';
 import { KpiStrip } from '../components/replay/KpiStrip';
 import { EpisodeStrip } from '../components/replay/EpisodeStrip';
-import { WhyPanel } from '../components/replay/WhyPanel';
 import {
   ReplaySelectionProvider,
   useReplaySelection,
@@ -26,10 +20,12 @@ import {
   useFindingsQuery,
   useVerificationRunsQuery,
   useDiffHunksQuery,
-  useFindingEvidenceQuery,
+  useEventRawQuery,
 } from '../lib/queries';
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import type { LiveEnvelope } from '../hooks/useLiveStream';
+import { ConversationStream } from '../components/replay/stream/ConversationStream';
+import { buildStreamModel } from '../components/replay/stream/streamModel';
 import styles from './SessionDetailPage.module.css';
 
 function envelopeToObserved(env: LiveEnvelope): ObservedEventDto {
@@ -56,7 +52,6 @@ const EMPTY_GRAPH: GraphPayload = { nodes: [], edges: [] };
 
 function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const sel = useReplaySelection();
-  const view = useReplayView();
 
   const detail = useSessionDetailQuery(sessionId);
   const graph = useSessionGraphQuery(sessionId);
@@ -90,6 +85,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     return () => io.disconnect();
   }, [window_]);
 
+  const effectiveGraph = graph.data ?? EMPTY_GRAPH;
+
   // --- KPI strip inputs ---
   const findingsData = findings.data ?? [];
   const riskCount = useMemo(
@@ -112,34 +109,115 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     return 'clean';
   }, [findingsData]);
 
-  // --- WhyPanel inputs ---
-  const selectedFinding = useMemo(() => {
-    if (!sel.selectedFindingId) return null;
-    return findingsData.find((f) => f.finding_id === sel.selectedFindingId) ?? null;
-  }, [sel.selectedFindingId, findingsData]);
+  const streamItems = useMemo(() => buildStreamModel(window_.events), [window_.events]);
 
-  const evidenceQuery = useFindingEvidenceQuery(sel.selectedFindingId ?? '', {
-    enabled: !!sel.selectedFindingId && sel.whyPanelOpen,
-  });
+  // event_id -> node_id (graph nodes carry source_event_ids)
+  const nodeIdByEventId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const n of effectiveGraph.nodes) for (const eid of n.source_event_ids) m.set(eid, n.node_id);
+    return m;
+  }, [effectiveGraph]);
 
-  // --- render branches ---
-  const detailError = detail.error as ApiError | null;
-  const is404 = detailError instanceof ApiError && detailError.status === 404;
-  const isLoading = detail.isLoading;
-  const effectiveGraph = graph.data ?? EMPTY_GRAPH;
+  // event ids that have a finding. Evidence refs (slice-14/15+) live in two
+  // namespaces; resolve each through its own path:
+  //   - candidateNodeIds: refs that may be node ids (bare-string ULID refs and
+  //     { node_id } refs) → mapped via the graph to their source event ids;
+  //   - directEventIds: ids that are already event ids (bare-string refs and
+  //     { event_id } refs) → used as-is.
+  // A bare string ref is ambiguous, so it is treated as both.
+  const findingEventIds = useMemo(() => {
+    const candidateNodeIds = new Set<string>();
+    const directEventIds = new Set<string>();
+    for (const f of findingsData) {
+      for (const ref of f.evidence_refs) {
+        if (typeof ref === 'string') {
+          candidateNodeIds.add(ref);
+          directEventIds.add(ref);
+        } else {
+          if (typeof ref.node_id === 'string') candidateNodeIds.add(ref.node_id);
+          if (typeof ref.event_id === 'string') {
+            directEventIds.add(ref.event_id);
+            // object refs with only an event_id were historically matched
+            // against node ids too; preserve that.
+            if (typeof ref.node_id !== 'string') candidateNodeIds.add(ref.event_id);
+          }
+        }
+      }
+    }
+    const eids = new Set<string>(directEventIds);
+    for (const n of effectiveGraph.nodes) {
+      if (candidateNodeIds.has(n.node_id)) for (const eid of n.source_event_ids) eids.add(eid);
+    }
+    return eids;
+  }, [findingsData, effectiveGraph]);
 
+  // event_id -> episode phase (by observed_at within [started_at, ended_at]).
+  // Computed over ALL window events — activity events (not just messages) need
+  // phases now so ActivityStack can split runs by phase.
+  const phaseByEventId = useMemo(() => {
+    const eps = episodes.data ?? [];
+    const out = new Map<string, string>();
+    for (const ev of window_.events) {
+      const t = ev.observed_at;
+      const ep = eps.find((e) => e.started_at <= t && t <= e.ended_at);
+      if (ep) out.set(ev.event_id, ep.phase);
+    }
+    return out;
+  }, [window_.events, episodes.data]);
+
+  const phaseOf = useCallback(
+    (eventId: string) => phaseByEventId.get(eventId) ?? null,
+    [phaseByEventId],
+  );
+
+  const selectedStreamEventId = useMemo(() => {
+    if (!sel.selectedNodeId) return null;
+    const n = effectiveGraph.nodes.find((x) => x.node_id === sel.selectedNodeId);
+    return n?.source_event_ids[0] ?? null;
+  }, [sel.selectedNodeId, effectiveGraph]);
+
+  const selectStreamCard = (eventId: string) => {
+    const nid = nodeIdByEventId.get(eventId);
+    sel.setSelectedNodeId(nid ?? null);
+  };
+
+  // --- DetailPanel inputs ---
   const selectedNode =
     sel.selectedNodeId && effectiveGraph
       ? effectiveGraph.nodes.find((n) => n.node_id === sel.selectedNodeId) ?? null
       : null;
   const selectedEventId = selectedNode?.source_event_ids[0] ?? null;
 
+  const rawQuery = useEventRawQuery(selectedEventId);
+
+  const selectedNodeFindings = useMemo(() => {
+    if (!sel.selectedNodeId) return [];
+    const nid = sel.selectedNodeId;
+    const node = effectiveGraph.nodes.find((n) => n.node_id === nid);
+    const sourceEventIds = new Set(node?.source_event_ids ?? []);
+    return findingsData.filter((f) =>
+      f.evidence_refs.some((ref) => {
+        if (typeof ref === 'string') return ref === nid || sourceEventIds.has(ref);
+        return ref.node_id === nid || (typeof ref.event_id === 'string' && sourceEventIds.has(ref.event_id));
+      }),
+    );
+  }, [sel.selectedNodeId, effectiveGraph, findingsData]);
+
+  const selectedNodePhase = useMemo(() => {
+    if (!selectedNode) return null;
+    const eps = episodes.data ?? [];
+    const t = selectedNode.started_at;
+    return eps.find((e) => e.started_at <= t && t <= e.ended_at)?.phase ?? null;
+  }, [selectedNode, episodes.data]);
+
+  // --- render branches ---
+  const detailError = detail.error as ApiError | null;
+  const is404 = detailError instanceof ApiError && detailError.status === 404;
+  const isLoading = detail.isLoading;
+
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <Link to="/sessions">← Sessions</Link>
-        <code>{sessionId}</code>
-      </header>
+      <TopBar sessionId={sessionId} />
 
       {isLoading && <p>Loading…</p>}
 
@@ -150,58 +228,62 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
       )}
 
       {!isLoading && !is404 && detail.data && (
-        <>
-          <KpiStrip
-            outcome={outcome}
-            verificationCoverage={verificationCoverage}
-            episodeCount={episodes.data?.length ?? 0}
-            riskCount={riskCount}
-          />
-          <EpisodeStrip episodes={episodes.data ?? []} />
-          <MetaStrip session={detail.data} events={window_.events} />
-          <div className={styles.viewToggleRow}>
-            <ViewToggle />
+        <div className={styles.grid} data-witmcc-detail-grid>
+          <div className={styles.kpi} data-slot="kpi">
+            <KpiStrip
+              outcome={outcome}
+              verificationCoverage={verificationCoverage}
+              episodeCount={episodes.data?.length ?? 0}
+              riskCount={riskCount}
+            />
+            <EpisodeStrip episodes={episodes.data ?? []} />
+            <MetaStrip session={detail.data} events={window_.events} />
           </div>
-          <div className={styles.split}>
-            <div>
-              <div
-                ref={sentinelRef}
-                aria-hidden
-                style={{ height: 1 }}
-                data-testid="scroll-sentinel"
-              />
-              {view === 'graph' ? (
-                <Suspense fallback={<p>Loading graph…</p>}>
-                  <CausalGraph
-                    graph={effectiveGraph}
-                    selectedNodeId={sel.selectedNodeId}
-                    onSelect={(id) => sel.setSelectedNodeId(id)}
-                  />
-                </Suspense>
-              ) : (
-                <Waterfall
-                  graph={effectiveGraph}
-                  selectedNodeId={sel.selectedNodeId}
-                  onSelect={(id) => sel.setSelectedNodeId(id)}
-                />
-              )}
-            </div>
-            <SourcePanel eventId={selectedEventId} node={selectedNode} />
+
+          <div className={styles.stream} data-slot="stream">
+            {/* Sentinel parked at the top of the stream slot: scrolling up to here triggers loadOlder. */}
+            <div
+              ref={sentinelRef}
+              aria-hidden
+              style={{ height: 1 }}
+              data-testid="scroll-sentinel"
+            />
+            <ConversationStream
+              items={streamItems}
+              phaseOf={phaseOf}
+              selectedEventId={selectedStreamEventId}
+              findingEventIds={findingEventIds}
+              onSelect={selectStreamCard}
+            />
           </div>
-        </>
+
+          <div className={styles.detail} data-slot="detail">
+            <DetailPanel
+              node={selectedNode}
+              record={rawQuery.data?.record ?? null}
+              findings={selectedNodeFindings}
+              episodePhase={selectedNodePhase}
+              nodes={effectiveGraph.nodes}
+              edges={effectiveGraph.edges}
+              onSelectNode={(id) => sel.setSelectedNodeId(id)}
+            />
+          </div>
+
+          <div className={styles.timeline} data-slot="timeline">
+            <Timeline
+              nodes={effectiveGraph.nodes}
+              edges={effectiveGraph.edges}
+              episodes={episodes.data ?? []}
+              selectedNodeId={sel.selectedNodeId}
+              onSelect={(id) => sel.setSelectedNodeId(id)}
+            />
+          </div>
+        </div>
       )}
 
       {!isLoading && !is404 && !detail.data && detail.isError && (
         <p role="alert">{detail.error?.message ?? 'failed'}</p>
       )}
-
-      <WhyPanel
-        open={sel.whyPanelOpen}
-        finding={selectedFinding}
-        evidence={evidenceQuery.data}
-        onClose={sel.closeWhyPanel}
-        onEvidenceHover={sel.setHoveredNodeId}
-      />
     </div>
   );
 }
