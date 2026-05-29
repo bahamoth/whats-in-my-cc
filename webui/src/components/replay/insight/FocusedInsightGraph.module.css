@@ -1,0 +1,79 @@
+/* R5 — FocusedInsightGraph styles */
+
+.wrap {
+  position: relative;
+  width: 100%;
+  height: 260px;
+  background: var(--witmcc-surface-1, #11141b);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+}
+
+.hopToggle {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--witmcc-surface-3, #1b202a);
+  border: 1px solid var(--witmcc-border-strong, #2a3040);
+  border-radius: 4px;
+  color: var(--witmcc-fg-muted, #aab0bd);
+  cursor: pointer;
+  font-family: var(--witmcc-mono, ui-monospace, monospace);
+  transition: background var(--witmcc-motion-fast, 150ms);
+}
+
+.hopToggle:hover {
+  background: var(--witmcc-surface-2, #161a23);
+  color: var(--witmcc-fg, #e6e8ee);
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 80px;
+  color: var(--witmcc-fg-subtle, #6a7180);
+  font-size: 13px;
+}
+
+.nodeInner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.nodeInner.center {
+  font-weight: 600;
+}
+
+.kind {
+  font-size: 10px;
+  font-family: var(--witmcc-mono, ui-monospace, monospace);
+  color: var(--witmcc-fg-muted, #aab0bd);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.nodeInner.center .kind {
+  color: var(--witmcc-accent, #4f8cff);
+}
+
+.nodeId {
+  font-size: 9px;
+  font-family: var(--witmcc-mono, ui-monospace, monospace);
+  color: var(--witmcc-fg-subtle, #6a7180);
+}
