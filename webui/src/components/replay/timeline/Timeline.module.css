@@ -41,7 +41,7 @@
 }
 
 .svgWrapper {
-  flex: 1;
+  flex: none;
   overflow: hidden;
   cursor: grab;
   position: relative;

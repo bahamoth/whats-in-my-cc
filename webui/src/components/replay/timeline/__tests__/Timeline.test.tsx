@@ -40,17 +40,19 @@ function renderTL(props = {}) {
 }
 
 describe('Timeline', () => {
-  // --- Lane rows ---
-  it('renders a lane row per LANES entry', () => {
+  // --- Lane rows (empty lanes hidden, #4) ---
+  it('renders a lane row only for lanes that have nodes (empty lanes hidden)', () => {
+    // nodes: user_message → Intent, tool_call → Action. The other 6 lanes are
+    // empty and must NOT render a row (keeps the surface compact + rows tall).
     const { container } = renderTL();
     expect(container.querySelector('[data-lane="Intent"]')).not.toBeNull();
     expect(container.querySelector('[data-lane="Action"]')).not.toBeNull();
-    expect(container.querySelector('[data-lane="Context"]')).not.toBeNull();
-    expect(container.querySelector('[data-lane="State"]')).not.toBeNull();
-    expect(container.querySelector('[data-lane="Files"]')).not.toBeNull();
-    expect(container.querySelector('[data-lane="Hook"]')).not.toBeNull();
-    expect(container.querySelector('[data-lane="OTel"]')).not.toBeNull();
-    expect(container.querySelector('[data-lane="Quality"]')).not.toBeNull();
+    expect(container.querySelector('[data-lane="Context"]')).toBeNull();
+    expect(container.querySelector('[data-lane="State"]')).toBeNull();
+    expect(container.querySelector('[data-lane="Files"]')).toBeNull();
+    expect(container.querySelector('[data-lane="Hook"]')).toBeNull();
+    expect(container.querySelector('[data-lane="OTel"]')).toBeNull();
+    expect(container.querySelector('[data-lane="Quality"]')).toBeNull();
   });
 
   // --- Nodes ---

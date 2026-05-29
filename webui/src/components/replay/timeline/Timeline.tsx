@@ -11,7 +11,7 @@ import { causalEdgeStyle } from '../causalEdgeStyle';
 import { useMediaQuery } from '../../../hooks/useMediaQuery';
 import { makeTimeScale } from './timeScale';
 import { fit, zoomAt, pan, clamp, type Viewport } from './viewport';
-import { nodesByLane } from './nodeLane';
+import { nodesByLane, nonEmptyLanes } from './nodeLane';
 import { Minimap } from './Minimap';
 import { nodeLabel } from '../stream/nodeLabel';
 import styles from './Timeline.module.css';
@@ -32,15 +32,9 @@ const MAX_NODES_PER_LANE = 200;
 const AXIS_HEIGHT = 24;      // px for the time axis row
 const EPISODE_HEIGHT = 12;   // px for the episode band row
 const LANE_LABEL_W = 52;     // px for lane label column
-const CTRL_HEIGHT = 30;      // px for control bar (rendered as HTML, not SVG)
 const NODE_RADIUS = 5;       // circle radius for instant nodes
 const NODE_BAR_H = 8;        // bar height for span nodes
-
-// Lane row height
-function laneHeight(svgHeight: number): number {
-  const availH = svgHeight - AXIS_HEIGHT - EPISODE_HEIGHT;
-  return Math.max(20, Math.floor(availH / LANES.length));
-}
+const LANE_H = 44;           // fixed, readable lane row height (total height is content-driven)
 
 // Lane colours from CSS tokens; fallbacks match the token values in tokens.css
 const LANE_COLORS: Record<string, string> = {
@@ -83,10 +77,26 @@ export function Timeline({
   episodes,
   selectedNodeId,
   onSelect,
-  width = 800,
-  height = 300,
+  width,
+  height,
 }: TimelineProps) {
   const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+
+  // Responsive width: with no explicit `width`, measure the container and fill
+  // it (previously the surface was a fixed 800px, wasting a wide screen's right
+  // half). An explicit prop still wins (tests, embeds).
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [measuredW, setMeasuredW] = useState<number>(width ?? 800);
+  useEffect(() => {
+    if (width != null) return;
+    const el = rootRef.current;
+    if (!el) return;
+    const apply = (w: number) => { if (w > 0) setMeasuredW(w); };
+    apply(el.clientWidth);
+    const ro = new ResizeObserver((entries) => apply(entries[0]?.contentRect.width ?? 0));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [width]);
 
   // Compute time extent from nodes
   const extent = useMemo<[number, number]>(() => {
@@ -118,11 +128,16 @@ export function Timeline({
 
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, nodeId: '', nodeKind: '', startedAt: '', labelPrimary: '', labelSecondary: '' });
 
-  // SVG drawable area
-  const svgW = width;
-  const svgH = height - CTRL_HEIGHT;
+  // Lanes that actually carry nodes this session — empty lanes are hidden so
+  // each visible row can be tall/readable (#4). Stable across zoom (uses all
+  // nodes, not the viewport slice).
+  const visibleLanes = useMemo(() => nonEmptyLanes(nodes), [nodes]);
+
+  // SVG drawable area — responsive width, content-driven height (fixed rows).
+  const svgW = width ?? measuredW;
+  const laneH = LANE_H;
+  const svgH = EPISODE_HEIGHT + 4 + LANE_H * visibleLanes.length + AXIS_HEIGHT;
   const drawW = svgW - LANE_LABEL_W;
-  const laneH = laneHeight(svgH);
   const axisY = svgH - AXIS_HEIGHT;
 
   // Time scale over current viewport
@@ -244,7 +259,7 @@ export function Timeline({
   const laneStartY = EPISODE_HEIGHT + 4;
 
   return (
-    <div className={styles.root} style={{ width, height }}>
+    <div ref={rootRef} className={styles.root} style={{ width: width ?? '100%', height }}>
       {/* Control bar */}
       <div className={styles.controls}>
         <button
@@ -315,8 +330,8 @@ export function Timeline({
             })}
           </g>
 
-          {/* ── Lane rows ── */}
-          {LANES.map((lane, laneIdx) => {
+          {/* ── Lane rows (only non-empty lanes, packed without gaps) ── */}
+          {visibleLanes.map((lane, laneIdx) => {
             const y = laneStartY + laneIdx * laneH;
             const laneNodes = visibleByLane.get(lane) ?? [];
             const aggregated = laneNodes.length > MAX_NODES_PER_LANE;
@@ -452,21 +467,14 @@ export function Timeline({
               const emphasized = selectedNodeId ? isIncident : undefined;
               const dimmed = selectedNodeId ? !isIncident : undefined;
 
-              // Node positions
-              const fromLaneIdx = LANES.indexOf(
-                LANES.find((l) => {
-                  const bucket = visibleByLane.get(l);
-                  return bucket?.some((n) => n.node_id === e.from_node_id);
-                }) ??
-                (LANES.find((l) => (byLane.get(l) ?? []).some((n) => n.node_id === e.from_node_id)) ?? LANES[0])
-              );
-              const toLaneIdx = LANES.indexOf(
-                LANES.find((l) => {
-                  const bucket = visibleByLane.get(l);
-                  return bucket?.some((n) => n.node_id === e.to_node_id);
-                }) ??
-                (LANES.find((l) => (byLane.get(l) ?? []).some((n) => n.node_id === e.to_node_id)) ?? LANES[0])
-              );
+              // Node lane rows — indexed within the visible (non-empty) lane set
+              // so edge endpoints land on the packed rows actually rendered.
+              const laneRowOf = (nodeId: string): number => {
+                const lane = visibleLanes.find((l) => (byLane.get(l) ?? []).some((n) => n.node_id === nodeId));
+                return lane ? visibleLanes.indexOf(lane) : 0;
+              };
+              const fromLaneIdx = laneRowOf(e.from_node_id);
+              const toLaneIdx = laneRowOf(e.to_node_id);
 
               const x1 = scale(new Date(fromNode.started_at));
               const y1 = laneStartY + fromLaneIdx * laneH + laneH / 2;
