@@ -2871,7 +2871,7 @@ vitest: 69 passed
 
   <!-- UX S7-S11 — Chat alignment, subagent grouping, timeline, raw/role, verif fix -->
   <section id="ux-s7-s11">
-    <h2><span class="num">38</span>UX S7–S11 — 세션 상세 UX 수정 (chat/timeline/raw)</h2>
+    <h2><span class="num">38</span>UX S7–S12 — 세션 상세 UX 수정 (chat/timeline/raw)</h2>
     <p>브랜치: <code>webui/ux-fixes</code> · 날짜: 2026-05-30 · 트랙: UX 재설계 epic(마일스톤 외).
       사용자가 claude-in-chrome로 라이브 디자인 확정 후, 슬라이스별 TDD red→green +
       브라우저 smoke로 구현. 세션 <code>eb70234e</code> 실데이터로 검증.</p>
@@ -2906,24 +2906,33 @@ vitest: 69 passed
         배열)이라 undefined 반환 → React Query 에러 → KPI Verification coverage가 0/60 오표기됐다.
         과잉 언랩 제거. 기존 테스트가 double-wrap shape를 mock해 버그를 숨기고 있어 실서버 shape로 교정.
         수정 후 KPI 60/60 정상화.</li>
+      <li><strong>S12 — 채팅 행 겹침(virtualizer):</strong> <code>useVirtualizer</code>가 측정 행 높이를
+        <code>index</code> 기준으로 캐시했는데 <code>useSessionWindow.loadOlder</code>가 older 페이지를
+        <code>prepend</code>하면 모든 index가 밀려 캐시가 엉뚱한 항목에 매핑 → 큰 행(긴 sidechain 프롬프트
+        ~618px)에 짧은 캐시 크기 적용 → 다음 행 오프셋이 행 안쪽에 박혀 겹침(최대 487px). <code>key={item.id}</code>는
+        React용일 뿐 virtualizer 캐시는 index 기반이었다. <code>getItemKey:(i)=&gt;items[i]?.id??i</code>로
+        안정적 id 키잉. jsdom은 레이아웃 미계산(가상 경로 미실행)이라 useVirtualizer가 item id로 키잉되는지
+        계약 테스트로 잠금. 브라우저 검증: 세션 653ea169에서 prepend 반복 후 overlapCount 13→0,
+        slot-vs-measured mismatch 0px.</li>
     </ul>
     <h3>검증</h3>
-    <p>288 vitest green(42 files) · <code>tsc -b</code> clean · 각 슬라이스 브라우저 smoke
+    <p>289 vitest green(42 files) · <code>tsc -b</code> clean · 각 슬라이스 브라우저 smoke
       (:5173 Vite dev, /v1 → :7878 프록시). <strong>운영 주의:</strong> WebUI는 <code>webui/dist</code>를
       rust-embed로 바이너리에 임베드하므로 <code>witmcc serve</code>(:7878)에 반영하려면
       <code>npm run build</code> + <code>cargo build</code> 재빌드 필요. 스키마/마이그레이션 변경 없음.</p>
-    <h3>Commit Reference (UX S7–S11)</h3>
+    <h3>Commit Reference (UX S7–S12)</h3>
     <ul>
       <li><code>e0f7936</code> — S7 채팅 우측 정렬</li>
       <li><code>cce9652</code> — S8 서브에이전트 교환 그룹화 + Prompt 라벨</li>
       <li><code>1267eeb</code> — S9 타임라인 전체폭 + 행 높이 + 빈 레인 숨김</li>
       <li><code>37c109f</code> — S10 role/source 배지 + Raw 탭 강조</li>
       <li><code>1951f98</code> — S11 verification-runs 과잉 언랩 수정</li>
+      <li><code>2ac9cac</code> — S12 채팅 행 겹침 수정(virtualizer stable id 키잉)</li>
     </ul>
   </section>
 
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S11 · <strong>MVP EXIT 2026-05-27</strong></p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
