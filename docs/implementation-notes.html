@@ -2869,8 +2869,61 @@ vitest: 69 passed
     </ul>
   </section>
 
+  <!-- UX S7-S11 — Chat alignment, subagent grouping, timeline, raw/role, verif fix -->
+  <section id="ux-s7-s11">
+    <h2><span class="num">38</span>UX S7–S11 — 세션 상세 UX 수정 (chat/timeline/raw)</h2>
+    <p>브랜치: <code>webui/ux-fixes</code> · 날짜: 2026-05-30 · 트랙: UX 재설계 epic(마일스톤 외).
+      사용자가 claude-in-chrome로 라이브 디자인 확정 후, 슬라이스별 TDD red→green +
+      브라우저 smoke로 구현. 세션 <code>eb70234e</code> 실데이터로 검증.</p>
+    <h3>설계 결정 / 편차</h3>
+    <ul>
+      <li><strong>S7 — 채팅 우측 정렬(#1):</strong> <code>MessageCard</code>가 우측 정렬을
+        <code>align-self:flex-end</code>에 의존했으나 실제 부모(virtualizer 절대배치 래퍼·fallback
+        block)가 flex가 아니라 무효였다. <code>.alignRight{margin-left:auto}</code> /
+        <code>.alignLeft{margin-right:auto}</code>로 수정(block/absolute 래퍼 양쪽 동작). CSS-only라
+        jsdom 레이아웃 테스트 불가 → 기존 <code>data-align</code> 단언 + 브라우저 smoke로 잠금.</li>
+      <li><strong>S8 — 서브에이전트 그룹화(#3):</strong> Task 서브에이전트 프롬프트(sidechain
+        user_message)가 "You"로 오표기됐다. 구분 키는 <code>is_sidechain</code>뿐 —
+        transcript <code>isSidechain</code>→<code>observed_event.is_sidechain</code>, 사용자 입력과
+        서브에이전트 프롬프트 모두 <code>user_type=external</code>이라 user_type으로는 구분 불가
+        (세션 eb70234e: user_message 40건 중 sidechain 5건). <code>ObservedEventDto</code>에 이미
+        노출되어 프론트 단독 수정. <code>buildStreamModel</code>이 연속 sidechain 런(프롬프트+응답+도구)을
+        <code>SidechainGroup</code>으로 묶고, 신규 <code>SubagentGroup</code>이 "↳ Subagent" 헤더 +
+        들여쓰기 + accent 보더로 메인 대화와 분리. 프롬프트는 "You"가 아닌 "Prompt"로 좌측 표기.</li>
+      <li><strong>S9 — 타임라인(#4):</strong> <code>SessionDetailPage</code>가 <code>Timeline</code>에
+        width/height를 안 넘겨 기본 800×300 고정 → 넓은 화면 우측 ~37%가 비고 8레인이 ~29px로 얇았다.
+        ResizeObserver 반응형 width(width prop 명시 시 우선), <code>LANE_H=44</code> 고정 행 +
+        콘텐츠 기반 높이, <code>nonEmptyLanes</code>로 노드 없는 레인 숨김(세션 단위, 줌 무관). 엣지
+        endpoint도 visibleLanes 인덱스로 패킹. 기존 "all-lanes" 테스트는 새 동작으로 교체.</li>
+      <li><strong>S10 — role/source 배지 + Raw 탭 강조(#2):</strong> Raw record는 배선상 정상
+        (<code>GET /v1/events/:id/raw</code>)이나 기본 Insight 탭 뒤에 가려져 발견이 어려웠다. 메시지
+        헤더에 origin 배지(external=사람 / subagent=Task 프롬프트 / agent=모델, role+sidechain 파생),
+        <code>DetailPanel</code> Raw 탭에 <code>{ }</code> 글리프 + record 로드 시 accent dot
+        (<code>data-has-record</code>). raw를 열면 <code>isSidechain</code>/<code>type</code>/
+        <code>agentId</code> 등 출처가 그대로 보인다.</li>
+      <li><strong>S11 — verification-runs 버그(보너스):</strong> <code>getVerificationRuns</code>가
+        <code>.then(r=&gt;r.data)</code>로 과잉 언랩 — 실 응답은 <code>{meta,data:[...]}</code>(data가
+        배열)이라 undefined 반환 → React Query 에러 → KPI Verification coverage가 0/60 오표기됐다.
+        과잉 언랩 제거. 기존 테스트가 double-wrap shape를 mock해 버그를 숨기고 있어 실서버 shape로 교정.
+        수정 후 KPI 60/60 정상화.</li>
+    </ul>
+    <h3>검증</h3>
+    <p>288 vitest green(42 files) · <code>tsc -b</code> clean · 각 슬라이스 브라우저 smoke
+      (:5173 Vite dev, /v1 → :7878 프록시). <strong>운영 주의:</strong> WebUI는 <code>webui/dist</code>를
+      rust-embed로 바이너리에 임베드하므로 <code>witmcc serve</code>(:7878)에 반영하려면
+      <code>npm run build</code> + <code>cargo build</code> 재빌드 필요. 스키마/마이그레이션 변경 없음.</p>
+    <h3>Commit Reference (UX S7–S11)</h3>
+    <ul>
+      <li><code>e0f7936</code> — S7 채팅 우측 정렬</li>
+      <li><code>cce9652</code> — S8 서브에이전트 교환 그룹화 + Prompt 라벨</li>
+      <li><code>1267eeb</code> — S9 타임라인 전체폭 + 행 높이 + 빈 레인 숨김</li>
+      <li><code>37c109f</code> — S10 role/source 배지 + Raw 탭 강조</li>
+      <li><code>1951f98</code> — S11 verification-runs 과잉 언랩 수정</li>
+    </ul>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · <strong>MVP EXIT 2026-05-27</strong> · branch: feat/remaining-milestones</p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S11 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
