@@ -185,7 +185,7 @@ fn map_assistant(
                 e.kind = EventKind::ToolCall;
                 e.tool_use_id = item.get("id").and_then(|x| x.as_str()).map(String::from);
                 e.tool_name = item.get("name").and_then(|x| x.as_str()).map(String::from);
-                e.payload = json!({"content_ordinal": ord, "input": item.get("input")});
+                e.payload = json!({"content_ordinal": ord, "tool_name": e.tool_name, "input": item.get("input")});
             }
             _ => {
                 e.kind = EventKind::Unknown;
