@@ -1,0 +1,29 @@
+.bar {
+  display: flex;
+  align-items: center;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--witmcc-border, #2c313a);
+  margin-bottom: 12px;
+}
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.link {
+  color: var(--witmcc-accent, #61afef);
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}
+.sep {
+  color: var(--witmcc-muted, #5c6370);
+}
+.current {
+  color: var(--witmcc-text, #abb2bf);
+  font-family: var(--witmcc-mono, ui-monospace, monospace);
+}
