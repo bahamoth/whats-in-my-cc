@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { MessageCard } from './MessageCard';
 import { ActivityStack } from './ActivityStack';
+import { SubagentGroup } from './SubagentGroup';
 import { splitRunByPhase } from './activityGroup';
 import type { StreamItem } from './streamModel';
 import styles from './ConversationStream.module.css';
@@ -22,6 +23,7 @@ interface ConversationStreamProps {
  * containing an event with that id. Used for scroll-into-view targeting. */
 function itemContainsEvent(item: StreamItem, eventId: string): boolean {
   if (item.type === 'message') return item.eventId === eventId;
+  if (item.type === 'sidechain-group') return item.items.some((i) => itemContainsEvent(i, eventId));
   return item.events.some((ae) => ae.event.event_id === eventId);
 }
 
@@ -127,6 +129,17 @@ export function ConversationStream({
           selected={item.eventId === selectedEventId}
           onSelect={onSelect}
           hasFinding={findingEventIds.has(item.eventId)}
+        />
+      );
+    }
+    if (item.type === 'sidechain-group') {
+      return (
+        <SubagentGroup
+          group={item}
+          selectedEventId={selectedEventId}
+          onSelect={onSelect}
+          findingEventIds={findingEventIds}
+          phaseOf={phaseOf}
         />
       );
     }

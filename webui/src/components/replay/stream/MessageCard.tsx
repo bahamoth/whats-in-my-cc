@@ -1,5 +1,5 @@
 // webui/src/components/replay/stream/MessageCard.tsx
-import { User, Bot, BrainCog, Lightbulb } from 'lucide-react';
+import { User, Bot, BrainCog, Lightbulb, CornerDownRight } from 'lucide-react';
 import type { MessageItem } from './streamModel';
 import { formatModel } from './nodeLabel';
 import styles from './MessageCard.module.css';
@@ -18,14 +18,21 @@ interface MessageCardProps {
 }
 
 export function MessageCard({ item, selected, onSelect, hasFinding = false }: MessageCardProps) {
-  const isRight = item.role === 'user';
+  // A sidechain user_message is the orchestrator's prompt to a Task subagent —
+  // not human input. It renders left, labelled "Prompt", inside a SubagentGroup.
+  const isSubagentPrompt = item.role === 'user' && item.sidechain;
+  const isRight = item.role === 'user' && !item.sidechain;
   const align = isRight ? 'right' : 'left';
 
   let Icon: typeof User;
   let label: string;
   let bubbleClass: string;
 
-  if (item.role === 'user') {
+  if (isSubagentPrompt) {
+    Icon = CornerDownRight;
+    label = 'Prompt';
+    bubbleClass = styles.subagentBubble;
+  } else if (item.role === 'user') {
     Icon = User;
     label = 'You';
     bubbleClass = styles.userBubble;

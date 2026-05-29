@@ -59,3 +59,52 @@ describe('buildStreamModel', () => {
     expect(run.events[0].result).toEqual({ isError: true });
   });
 });
+
+describe('buildStreamModel — sidechain grouping (#3)', () => {
+  it('tags message items with their sidechain origin', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'u', kind: 'user_message', payload: { content: 'hi' } }),
+      ev({ event_id: 's', kind: 'user_message', is_sidechain: true, payload: { content: 'explore' } }),
+    ]);
+    const mainMsg = items.find((i: any) => i.type === 'message') as any;
+    expect(mainMsg.sidechain).toBe(false);
+    const group = items.find((i: any) => i.type === 'sidechain-group') as any;
+    expect(group).toBeTruthy();
+    const subMsg = group.items.find((i: any) => i.type === 'message') as any;
+    expect(subMsg.sidechain).toBe(true);
+  });
+
+  it('groups a contiguous sidechain run into one sidechain-group, preserving main flow order', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'u1', kind: 'user_message', payload: { content: 'main q' } }),
+      ev({ event_id: 'a1', kind: 'assistant_message', actor: 'assistant', payload: { text: 'dispatching', model: 'claude-opus-4-8' } }),
+      ev({ event_id: 's-u', kind: 'user_message', is_sidechain: true, payload: { content: 'subagent prompt' } }),
+      ev({ event_id: 's-a', kind: 'assistant_message', is_sidechain: true, actor: 'assistant', payload: { text: 'subagent reply', model: 'claude-opus-4-8' } }),
+      ev({ event_id: 'u2', kind: 'user_message', payload: { content: 'main q2' } }),
+    ]);
+    expect(items.map((i: any) => i.type)).toEqual(['message', 'message', 'sidechain-group', 'message']);
+    const group = items[2] as any;
+    expect(group.items.map((i: any) => i.type)).toEqual(['message', 'message']);
+    expect(group.items.map((i: any) => i.text)).toEqual(['subagent prompt', 'subagent reply']);
+  });
+
+  it('keeps sidechain tool activity inside the group, not the main flow', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 's-u', kind: 'user_message', is_sidechain: true, payload: { content: 'p' } }),
+      ev({ event_id: 's-c', kind: 'tool_call', is_sidechain: true, actor: 'assistant', tool_name: 'Read', payload: { tool_name: 'Read', input: {} } }),
+    ]);
+    expect(items).toHaveLength(1);
+    const group = items[0] as any;
+    expect(group.type).toBe('sidechain-group');
+    expect(group.items.map((i: any) => i.type)).toEqual(['message', 'activity-run']);
+  });
+
+  it('separates two distinct subagent dispatches split by main-thread events', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 's1', kind: 'user_message', is_sidechain: true, payload: { content: 'sub1' } }),
+      ev({ event_id: 'm', kind: 'assistant_message', actor: 'assistant', payload: { text: 'back to main', model: 'claude-opus-4-8' } }),
+      ev({ event_id: 's2', kind: 'user_message', is_sidechain: true, payload: { content: 'sub2' } }),
+    ]);
+    expect(items.map((i: any) => i.type)).toEqual(['sidechain-group', 'message', 'sidechain-group']);
+  });
+});

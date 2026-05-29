@@ -19,6 +19,10 @@ export interface MessageItem {
   model: string | null;
   text: string;
   timestamp: string;
+  /** True when the source event is on a Task-tool sidechain (subagent). For a
+   *  user_message this means the orchestrator's prompt TO a subagent — NOT human
+   *  input — so it must not be labelled "You" nor right-aligned. */
+  sidechain: boolean;
 }
 
 export interface ActivityEvent {
@@ -32,7 +36,16 @@ export interface ActivityRun {
   events: ActivityEvent[];
 }
 
-export type StreamItem = MessageItem | ActivityRun;
+/** A contiguous run of sidechain (subagent) events — the prompt the orchestrator
+ *  sent, the subagent's replies, and its tool activity — grouped so the whole
+ *  exchange reads as one indented block separate from the main conversation. */
+export interface SidechainGroup {
+  type: 'sidechain-group';
+  id: string;
+  items: StreamItem[];
+}
+
+export type StreamItem = MessageItem | ActivityRun | SidechainGroup;
 
 const SCAFFOLD =
   /^\s*(<command-name>|<command-message>|<command-args>|<local-command-stdout>|<local-command-caveat>|Base directory for this skill:|\[Request interrupted)/;
@@ -77,29 +90,60 @@ export function buildStreamModel(events: ObservedEventDto[]): StreamItem[] {
   }
 
   const items: StreamItem[] = [];
+
+  // Sidechain items accumulate into a buffer that is flushed as one
+  // SidechainGroup the moment the stream returns to the main thread (or ends).
+  let scBuf: StreamItem[] | null = null;
+  let scFirstId = '';
+  const closeGroup = () => {
+    if (scBuf && scBuf.length) {
+      items.push({ type: 'sidechain-group', id: `sc-${scFirstId}`, items: scBuf });
+    }
+    scBuf = null;
+  };
+  const emit = (it: StreamItem, sidechain: boolean) => {
+    if (sidechain) {
+      if (!scBuf) { scBuf = []; scFirstId = it.id; }
+      scBuf.push(it);
+    } else {
+      closeGroup();
+      items.push(it);
+    }
+  };
+
   let run: ActivityEvent[] = [];
+  let runSc = false;
   const flush = () => {
     if (run.length) {
-      items.push({ type: 'activity-run', id: `run-${run[0].event.event_id}`, events: run });
+      emit({ type: 'activity-run', id: `run-${run[0].event.event_id}`, events: run }, runSc);
       run = [];
     }
   };
 
   for (const e of events) {
     if (e.kind === 'tool_result') continue;
+    const sc = !!e.is_sidechain;
     const c = classify(e);
     if (c.cat === 'message') {
       flush();
-      items.push({
-        type: 'message',
-        id: e.event_id,
-        eventId: e.event_id,
-        role: c.role!,
-        model: c.model ?? null,
-        text: c.text!,
-        timestamp: e.observed_at,
-      });
+      emit(
+        {
+          type: 'message',
+          id: e.event_id,
+          eventId: e.event_id,
+          role: c.role!,
+          model: c.model ?? null,
+          text: c.text!,
+          timestamp: e.observed_at,
+          sidechain: sc,
+        },
+        sc,
+      );
     } else if (c.cat === 'activity') {
+      // A change of sidechain status breaks the activity run so a run never
+      // straddles the main↔subagent boundary.
+      if (run.length && runSc !== sc) flush();
+      runSc = sc;
       let result: { isError: boolean } | null = null;
       if (e.kind === 'tool_call' && e.tool_use_id) {
         const r = resultByUse.get(e.tool_use_id);
@@ -110,6 +154,7 @@ export function buildStreamModel(events: ObservedEventDto[]): StreamItem[] {
     // cat === 'drop': skip silently
   }
   flush();
+  closeGroup();
   return items;
 }
 
