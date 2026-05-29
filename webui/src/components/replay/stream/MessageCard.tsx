@@ -28,6 +28,15 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
   let label: string;
   let bubbleClass: string;
 
+  // Origin chip — surfaces who produced this message (the raw role the user
+  // would otherwise have to open Raw to confirm): a human, a subagent, or the
+  // model. Complements the friendly label.
+  const sourceTag = isSubagentPrompt
+    ? 'subagent'
+    : item.role === 'user'
+    ? 'external'
+    : 'agent';
+
   if (isSubagentPrompt) {
     Icon = CornerDownRight;
     label = 'Prompt';
@@ -67,6 +76,7 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
       <div className={styles.head}>
         <Icon size={14} aria-hidden className={styles.icon} />
         <span className={styles.label}>{label}</span>
+        <span data-testid="source-badge" className={styles.sourceBadge}>{sourceTag}</span>
         {hasFinding && (
           <Lightbulb
             size={12}

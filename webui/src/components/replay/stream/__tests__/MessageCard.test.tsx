@@ -28,6 +28,14 @@ describe('MessageCard', () => {
     expect(screen.getByText('Prompt')).toBeInTheDocument();
     expect(screen.queryByText('You')).toBeNull();
   });
+  it('shows a source badge revealing origin (external / subagent / agent)', () => {
+    const { rerender } = render(<MessageCard item={m({ role: 'user' })} selected={false} onSelect={() => {}} />);
+    expect(screen.getByTestId('source-badge')).toHaveTextContent('external');
+    rerender(<MessageCard item={m({ role: 'user', sidechain: true })} selected={false} onSelect={() => {}} />);
+    expect(screen.getByTestId('source-badge')).toHaveTextContent('subagent');
+    rerender(<MessageCard item={m({ role: 'assistant', model: 'claude-opus-4-8' })} selected={false} onSelect={() => {}} />);
+    expect(screen.getByTestId('source-badge')).toHaveTextContent('agent');
+  });
   it('thinking is left + distinct (data-role=thinking)', () => {
     render(<MessageCard item={m({ role: 'thinking', text: '추론중' })} selected={false} onSelect={() => {}} />);
     expect(screen.getByTestId('message-card')).toHaveAttribute('data-role', 'thinking');

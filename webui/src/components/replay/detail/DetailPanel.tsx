@@ -1,5 +1,6 @@
 // webui/src/components/replay/detail/DetailPanel.tsx
 import { useState } from 'react';
+import { Braces } from 'lucide-react';
 import type { FindingDto, GraphNodeDto, GraphEdgeDto } from '../../../api/types';
 import { InsightTab } from './InsightTab';
 import { RawTab } from './RawTab';
@@ -37,11 +38,30 @@ export function DetailPanel({ node, record, findings, episodePhase, nodes, edges
     </button>
   );
 
+  // The Raw tab is secondary to Insight, so the raw source record was easy to
+  // miss (#2). Mark it with a braces glyph and, when a record is loaded but the
+  // tab isn't open, an accent dot to invite the click.
+  const hasRecord = record != null;
+  const rawTab = (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active === 'raw'}
+      data-has-record={hasRecord ? 'true' : 'false'}
+      className={`${styles.tab} ${active === 'raw' ? styles.active : ''} ${hasRecord && active !== 'raw' ? styles.tabEmphasis : ''}`}
+      onClick={() => setChosen('raw')}
+    >
+      <Braces size={12} aria-hidden />
+      Raw
+      {hasRecord && active !== 'raw' && <span className={styles.tabDot} aria-hidden />}
+    </button>
+  );
+
   return (
     <aside className={styles.panel}>
       <div className={styles.tabs} role="tablist">
         {tab('insight', 'Insight')}
-        {tab('raw', 'Raw')}
+        {rawTab}
       </div>
       <div className={styles.body} role="tabpanel">
         {active === 'insight' && (
