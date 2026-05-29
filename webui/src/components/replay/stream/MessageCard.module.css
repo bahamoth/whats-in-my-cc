@@ -54,7 +54,7 @@
 
 .finding {
   flex: none;
-  color: var(--witmcc-warning, #e0b341);
+  color: var(--witmcc-warning, #f0b429);
 }
 
 /* ---- bubble ---- */
