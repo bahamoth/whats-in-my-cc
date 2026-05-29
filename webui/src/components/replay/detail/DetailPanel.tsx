@@ -47,7 +47,7 @@ export function DetailPanel({ node, record, findings, episodePhase }: DetailPane
       <div className={styles.body} role="tabpanel">
         {active === 'insight' && <InsightTab findings={findings} />}
         {active === 'detail' && <DetailTab node={node} record={record} episodePhase={episodePhase} />}
-        {active === 'raw' && <RawTab nodeId={node.node_id ?? null} record={record} />}
+        {active === 'raw' && <RawTab nodeId={node.node_id} record={record} />}
       </div>
     </aside>
   );

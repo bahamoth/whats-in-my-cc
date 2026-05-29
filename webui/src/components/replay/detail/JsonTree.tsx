@@ -51,6 +51,9 @@ function Node({ k, value, path, expanded, onToggle }: { k: string | null; value:
       {open && (
         <div className={styles.children}>
           {entries.map(([childKey, childVal]) => (
+            // Path is dot-joined. Limitation: a key containing "." could
+            // collide with the path namespace (e.g. {"a.b":…} vs {a:{b:…}}).
+            // Acceptable for Claude Code raw records, whose keys are dotless.
             <Node key={childKey} k={childKey} value={childVal} path={`${path}.${childKey}`} expanded={expanded} onToggle={onToggle} />
           ))}
         </div>

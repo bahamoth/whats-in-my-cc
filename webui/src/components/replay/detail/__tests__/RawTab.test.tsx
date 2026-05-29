@@ -26,4 +26,20 @@ describe('RawTab', () => {
     render(<RawTab nodeId={null} record={null} />);
     expect(screen.getByText(/no raw record|select/i)).toBeInTheDocument();
   });
+
+  it('isolates expansion per node id', () => {
+    const { rerender } = render(<RawTab nodeId="n1" record={{ outer: { inner: 1 } }} />);
+    fireEvent.click(screen.getByText('outer')); // expand $.outer for n1
+    expect(screen.getByText('inner')).toBeInTheDocument();
+
+    // switch to a different node: its set is independent, so the nested
+    // child is collapsed.
+    rerender(<RawTab nodeId="n2" record={{ outer: { inner: 1 } }} />);
+    expect(screen.getByText('outer')).toBeInTheDocument();
+    expect(screen.queryByText('inner')).toBeNull();
+
+    // back to n1: its expansion was preserved.
+    rerender(<RawTab nodeId="n1" record={{ outer: { inner: 1 } }} />);
+    expect(screen.getByText('inner')).toBeInTheDocument();
+  });
 });
