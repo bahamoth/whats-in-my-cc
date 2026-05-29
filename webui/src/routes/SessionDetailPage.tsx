@@ -25,6 +25,8 @@ import {
 } from '../lib/queries';
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import type { LiveEnvelope } from '../hooks/useLiveStream';
+import { ConversationStream } from '../components/replay/stream/ConversationStream';
+import { buildStreamCards } from '../components/replay/stream/streamModel';
 import styles from './SessionDetailPage.module.css';
 
 function envelopeToObserved(env: LiveEnvelope): ObservedEventDto {
@@ -84,6 +86,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     return () => io.disconnect();
   }, [window_]);
 
+  const effectiveGraph = graph.data ?? EMPTY_GRAPH;
+
   // --- KPI strip inputs ---
   const findingsData = findings.data ?? [];
   const riskCount = useMemo(
@@ -116,11 +120,63 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     enabled: !!sel.selectedFindingId && sel.whyPanelOpen,
   });
 
+  const streamCards = useMemo(() => buildStreamCards(window_.events), [window_.events]);
+
+  // event_id -> node_id (graph nodes carry source_event_ids)
+  const nodeIdByEventId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const n of effectiveGraph.nodes) for (const eid of n.source_event_ids) m.set(eid, n.node_id);
+    return m;
+  }, [effectiveGraph]);
+
+  // event ids that have a finding (finding.evidence_refs -> node -> source events)
+  const findingEventIds = useMemo(() => {
+    const nodeIdsWithFinding = new Set<string>();
+    for (const f of findingsData) {
+      for (const ref of f.evidence_refs) {
+        const id = typeof ref === 'string' ? ref : ref.node_id ?? ref.event_id;
+        if (typeof id === 'string') nodeIdsWithFinding.add(id);
+      }
+    }
+    const eids = new Set<string>();
+    for (const n of effectiveGraph.nodes) {
+      if (nodeIdsWithFinding.has(n.node_id)) for (const eid of n.source_event_ids) eids.add(eid);
+    }
+    // some refs are event ids directly
+    for (const f of findingsData) for (const ref of f.evidence_refs) {
+      const id = typeof ref === 'string' ? ref : ref.event_id;
+      if (typeof id === 'string') eids.add(id);
+    }
+    return eids;
+  }, [findingsData, effectiveGraph]);
+
+  // event_id -> episode phase (by observed_at within [started_at, ended_at])
+  const phaseByEventId = useMemo(() => {
+    const eps = episodes.data ?? [];
+    const out: Record<string, string> = {};
+    for (const card of streamCards) {
+      const t = card.timestamp;
+      const ep = eps.find((e) => e.started_at <= t && t <= e.ended_at);
+      if (ep) out[card.eventId] = ep.phase;
+    }
+    return out;
+  }, [streamCards, episodes.data]);
+
+  const selectedStreamEventId = useMemo(() => {
+    if (!sel.selectedNodeId) return null;
+    const n = effectiveGraph.nodes.find((x) => x.node_id === sel.selectedNodeId);
+    return n?.source_event_ids[0] ?? null;
+  }, [sel.selectedNodeId, effectiveGraph]);
+
+  const selectStreamCard = (eventId: string) => {
+    const nid = nodeIdByEventId.get(eventId);
+    sel.setSelectedNodeId(nid ?? null);
+  };
+
   // --- render branches ---
   const detailError = detail.error as ApiError | null;
   const is404 = detailError instanceof ApiError && detailError.status === 404;
   const isLoading = detail.isLoading;
-  const effectiveGraph = graph.data ?? EMPTY_GRAPH;
 
   const selectedNode =
     sel.selectedNodeId && effectiveGraph
@@ -154,15 +210,20 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
           </div>
 
           <div className={styles.stream} data-slot="stream">
-            {/* Sentinel parked at the top of the stream slot: R2's ConversationStream is the scrollable list, and scrolling up to here triggers loadOlder. Until R2 lands the slot holds only the placeholder below. */}
+            {/* Sentinel parked at the top of the stream slot: scrolling up to here triggers loadOlder. */}
             <div
               ref={sentinelRef}
               aria-hidden
               style={{ height: 1 }}
               data-testid="scroll-sentinel"
             />
-            {/* R2 replaces this slot with ConversationStream. */}
-            <p className={styles.placeholder}>Conversation stream (R2)</p>
+            <ConversationStream
+              cards={streamCards}
+              selectedEventId={selectedStreamEventId}
+              phaseByEventId={phaseByEventId}
+              findingEventIds={findingEventIds}
+              onSelect={selectStreamCard}
+            />
           </div>
 
           <div className={styles.detail} data-slot="detail">
