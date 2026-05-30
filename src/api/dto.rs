@@ -221,6 +221,7 @@ pub struct FindingDto {
     pub schema_version: String,
     pub session_id: String,
     pub category: String,
+    pub subkind: Option<String>,
     pub severity: String,
     pub confidence: f64,
     pub summary: String,
@@ -234,6 +235,28 @@ pub struct FindingDto {
 #[derive(Serialize)]
 pub struct FindingsResponse {
     pub data: Vec<FindingDto>,
+}
+
+/// insight-redesign #3 — tool_failure class breakdown for a session.
+/// `user_visible` is the only headline-eligible count; the other two are
+/// internal/benign noise surfaced for transparency, never lumped into a headline.
+#[derive(Serialize)]
+pub struct ToolFailureSummaryDto {
+    pub session_id: String,
+    pub user_visible: i64,
+    pub internal_retry: i64,
+    pub benign_nonzero_exit: i64,
+    /// findings of category tool_failure with NULL subkind (pre-reframe rows
+    /// re-ingested before classification, or the no-tool_use_id early path).
+    pub unclassified: i64,
+    pub total: i64,
+    /// The user-visible drill list (full FindingDto rows, severity=high).
+    pub user_visible_findings: Vec<FindingDto>,
+}
+
+#[derive(Serialize)]
+pub struct ToolFailureSummaryResponse {
+    pub data: ToolFailureSummaryDto,
 }
 
 #[derive(Serialize)]

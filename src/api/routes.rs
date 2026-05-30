@@ -670,6 +670,7 @@ fn finding_row_to_dto(row: repo_finding::FindingRow) -> FindingDto {
         schema_version: row.schema_version,
         session_id: row.session_id,
         category: row.category,
+        subkind: row.subkind,
         severity: row.severity,
         confidence: row.confidence,
         summary: row.summary,
@@ -878,6 +879,66 @@ pub async fn session_findings(
                 .into_response()
         }
     }
+}
+
+/// `GET /v1/sessions/:id/tool-failures` — tool_failure class breakdown +
+/// user-visible drill list (spec §6.3). Internal retries / benign exits are
+/// counted but kept out of the drill list so they never headline.
+pub async fn session_tool_failures(
+    State(pool): State<SqlitePool>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    let counts = match repo_finding::count_by_subkind(&pool, &session_id, "tool_failure").await {
+        Ok(c) => c,
+        Err(err) => {
+            tracing::error!(err = %err, "count_by_subkind failed");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response();
+        }
+    };
+    let mut user_visible = 0i64;
+    let mut internal_retry = 0i64;
+    let mut benign = 0i64;
+    let mut unclassified = 0i64;
+    for (sk, n) in &counts {
+        match sk.as_deref() {
+            Some("user_visible") => user_visible = *n,
+            Some("internal_retry") => internal_retry = *n,
+            Some("benign_nonzero_exit") => benign = *n,
+            _ => unclassified += *n,
+        }
+    }
+    let total = user_visible + internal_retry + benign + unclassified;
+
+    let drill_filter = repo_finding::ListFilter {
+        session_id: Some(session_id.clone()),
+        category: Some("tool_failure".into()),
+        subkind: Some("user_visible".into()),
+        status: Some("active".into()),
+        limit: 200,
+        ..Default::default()
+    };
+    let drill = repo_finding::list(&pool, &drill_filter)
+        .await
+        .unwrap_or_default();
+    let user_visible_findings: Vec<FindingDto> =
+        drill.into_iter().map(finding_row_to_dto).collect();
+
+    Json(ToolFailureSummaryResponse {
+        data: ToolFailureSummaryDto {
+            session_id,
+            user_visible,
+            internal_retry,
+            benign_nonzero_exit: benign,
+            unclassified,
+            total,
+            user_visible_findings,
+        },
+    })
+    .into_response()
 }
 
 // ---------------------------------------------------------------------------
