@@ -10,6 +10,9 @@
 pub struct FindingCandidate {
     /// Stable category string — appears in `Finding.category`.
     pub category: &'static str,
+    /// Optional finding sub-type, persisted to `finding.subkind`. For
+    /// `tool_failure` this is the `FailureClass` string; `None` otherwise.
+    pub subkind: Option<&'static str>,
     /// L1 confidence; fixed per category (not per-instance).
     pub confidence_l1: f32,
     /// Severity string: `"high"` | `"medium"` | `"low"`.

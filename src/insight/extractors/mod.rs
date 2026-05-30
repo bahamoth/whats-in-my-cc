@@ -42,6 +42,7 @@ pub mod noop_test {
         fn extract(&self, _view: &SessionInsightView<'_>) -> Vec<FindingCandidate> {
             vec![FindingCandidate {
                 category: "noop_test",
+                subkind: None,
                 confidence_l1: 0.9,
                 severity: "low",
                 summary: "noop_test: synthetic candidate for L2 path testing".to_string(),

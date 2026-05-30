@@ -117,6 +117,7 @@ impl InsightExtractor for RiskyAction {
 
             candidates.push(FindingCandidate {
                 category: "risky_action",
+                subkind: None,
                 confidence_l1: 0.7,
                 severity: "high",
                 summary,
@@ -169,6 +170,7 @@ impl InsightExtractor for RiskyAction {
 
             candidates.push(FindingCandidate {
                 category: "risky_action",
+                subkind: None,
                 confidence_l1: 0.7,
                 severity: "high",
                 summary,
