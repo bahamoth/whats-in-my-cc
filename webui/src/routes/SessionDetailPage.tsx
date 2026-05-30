@@ -6,7 +6,7 @@ import { MetaStrip } from '../components/MetaStrip';
 import { DetailPanel } from '../components/replay/detail/DetailPanel';
 import { Timeline } from '../components/replay/timeline/Timeline';
 import { TopBar } from '../components/layout/TopBar';
-import { KpiStrip } from '../components/replay/KpiStrip';
+import { InsightStrip } from '../components/replay/insight-strip/InsightStrip';
 import { EpisodeStrip } from '../components/replay/EpisodeStrip';
 import {
   ReplaySelectionProvider,
@@ -19,7 +19,9 @@ import {
   useEpisodesQuery,
   useFindingsQuery,
   useVerificationRunsQuery,
-  useDiffHunksQuery,
+  useToolFailureSummaryQuery,
+  useSessionUsageQuery,
+  useUsageBaselineQuery,
   useEventRawQuery,
 } from '../lib/queries';
 import { useSessionWindow } from '../hooks/useSessionWindow';
@@ -58,7 +60,9 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const episodes = useEpisodesQuery(sessionId);
   const findings = useFindingsQuery(sessionId);
   const verificationRuns = useVerificationRunsQuery(sessionId);
-  const diffHunks = useDiffHunksQuery(sessionId);
+  const toolFailures = useToolFailureSummaryQuery(sessionId);
+  const usage = useSessionUsageQuery(sessionId);
+  const baseline = useUsageBaselineQuery();
 
   const window_ = useSessionWindow(sessionId);
 
@@ -87,27 +91,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
 
   const effectiveGraph = graph.data ?? EMPTY_GRAPH;
 
-  // --- KPI strip inputs ---
+  // Findings drive the stream highlight + DetailPanel cross-reference (below).
   const findingsData = findings.data ?? [];
-  const riskCount = useMemo(
-    () => findingsData.filter((f) => f.severity === 'high').length,
-    [findingsData],
-  );
-  const verificationCoverage = useMemo(() => {
-    const total = diffHunks.data?.length ?? 0;
-    const covered = new Set<string>();
-    for (const vr of verificationRuns.data ?? []) {
-      for (const h of vr.covered_diff_hunk_ids) covered.add(h);
-    }
-    return total === 0 ? null : { covered: covered.size, total };
-  }, [diffHunks.data, verificationRuns.data]);
-
-  const outcome: 'clean' | 'attention' | 'problem' | 'unknown' = useMemo(() => {
-    if (findingsData.length === 0) return 'clean';
-    if (findingsData.some((f) => f.severity === 'high')) return 'problem';
-    if (findingsData.some((f) => f.severity === 'medium')) return 'attention';
-    return 'clean';
-  }, [findingsData]);
 
   const streamItems = useMemo(() => buildStreamModel(window_.events), [window_.events]);
 
@@ -230,11 +215,16 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
       {!isLoading && !is404 && detail.data && (
         <div className={styles.grid} data-witmcc-detail-grid>
           <div className={styles.kpi} data-slot="kpi">
-            <KpiStrip
-              outcome={outcome}
-              verificationCoverage={verificationCoverage}
-              episodeCount={episodes.data?.length ?? 0}
-              riskCount={riskCount}
+            <InsightStrip
+              usage={usage.data}
+              verificationRuns={verificationRuns.data}
+              findings={findings.data}
+              toolFailures={toolFailures.data}
+              baseline={
+                baseline.data
+                  ? { cache_hit_ratio: baseline.data.cache_hit_ratio.median }
+                  : undefined
+              }
             />
             <EpisodeStrip episodes={episodes.data ?? []} />
             <MetaStrip session={detail.data} events={window_.events} />
