@@ -12,6 +12,7 @@ pub async fn call(args: &Value, pool: &SqlitePool) -> Value {
         category: args["category"].as_str().map(str::to_string),
         severity: args["severity"].as_str().map(str::to_string),
         status: None, // return all statuses when called from MCP
+        subkind: args["subkind"].as_str().map(str::to_string),
         limit: args["limit"].as_i64().unwrap_or(50).clamp(1, 200),
     };
 

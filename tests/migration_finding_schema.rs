@@ -59,3 +59,17 @@ async fn finding_default_status_is_active() {
             .unwrap();
     assert_eq!(status, "active");
 }
+
+#[tokio::test]
+async fn finding_table_has_subkind_column() {
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+    let cols: Vec<String> = sqlx::query_scalar("SELECT name FROM pragma_table_info('finding')")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert!(
+        cols.iter().any(|c| c == "subkind"),
+        "finding table must have a subkind column; got {cols:?}"
+    );
+}
