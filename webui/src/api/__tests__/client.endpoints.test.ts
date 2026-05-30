@@ -12,6 +12,7 @@ import {
   getFindingEvidence,
   getSessionUsage,
   getToolFailureSummary,
+  getUsageBaseline,
   getVerificationRuns,
 } from '../client';
 
@@ -117,6 +118,22 @@ describe('getSessionUsage', () => {
     };
     fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
     const out = await getSessionUsage('s1');
+    expect(out).toEqual(expected);
+  });
+});
+
+describe('getUsageBaseline', () => {
+  it('hits GET /v1/usage/baseline and unwraps the envelope `data`', async () => {
+    const expected = {
+      session_count: 2,
+      cache_hit_ratio: { p25: 0.0, median: 0.45, p75: 0.9 },
+      billed_tokens: { p25: 200, median: 300, p75: 400 },
+      turns: { p25: 1, median: 1, p75: 1 },
+      output_tokens: { p25: 100, median: 200, p75: 300 },
+    };
+    fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
+    const out = await getUsageBaseline();
+    expect(fetchSpy).toHaveBeenCalledWith('/v1/usage/baseline', expect.any(Object));
     expect(out).toEqual(expected);
   });
 });
