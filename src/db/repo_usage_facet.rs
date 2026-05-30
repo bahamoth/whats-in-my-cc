@@ -45,6 +45,9 @@ pub struct UsageAggregate {
 pub struct ModelUsage {
     pub model: String,
     pub turns: i64,
+    pub input_tokens: i64,
+    pub cache_creation_input_tokens: i64,
+    pub cache_read_input_tokens: i64,
     pub output_tokens: i64,
 }
 
@@ -113,6 +116,9 @@ pub async fn session_aggregate(pool: &SqlitePool, session_id: &str) -> Result<Us
     let by_model_rows = sqlx::query(
         "SELECT COALESCE(model,'unknown') AS model,
                 COUNT(*) AS turns,
+                COALESCE(SUM(input_tokens),0) AS input_tokens,
+                COALESCE(SUM(cache_creation_input_tokens),0) AS cc,
+                COALESCE(SUM(cache_read_input_tokens),0) AS cr,
                 COALESCE(SUM(output_tokens),0) AS output_tokens
          FROM usage_facet WHERE session_id = ?
          GROUP BY model ORDER BY turns DESC",
@@ -145,6 +151,9 @@ fn map_model_usage(r: sqlx::sqlite::SqliteRow) -> ModelUsage {
     ModelUsage {
         model: r.get("model"),
         turns: r.get::<i64, _>("turns"),
+        input_tokens: r.get::<i64, _>("input_tokens"),
+        cache_creation_input_tokens: r.get::<i64, _>("cc"),
+        cache_read_input_tokens: r.get::<i64, _>("cr"),
         output_tokens: r.get::<i64, _>("output_tokens"),
     }
 }
@@ -207,6 +216,9 @@ mod tests {
             .expect("opus row present");
         assert_eq!(opus.turns, 1);
         assert_eq!(opus.output_tokens, 300);
+        assert_eq!(opus.input_tokens, 2, "per-model input sum");
+        assert_eq!(opus.cache_creation_input_tokens, 100, "per-model cache_creation sum");
+        assert_eq!(opus.cache_read_input_tokens, 5000, "per-model cache_read sum");
         let haiku = agg
             .by_model
             .iter()
@@ -214,6 +226,9 @@ mod tests {
             .expect("haiku row present");
         assert_eq!(haiku.turns, 1);
         assert_eq!(haiku.output_tokens, 400);
+        assert_eq!(haiku.input_tokens, 3);
+        assert_eq!(haiku.cache_creation_input_tokens, 200);
+        assert_eq!(haiku.cache_read_input_tokens, 6000);
     }
 
     #[tokio::test]
