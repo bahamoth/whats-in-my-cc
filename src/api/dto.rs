@@ -308,6 +308,29 @@ pub struct ModelUsageDto {
     pub priced: bool,
 }
 
+/// insight-redesign #6 — one baseline metric's quantile triple.
+/// `median` is the user's rolling norm; the frontend renders the measured
+/// session value as a delta against it ("vs your median"). All three are null
+/// when no session in the store has usage_facet rows for this metric.
+#[derive(Serialize)]
+pub struct BaselineStat {
+    pub p25: Option<f64>,
+    pub median: Option<f64>,
+    pub p75: Option<f64>,
+}
+
+/// insight-redesign #6 — cross-session usage baseline. Median (+ p25/p75) of
+/// each key metric across ALL stored sessions that have usage_facet rows.
+/// `session_count` is the number of sessions the baseline was computed over.
+#[derive(Serialize)]
+pub struct UsageBaselineDto {
+    pub session_count: i64,
+    pub cache_hit_ratio: BaselineStat,
+    pub billed_tokens: BaselineStat,
+    pub turns: BaselineStat,
+    pub output_tokens: BaselineStat,
+}
+
 /// Response for `GET /v1/findings/:id/evidence`.
 #[derive(Serialize)]
 pub struct FindingEvidenceResponse {
