@@ -309,6 +309,10 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
       return [{ source: fn.node_kind, label: facetLabel, record: fn.payload }];
     });
 
+    // No facets → no multi-source split. Return undefined so RawTab falls back
+    // to the bare single-record JsonTree (and DetailPanel's accent dot stays a
+    // meaningful "this node has a loaded raw record" signal, not always-on).
+    if (facetBlocks.length === 0) return undefined;
     return [entityBlock, ...facetBlocks];
   }, [selectedNode, entityFacets, nodeById]);
 
