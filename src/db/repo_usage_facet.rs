@@ -51,6 +51,57 @@ pub struct ModelUsage {
     pub output_tokens: i64,
 }
 
+/// insight-redesign #6 — one row per session that has usage_facet rows.
+/// Each metric is computed the same way `/v1/sessions/:id/usage` computes it,
+/// so a session's value is directly comparable to the cross-session baseline.
+#[derive(Debug, Clone)]
+pub struct SessionMetrics {
+    pub session_id: String,
+    /// cache_read / (cache_read + cache_creation + input); None when denom 0.
+    pub cache_hit_ratio: Option<f64>,
+    /// input + cache_creation + output (cache_read is NOT billed).
+    pub billed_tokens: i64,
+    pub turns: i64,
+    pub output_tokens: i64,
+}
+
+/// insight-redesign #6 — quantile triple for one baseline metric.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Quantiles {
+    pub p25: f64,
+    pub median: f64,
+    pub p75: f64,
+}
+
+/// Compute p25 / median (p50) / p75 from an unsorted slice of values using the
+/// "nearest-rank with linear interpolation" method (type-7, the default in R /
+/// numpy.percentile). Returns None for an empty slice. SQLite has no MEDIAN(),
+/// so this is computed in Rust over the per-session metric values.
+pub fn median_p25_p75(values: &[f64]) -> Option<Quantiles> {
+    if values.is_empty() {
+        return None;
+    }
+    let mut v = values.to_vec();
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let quantile = |p: f64| -> f64 {
+        // type-7 (R/numpy default): rank h = (n-1)*p, linear interpolation.
+        let n = v.len();
+        if n == 1 {
+            return v[0];
+        }
+        let h = (n as f64 - 1.0) * p;
+        let lo = h.floor() as usize;
+        let hi = h.ceil() as usize;
+        let frac = h - lo as f64;
+        v[lo] + frac * (v[hi] - v[lo])
+    };
+    Some(Quantiles {
+        p25: quantile(0.25),
+        median: quantile(0.5),
+        p75: quantile(0.75),
+    })
+}
+
 pub async fn insert(pool: &SqlitePool, row: &UsageFacetRow) -> Result<()> {
     sqlx::query(
         "INSERT OR REPLACE INTO usage_facet(
@@ -135,6 +186,47 @@ pub async fn session_aggregate(pool: &SqlitePool, session_id: &str) -> Result<Us
         output_tokens: row.get::<i64, _>("output_tokens"),
         by_model: by_model_rows.into_iter().map(map_model_usage).collect(),
     })
+}
+
+/// insight-redesign #6 — per-session metric rows for the cross-session
+/// baseline. One row per session that has at least one usage_facet row.
+/// billed_tokens = input + cache_creation + output (cache_read NOT billed).
+/// cache_hit_ratio = cache_read / (cache_read + cache_creation + input);
+/// NULL when the denominator is 0 (mirrors `/v1/sessions/:id/usage`).
+pub async fn per_session_metrics(pool: &SqlitePool) -> Result<Vec<SessionMetrics>> {
+    let rows = sqlx::query(
+        "SELECT session_id,
+                COUNT(*) AS turns,
+                COALESCE(SUM(input_tokens),0)
+                  + COALESCE(SUM(cache_creation_input_tokens),0)
+                  + COALESCE(SUM(output_tokens),0)            AS billed_tokens,
+                COALESCE(SUM(output_tokens),0)                AS output_tokens,
+                CASE
+                  WHEN (COALESCE(SUM(cache_read_input_tokens),0)
+                        + COALESCE(SUM(cache_creation_input_tokens),0)
+                        + COALESCE(SUM(input_tokens),0)) > 0
+                  THEN CAST(COALESCE(SUM(cache_read_input_tokens),0) AS REAL)
+                       / (COALESCE(SUM(cache_read_input_tokens),0)
+                          + COALESCE(SUM(cache_creation_input_tokens),0)
+                          + COALESCE(SUM(input_tokens),0))
+                  ELSE NULL
+                END                                           AS cache_hit_ratio
+         FROM usage_facet
+         GROUP BY session_id",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(map_session_metrics).collect())
+}
+
+fn map_session_metrics(r: sqlx::sqlite::SqliteRow) -> SessionMetrics {
+    SessionMetrics {
+        session_id: r.get("session_id"),
+        cache_hit_ratio: r.get::<Option<f64>, _>("cache_hit_ratio"),
+        billed_tokens: r.get::<i64, _>("billed_tokens"),
+        turns: r.get::<i64, _>("turns"),
+        output_tokens: r.get::<i64, _>("output_tokens"),
+    }
 }
 
 fn map_assistant_raw_line(r: sqlx::sqlite::SqliteRow) -> AssistantRawLine {
@@ -249,5 +341,83 @@ mod tests {
         assert_eq!(agg.cache_creation_input_tokens, 900);
         assert_eq!(agg.cache_read_input_tokens, 9000);
         assert_eq!(agg.output_tokens, 999);
+    }
+
+    #[test]
+    fn quantiles_of_empty_is_none() {
+        assert!(median_p25_p75(&[]).is_none());
+    }
+
+    #[test]
+    fn quantiles_single_value() {
+        let q = median_p25_p75(&[7.0]).unwrap();
+        assert_eq!(q.median, 7.0);
+        assert_eq!(q.p25, 7.0);
+        assert_eq!(q.p75, 7.0);
+    }
+
+    #[test]
+    fn median_odd_count_is_middle() {
+        // sorted: 1,3,5,7,9 -> median index 2 -> 5.0
+        let q = median_p25_p75(&[5.0, 1.0, 9.0, 3.0, 7.0]).unwrap();
+        assert_eq!(q.median, 5.0);
+    }
+
+    #[test]
+    fn median_even_count_interpolates_midpoint() {
+        // sorted: 2,4,6,8 -> median between 4 and 6 -> 5.0
+        let q = median_p25_p75(&[8.0, 2.0, 6.0, 4.0]).unwrap();
+        assert_eq!(q.median, 5.0);
+    }
+
+    #[test]
+    fn p25_p75_type7_interpolation() {
+        // sorted: 10,20,30,40 (n=4). type-7 rank h = (n-1)*p.
+        // p25: h = 3*0.25 = 0.75 -> 10 + 0.75*(20-10) = 17.5
+        // p75: h = 3*0.75 = 2.25 -> 30 + 0.25*(40-30) = 32.5
+        let q = median_p25_p75(&[40.0, 10.0, 30.0, 20.0]).unwrap();
+        assert_eq!(q.p25, 17.5);
+        assert_eq!(q.median, 25.0);
+        assert_eq!(q.p75, 32.5);
+    }
+
+    #[tokio::test]
+    async fn per_session_metrics_one_row_per_session() {
+        let pool = pool().await;
+        // Session A (the shared sess_uf_test): two opus/haiku turns.
+        insert(&pool, &row("raw_a1", "claude-opus-4-8", 2, 100, 5000, 300))
+            .await
+            .unwrap();
+        insert(
+            &pool,
+            &row("raw_a2", "claude-haiku-4-5-20251001", 3, 200, 6000, 400),
+        )
+        .await
+        .unwrap();
+        // Session B: one turn, distinct session_id.
+        let mut b = row("raw_b1", "claude-opus-4-8", 10, 0, 0, 50);
+        b.session_id = "sess_uf_other".into();
+        insert(&pool, &b).await.unwrap();
+
+        let mut metrics = per_session_metrics(&pool).await.unwrap();
+        metrics.sort_by(|x, y| x.session_id.cmp(&y.session_id));
+        assert_eq!(metrics.len(), 2, "one row per session with usage rows");
+
+        let a = &metrics[0];
+        assert_eq!(a.session_id, "sess_uf_other");
+        // Session B denom = 0+0+10 = 10, cache_read 0 -> ratio 0.0.
+        assert_eq!(a.cache_hit_ratio, Some(0.0));
+        assert_eq!(a.billed_tokens, 10 + 0 + 50);
+        assert_eq!(a.turns, 1);
+        assert_eq!(a.output_tokens, 50);
+
+        let s = &metrics[1];
+        assert_eq!(s.session_id, "sess_uf_test");
+        // Session A: input 5, cc 300, cr 11000 -> denom 11305, ratio 11000/11305.
+        let ratio = s.cache_hit_ratio.unwrap();
+        assert!((ratio - 11000.0 / 11305.0).abs() < 1e-9);
+        assert_eq!(s.billed_tokens, 5 + 300 + 700);
+        assert_eq!(s.turns, 2);
+        assert_eq!(s.output_tokens, 700);
     }
 }
