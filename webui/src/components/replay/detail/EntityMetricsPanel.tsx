@@ -75,6 +75,7 @@ export function EntityMetricsPanel({ kind, toolMetrics, llmMetrics }: EntityMetr
     );
   }
 
+  // 'thinking' is not a graph node today; kept for forward-compat — reached only if thinking nodes are ever materialized
   if (kind === 'assistant_message' || kind === 'thinking') {
     return (
       <div className={styles.wrap} data-testid="entity-metrics" data-kind={kind}>
