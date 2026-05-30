@@ -663,6 +663,28 @@ pub fn compute(
         }
     }
 
+    // 3e. facet_of (도구) — log_record facet → tool_call 엔티티. 신뢰 키 tool_use_id.
+    //     log_record는 tool_use_id 컬럼이 비어 payload.attributes.tool_use_id에서 추출.
+    for n in &nodes {
+        if n.node_kind != "log_record" {
+            continue;
+        }
+        let Some(tid) = n.payload
+            .pointer("/attributes/tool_use_id")
+            .and_then(|v| v.as_str()) else { continue; };
+        let Some(call_nid) = tool_call_nid_by_tid.get(tid) else { continue; };
+        if !valid_nodes.contains(call_nid.as_str()) || !valid_nodes.contains(n.node_id.as_str()) {
+            continue;
+        }
+        edges.push(make_edge(
+            session_id,
+            &n.node_id,
+            call_nid,
+            "facet_of",
+            json!({"basis": "tool_use_id"}),
+        ));
+    }
+
     // 3c. turn_order — adjacent pairs of nodes ordered by (started_at, node_id).
     //     otel_span nodes are excluded: they are not conversation turns, and
     //     cross-kind turn_order edges will be wired in a later slice once
