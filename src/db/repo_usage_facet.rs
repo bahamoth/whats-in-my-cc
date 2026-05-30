@@ -148,3 +148,91 @@ fn map_model_usage(r: sqlx::sqlite::SqliteRow) -> ModelUsage {
         output_tokens: r.get::<i64, _>("output_tokens"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::migrate;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    fn row(raw_event_id: &str, model: &str, input: i64, cc: i64, cr: i64, output: i64) -> UsageFacetRow {
+        UsageFacetRow {
+            raw_event_id: raw_event_id.into(),
+            schema_version: "usage_facet.v1".into(),
+            session_id: "sess_uf_test".into(),
+            model: Some(model.into()),
+            input_tokens: input,
+            cache_creation_input_tokens: cc,
+            cache_read_input_tokens: cr,
+            output_tokens: output,
+            observed_at: "2026-05-30T10:00:00Z".into(),
+            parser_version: "usage_facet@v1".into(),
+        }
+    }
+
+    async fn pool() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        migrate(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn roundtrip_and_aggregate() {
+        let pool = pool().await;
+        insert(&pool, &row("raw_001", "claude-opus-4-8", 2, 100, 5000, 300))
+            .await
+            .unwrap();
+        insert(
+            &pool,
+            &row("raw_002", "claude-haiku-4-5-20251001", 3, 200, 6000, 400),
+        )
+        .await
+        .unwrap();
+
+        let agg = session_aggregate(&pool, "sess_uf_test").await.unwrap();
+        assert_eq!(agg.turns, 2);
+        assert_eq!(agg.input_tokens, 5);
+        assert_eq!(agg.cache_creation_input_tokens, 300);
+        assert_eq!(agg.cache_read_input_tokens, 11000);
+        assert_eq!(agg.output_tokens, 700);
+
+        assert_eq!(agg.by_model.len(), 2, "two distinct models -> two rows");
+        let opus = agg
+            .by_model
+            .iter()
+            .find(|m| m.model == "claude-opus-4-8")
+            .expect("opus row present");
+        assert_eq!(opus.turns, 1);
+        assert_eq!(opus.output_tokens, 300);
+        let haiku = agg
+            .by_model
+            .iter()
+            .find(|m| m.model == "claude-haiku-4-5-20251001")
+            .expect("haiku row present");
+        assert_eq!(haiku.turns, 1);
+        assert_eq!(haiku.output_tokens, 400);
+    }
+
+    #[tokio::test]
+    async fn insert_or_replace_dedup() {
+        let pool = pool().await;
+        // First insert.
+        insert(&pool, &row("raw_dup", "claude-opus-4-8", 2, 100, 5000, 300))
+            .await
+            .unwrap();
+        // Same raw_event_id (PK) with different token values — must replace.
+        insert(&pool, &row("raw_dup", "claude-opus-4-8", 9, 900, 9000, 999))
+            .await
+            .unwrap();
+
+        let agg = session_aggregate(&pool, "sess_uf_test").await.unwrap();
+        assert_eq!(agg.turns, 1, "INSERT OR REPLACE must deduplicate by PK");
+        assert_eq!(agg.input_tokens, 9, "aggregate reflects the replaced row");
+        assert_eq!(agg.cache_creation_input_tokens, 900);
+        assert_eq!(agg.cache_read_input_tokens, 9000);
+        assert_eq!(agg.output_tokens, 999);
+    }
+}
