@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use std::path::Path;
 
-use crate::db::{repo_diff_hunk, repo_observed, repo_raw, repo_runs, repo_verification_run};
+use crate::db::{repo_diff_hunk, repo_observed, repo_raw, repo_runs, repo_usage_facet, repo_verification_run};
 use crate::live::{LiveEvent, LiveSink};
 use crate::security::redaction::engine::scan;
 
@@ -13,7 +13,7 @@ use crate::security::redaction::engine::scan;
 type TurnBackfillRow = (String, Option<String>, Option<String>, Option<String>);
 use crate::error::{Result, WitmccError};
 use crate::ids::MonotonicUlidGen;
-use crate::ingest::{diff_hunk, mapping, transcript, verification_run};
+use crate::ingest::{diff_hunk, mapping, transcript, usage_facet, verification_run};
 use crate::model::observed::EventKind;
 use crate::model::meta::SCHEMA_VERSION;
 
@@ -220,6 +220,37 @@ pub async fn ingest_file(
                         failure_summary: rec.failure_summary,
                         raw_event_id: rec.raw_event_id,
                         parser_version: rec.parser_version.to_string(),
+                    },
+                )
+                .await?;
+            }
+        }
+
+        // insight-redesign #1 — populate usage_facet from raw transcript lines.
+        // Usage lives only in raw_event.payload, so we read the joined raw line
+        // and parse it; dedupe is by raw_event_id (one assistant turn = one row).
+        if !session_id.is_empty() {
+            let lines = repo_usage_facet::assistant_raw_lines(pool, session_id).await?;
+            for line in lines {
+                let Ok(val) = serde_json::from_str::<serde_json::Value>(&line.raw) else {
+                    continue;
+                };
+                let Some(u) = usage_facet::parse_usage(&val) else {
+                    continue;
+                };
+                repo_usage_facet::insert(
+                    pool,
+                    &repo_usage_facet::UsageFacetRow {
+                        raw_event_id: line.raw_event_id,
+                        schema_version: usage_facet::SCHEMA_VERSION.to_string(),
+                        session_id: line.session_id,
+                        model: u.model.or(line.model),
+                        input_tokens: u.input_tokens,
+                        cache_creation_input_tokens: u.cache_creation_input_tokens,
+                        cache_read_input_tokens: u.cache_read_input_tokens,
+                        output_tokens: u.output_tokens,
+                        observed_at: line.observed_at,
+                        parser_version: usage_facet::PARSER_VERSION.to_string(),
                     },
                 )
                 .await?;
