@@ -17,7 +17,7 @@
 
 use sha2::{Digest, Sha256};
 
-use crate::insight::verification_allowlist::classify;
+use crate::insight::verification_allowlist::classify_segment;
 use crate::model::observed::{EventKind, ObservedEvent};
 
 pub const PARSER_VERSION: &str = "verification_run@v1";
@@ -35,6 +35,8 @@ pub struct VerificationRunRecord {
     pub trigger_event_id: String,
     pub trigger_tool_use_id: Option<String>,
     pub status: String,          // "passed" | "failed" | "unknown"
+    pub detection_basis: String, // "known_tool" | "test_keyword"
+    pub status_basis: String,    // "exit" | "piped"
     pub started_at: String,      // ISO 8601 UTC
     pub ended_at: Option<String>,
     pub exit_code: Option<i32>,
@@ -86,12 +88,15 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
-        // Normalise: strip trailing shell pipe / redirect sections so that
-        // `cargo test 2>&1 | tail -5` is classified as `cargo test`.
-        let effective_cmd = normalise_command(cmd);
-        let Some(command_kind) = classify(effective_cmd) else {
+        // Segment-split + per-segment classify: picks the first segment that
+        // matches a verification tool (Tier-1) or test/spec keyword (Tier-2),
+        // so `cd webui && npx vitest run` (or `cd webui\nnpx vitest run`) is
+        // detected on its `npx vitest run` segment, not the leading `cd`.
+        let Some(m) = matched_segment(cmd) else {
             continue;
         };
+        let command_kind = m.command_kind;
+        let effective_cmd = m.command.as_str();
 
         let Some(tid) = ev.tool_use_id.as_deref() else {
             continue;
@@ -124,6 +129,14 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
         };
         let _ = is_error; // suppressed; status string is the canonical output
 
+        // status_basis: when the matched segment is piped to a non-pager,
+        // the exit code is masked → force status to "unknown" (design §6.2).
+        let (status, failure_summary) = if m.status_basis == "piped" {
+            ("unknown", None)
+        } else {
+            (status, failure_summary)
+        };
+
         // trigger_event_id = the tool_result event (or the tool_call if no result)
         let trigger_event_id = result_ev
             .map(|r| r.event_id.as_str())
@@ -149,6 +162,8 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             trigger_event_id: trigger_event_id.to_string(),
             trigger_tool_use_id: Some(tid.to_string()),
             status: status.into(),
+            detection_basis: m.detection_basis.to_string(),
+            status_basis: m.status_basis.to_string(),
             started_at,
             ended_at,
             exit_code: None, // not available in transcript; OTel branch may set this
@@ -183,10 +198,11 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             .pointer("/hook/hook_input/tool_input/command")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        let effective_cmd = normalise_command(cmd);
-        let Some(_command_kind) = classify(effective_cmd) else {
+        let Some(m) = matched_segment(cmd) else {
             continue;
         };
+        let _command_kind = m.command_kind;
+        let effective_cmd = m.command.as_str();
         let trigger_event_id = ev.event_id.as_str();
         if seen_trigger_ids.contains(trigger_event_id) {
             continue;
@@ -209,6 +225,10 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             trigger_event_id: trigger_event_id.to_string(),
             trigger_tool_use_id: ev.tool_use_id.clone(),
             status: "unknown".into(), // hook events don't carry exit status directly
+            detection_basis: m.detection_basis.to_string(),
+            // hook events never carry an exit code; basis is the matched
+            // segment's pipe state but status is unknown regardless.
+            status_basis: m.status_basis.to_string(),
             started_at,
             ended_at: None,
             exit_code: None,
@@ -260,6 +280,10 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             trigger_event_id: trigger_event_id.to_string(),
             trigger_tool_use_id: None,
             status: "unknown".into(),
+            // OTel spans are detected by attribute, not command parsing →
+            // known_tool with exit-derived status semantics.
+            detection_basis: "known_tool".to_string(),
+            status_basis: "exit".to_string(),
             started_at,
             ended_at: None,
             exit_code: None,
@@ -285,11 +309,123 @@ fn derive_id(session_id: &str, trigger_event_id: &str, started_at: &str) -> Stri
     format!("vr_{}", hex::encode(&hash[..8]))
 }
 
+/// One matched command segment within a (possibly compound) Bash command.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchedSegment {
+    /// The matched segment text (wrapper still present, redirects retained).
+    pub command: String,
+    pub command_kind: &'static str,
+    pub detection_basis: &'static str, // "known_tool" | "test_keyword"
+    pub status_basis: &'static str,    // "exit" | "piped"
+}
+
+/// Pager / output-filter commands. When the matched segment is piped INTO one
+/// of these, the pipe is an output-capture idiom and the verification tool's
+/// exit is still considered observable (status_basis = "exit").
+const PAGER_COMMANDS: &[&str] = &["tail", "head", "cat", "less", "more", "wc"];
+
+/// Split a compound shell command into simple-command segments on the
+/// connectors `&& || | ; &` and the NEWLINE separator. The `2>&1` redirect is
+/// NOT a connector and stays attached to its segment. Empty segments dropped.
+///
+/// Real-data anchoring: in this project's transcripts (session 653ea169)
+/// `cd .../webui` and `npx vitest run …` are joined by a literal newline, so
+/// newline MUST be treated as a connector (see
+/// `tests/fixtures/transcripts/real/verification_npx_v01.jsonl`).
+pub fn split_segments(cmd: &str) -> Vec<String> {
+    let bytes = cmd.as_bytes();
+    let mut segs: Vec<String> = Vec::new();
+    let mut start = 0usize;
+    let mut i = 0usize;
+    let push = |segs: &mut Vec<String>, s: &str| {
+        let t = s.trim();
+        if !t.is_empty() {
+            segs.push(t.to_string());
+        }
+    };
+    while i < bytes.len() {
+        let two = cmd.get(i..i + 2);
+        if two == Some("&&") || two == Some("||") {
+            push(&mut segs, &cmd[start..i]);
+            i += 2;
+            start = i;
+            continue;
+        }
+        let c = bytes[i] as char;
+        // A `&` that immediately follows `>` is part of a redirect (`2>&1`,
+        // `>&2`), NOT a background connector — leave it attached to the segment.
+        if c == '&' && i > 0 && bytes[i - 1] == b'>' {
+            i += 1;
+            continue;
+        }
+        // single-char connectors: pipe, semicolon, background, and newline.
+        // (`&&`/`||` already handled above.)
+        if c == '|' || c == ';' || c == '&' || c == '\n' {
+            push(&mut segs, &cmd[start..i]);
+            i += 1;
+            start = i;
+            continue;
+        }
+        i += 1;
+    }
+    push(&mut segs, &cmd[start..]);
+    segs
+}
+
+/// Evaluate a compound Bash command and return the FIRST segment that matches
+/// a verification tool (Tier-1) or test/spec keyword (Tier-2), with its
+/// `status_basis` (whether a downstream non-pager pipe masks the exit code).
+pub fn matched_segment(cmd: &str) -> Option<MatchedSegment> {
+    let segs = split_segments(cmd);
+    for (idx, seg) in segs.iter().enumerate() {
+        if let Some((kind, basis)) = classify_segment(seg) {
+            // status_basis: examine the connector that follows the matched
+            // segment in the ORIGINAL command. If it is a pipe `|` into a
+            // non-pager command, the exit code is masked → "piped". A trailing
+            // pager pipe (tail/head/…) or any non-pipe connector keeps "exit".
+            let status_basis = downstream_status_basis(cmd, seg, &segs, idx);
+            return Some(MatchedSegment {
+                command: seg.clone(),
+                command_kind: kind,
+                detection_basis: basis,
+                status_basis,
+            });
+        }
+    }
+    None
+}
+
+/// Decide "exit" vs "piped" for the matched segment at `idx`.
+fn downstream_status_basis(cmd: &str, seg: &str, segs: &[String], idx: usize) -> &'static str {
+    // Find the byte position right after the matched segment text in `cmd`.
+    let Some(seg_pos) = cmd.find(seg) else {
+        return "exit";
+    };
+    let after = cmd[seg_pos + seg.len()..].trim_start();
+    // A pipe connector masks the exit code only if it is `|` (single) and the
+    // next segment's leading command is NOT a pager.
+    if after.starts_with('|') && !after.starts_with("||") {
+        if let Some(next) = segs.get(idx + 1) {
+            let next_lead = next.split_whitespace().next().unwrap_or("");
+            if PAGER_COMMANDS.contains(&next_lead) {
+                return "exit"; // output-capture idiom
+            }
+            return "piped";
+        }
+        return "piped";
+    }
+    "exit"
+}
+
 /// Normalise a shell command string for allowlist matching.
 ///
 /// Strategy: take everything up to the first `2>&1`, `|`, `;`, or `&&`
 /// token. This handles the common pattern `cargo test 2>&1 | tail -5`
 /// where the useful prefix is `cargo test`.
+///
+/// Retained (and unit-tested by `normalise_removes_pipe_redirect`) as the
+/// documented pre-rewrite behaviour; the extractor now uses `matched_segment`.
+#[allow(dead_code)]
 fn normalise_command(cmd: &str) -> &str {
     // Find the first occurrence of shell metacharacter sequences.
     // We scan for: " 2>&1", " |", " ;", " &&", " &"
@@ -337,5 +473,104 @@ mod tests {
         let b = derive_id("sess", "ev1", "2026-05-27T10:00:00Z");
         assert_eq!(a, b);
         assert!(a.starts_with("vr_"));
+    }
+
+    #[test]
+    fn split_segments_breaks_on_connectors() {
+        assert_eq!(
+            split_segments("cd webui && npx vitest run"),
+            vec!["cd webui", "npx vitest run"]
+        );
+        assert_eq!(
+            split_segments("cargo fmt && cargo clippy && cargo test"),
+            vec!["cargo fmt", "cargo clippy", "cargo test"]
+        );
+        assert_eq!(split_segments("a ; b || c & d"), vec!["a", "b", "c", "d"]);
+        // pipe is a connector too (for SEGMENT identification)
+        assert_eq!(
+            split_segments("cargo test | tail -5"),
+            vec!["cargo test", "tail -5"]
+        );
+        // 2>&1 is a redirect, NOT a connector — stays attached to its segment
+        assert_eq!(
+            split_segments("cargo test 2>&1 | tail -5"),
+            vec!["cargo test 2>&1", "tail -5"]
+        );
+    }
+
+    #[test]
+    fn split_segments_breaks_on_newline_real_data() {
+        // Real-data anchoring: in this project's transcripts (session 653ea169)
+        // `cd .../webui` and `npx vitest run …` are joined by a literal NEWLINE,
+        // not `&&`. The detector MUST split on newline or the headline bug
+        // (verification 0%) is unfixed. Frozen sample:
+        //   tests/fixtures/transcripts/real/verification_npx_v01.jsonl
+        assert_eq!(
+            split_segments("cd /tmp/webui\nnpx vitest run 2>&1 | tail -12"),
+            vec!["cd /tmp/webui", "npx vitest run 2>&1", "tail -12"]
+        );
+    }
+
+    #[test]
+    fn matched_segment_picks_first_known_tool_after_cd() {
+        // The design spec's headline bug: cd is segment 0, the tool is segment 1.
+        let m = matched_segment("cd webui && npx vitest run").expect("match");
+        assert_eq!(m.command, "npx vitest run");
+        assert_eq!(m.command_kind, "test_suite_js");
+        assert_eq!(m.detection_basis, "known_tool");
+        // tool segment is the LAST segment → exit code visible.
+        assert_eq!(m.status_basis, "exit");
+    }
+
+    #[test]
+    fn matched_segment_picks_known_tool_after_cd_newline_real_data() {
+        // Real-data shape (newline connector). Pager pipe (tail) keeps exit basis.
+        let m = matched_segment("cd /tmp/webui\nnpx vitest run 2>&1 | tail -12")
+            .expect("match");
+        assert_eq!(m.command, "npx vitest run 2>&1");
+        assert_eq!(m.command_kind, "test_suite_js");
+        assert_eq!(m.detection_basis, "known_tool");
+        assert_eq!(m.status_basis, "exit");
+    }
+
+    #[test]
+    fn matched_segment_pager_pipe_is_exit_basis() {
+        // `… 2>&1 | tail` is an output-capture idiom: tail is a pager, so the
+        // verification tool's exit is treated as observable (status_basis=exit).
+        let m = matched_segment("cargo test 2>&1 | tail -40").expect("match");
+        assert_eq!(m.command, "cargo test 2>&1");
+        assert_eq!(m.command_kind, "test_suite_rust");
+        assert_eq!(m.status_basis, "exit");
+    }
+
+    #[test]
+    fn matched_segment_real_pipe_is_piped_basis() {
+        // Piped to a NON-pager downstream command → exit code masked → piped.
+        let m = matched_segment("npm test | grep FAIL").expect("match");
+        assert_eq!(m.command_kind, "test_suite_js");
+        assert_eq!(m.detection_basis, "known_tool");
+        assert_eq!(m.status_basis, "piped");
+    }
+
+    #[test]
+    fn matched_segment_keyword_tier() {
+        let m = matched_segment("cd repo && ./run_e2e_test.sh").expect("match");
+        assert_eq!(m.command_kind, "test_suite_other");
+        assert_eq!(m.detection_basis, "test_keyword");
+        assert_eq!(m.status_basis, "exit");
+    }
+
+    #[test]
+    fn matched_segment_none_when_no_segment_matches() {
+        assert!(matched_segment("cd webui && npm install").is_none());
+        assert!(matched_segment("git status").is_none());
+    }
+
+    #[test]
+    fn matched_segment_excludes_dry_run() {
+        // dry-run / collect-only are not runs (slice directive #6).
+        assert!(matched_segment("cargo test --no-run").is_none());
+        assert!(matched_segment("cd webui && npx vitest run --no-run").is_none());
+        assert!(matched_segment("pytest --collect-only").is_none());
     }
 }

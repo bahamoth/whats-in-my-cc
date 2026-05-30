@@ -156,6 +156,58 @@ fn is_dry_run(segment: &str) -> bool {
     false
 }
 
+/// Strip trailing stream-redirect idioms from a (segment-split) command so the
+/// Tier-1 regexes — which forbid `&` via `[^|;&]+` — still match. Output
+/// redirects do not change *which* tool ran; they only capture its streams.
+///
+/// Handles the common trailing forms (after the leading command + args):
+///   - `2>&1`, `>&2`, `1>&2`           (fd duplication)
+///   - `> file`, `2> file`, `&> file`  (truncating redirect to a target)
+///   - `>> file`, `2>> file`           (appending redirect)
+/// A `cmd 2>&1` → `cmd`. A `cmd > out.log` → `cmd`. Only contiguous trailing
+/// redirect tokens are removed; a redirect in the middle is left intact (these
+/// segments are already pipe-split, so a trailing redirect is the common case).
+pub fn strip_redirects(segment: &str) -> &str {
+    let mut s = segment.trim_end();
+    loop {
+        let trimmed = s.trim_end();
+        // fd-duplication form: token ending in `>&N` or exactly `2>&1` etc.
+        if let Some(last) = trimmed.split_whitespace().next_back() {
+            if is_fd_dup_token(last) {
+                // drop the trailing token
+                let cut = trimmed.len() - last.len();
+                s = trimmed[..cut].trim_end();
+                continue;
+            }
+        }
+        // `OP target` form: a redirect operator token followed by a target.
+        let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+        if tokens.len() >= 2 && is_redirect_op(tokens[tokens.len() - 2]) {
+            // drop the last two tokens (operator + target)
+            let op = tokens[tokens.len() - 2];
+            if let Some(pos) = trimmed.rfind(op) {
+                s = trimmed[..pos].trim_end();
+                continue;
+            }
+        }
+        return trimmed;
+    }
+}
+
+/// True for fd-duplication redirect tokens like `2>&1`, `>&2`, `1>&2`, `&>file`.
+fn is_fd_dup_token(tok: &str) -> bool {
+    // `2>&1`, `>&2`, `1>&2`
+    if tok.contains(">&") {
+        return true;
+    }
+    false
+}
+
+/// True for standalone redirect operator tokens (`>`, `>>`, `2>`, `2>>`, `&>`).
+fn is_redirect_op(tok: &str) -> bool {
+    matches!(tok, ">" | ">>" | "2>" | "2>>" | "&>" | "1>" | "1>>")
+}
+
 /// Strip recognised wrapper prefixes from the front of a (already
 /// segment-split, trimmed) command. Strips left-to-right and repeats until no
 /// wrapper remains, so `sudo npx vitest run` → `vitest run`.
@@ -227,7 +279,7 @@ fn remainder_after(s: &str, n: usize) -> &str {
 /// Dry-run / collect-only / list segments are denied at both tiers (they
 /// compile or enumerate tests but do not run them — slice directive #6).
 pub fn classify_segment(segment: &str) -> Option<(&'static str, &'static str)> {
-    let stripped = strip_wrappers(segment);
+    let stripped = strip_wrappers(strip_redirects(segment));
 
     // Post-match deny: dry-run / collect-only / list is not a verification run.
     if is_dry_run(stripped) {
