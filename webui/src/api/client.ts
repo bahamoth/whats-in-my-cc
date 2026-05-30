@@ -11,6 +11,7 @@ import type {
   DiffHunkDto,
   FindingEvidenceResponse,
   SessionUsageDto,
+  ToolFailureSummaryDto,
 } from './types';
 
 export class ApiError extends Error {
@@ -77,6 +78,9 @@ export const getEpisodes = (id: string): Promise<EpisodeDto[]> =>
 
 export const getFindings = (id: string): Promise<FindingDto[]> =>
   jsonGet<FindingDto[]>(`/v1/sessions/${encodeURIComponent(id)}/findings`);
+
+export const getToolFailureSummary = (id: string): Promise<ToolFailureSummaryDto> =>
+  jsonGet<ToolFailureSummaryDto>(`/v1/sessions/${encodeURIComponent(id)}/tool-failures`);
 
 export const getFindingEvidence = (findingId: string): Promise<FindingEvidenceResponse> =>
   jsonGet<FindingEvidenceResponse>(`/v1/findings/${encodeURIComponent(findingId)}/evidence`);

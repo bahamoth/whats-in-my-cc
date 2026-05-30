@@ -11,6 +11,7 @@ import {
   getFindings,
   getFindingEvidence,
   getSessionUsage,
+  getToolFailureSummary,
   getVerificationRuns,
 } from '../client';
 
@@ -96,6 +97,22 @@ describe('getSessionUsage', () => {
     fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
     const out = await getSessionUsage('s1');
     expect(out).toEqual(expected);
+  });
+});
+
+describe('getToolFailureSummary', () => {
+  it('hits GET /v1/sessions/:id/tool-failures and unwraps `data`', async () => {
+    const expected = {
+      session_id: 's1', user_visible: 28, internal_retry: 1941,
+      benign_nonzero_exit: 12, unclassified: 0, total: 1981, user_visible_findings: [],
+    };
+    fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
+    const out = await getToolFailureSummary('s1');
+    expect(out).toEqual(expected);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/v1/sessions/s1/tool-failures'),
+      expect.any(Object),
+    );
   });
 });
 

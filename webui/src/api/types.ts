@@ -97,7 +97,8 @@ export type FindingDto = {
   schema_version: string;
   session_id: string;
   category: string;
-  severity: 'low' | 'medium' | 'high' | string;
+  subkind?: string | null;
+  severity: 'low' | 'medium' | 'high' | 'info' | string;
   confidence: number;
   summary: string;
   evidence_refs: EvidenceRef[];
@@ -105,6 +106,19 @@ export type FindingDto = {
   provenance: Record<string, unknown>;
   status: string;
   created_at: string;
+};
+
+/** insight-redesign #3 — tool_failure class breakdown for a session. Only
+ *  `user_visible` is headline-eligible; the other two classes are surfaced
+ *  for transparency but never lumped into a `severity=high` headline. */
+export type ToolFailureSummaryDto = {
+  session_id: string;
+  user_visible: number;
+  internal_retry: number;
+  benign_nonzero_exit: number;
+  unclassified: number;
+  total: number;
+  user_visible_findings: FindingDto[];
 };
 
 export type EpisodeDto = {
