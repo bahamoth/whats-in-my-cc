@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Braces } from 'lucide-react';
 import type { FindingDto, GraphNodeDto, GraphEdgeDto } from '../../../api/types';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
+import type { ToolMetrics } from './toolMetrics';
 import { InsightTab } from './InsightTab';
 import { RawTab } from './RawTab';
 import { ResponseMetricsPanel } from './ResponseMetricsPanel';
@@ -24,9 +25,13 @@ interface DetailPanelProps {
   /** Per-response metrics for the selected thinking marker (may be null when
    *  the LLM-request span is outside the loaded window). */
   thinkingMetrics?: LlmRequestMetrics | null;
+  /** Tool-execution metrics for the selected `tool_call` node (Insight tab). */
+  toolMetrics?: ToolMetrics | null;
+  /** Per-response metrics for the selected `assistant_message` node (Insight tab). */
+  llmMetrics?: LlmRequestMetrics | null;
 }
 
-export function DetailPanel({ node, record, findings, episodePhase, nodes, edges, onSelectNode, thinkingSelected, thinkingMetrics }: DetailPanelProps) {
+export function DetailPanel({ node, record, findings, thinkingSelected, thinkingMetrics, toolMetrics, llmMetrics }: DetailPanelProps) {
   const [chosen, setChosen] = useState<TabId | null>(null);
   const active = chosen ?? 'insight';
 
@@ -80,13 +85,9 @@ export function DetailPanel({ node, record, findings, episodePhase, nodes, edges
         {active === 'insight' && (
           <InsightTab
             findings={findings}
-            nodes={nodes}
-            edges={edges}
-            selectedNodeId={node.node_id}
-            onSelectNode={onSelectNode}
             node={node}
-            record={record}
-            episodePhase={episodePhase}
+            toolMetrics={toolMetrics ?? null}
+            llmMetrics={llmMetrics ?? null}
           />
         )}
         {active === 'raw' && <RawTab nodeId={node.node_id} record={record} />}
