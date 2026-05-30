@@ -15,6 +15,8 @@ pub struct FindingRow {
     pub schema_version: String,
     pub session_id: String,
     pub category: String,
+    /// Optional finding sub-type (e.g. tool_failure failure class). NULL-able.
+    pub subkind: Option<String>,
     pub severity: String,
     pub confidence: f64,
     pub summary: String,
@@ -33,14 +35,15 @@ pub struct FindingRow {
 pub async fn insert(pool: &SqlitePool, row: &FindingRow) -> Result<()> {
     sqlx::query(
         "INSERT OR REPLACE INTO finding \
-         (finding_id, schema_version, session_id, category, severity, confidence, \
+         (finding_id, schema_version, session_id, category, subkind, severity, confidence, \
           summary, evidence_refs, evidence_projection, provenance, status) \
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
     )
     .bind(&row.finding_id)
     .bind(&row.schema_version)
     .bind(&row.session_id)
     .bind(&row.category)
+    .bind(&row.subkind)
     .bind(&row.severity)
     .bind(row.confidence)
     .bind(&row.summary)
@@ -60,6 +63,7 @@ pub struct ListFilter {
     pub category: Option<String>,
     pub severity: Option<String>,
     pub status: Option<String>,
+    pub subkind: Option<String>,
     pub limit: i64,
 }
 
@@ -172,7 +176,11 @@ pub async fn list(pool: &SqlitePool, f: &ListFilter) -> Result<Vec<FindingRow>> 
         }
     };
 
-    Ok(rows.into_iter().map(map_row).collect())
+    let mut out: Vec<FindingRow> = rows.into_iter().map(map_row).collect();
+    if let Some(sk) = &f.subkind {
+        out.retain(|r| r.subkind.as_deref() == Some(sk.as_str()));
+    }
+    Ok(out)
 }
 
 /// Fetch a single finding by ID (returns None if not found).
@@ -195,12 +203,37 @@ pub async fn list_by_session(pool: &SqlitePool, session_id: &str) -> Result<Vec<
     Ok(rows.into_iter().map(map_row).collect())
 }
 
+/// Count active findings for a session+category grouped by subkind.
+/// Returns rows of `(subkind_or_null, count)`. Used by the tool-failure
+/// summary endpoint so the surface can show user-visible-only counts.
+pub async fn count_by_subkind(
+    pool: &SqlitePool,
+    session_id: &str,
+    category: &str,
+) -> Result<Vec<(Option<String>, i64)>> {
+    let rows = sqlx::query(
+        "SELECT subkind AS subkind, COUNT(*) AS n \
+         FROM finding \
+         WHERE session_id=? AND category=? AND status='active' \
+         GROUP BY subkind",
+    )
+    .bind(session_id)
+    .bind(category)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.get::<Option<String>, _>("subkind"), r.get::<i64, _>("n")))
+        .collect())
+}
+
 fn map_row(r: sqlx::sqlite::SqliteRow) -> FindingRow {
     FindingRow {
         finding_id: r.get("finding_id"),
         schema_version: r.get("schema_version"),
         session_id: r.get("session_id"),
         category: r.get("category"),
+        subkind: r.get("subkind"),
         severity: r.get("severity"),
         confidence: r.get("confidence"),
         summary: r.get("summary"),

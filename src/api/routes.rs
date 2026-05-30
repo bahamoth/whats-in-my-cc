@@ -653,6 +653,7 @@ pub struct FindingsQuery {
     pub category: Option<String>,
     pub severity: Option<String>,
     pub status: Option<String>,
+    pub subkind: Option<String>,
     pub limit: Option<i64>,
 }
 
@@ -693,6 +694,7 @@ pub async fn list_findings(
         category: q.category,
         severity: q.severity,
         status: q.status,
+        subkind: q.subkind,
         limit: q.limit.unwrap_or(50).min(200).max(1),
     };
     match repo_finding::list(&pool, &filter).await {
