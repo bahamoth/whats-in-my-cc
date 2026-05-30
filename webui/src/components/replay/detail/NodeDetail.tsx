@@ -1,4 +1,5 @@
 // webui/src/components/replay/detail/NodeDetail.tsx
+// no longer used by InsightTab (metrics-led redesign)
 import type { GraphNodeDto, FindingDto } from '../../../api/types';
 import { nodeLabel } from '../stream/nodeLabel';
 import styles from './NodeDetail.module.css';

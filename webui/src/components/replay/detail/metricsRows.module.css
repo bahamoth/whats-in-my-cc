@@ -1,0 +1,39 @@
+/* webui/src/components/replay/detail/metricsRows.module.css
+ * Shared metric-row visual style for the neutral metricsRows primitives,
+ * reused by EntityMetricsPanel (Insight tab) and ResponseMetricsPanel
+ * (thinking-marker path). */
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--witmcc-border, #1d212c);
+  border: 1px solid var(--witmcc-border, #1d212c);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  background: var(--witmcc-surface-1, #11141b);
+  font-size: 12px;
+}
+.row[data-warn='true'] {
+  background: color-mix(in srgb, var(--witmcc-warn, #e0a23b) 12%, var(--witmcc-surface-1, #11141b));
+}
+.k {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--witmcc-fg-subtle, #6a7180);
+}
+.v {
+  color: var(--witmcc-fg, #e6e8ee);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--witmcc-mono, ui-monospace, monospace);
+}
+.row[data-warn='true'] .v {
+  color: var(--witmcc-warn, #e0a23b);
+}

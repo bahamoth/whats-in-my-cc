@@ -5,12 +5,12 @@
 // (absent) content we surface the honest per-response metrics joined from the
 // `claude_code.llm_request` span.
 //
-// The metric rows themselves (Row + InfoTip + TIPS) live in EntityMetricsPanel
-// and are reused here — this component only adds the thinking-specific frame
-// (heading, "not recorded" note, warn footnote) around them.
+// The metric rows themselves (Row + InfoTip + TIPS) live in the neutral
+// `metricsRows` module and are reused here — this component only adds the
+// thinking-specific frame (heading, "not recorded" note, warn footnote).
 import { BrainCog, AlertTriangle } from 'lucide-react';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
-import { ResponseMetricsRows, responseWarns } from './EntityMetricsPanel';
+import { ResponseMetricsRows, responseWarns } from './metricsRows';
 import styles from './ResponseMetricsPanel.module.css';
 
 interface ResponseMetricsPanelProps {

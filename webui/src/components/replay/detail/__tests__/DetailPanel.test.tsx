@@ -1,7 +1,8 @@
 // webui/src/components/replay/detail/__tests__/DetailPanel.test.tsx
 /**
- * S6.2 — 2-tab DetailPanel: Insight (subgraph + NodeDetail + findings) / Raw.
- * Detail tab removed; InsightTab now hosts NodeDetail below the subgraph.
+ * 2-tab DetailPanel: Insight / Raw. The Insight tab is metrics-led — it hosts a
+ * compact node header + EntityMetricsPanel + Findings (the old subgraph and
+ * shallow per-kind sections were removed).
  */
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
@@ -28,49 +29,47 @@ function finding(): FindingDto {
 
 describe('DetailPanel', () => {
   it('shows only Insight and Raw tabs (Detail tab removed)', () => {
-    render(<DetailPanel node={someNode} record={null} findings={[]} episodePhase={null} nodes={[someNode]} edges={[]} onSelectNode={() => {}} />);
+    render(<DetailPanel node={someNode} record={null} findings={[]} />);
     expect(screen.getByRole('tab', { name: /insight/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /raw/i })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /^detail$/i })).toBeNull();
   });
 
-  it('Insight tab contains node detail (focused node label) below the subgraph', () => {
-    render(<DetailPanel node={toolNode} record={{ tool_result: { is_error: false } }} findings={[]} episodePhase="action" nodes={[toolNode]} edges={[]} onSelectNode={() => {}} />);
-    // 'Bash' now appears in both NodeDetail and the focused subgraph node label.
-    // We assert at least one match is present.
+  it('Insight tab shows the focused node header label', () => {
+    render(<DetailPanel node={toolNode} record={{ tool_result: { is_error: false } }} findings={[]} />);
     expect(screen.getAllByText(/Bash|Read/).length).toBeGreaterThan(0);
   });
 
   it('defaults to the Insight tab', () => {
-    render(<DetailPanel node={someNode} record={null} findings={[finding()]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
+    render(<DetailPanel node={someNode} record={null} findings={[finding()]} />);
     expect(screen.getByRole('tab', { name: /insight/i })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('also defaults to Insight when no findings', () => {
-    render(<DetailPanel node={someNode} record={null} findings={[]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
+    render(<DetailPanel node={someNode} record={null} findings={[]} />);
     expect(screen.getByRole('tab', { name: /insight/i })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('switches tab on click and keeps it across a re-render', () => {
-    const { rerender } = render(<DetailPanel node={someNode} record={{ a: 1 }} findings={[finding()]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
+    const { rerender } = render(<DetailPanel node={someNode} record={{ a: 1 }} findings={[finding()]} />);
     fireEvent.click(screen.getByRole('tab', { name: /raw/i }));
     expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('aria-selected', 'true');
-    rerender(<DetailPanel node={someNode} record={{ a: 1 }} findings={[finding()]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
+    rerender(<DetailPanel node={someNode} record={{ a: 1 }} findings={[finding()]} />);
     expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('emphasizes the Raw tab when a raw record is available (#2 discoverability)', () => {
-    render(<DetailPanel node={someNode} record={{ actor: 'user', is_sidechain: true }} findings={[]} episodePhase={null} nodes={[someNode]} edges={[]} onSelectNode={() => {}} />);
+    render(<DetailPanel node={someNode} record={{ actor: 'user', is_sidechain: true }} findings={[]} />);
     expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('data-has-record', 'true');
   });
 
   it('does not emphasize the Raw tab when there is no raw record', () => {
-    render(<DetailPanel node={someNode} record={null} findings={[]} episodePhase={null} nodes={[someNode]} edges={[]} onSelectNode={() => {}} />);
+    render(<DetailPanel node={someNode} record={null} findings={[]} />);
     expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('data-has-record', 'false');
   });
 
   it('shows an empty hint when no node is selected', () => {
-    render(<DetailPanel node={null} record={null} findings={[]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
+    render(<DetailPanel node={null} record={null} findings={[]} />);
     expect(screen.getByText(/select a node/i)).toBeInTheDocument();
   });
 
@@ -80,13 +79,13 @@ describe('DetailPanel', () => {
       outputTokens: 2300, cacheReadTokens: 290000, cacheCreationTokens: 2200,
       stopReason: 'tool_use', attempt: 1, success: true, model: 'claude-opus-4-8',
     };
-    render(<DetailPanel node={null} record={null} findings={[]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} thinkingSelected thinkingMetrics={metrics} />);
+    render(<DetailPanel node={null} record={null} findings={[]} thinkingSelected thinkingMetrics={metrics} />);
     expect(screen.getByTestId('response-metrics')).toBeInTheDocument();
     expect(screen.queryByText(/select a node/i)).toBeNull();
   });
 
   it('renders the response-metrics panel even when its metrics are null', () => {
-    render(<DetailPanel node={null} record={null} findings={[]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} thinkingSelected thinkingMetrics={null} />);
+    render(<DetailPanel node={null} record={null} findings={[]} thinkingSelected thinkingMetrics={null} />);
     expect(screen.getByTestId('response-metrics')).toBeInTheDocument();
   });
 });
