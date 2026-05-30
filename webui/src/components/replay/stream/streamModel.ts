@@ -85,6 +85,16 @@ function userText(p: Record<string, unknown>): string {
   ).trim();
 }
 
+/** log_record event_names that represent genuine state changes and should
+ *  appear as beats in the message view. All other log_record names are
+ *  telemetry / facet observations and are dropped from the stream. */
+const STREAM_STATE_LOG = new Set([
+  'compaction',
+  'skill_activated',
+  'permission_mode_changed',
+  'mcp_server_connection',
+]);
+
 function classify(
   e: ObservedEventDto,
 ): {
@@ -116,6 +126,11 @@ function classify(
     return { cat: 'thinking', sigLen: sig.length };
   }
   if (e.kind === 'system_summary') return { cat: 'drop' };
+  if (e.kind === 'metric_sample' || e.kind === 'otel_span') return { cat: 'drop' };
+  if (e.kind === 'log_record') {
+    const name = (asObj(e.payload).event_name as string) ?? '';
+    return STREAM_STATE_LOG.has(name) ? { cat: 'activity' } : { cat: 'drop' };
+  }
   return { cat: 'activity' };
 }
 
