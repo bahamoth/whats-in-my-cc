@@ -116,6 +116,10 @@ pub fn router(state: AppState) -> Router {
             get(routes::session_verification_runs),
         )
         .route(
+            "/v1/sessions/:id/usage",
+            get(routes::session_usage),
+        )
+        .route(
             "/v1/verification-runs/:id",
             get(routes::verification_run_detail),
         )

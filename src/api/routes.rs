@@ -12,7 +12,7 @@ use crate::api::dto::*;
 use crate::api::AppState;
 use crate::db::{
     repo_audit, repo_diff_hunk, repo_episode, repo_finding, repo_findings_pending, repo_graph,
-    repo_observed, repo_raw, repo_retention, repo_verification_run,
+    repo_observed, repo_raw, repo_retention, repo_usage_facet, repo_verification_run,
 };
 use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
 
@@ -371,6 +371,51 @@ pub async fn event_raw(
             telemetry,
         },
     }))
+}
+
+/// insight-redesign #1 — `GET /v1/sessions/:id/usage`
+///
+/// Returns the session token-usage aggregate: total turns, raw token counts,
+/// billed_tokens (input + cache_creation + output; cache_read is NOT billed),
+/// cache_hit_ratio (cache_read / (cache_read + cache_creation + input); null
+/// when denominator is 0), and a per-model breakdown.
+pub async fn session_usage(
+    State(pool): State<SqlitePool>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let agg = repo_usage_facet::session_aggregate(&pool, &id)
+        .await
+        .expect("db");
+    let billed = agg.input_tokens + agg.cache_creation_input_tokens + agg.output_tokens;
+    let denom = agg.cache_read_input_tokens + agg.cache_creation_input_tokens + agg.input_tokens;
+    let cache_hit_ratio = if denom > 0 {
+        Some(agg.cache_read_input_tokens as f64 / denom as f64)
+    } else {
+        None
+    };
+    let data = SessionUsageDto {
+        session_id: id,
+        turns: agg.turns,
+        input_tokens: agg.input_tokens,
+        cache_creation_input_tokens: agg.cache_creation_input_tokens,
+        cache_read_input_tokens: agg.cache_read_input_tokens,
+        output_tokens: agg.output_tokens,
+        billed_tokens: billed,
+        cache_hit_ratio,
+        by_model: agg
+            .by_model
+            .into_iter()
+            .map(|m| ModelUsageDto {
+                model: m.model,
+                turns: m.turns,
+                output_tokens: m.output_tokens,
+            })
+            .collect(),
+    };
+    Json(Envelope {
+        meta: ResponseMeta::now(),
+        data,
+    })
 }
 
 /// Slice-11 — `GET /v1/sessions/:id/verification-runs`
