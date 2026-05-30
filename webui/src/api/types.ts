@@ -192,7 +192,17 @@ export type FindingEvidenceResponse = {
   }>;
 };
 
-export type ModelUsageDto = { model: string; turns: number; output_tokens: number };
+export type ModelUsageDto = {
+  model: string;
+  turns: number;
+  input_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  output_tokens: number;
+  /** Per-model public-pricing ESTIMATE (USD); 0 when unpriced. */
+  estimated_cost_usd: number;
+  priced: boolean;
+};
 
 export type SessionUsageDto = {
   session_id: string;
@@ -203,6 +213,12 @@ export type SessionUsageDto = {
   output_tokens: number;
   billed_tokens: number;
   cache_hit_ratio: number | null;
+  /** Public-pricing ESTIMATE (USD) — NOT actual billing. */
+  estimated_cost_usd: number;
+  /** "estimate_public_pricing" — drives the 추정 badge. */
+  cost_basis: string;
+  pricing_version: string;
+  models_without_pricing: string[];
   by_model: ModelUsageDto[];
 };
 
