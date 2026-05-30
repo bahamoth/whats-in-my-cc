@@ -4,6 +4,7 @@
 use chrono::{TimeZone, Utc};
 use serde_json::json;
 use witmcc::insight::extractors::tool_failure::ToolFailure;
+use witmcc::insight::extractors::tool_failure::{classify_failure, FailureClass};
 use witmcc::insight::extractor::InsightExtractor;
 use witmcc::insight::view::SessionInsightView;
 use witmcc::model::observed::{Actor, EventKind, ObservedEvent};
@@ -198,4 +199,61 @@ fn fires_when_retry_success_is_beyond_5_events() {
         "must fire when success retry is beyond 5 events, got {:?}",
         cands.len()
     );
+}
+
+/// StructuredOutput failures are internal agent auto-retries (spec §6.3) —
+/// classified internal_retry regardless of the error text.
+#[test]
+fn classifies_structured_output_as_internal_retry() {
+    assert_eq!(
+        classify_failure("StructuredOutput", "schema validation failed: missing key"),
+        FailureClass::InternalRetry
+    );
+}
+
+/// grep no-match (exit 1) and Read file-not-found are benign non-zero exits,
+/// not user-visible failures (spec §6.3 "Stop benign non-zero exits").
+#[test]
+fn classifies_benign_nonzero_exits() {
+    assert_eq!(
+        classify_failure("Bash", "grep: no matches found"),
+        FailureClass::BenignNonzeroExit
+    );
+    assert_eq!(
+        classify_failure("Read", "File does not exist: /tmp/missing.rs"),
+        FailureClass::BenignNonzeroExit
+    );
+    assert_eq!(
+        classify_failure("Read", "<tool_use_error>File does not exist.</tool_use_error>"),
+        FailureClass::BenignNonzeroExit
+    );
+}
+
+/// A real failing Bash build / Edit failure stays user_visible.
+#[test]
+fn classifies_real_failures_as_user_visible() {
+    assert_eq!(
+        classify_failure("Bash", "error[E0599]: no method named `foo`"),
+        FailureClass::UserVisible
+    );
+    assert_eq!(
+        classify_failure("Edit", "String to replace not found in file."),
+        FailureClass::UserVisible
+    );
+    // unknown tool, ordinary error → user_visible (conservative; we surface it)
+    assert_eq!(
+        classify_failure("mcp__server__do_thing", "connection refused"),
+        FailureClass::UserVisible
+    );
+}
+
+/// FailureClass exposes its persisted string + severity mapping.
+#[test]
+fn failure_class_as_str_and_severity() {
+    assert_eq!(FailureClass::UserVisible.as_str(), "user_visible");
+    assert_eq!(FailureClass::InternalRetry.as_str(), "internal_retry");
+    assert_eq!(FailureClass::BenignNonzeroExit.as_str(), "benign_nonzero_exit");
+    assert_eq!(FailureClass::UserVisible.severity(), "high");
+    assert_eq!(FailureClass::InternalRetry.severity(), "info");
+    assert_eq!(FailureClass::BenignNonzeroExit.severity(), "info");
 }
