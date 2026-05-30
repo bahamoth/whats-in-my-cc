@@ -239,6 +239,29 @@ pub struct FindingDetailResponse {
     pub data: FindingDto,
 }
 
+/// insight-redesign #1 — session token-usage aggregate.
+#[derive(Serialize)]
+pub struct SessionUsageDto {
+    pub session_id: String,
+    pub turns: i64,
+    pub input_tokens: i64,
+    pub cache_creation_input_tokens: i64,
+    pub cache_read_input_tokens: i64,
+    pub output_tokens: i64,
+    /// input + cache_creation + output (cache_read is NOT billed)
+    pub billed_tokens: i64,
+    /// cache_read / (cache_read + cache_creation + input); null when denom 0
+    pub cache_hit_ratio: Option<f64>,
+    pub by_model: Vec<ModelUsageDto>,
+}
+
+#[derive(Serialize)]
+pub struct ModelUsageDto {
+    pub model: String,
+    pub turns: i64,
+    pub output_tokens: i64,
+}
+
 /// Response for `GET /v1/findings/:id/evidence`.
 #[derive(Serialize)]
 pub struct FindingEvidenceResponse {
