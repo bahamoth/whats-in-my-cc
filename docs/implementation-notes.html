@@ -2931,8 +2931,85 @@ vitest: 69 passed
     </ul>
   </section>
 
+  <!-- insight-surface-redesign slice 1 — usage_facet                             -->
+  <section id="insight-surface-slice-1">
+    <h2><span class="num">39</span>Insight-Surface Redesign Slice 1 — <code>usage_facet</code> (migration 0014)</h2>
+    <p><strong>브랜치:</strong> <code>insight-surface-redesign</code> · <strong>날짜:</strong> 2026-05-30 · <strong>트랙:</strong> insight-surface-redesign epic (슬라이스 1/6).
+    Spec: <code>docs/superpowers/specs/2026-05-30-witmcc-insight-surface-redesign-design.md</code>.</p>
+
+    <h3>신규 테이블: <code>usage_facet</code> (migration 0014)</h3>
+    <p>파일: <code>migrations/20260603120000_0014_usage_facet.sql</code>.
+    assistant API 턴 1건 = <code>usage_facet</code> 행 1건. PK는 <code>raw_event_id</code>(raw_event 외래 키)로 dedup 보장.
+    컬럼: <code>session_id</code>, <code>raw_event_id</code>, <code>model</code>, <code>input_tokens</code>,
+    <code>cache_creation_input_tokens</code>, <code>cache_read_input_tokens</code>, <code>output_tokens</code>,
+    <code>recorded_at</code>.</p>
+
+    <h3>핵심 설계 결정: raw_event JOIN 필요</h3>
+    <p><code>message.usage</code>는 <code>observed_event.payload</code>에 없고 <code>raw_event.payload</code>에만 존재한다.
+    UX S1(§36) payload enrichment에서 추가한 <code>model</code> 필드는 <code>observed_event.payload</code>에 있지만
+    usage 토큰 정보는 raw에서만 읽어야 한다.
+    따라서 <code>repo_usage_facet::assistant_raw_lines</code>는 <code>observed_event ⋈ raw_event</code>를 JOIN하여
+    <code>actor = 'assistant'</code>인 행을 필터링한다.</p>
+    <p><strong>actor 기준 (kind 기준 아님):</strong> <code>kind = 'assistant_message'</code>로 필터하면
+    tool_use 전용 assistant 라인(텍스트 content 블록 없음 → assistant_message 이벤트 미생성)이 누락된다.
+    <code>actor = 'assistant'</code>로 raw_event를 필터하면 모든 assistant API 응답을 포괄하며,
+    <code>raw_event_id</code> PK dedup으로 중복 삽입을 방지한다.</p>
+
+    <h3>구현 파일</h3>
+    <ul>
+      <li><code>src/ingest/usage_facet.rs</code> — <code>parse_usage(payload)</code>: raw payload JSON에서 <code>message.usage</code> 추출.</li>
+      <li><code>src/db/repo_usage_facet.rs</code> — <code>insert_batch</code>, <code>assistant_raw_lines</code>, <code>aggregate_for_session</code>.</li>
+      <li><code>src/ingest/store.rs</code> — <code>rebuild_session</code> 내 <code>repo_usage_facet::populate_session</code> 호출로 배선.</li>
+    </ul>
+
+    <h3>엔드포인트: <code>GET /v1/sessions/:id/usage</code></h3>
+    <p>집계 응답 필드:</p>
+    <ul>
+      <li><strong>turns</strong>: assistant 턴 수 (<code>usage_facet</code> 행 수).</li>
+      <li><strong>input_tokens / cache_creation_input_tokens / cache_read_input_tokens / output_tokens</strong>: 합산 토큰.</li>
+      <li><strong>billed_tokens</strong>: <code>input + cache_creation + output</code> (cache_read는 과금 없음).</li>
+      <li><strong>cache_hit_ratio</strong>: <code>cache_read / (cache_read + cache_creation + input)</code>.</li>
+      <li><strong>by_model</strong>: 모델별 turns + output_tokens 배열.</li>
+    </ul>
+    <h4>실 데이터 스모크 결과 (세션 <code>653ea169</code>, 2026-05-30)</h4>
+    <pre><code>{
+  "data": {
+    "session_id": "653ea169-1121-442e-9cc9-776471a10895",
+    "turns": 4617,
+    "input_tokens": 570268,
+    "cache_creation_input_tokens": 11294007,
+    "cache_read_input_tokens": 693782106,
+    "output_tokens": 2422733,
+    "billed_tokens": 14287008,
+    "cache_hit_ratio": 0.9831866564904838,
+    "by_model": [
+      {"model": "claude-opus-4-8",            "turns": 3540, "output_tokens": 2295405},
+      {"model": "claude-haiku-4-5-20251001",  "turns": 858,  "output_tokens": 99303},
+      {"model": "claude-sonnet-4-6",          "turns": 219,  "output_tokens": 28025}
+    ]
+  }
+}</code></pre>
+    <p>cache_hit_ratio ≈ 0.983 — 전체 입력의 98%가 캐시에서 읽힘. billed_tokens 14,287,008 (cache_read 693M은 미과금).</p>
+
+    <h3>운영 주의 (migration 0014)</h3>
+    <p>신규 migration 0014 추가. 기존 dev DB는 <code>witmcc init-db</code> 후 <code>witmcc ingest --all</code>로 재ingest 필요.
+    재ingest 전에는 <code>usage_facet</code>에 행이 없어 <code>GET /v1/sessions/:id/usage</code>가 turns=0을 반환한다.</p>
+    <p>재ingest 확인 쿼리: <code>SELECT COUNT(*) AS rows, COUNT(DISTINCT session_id) AS sessions FROM usage_facet;</code></p>
+
+    <h3>Commit Reference (Slice 1)</h3>
+    <ul>
+      <li><code>53689ea</code> — feat(usage): migration 0014 — usage_facet side-table</li>
+      <li><code>b60a1d3</code> — feat(usage): pure parse_usage extractor + tests</li>
+      <li><code>ecdd795</code> — feat(usage): repo_usage_facet (insert, raw lines, aggregate)</li>
+      <li><code>0ae657a</code> — feat(usage): wire usage_facet population into ingest + real-fixture test</li>
+      <li><code>e15e3c8</code> — test(usage): repo_usage_facet unit tests + drop dead assertion</li>
+      <li><code>147fa21</code> — feat(usage): GET /v1/sessions/:id/usage aggregate endpoint</li>
+      <li><code>16f36ab</code> — feat(usage): frontend types + getSessionUsage + useSessionUsageQuery</li>
+    </ul>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · <strong>MVP EXIT 2026-05-27</strong></p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slice-1 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
