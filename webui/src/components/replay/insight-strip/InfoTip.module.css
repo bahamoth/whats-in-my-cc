@@ -1,0 +1,34 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.trigger {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid var(--witmcc-border-strong);
+  background: var(--witmcc-surface-3);
+  color: var(--witmcc-fg-muted);
+  font-size: 10px;
+  line-height: 1;
+  cursor: help;
+  padding: 0;
+}
+
+.bubble {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+  width: max-content;
+  max-width: 280px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--witmcc-fg);
+  background: var(--witmcc-surface-3);
+  border: 1px solid var(--witmcc-border-strong);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
