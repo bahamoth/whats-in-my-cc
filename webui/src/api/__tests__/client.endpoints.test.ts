@@ -10,6 +10,7 @@ import {
   getEpisodes,
   getFindings,
   getFindingEvidence,
+  getSessionUsage,
   getVerificationRuns,
 } from '../client';
 
@@ -81,6 +82,19 @@ describe('getFindingEvidence', () => {
     fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
     const out = await getFindingEvidence('f1');
     expect(fetchSpy).toHaveBeenCalledWith('/v1/findings/f1/evidence', expect.any(Object));
+    expect(out).toEqual(expected);
+  });
+});
+
+describe('getSessionUsage', () => {
+  it('getSessionUsage unwraps the usage envelope', async () => {
+    const expected = {
+      session_id: 's1', turns: 3, input_tokens: 10,
+      cache_creation_input_tokens: 20, cache_read_input_tokens: 900,
+      output_tokens: 30, billed_tokens: 60, cache_hit_ratio: 0.96, by_model: [],
+    };
+    fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
+    const out = await getSessionUsage('s1');
     expect(out).toEqual(expected);
   });
 });

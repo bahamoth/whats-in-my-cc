@@ -176,6 +176,20 @@ export type FindingEvidenceResponse = {
   }>;
 };
 
+export type ModelUsageDto = { model: string; turns: number; output_tokens: number };
+
+export type SessionUsageDto = {
+  session_id: string;
+  turns: number;
+  input_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  output_tokens: number;
+  billed_tokens: number;
+  cache_hit_ratio: number | null;
+  by_model: ModelUsageDto[];
+};
+
 export type RawEventResponse = {
   schema_version: string;
   event_id: string;

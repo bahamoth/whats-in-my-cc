@@ -10,6 +10,7 @@ import type {
   VerificationRunDto,
   DiffHunkDto,
   FindingEvidenceResponse,
+  SessionUsageDto,
 } from './types';
 
 export class ApiError extends Error {
@@ -83,6 +84,9 @@ export const getFindingEvidence = (findingId: string): Promise<FindingEvidenceRe
 export const getVerificationRuns = (id: string): Promise<VerificationRunDto[]> =>
   // jsonGet already returns the envelope's `data`, which here IS the array.
   jsonGet<VerificationRunDto[]>(`/v1/sessions/${encodeURIComponent(id)}/verification-runs`);
+
+export const getSessionUsage = (id: string): Promise<SessionUsageDto> =>
+  jsonGet<SessionUsageDto>(`/v1/sessions/${encodeURIComponent(id)}/usage`);
 
 export const getDiffHunks = (id: string): Promise<DiffHunkDto[]> =>
   jsonGet<{ hunks: DiffHunkDto[] }>(`/v1/sessions/${encodeURIComponent(id)}/diff-hunks`).then(
