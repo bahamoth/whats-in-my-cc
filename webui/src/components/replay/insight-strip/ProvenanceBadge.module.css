@@ -1,0 +1,27 @@
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--witmcc-border-strong);
+  color: var(--witmcc-fg-muted);
+  white-space: nowrap;
+}
+
+.badge[data-provenance='measured'] {
+  color: var(--witmcc-success);
+  border-color: var(--witmcc-success);
+}
+.badge[data-provenance='mixed'] {
+  color: var(--witmcc-info);
+  border-color: var(--witmcc-info);
+}
+.badge[data-provenance='estimated'] {
+  color: var(--witmcc-warning);
+  border-color: var(--witmcc-warning);
+}
+.badge[data-provenance='uncollected'] {
+  color: var(--witmcc-fg-subtle);
+  border-color: var(--witmcc-border);
+}
