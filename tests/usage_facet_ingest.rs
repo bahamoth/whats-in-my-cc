@@ -35,6 +35,4 @@ async fn ingest_populates_usage_facet_from_real_fixture() {
         agg.cache_read_input_tokens > 0,
         "real fixture has prompt-cache reads"
     );
-    let billed = agg.input_tokens + agg.cache_creation_input_tokens;
-    assert!(agg.cache_read_input_tokens + billed > 0);
 }
