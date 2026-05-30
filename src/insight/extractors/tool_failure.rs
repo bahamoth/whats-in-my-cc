@@ -22,6 +22,68 @@ use crate::model::observed::EventKind;
 /// Number of events forward to check for a compensating successful retry.
 const RETRY_WINDOW: usize = 5;
 
+/// Tools whose failures are internal agent auto-retries, not user-visible
+/// failures (spec §6.3). `StructuredOutput` is the workflow-subagent schema
+/// tool that produces the 1941/1953 retry-cycle noise in session 653ea169.
+const INTERNAL_RETRY_TOOLS: &[&str] = &["StructuredOutput"];
+
+/// Substrings (lower-cased compare) that mark a benign non-zero exit: a tool
+/// "failure" the user does not care about (grep no-match exit 1, Read of a
+/// missing file). Kept deliberately tiny + evidence-anchored, not a blanket
+/// "only Bash/Edit/Write count" rule (that would drop real MCP/Task/browser
+/// failures, which §6.3 lists among the ~28 user-visible ones).
+const BENIGN_EXIT_MARKERS: &[&str] = &[
+    "no matches found",     // grep / ripgrep exit 1
+    "file does not exist",  // Read tool not-found
+    "no such file or directory",
+];
+
+/// The class a fired tool_failure falls into. Drives both the persisted
+/// `subkind` and the finding `severity` (so internal noise never headlines).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FailureClass {
+    /// Genuine user-facing failure — headline-eligible (severity high).
+    UserVisible,
+    /// Internal agent auto-retry (e.g. StructuredOutput) — severity info.
+    InternalRetry,
+    /// Benign non-zero exit (grep no-match, Read not-found) — severity info.
+    BenignNonzeroExit,
+}
+
+impl FailureClass {
+    /// Stable string persisted in `finding.subkind` + evidence_projection.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FailureClass::UserVisible => "user_visible",
+            FailureClass::InternalRetry => "internal_retry",
+            FailureClass::BenignNonzeroExit => "benign_nonzero_exit",
+        }
+    }
+
+    /// Severity for the finding. Only `user_visible` is `high`; the two noise
+    /// classes are `info` so a `severity=high` headline never lumps them.
+    pub fn severity(self) -> &'static str {
+        match self {
+            FailureClass::UserVisible => "high",
+            FailureClass::InternalRetry | FailureClass::BenignNonzeroExit => "info",
+        }
+    }
+}
+
+/// Classify a fired tool_failure by tool name + error excerpt (spec §6.3).
+/// Precedence: internal-retry tool first, then benign-exit markers, else
+/// user_visible (conservative — an unrecognised failure is surfaced).
+pub fn classify_failure(tool_name: &str, error_excerpt: &str) -> FailureClass {
+    if INTERNAL_RETRY_TOOLS.contains(&tool_name) {
+        return FailureClass::InternalRetry;
+    }
+    let lc = error_excerpt.to_ascii_lowercase();
+    if BENIGN_EXIT_MARKERS.iter().any(|m| lc.contains(m)) {
+        return FailureClass::BenignNonzeroExit;
+    }
+    FailureClass::UserVisible
+}
+
 pub struct ToolFailure;
 
 impl InsightExtractor for ToolFailure {
