@@ -144,6 +144,7 @@ impl InsightExtractor for MissingVerification {
 
                 candidates.push(FindingCandidate {
                     category: "missing_verification",
+                    subkind: None,
                     confidence_l1: 0.9,
                     severity: "medium",
                     summary,

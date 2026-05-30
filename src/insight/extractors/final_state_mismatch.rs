@@ -171,6 +171,7 @@ impl InsightExtractor for FinalStateMismatch {
         // Session-level grain: at most one finding.
         vec![FindingCandidate {
             category: "final_state_mismatch",
+            subkind: None,
             confidence_l1: 0.6,
             severity: "medium",
             summary,

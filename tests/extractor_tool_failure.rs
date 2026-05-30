@@ -257,3 +257,65 @@ fn failure_class_as_str_and_severity() {
     assert_eq!(FailureClass::InternalRetry.severity(), "info");
     assert_eq!(FailureClass::BenignNonzeroExit.severity(), "info");
 }
+
+/// tool_result with arbitrary error content (the default helper hardcodes
+/// "error output"); lets us drive classify_failure via the excerpt.
+fn tool_result_ev_content(i: usize, tool_use_id: &str, content: &str) -> ObservedEvent {
+    ObservedEvent {
+        tool_use_id: Some(tool_use_id.into()),
+        payload: json!({
+            "content_ordinal": 0,
+            "tool_result": {
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "is_error": true,
+                "content": content
+            }
+        }),
+        ..base_event(i, Actor::Tool, EventKind::ToolResult)
+    }
+}
+
+/// A StructuredOutput failure is emitted but tagged internal_retry / info,
+/// NOT high — so it never enters a severity=high headline (spec §6.3).
+#[test]
+fn structured_output_failure_is_info_internal_retry() {
+    let events = vec![
+        tool_call_ev(0, "tid_0", "StructuredOutput"),
+        tool_result_ev_content(1, "tid_0", "schema validation failed"),
+    ];
+    let cands = ToolFailure.extract(&view_from_events(&events));
+    assert_eq!(cands.len(), 1);
+    assert_eq!(cands[0].severity, "info", "internal retry must not be high");
+    assert_eq!(cands[0].subkind, Some("internal_retry"));
+    assert_eq!(
+        cands[0].evidence_projection["failure_class"].as_str(),
+        Some("internal_retry")
+    );
+}
+
+/// grep no-match is benign → info / benign_nonzero_exit.
+#[test]
+fn grep_no_match_is_info_benign() {
+    let events = vec![
+        tool_call_ev(0, "tid_0", "Bash"),
+        tool_result_ev_content(1, "tid_0", "grep: no matches found"),
+    ];
+    let cands = ToolFailure.extract(&view_from_events(&events));
+    assert_eq!(cands.len(), 1);
+    assert_eq!(cands[0].severity, "info");
+    assert_eq!(cands[0].subkind, Some("benign_nonzero_exit"));
+}
+
+/// A genuine Bash failure stays high / user_visible.
+#[test]
+fn real_bash_failure_stays_high_user_visible() {
+    let events = vec![
+        tool_call_ev(0, "tid_0", "Bash"),
+        tool_result_ev_content(1, "tid_0", "error[E0599]: no method named foo"),
+    ];
+    let cands = ToolFailure.extract(&view_from_events(&events));
+    assert_eq!(cands.len(), 1);
+    assert_eq!(cands[0].severity, "high");
+    assert_eq!(cands[0].subkind, Some("user_visible"));
+}

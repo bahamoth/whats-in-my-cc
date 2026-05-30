@@ -148,6 +148,7 @@ impl InsightExtractor for ContextBloat {
 
             candidates.push(FindingCandidate {
                 category: "context_bloat",
+                subkind: None,
                 confidence_l1: 0.5,
                 severity: "low",
                 summary,

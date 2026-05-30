@@ -226,11 +226,17 @@ fn build_candidate(
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
 
-    let summary = format!("Tool {tool_name} failed with is_error=true (tool_use_id={tool_use_id}).");
+    let class = classify_failure(tool_name, &error_excerpt);
+
+    let summary = format!(
+        "Tool {tool_name} failed with is_error=true (tool_use_id={tool_use_id}, class={}).",
+        class.as_str()
+    );
 
     let projection = json!({
         "category": "tool_failure",
         "session_id": session_id,
+        "failure_class": class.as_str(),
         "tool_use_id": tool_use_id,
         "tool_name": tool_name,
         "error_excerpt_redacted": error_excerpt,
@@ -240,8 +246,9 @@ fn build_candidate(
 
     FindingCandidate {
         category: "tool_failure",
+        subkind: Some(class.as_str()),
         confidence_l1: 1.0,
-        severity: "high",
+        severity: class.severity(),
         summary,
         evidence_refs,
         evidence_projection: projection,
