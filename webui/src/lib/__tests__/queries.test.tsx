@@ -19,7 +19,9 @@ import {
   useSessionGraphQuery,
   useEpisodesQuery,
   useFindingsQuery,
+  useUsageBaselineQuery,
   sessionKeys,
+  usageKeys,
 } from '../queries';
 
 const ENVELOPE = (data: unknown) => ({ meta: { generated_at: '2026-05-29T00:00:00Z' }, data });
@@ -124,5 +126,22 @@ describe('useFindingsQuery', () => {
     const { result } = renderHook(() => useFindingsQuery('S1'), { wrapper: wrap(qc) });
     await waitFor(() => expect(result.current.data?.length).toBe(1));
     expect(result.current.data?.[0]?.finding_id).toBe('good');
+  });
+});
+
+describe('useUsageBaselineQuery', () => {
+  it('caches the baseline under usageKeys.baseline()', async () => {
+    const payload = {
+      session_count: 2,
+      cache_hit_ratio: { p25: 0.0, median: 0.45, p75: 0.9 },
+      billed_tokens: { p25: 200, median: 300, p75: 400 },
+      turns: { p25: 1, median: 1, p75: 1 },
+      output_tokens: { p25: 100, median: 200, p75: 300 },
+    };
+    fetchSpy.mockResolvedValue(mockOk(ENVELOPE(payload)));
+    const qc = createQueryClient();
+    const { result } = renderHook(() => useUsageBaselineQuery(), { wrapper: wrap(qc) });
+    await waitFor(() => expect(result.current.data).toEqual(payload));
+    expect(qc.getQueryData(usageKeys.baseline())).toEqual(payload);
   });
 });

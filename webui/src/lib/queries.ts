@@ -15,6 +15,7 @@ import {
   getFindings,
   getFindingEvidence,
   getSessionUsage,
+  getUsageBaseline,
   getToolFailureSummary,
   getVerificationRuns,
   getDiffHunks,
@@ -26,6 +27,7 @@ import type {
   EpisodeDto,
   FindingDto,
   SessionUsageDto,
+  UsageBaselineDto,
   ToolFailureSummaryDto,
   VerificationRunDto,
   DiffHunkDto,
@@ -47,6 +49,11 @@ export const sessionKeys = {
   verificationRuns: (id: string) => ['session', id, 'verification-runs'] as const,
   usage: (id: string) => ['session', id, 'usage'] as const,
   findingEvidence: (findingId: string) => ['finding', findingId, 'evidence'] as const,
+};
+
+/** insight-redesign #6 — store-wide usage baseline (not session-scoped). */
+export const usageKeys = {
+  baseline: () => ['usage', 'baseline'] as const,
 };
 
 type QOpts<T> = Omit<UseQueryOptions<T, Error, T>, 'queryKey' | 'queryFn'>;
@@ -129,6 +136,15 @@ export function useSessionUsageQuery(id: string, opts?: QOpts<SessionUsageDto>) 
     queryKey: sessionKeys.usage(id),
     queryFn: () => getSessionUsage(id),
     enabled: !!id,
+    ...opts,
+  });
+}
+
+export function useUsageBaselineQuery(opts?: QOpts<UsageBaselineDto>) {
+  return useQuery<UsageBaselineDto>({
+    queryKey: usageKeys.baseline(),
+    queryFn: () => getUsageBaseline(),
+    staleTime: 60_000,
     ...opts,
   });
 }
