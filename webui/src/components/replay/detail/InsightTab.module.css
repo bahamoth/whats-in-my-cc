@@ -1,6 +1,16 @@
 /* webui/src/components/replay/detail/InsightTab.module.css */
-.root { display: flex; flex-direction: column; gap: 8px; }
+.root { display: flex; flex-direction: column; gap: 12px; padding: 4px; }
 .empty { color: var(--witmcc-fg-subtle, #6a7180); padding: 12px; }
+
+/* Compact node header (replaces NodeDetail header) */
+.nodeHeader { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.nodeIcon { font-size: 14px; }
+.nodePrimary { font-size: 15px; font-weight: 600; color: var(--witmcc-fg, #e6e8ee); }
+.nodeId { font-size: 11px; color: var(--witmcc-fg-subtle, #6a7180); font-family: var(--witmcc-mono, ui-monospace, monospace); margin-left: auto; }
+
+/* Findings section */
+.findingsSection { border-top: 1px solid var(--witmcc-border, #1d212c); padding-top: 10px; }
+.sectionTitle { font-size: 11px; text-transform: uppercase; color: var(--witmcc-fg-subtle, #6a7180); letter-spacing: 0.06em; margin-bottom: 8px; }
 .list { list-style: none; margin: 0; padding: 0; }
 .item { border: 1px solid var(--witmcc-border, #1d212c); border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; }
 .head { display: flex; align-items: center; gap: 8px; font-size: 11px; }

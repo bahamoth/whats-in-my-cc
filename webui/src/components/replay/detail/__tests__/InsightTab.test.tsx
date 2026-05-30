@@ -1,12 +1,13 @@
 // webui/src/components/replay/detail/__tests__/InsightTab.test.tsx
 /**
- * S6.2 — InsightTab now renders FocusedInsightGraph above NodeDetail (which
- * owns findings rendering). Old inline findings list removed.
+ * Task 6 — metrics-led Insight tab: a compact node header + EntityMetricsPanel
+ * (kind-dependent collected metrics) + that node's Findings. The old
+ * FocusedInsightGraph subgraph and shallow per-kind sections were removed.
  */
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { InsightTab } from '../InsightTab';
-import type { FindingDto, GraphNodeDto, GraphEdgeDto } from '../../../../api/types';
+import type { FindingDto, GraphNodeDto } from '../../../../api/types';
 
 function finding(p: Partial<FindingDto>): FindingDto {
   return {
@@ -19,68 +20,50 @@ function finding(p: Partial<FindingDto>): FindingDto {
 function n(id: string, kind = 'tool_call', payload: unknown = {}): GraphNodeDto {
   return { node_id: id, schema_version: '1', session_id: 's', node_kind: kind, started_at: '', ended_at: null, merge_keys: {}, source_event_ids: [], source_uris: [], payload };
 }
-function e(id: string, from: string, to: string): GraphEdgeDto {
-  return { edge_id: id, schema_version: '1', session_id: 's', from_node_id: from, to_node_id: to, edge_kind: 'x', origin: 'deterministic', attributes: {}, inference_rule_id: null, confidence: null };
-}
 
 const toolNode = n('b', 'tool_call', { tool_name: 'Bash', input: { command: 'ls' } });
 
+const toolMetrics = {
+  durationMs: 57, success: true, decisionSource: 'config', decisionType: 'accept',
+  inputBytes: 362, resultBytes: 302, sequence: 763,
+};
+
 describe('InsightTab', () => {
-  it('renders findings via NodeDetail (summary, category, severity visible)', () => {
+  it('renders findings (summary, category, severity visible)', () => {
     render(
-      <InsightTab findings={[finding({})]} nodes={[toolNode]} edges={[]} selectedNodeId="b"
-        onSelectNode={() => {}} node={toolNode} record={null} episodePhase={null} />,
+      <InsightTab findings={[finding({})]} node={toolNode} toolMetrics={toolMetrics} llmMetrics={null} />,
     );
     expect(screen.getByText('risky rm -rf')).toBeInTheDocument();
     expect(screen.getByText(/risky_action/)).toBeInTheDocument();
     expect(screen.getByText(/high/i)).toBeInTheDocument();
   });
 
-  it('renders confidence as a percentage via NodeDetail', () => {
+  it('renders confidence as a percentage', () => {
     render(
-      <InsightTab findings={[finding({ confidence: 0.8 })]} nodes={[toolNode]} edges={[]} selectedNodeId="b"
-        onSelectNode={() => {}} node={toolNode} record={null} episodePhase={null} />,
+      <InsightTab findings={[finding({ confidence: 0.8 })]} node={toolNode} toolMetrics={toolMetrics} llmMetrics={null} />,
     );
     expect(screen.getByText('80%')).toBeInTheDocument();
   });
 
   it('shows an empty hint when no node and no findings', () => {
-    render(
-      <InsightTab findings={[]} nodes={[]} edges={[]} selectedNodeId={null}
-        onSelectNode={() => {}} node={null} record={null} episodePhase={null} />,
-    );
+    render(<InsightTab findings={[]} node={null} toolMetrics={null} llmMetrics={null} />);
     expect(screen.getByText(/no insights|no findings/i)).toBeInTheDocument();
   });
 
-  it('renders the focused subgraph above NodeDetail for the selected node', () => {
-    // ResizeObserver is mocked globally in webui/src/test/setup.ts — no per-file mock needed.
-    const nodes = [n('a'), toolNode, n('c')];
-    const edges = [e('e1', 'a', 'b'), e('e2', 'b', 'c')];
-    render(
-      <InsightTab findings={[]} nodes={nodes} edges={edges} selectedNodeId="b"
-        onSelectNode={() => {}} node={toolNode} record={null} episodePhase={null} />,
-    );
-    expect(screen.getByTestId('focused-graph')).toBeInTheDocument();
+  it('renders the node header (tool name) when a node is provided', () => {
+    render(<InsightTab findings={[]} node={toolNode} toolMetrics={toolMetrics} llmMetrics={null} />);
+    expect(screen.getByText('Bash')).toBeInTheDocument();
   });
 
-  it('findings render via NodeDetail when a node is selected and there are findings', () => {
-    const nodes = [n('a'), toolNode, n('c')];
-    const edges = [e('e1', 'a', 'b')];
-    render(
-      <InsightTab findings={[finding({})]} nodes={nodes} edges={edges} selectedNodeId="b"
-        onSelectNode={() => {}} node={toolNode} record={null} episodePhase={null} />,
-    );
-    expect(screen.getByTestId('focused-graph')).toBeInTheDocument();
-    expect(screen.getByText('risky rm -rf')).toBeInTheDocument();
+  it('renders the entity metrics panel for the selected node', () => {
+    render(<InsightTab findings={[]} node={toolNode} toolMetrics={toolMetrics} llmMetrics={null} />);
+    expect(screen.getByTestId('entity-metrics')).toBeInTheDocument();
+    // tool-execution metric meaning is surfaced
+    expect(screen.getByText(/결정 출처/)).toBeInTheDocument();
   });
 
-  it('renders NodeDetail label (tool name) when a node is provided', () => {
-    render(
-      <InsightTab findings={[]} nodes={[toolNode]} edges={[]} selectedNodeId="b"
-        onSelectNode={() => {}} node={toolNode} record={null} episodePhase={null} />,
-    );
-    // 'Bash' now appears both in NodeDetail and in the focused subgraph node label
-    // (nodeLabel primary for tool_call with tool_name:'Bash'). At least one must be present.
-    expect(screen.getAllByText('Bash').length).toBeGreaterThan(0);
+  it('does not render the focused subgraph (removed)', () => {
+    render(<InsightTab findings={[]} node={toolNode} toolMetrics={toolMetrics} llmMetrics={null} />);
+    expect(screen.queryByTestId('focused-graph')).toBeNull();
   });
 });

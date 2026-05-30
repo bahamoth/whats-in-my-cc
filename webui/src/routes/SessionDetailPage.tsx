@@ -28,6 +28,8 @@ import { useSessionWindow } from '../hooks/useSessionWindow';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
 import { buildStreamModel } from '../components/replay/stream/streamModel';
 import { buildLlmRequestMetrics } from '../components/replay/stream/llmRequestMetrics';
+import { buildEntityFacets } from '../components/replay/facets/entityFacets';
+import { buildToolMetrics } from '../components/replay/detail/toolMetrics';
 import styles from './SessionDetailPage.module.css';
 
 const EMPTY_GRAPH: GraphPayload = { nodes: [], edges: [] };
@@ -95,6 +97,13 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   }, [window_]);
 
   const effectiveGraph = graph.data ?? EMPTY_GRAPH;
+
+  // entity → its facet group (facet_of edges). Used to gather a tool_call's
+  // log_record facet nodes for tool-execution metrics in the Insight tab.
+  const entityFacets = useMemo(
+    () => buildEntityFacets(effectiveGraph.nodes, effectiveGraph.edges),
+    [effectiveGraph],
+  );
 
   // Findings drive the stream highlight + DetailPanel cross-reference (below).
   const findingsData = findings.data ?? [];
@@ -229,6 +238,28 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     return eps.find((e) => e.started_at <= t && t <= e.ended_at)?.phase ?? null;
   }, [selectedNode, episodes.data]);
 
+  // Tool-execution metrics for a selected tool_call node: gather its log_record
+  // facet nodes (via facet_of edges) and fold them into one ToolMetrics.
+  const selectedToolMetrics = useMemo(() => {
+    if (selectedNode?.node_kind !== 'tool_call') return null;
+    const group = entityFacets.get(selectedNode.node_id);
+    if (!group) return null;
+    const facetIds = new Set(group.facetNodeIds);
+    const facetNodes = effectiveGraph.nodes.filter((n) => facetIds.has(n.node_id));
+    return buildToolMetrics(facetNodes);
+  }, [selectedNode, entityFacets, effectiveGraph]);
+
+  // Per-response metrics for a selected assistant_message node: resolve the
+  // node's request_id (via its source event) then look up the joined span map.
+  const selectedNodeLlmMetrics = useMemo(() => {
+    if (selectedNode?.node_kind !== 'assistant_message') return null;
+    const eid = selectedNode.source_event_ids[0];
+    if (!eid) return null;
+    const ev = window_.events.find((e) => e.event_id === eid);
+    const rid = ev?.request_id ?? null;
+    return rid ? metricsByReq.get(rid) ?? null : null;
+  }, [selectedNode, window_.events, metricsByReq]);
+
   // --- render branches ---
   const detailError = detail.error as ApiError | null;
   const is404 = detailError instanceof ApiError && detailError.status === 404;
@@ -292,6 +323,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               onSelectNode={(id) => sel.setSelectedNodeId(id)}
               thinkingSelected={!!selectedThinkingEvent}
               thinkingMetrics={selectedThinkingMetrics}
+              toolMetrics={selectedToolMetrics}
+              llmMetrics={selectedNodeLlmMetrics}
             />
           </div>
 
