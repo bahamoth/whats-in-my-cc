@@ -3008,8 +3008,67 @@ vitest: 69 passed
     </ul>
   </section>
 
+  <section>
+    <h2>Insight Surface Redesign — Slices 2–7 (2026-05-30)</h2>
+    <p>사양 <code>docs/superpowers/specs/2026-05-30-witmcc-insight-surface-redesign-design.md</code>의 나머지 슬라이스.
+    상단 표면을 "5개 진단 질문에 답하는 화면"으로 재편한다. subagent-driven 워크플로우로 구현, 최종 whole-branch 검증
+    <strong>all-green</strong> (cargo test 0 failed · webui vitest 314 passed · tsc -b clean; migration 0014/0015/0016 모두 in-memory migrate()로 적용 확인).</p>
+
+    <h3>Slice 2 — 검증 감지 재작성 (Q4 "가드")</h3>
+    <p>닫힌 16-패턴 allowlist는 <code>npx vitest</code>·복합·<code>tsc</code>를 못 봐 이 프로젝트의 검증을 0건으로 만들었다. 재작성:
+    Bash 명령을 connector(<code>&amp;&amp; || | ; &amp;</code> + <strong>개행</strong>)로 세그먼트 분리 → 래퍼(<code>npx</code>/<code>pnpm dlx</code>/<code>bunx</code>/<code>poetry run</code>/…) 제거 →
+    Tier-1 known-tool(<code>detection_basis='known_tool'</code>) / Tier-2 키워드(<code>'test'</code>/<code>'spec'</code> → <code>'test_keyword'</code>, 비실행 denylist).
+    <code>status_basis</code>: 출력 캡처용 trailing pager pipe(<code>tail/head/…</code>)·<code>2&gt;&amp;1</code>은 <code>'exit'</code>, 실제 파이프는 <code>'piped'</code>+status <code>unknown</code>.
+    <strong>dry-run 제외</strong>(<code>--no-run</code>/<code>--collect-only</code>/<code>--list</code>)는 컨트롤러 지시로 plan을 override(테스트 안 돌리므로 가드 run 아님).
+    <strong>실데이터 적응</strong>: 실 transcript(653ea169)는 <code>cd</code>/<code>npx</code>를 개행으로 잇고 <code>2&gt;&amp;1 | tail</code>을 써서, 개행-connector 분리 + redirect-strip을 추가(실 fixture·단위테스트로 잠금).
+    Tier-2 토크나이저는 <code>/</code>로 안 쪼갠다(<code>tests/</code> 경로 인자 오탐 방지).
+    migration <code>0015</code>가 <code>detection_basis</code>/<code>status_basis</code> 컬럼 추가 → repo→ingest→VerificationRunDto→routes→webui types까지 전달.
+    <strong>frozen invariant 유지</strong>: <code>transcript_verification_bash.rs</code>(3 runs all passed), <code>verification_bash_allowlist.rs</code>(count=16) 그대로 green.</p>
+
+    <h3>Slice 3 — tool_failure 재구성 (Risk 노이즈 제거)</h3>
+    <p>session 653ea169의 high finding 1953건 중 1941건이 워크플로우 내부 <code>StructuredOutput</code> 스키마 재시도였다(+ grep no-match·파일없음 등 양성).
+    pure <code>classify_failure(tool_name, error_excerpt) → FailureClass</code> 도입: <code>internal_retry</code>(StructuredOutput)·<code>benign_nonzero_exit</code>는 severity <code>info</code>로 강등, <code>user_visible</code>만 <code>high</code>.
+    클래스는 <code>finding.subkind</code> 컬럼(migration <code>0016</code>, additive) + <code>evidence_projection.failure_class</code> 두 곳에 보존(source-preserving).
+    <code>repo_finding::count_by_subkind</code> + <code>ListFilter.subkind</code>, <code>FindingDto.subkind</code>, <code>?subkind=</code>, 신규 <code>GET /v1/sessions/:id/tool-failures</code>(클래스별 카운트 + user-visible drill), MCP search_findings 필터에도 연결. 프론트 <code>useToolFailureSummaryQuery</code>.
+    (frozen fixture에 is_error 실패가 없어 분류기는 synthetic ObservedEvent로 테스트 — spec §9 허용.)</p>
+
+    <h3>Slice 4 — episode 분류기 drift 이중분류 수정</h3>
+    <p><code>classifier.rs</code>의 drift 분기가 경계 이벤트를 Exploration과 Drift 양쪽에 넣어 겹침(653ea169에서 513 event_id 중복)·0초·음수 gap·빈 evidence를 만들었다.
+    <code>emit()</code>를 인덱스 기반 <code>(events, start_idx, end_idx)</code>로 바꿔 drift가 Exploration을 <code>i-1</code>에 닫고 Drift를 <code>i</code>에 시작(정상 경계와 동일 off-by-one) → 각 이벤트가 정확히 한 episode에만 속함.
+    <code>evidence_node_ids</code>를 spanned event_ids로 채움. <code>episode_id</code> 파생 입력 불변 → byte-stable, 두 frozen golden + determinism 테스트 모두 green. 신규 invariant 테스트(겹침0·monotonic·evidence 채움) 추가. migration 불필요.</p>
+
+    <h3>Slice 5 — 비용 (공개 요금 추정)</h3>
+    <p>마이그레이션 없는 read-path: <code>usage_facet</code> 모델별 토큰 합 × <code>src/insight/pricing.rs</code>의 <strong>공개 요금 ESTIMATE</strong> 표(<code>claude-opus-4-7/4-8</code>·<code>sonnet-4-6</code>·<code>haiku-4-5-20251001</code>).
+    <code>SessionUsageDto</code>에 <code>estimated_cost_usd</code>·<code>cost_basis='estimate_public_pricing'</code>·<code>pricing_version</code>·<code>models_without_pricing</code> 추가, 모델별 <code>estimated_cost_usd</code>/<code>priced</code>.
+    <strong>실제 청구액 아님</strong>(배지 추정); OTel <code>claude_code.cost.usage</code> 도착 시 대체. 미가격 모델은 $0 + 플래그.</p>
+
+    <h3>Slice 6 — 교차 세션 baseline</h3>
+    <p>단일 세션 수치를 신호로: <code>median_p25_p75</code>(type-7) + <code>per_session_metrics</code>(세션당 cache_hit_ratio/billed/turns/output, 핸들러와 동일 산식) → 신규 <code>GET /v1/usage/baseline</code>(스토어 전체 중앙값; cache_hit는 denom=0 세션 제외).
+    프론트 <code>useUsageBaselineQuery</code>로 카드마다 "vs 내 중앙값" 델타. 마이그레이션 없음.</p>
+
+    <h3>Slice 7 — 프론트 인사이트 표면 (Direction A)</h3>
+    <p>6-타일 <code>KpiStrip</code>을 5-카드 <strong>InsightStrip</strong>로 교체: 컨텍스트 효율 · 토큰(청구 vs 캐시읽음 분리) · 검증(종류·결과) · 도구 실패(사용자) · 비용.
+    각 값에 <strong>ProvenanceBadge</strong>(측정/혼합/추정/미수집·예정) + <strong>InfoTip</strong>(<code>?</code> hover + click-pin) + 클릭 펼침 drill.
+    <strong>Risk 점수·Episodes 카운트·Outcome 3단계·latency p95 타일 제거</strong>(보정 필요한 추상 → contract-test로 부재 확인); phase 바 유지.
+    앞 슬라이스의 <em>실제 API</em>를 소비: 검증 카드는 <code>detection_basis</code>가 전부 known_tool+exit이면 측정, 아니면 혼합; 도구실패는 slice-3 <code>user_visible</code> 요약이 있으면 측정; 비용은 slice-5 <code>estimated_cost_usd</code>(추정); baseline 델타는 slice-6에서. 순수 <code>buildInsightCards</code> 뷰모델은 jsdom 단위테스트.</p>
+
+    <h3>운영 주의 (migration 0015·0016)</h3>
+    <p>신규 migration <code>0015</code>(verification detection_basis/status_basis) + <code>0016</code>(finding subkind). 기존 dev DB는 <code>witmcc init-db</code> + <code>witmcc ingest --all</code> 재ingest 필요(usage/cost/baseline/tool-failures 데이터 채움).</p>
+    <p><strong>워크플로우 교훈:</strong> 슬라이스별 dev-DB 재ingest를 implementer가 매번 돌리다 한 에이전트가 <code>ingest</code>를 backgrounded로 오판해 중복 실행 → 동일 SQLite lock 교착. <code>ingest --all</code> 자체는 정상(단일 실행이면 OK). 이후 워크플로우는 dev-DB 비접촉(정확성은 <code>cargo test</code> in-memory migrate가 게이트), 재ingest는 컨트롤러가 최종 1회만 수행하도록 변경.</p>
+
+    <h3>Commit Reference (Slices 2–7)</h3>
+    <ul>
+      <li><strong>S2</strong> <code>edcb7f9</code>·<code>908dd5a</code>·<code>e4ce76c</code>·<code>6657b11</code>·<code>5426de9</code>·<code>83bd8e7</code>·<code>9076238</code>·<code>8b2ccde</code>·<code>f68c913</code></li>
+      <li><strong>S3</strong> <code>58a078a</code>·<code>37a04b4</code>·<code>e56ff89</code>·<code>2493b7f</code>·<code>53817d4</code>·<code>2608403</code></li>
+      <li><strong>S4</strong> <code>3cd63d1</code>·<code>b238fbc</code></li>
+      <li><strong>S5</strong> <code>bd9ddd3</code>·<code>4070b45</code>·<code>7fc4541</code>·<code>48bc594</code></li>
+      <li><strong>S6</strong> <code>5e9d077</code>·<code>6e6aa3d</code>·<code>b050161</code>·<code>971195d</code>·<code>08ed35e</code></li>
+      <li><strong>S7</strong> <code>a857547</code>·<code>e422ea6</code>·<code>5fe38ad</code>·<code>b877250</code>·<code>37043d0</code></li>
+    </ul>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slice-1 · <strong>MVP EXIT 2026-05-27</strong></p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
