@@ -73,6 +73,9 @@ pub async fn insert(pool: &SqlitePool, row: &UsageFacetRow) -> Result<()> {
 
 /// Distinct assistant raw lines for a session (one per raw_event_id), so the
 /// caller can parse usage from `raw`. Usage lives only in raw_event.payload.
+/// Filters by `actor = 'assistant'` (not `kind = 'assistant_message'`) because
+/// an assistant transcript line that contains only tool_use content produces
+/// ToolCall kind events — no AssistantMessage kind — yet still carries usage.
 pub async fn assistant_raw_lines(
     pool: &SqlitePool,
     session_id: &str,
@@ -85,7 +88,7 @@ pub async fn assistant_raw_lines(
                 CAST(re.payload AS TEXT)   AS raw
          FROM observed_event oe
          JOIN raw_event re ON oe.raw_event_id = re.raw_event_id
-         WHERE oe.kind = 'assistant_message' AND oe.session_id = ?
+         WHERE oe.actor = 'assistant' AND oe.session_id = ?
          GROUP BY oe.raw_event_id",
     )
     .bind(session_id)
