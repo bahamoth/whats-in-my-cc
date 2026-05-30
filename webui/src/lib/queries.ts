@@ -14,6 +14,7 @@ import {
   getEpisodes,
   getFindings,
   getFindingEvidence,
+  getSessionUsage,
   getVerificationRuns,
   getDiffHunks,
   getEventRaw,
@@ -23,6 +24,7 @@ import type {
   GraphPayload,
   EpisodeDto,
   FindingDto,
+  SessionUsageDto,
   VerificationRunDto,
   DiffHunkDto,
   FindingEvidenceResponse,
@@ -40,6 +42,7 @@ export const sessionKeys = {
   findings: (id: string) => ['session', id, 'findings'] as const,
   diffHunks: (id: string) => ['session', id, 'diff-hunks'] as const,
   verificationRuns: (id: string) => ['session', id, 'verification-runs'] as const,
+  usage: (id: string) => ['session', id, 'usage'] as const,
   findingEvidence: (findingId: string) => ['finding', findingId, 'evidence'] as const,
 };
 
@@ -101,6 +104,15 @@ export function useVerificationRunsQuery(id: string, opts?: QOpts<VerificationRu
   return useQuery<VerificationRunDto[]>({
     queryKey: sessionKeys.verificationRuns(id),
     queryFn: () => getVerificationRuns(id),
+    enabled: !!id,
+    ...opts,
+  });
+}
+
+export function useSessionUsageQuery(id: string, opts?: QOpts<SessionUsageDto>) {
+  return useQuery<SessionUsageDto>({
+    queryKey: sessionKeys.usage(id),
+    queryFn: () => getSessionUsage(id),
     enabled: !!id,
     ...opts,
   });
