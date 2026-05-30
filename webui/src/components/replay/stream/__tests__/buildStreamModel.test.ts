@@ -82,6 +82,23 @@ describe('buildStreamModel', () => {
   });
 });
 
+describe('buildStreamModel — classify refinement (#7)', () => {
+  it('drops telemetry/facet events from the stream but keeps state-change logs', () => {
+    const items = buildStreamModel([
+      ev({ event_id: '1', kind: 'metric_sample', actor: 'system', payload: { instrument_name: 'claude_code.token.usage' } }),
+      ev({ event_id: '2', kind: 'otel_span', actor: 'system', payload: { raw_span: { name: 'claude_code.tool' } } }),
+      ev({ event_id: '3', kind: 'log_record', actor: 'system', payload: { event_name: 'tool_result', attributes: {} } }),
+      ev({ event_id: '4', kind: 'log_record', actor: 'system', payload: { event_name: 'compaction', attributes: {} } }),
+    ]);
+    const acts = items.filter((i) => i.type === 'activity-run');
+    const evIds = acts.flatMap((a: any) => a.events.map((e: any) => e.event.event_id));
+    expect(evIds).toContain('4');     // state-change log kept
+    expect(evIds).not.toContain('1'); // metric dropped
+    expect(evIds).not.toContain('2'); // span dropped
+    expect(evIds).not.toContain('3'); // facet log dropped
+  });
+});
+
 describe('buildStreamModel — sidechain grouping (#3)', () => {
   it('tags message items with their sidechain origin', () => {
     const items = buildStreamModel([
