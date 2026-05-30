@@ -437,6 +437,53 @@ pub async fn session_usage(
     })
 }
 
+/// insight-redesign #6 — `GET /v1/usage/baseline`
+///
+/// Cross-session baseline: median (+ p25/p75) of each key usage metric over
+/// ALL stored sessions that have usage_facet rows. SQLite has no MEDIAN(), so
+/// the per-session metric rows are pulled and the quantiles computed in Rust.
+/// `cache_hit_ratio`'s distribution excludes sessions with a 0-token
+/// denominator (None); `session_count` counts all sessions with usage rows.
+pub async fn usage_baseline(State(pool): State<SqlitePool>) -> impl IntoResponse {
+    let metrics = repo_usage_facet::per_session_metrics(&pool)
+        .await
+        .expect("db");
+
+    let session_count = metrics.len() as i64;
+
+    let cache_hit_vals: Vec<f64> = metrics.iter().filter_map(|m| m.cache_hit_ratio).collect();
+    let billed_vals: Vec<f64> = metrics.iter().map(|m| m.billed_tokens as f64).collect();
+    let turns_vals: Vec<f64> = metrics.iter().map(|m| m.turns as f64).collect();
+    let output_vals: Vec<f64> = metrics.iter().map(|m| m.output_tokens as f64).collect();
+
+    fn stat(values: &[f64]) -> BaselineStat {
+        match repo_usage_facet::median_p25_p75(values) {
+            Some(q) => BaselineStat {
+                p25: Some(q.p25),
+                median: Some(q.median),
+                p75: Some(q.p75),
+            },
+            None => BaselineStat {
+                p25: None,
+                median: None,
+                p75: None,
+            },
+        }
+    }
+
+    let data = UsageBaselineDto {
+        session_count,
+        cache_hit_ratio: stat(&cache_hit_vals),
+        billed_tokens: stat(&billed_vals),
+        turns: stat(&turns_vals),
+        output_tokens: stat(&output_vals),
+    };
+    Json(Envelope {
+        meta: ResponseMeta::now(),
+        data,
+    })
+}
+
 /// Slice-11 — `GET /v1/sessions/:id/verification-runs`
 ///
 /// Lists all verification runs for a session, ordered by `started_at`.
