@@ -21,6 +21,8 @@ pub struct VerificationRunRow {
     pub trigger_event_id: String,
     pub trigger_tool_use_id: Option<String>,
     pub status: String,
+    pub detection_basis: String,
+    pub status_basis: String,
     pub started_at: String,
     pub ended_at: Option<String>,
     pub exit_code: Option<i32>,
@@ -41,8 +43,8 @@ pub async fn insert(pool: &SqlitePool, row: &NewVerificationRun) -> Result<()> {
             verification_run_id, schema_version, session_id, source, command,
             command_kind, trigger_event_id, trigger_tool_use_id, status,
             started_at, ended_at, exit_code, failure_summary,
-            raw_event_id, parser_version)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            raw_event_id, parser_version, detection_basis, status_basis)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     )
     .bind(&row.verification_run_id)
     .bind(&row.schema_version)
@@ -59,6 +61,8 @@ pub async fn insert(pool: &SqlitePool, row: &NewVerificationRun) -> Result<()> {
     .bind(&row.failure_summary)
     .bind(&row.raw_event_id)
     .bind(&row.parser_version)
+    .bind(&row.detection_basis)
+    .bind(&row.status_basis)
     .execute(pool)
     .await?;
     Ok(())
@@ -73,7 +77,7 @@ pub async fn list_session(
         "SELECT verification_run_id, schema_version, session_id, source, command,
                 command_kind, trigger_event_id, trigger_tool_use_id, status,
                 started_at, ended_at, exit_code, failure_summary,
-                raw_event_id, parser_version
+                raw_event_id, parser_version, detection_basis, status_basis
          FROM verification_run
          WHERE session_id = ?
          ORDER BY started_at, verification_run_id",
@@ -93,7 +97,7 @@ pub async fn get(
         "SELECT verification_run_id, schema_version, session_id, source, command,
                 command_kind, trigger_event_id, trigger_tool_use_id, status,
                 started_at, ended_at, exit_code, failure_summary,
-                raw_event_id, parser_version
+                raw_event_id, parser_version, detection_basis, status_basis
          FROM verification_run
          WHERE verification_run_id = ?",
     )
@@ -114,6 +118,8 @@ fn map_row(r: sqlx::sqlite::SqliteRow) -> VerificationRunRow {
         trigger_event_id: r.get("trigger_event_id"),
         trigger_tool_use_id: r.get("trigger_tool_use_id"),
         status: r.get("status"),
+        detection_basis: r.get("detection_basis"),
+        status_basis: r.get("status_basis"),
         started_at: r.get("started_at"),
         ended_at: r.get("ended_at"),
         exit_code: r.get::<Option<i64>, _>("exit_code").map(|x| x as i32),
@@ -140,6 +146,8 @@ mod tests {
             trigger_event_id: "ev_001".into(),
             trigger_tool_use_id: Some("toolu_001".into()),
             status: "passed".into(),
+            detection_basis: "known_tool".into(),
+            status_basis: "exit".into(),
             started_at: "2026-05-27T10:00:00Z".into(),
             ended_at: Some("2026-05-27T10:00:05Z".into()),
             exit_code: Some(0),
@@ -163,6 +171,8 @@ mod tests {
         assert_eq!(out[0].verification_run_id, "vr_test_001");
         assert_eq!(out[0].command, "cargo test");
         assert_eq!(out[0].status, "passed");
+        assert_eq!(out[0].detection_basis, "known_tool");
+        assert_eq!(out[0].status_basis, "exit");
         assert_eq!(out[0].exit_code, Some(0));
         assert_eq!(out[0].trigger_tool_use_id.as_deref(), Some("toolu_001"));
     }
