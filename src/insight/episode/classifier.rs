@@ -111,16 +111,28 @@ impl ClassifierState {
     }
 }
 
-/// Emit a completed episode span.
+/// Emit a completed episode span covering events `[start_idx ..= end_idx]`.
+/// `evidence_node_ids` is populated with the spanned event_ids — the episode's
+/// evidence is the events it covers (the classifier owns event_ids; it has no
+/// access to derived graph node_ids, and reaching into the graph would break
+/// the pure-function determinism contract). The graph builder serializes this
+/// vec verbatim into the `episode.evidence_node_ids` JSON column (build.rs).
 fn emit(
     session_id: &str,
     phase: Phase,
-    start: &ObservedEvent,
-    end: &ObservedEvent,
+    events: &[ObservedEvent],
+    start_idx: usize,
+    end_idx: usize,
     basis: Vec<&'static str>,
     confidence: f32,
 ) -> EpisodeRecord {
+    let start = &events[start_idx];
+    let end = &events[end_idx];
     let episode_id = make_episode_id(session_id, phase, &start.event_id, &end.event_id);
+    let evidence_node_ids: Vec<String> = events[start_idx..=end_idx]
+        .iter()
+        .map(|e| e.event_id.clone())
+        .collect();
     EpisodeRecord {
         episode_id,
         schema_version: "episode.v1".into(),
@@ -130,7 +142,7 @@ fn emit(
         end_event_id: end.event_id.clone(),
         started_at: start.observed_at,
         ended_at: end.observed_at,
-        evidence_node_ids: vec![],
+        evidence_node_ids,
         classification_basis: basis,
         confidence,
         summary: None,
@@ -185,42 +197,41 @@ pub fn classify_session(
         let new_phase = classify_event_phase(i, events, &verification_trigger_ids, &st);
 
         if new_phase != st.current_phase || should_force_boundary(ev, st.current_phase) {
-            // Emit the current episode [phase_start_idx .. i-1].
+            // Emit the current episode [phase_start_idx ..= i-1]. The new phase
+            // starts at i — ranges never overlap (prev ends at i-1).
             let (basis, confidence) = phase_basis_confidence(st.current_phase);
             out.push(emit(
                 session_id,
                 st.current_phase,
-                &events[st.phase_start_idx],
-                &events[i - 1],
+                events,
+                st.phase_start_idx,
+                i - 1,
                 basis,
                 confidence,
             ));
 
-            // Start new episode.
+            // Start new episode at i.
             st.current_phase = new_phase;
             st.phase_start_idx = i;
             st.reset_streak();
-
-            // After a verification episode ends, set had_failure based on
-            // whether the run that triggered it failed (repair detection).
-            if st.current_phase == Phase::Verification {
-                // We don't have run status here without looking up; set
-                // had_failure conservatively when transitioning away from
-                // verification — handled at transition out of Verification.
-            }
         }
 
         // Exploration streak tracking for drift.
         if st.current_phase == Phase::Exploration {
             st.exploration_streak += 1;
             if st.exploration_streak >= DRIFT_THRESHOLD {
-                // Force Drift phase.
+                // Close the Exploration episode at i-1 (NOT i) and begin Drift
+                // at i — same off-by-one as the normal boundary, so events[i]
+                // belongs to exactly one episode. Pre-fix this ended at i and
+                // started Drift at i, double-classifying events[i] (spec §6.4:
+                // 513 shared event_ids / zero-duration rows in 653ea169).
                 let (basis, confidence) = phase_basis_confidence(Phase::Exploration);
                 out.push(emit(
                     session_id,
                     Phase::Exploration,
-                    &events[st.phase_start_idx],
-                    ev,
+                    events,
+                    st.phase_start_idx,
+                    i - 1,
                     basis,
                     confidence,
                 ));
@@ -235,13 +246,14 @@ pub fn classify_session(
         i += 1;
     }
 
-    // Emit the final episode.
+    // Emit the final episode [phase_start_idx ..= last].
     let (basis, confidence) = phase_basis_confidence(st.current_phase);
     out.push(emit(
         session_id,
         st.current_phase,
-        &events[st.phase_start_idx],
-        &events[events.len() - 1],
+        events,
+        st.phase_start_idx,
+        events.len() - 1,
         basis,
         confidence,
     ));
