@@ -1,3 +1,4 @@
+// no longer used by InsightTab (metrics-led redesign)
 /**
  * R5 — Focused neighborhood subgraph. Shows the 1–2 hop causal neighborhood
  * of the selected node using dagre LR layout + @xyflow/react. Deterministic

@@ -1,7 +1,7 @@
 // webui/src/components/replay/detail/DetailPanel.tsx
 import { useState } from 'react';
 import { Braces } from 'lucide-react';
-import type { FindingDto, GraphNodeDto, GraphEdgeDto } from '../../../api/types';
+import type { FindingDto, GraphNodeDto } from '../../../api/types';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import type { ToolMetrics } from './toolMetrics';
 import { InsightTab } from './InsightTab';
@@ -15,10 +15,6 @@ interface DetailPanelProps {
   node: GraphNodeDto | null;
   record: unknown;
   findings: FindingDto[];
-  episodePhase: string | null;
-  nodes: GraphNodeDto[];
-  edges: GraphEdgeDto[];
-  onSelectNode: (id: string) => void;
   /** True when a thinking marker is selected (which has no graph node): the
    *  panel shows the per-response metrics instead of node detail. */
   thinkingSelected?: boolean;

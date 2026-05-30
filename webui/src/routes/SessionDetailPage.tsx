@@ -231,13 +231,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     );
   }, [sel.selectedNodeId, effectiveGraph, findingsData]);
 
-  const selectedNodePhase = useMemo(() => {
-    if (!selectedNode) return null;
-    const eps = episodes.data ?? [];
-    const t = selectedNode.started_at;
-    return eps.find((e) => e.started_at <= t && t <= e.ended_at)?.phase ?? null;
-  }, [selectedNode, episodes.data]);
-
   // Tool-execution metrics for a selected tool_call node: gather its log_record
   // facet nodes (via facet_of edges) and fold them into one ToolMetrics.
   const selectedToolMetrics = useMemo(() => {
@@ -251,6 +244,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
 
   // Per-response metrics for a selected assistant_message node: resolve the
   // node's request_id (via its source event) then look up the joined span map.
+  // thinking is not a graph node (graph/build.rs `_ => continue`); thinking
+  // markers use the nodeless thinkingMetrics path → ResponseMetricsPanel.
   const selectedNodeLlmMetrics = useMemo(() => {
     if (selectedNode?.node_kind !== 'assistant_message') return null;
     const eid = selectedNode.source_event_ids[0];
@@ -317,10 +312,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               node={selectedNode}
               record={rawQuery.data?.record ?? null}
               findings={selectedNodeFindings}
-              episodePhase={selectedNodePhase}
-              nodes={effectiveGraph.nodes}
-              edges={effectiveGraph.edges}
-              onSelectNode={(id) => sel.setSelectedNodeId(id)}
               thinkingSelected={!!selectedThinkingEvent}
               thinkingMetrics={selectedThinkingMetrics}
               toolMetrics={selectedToolMetrics}
