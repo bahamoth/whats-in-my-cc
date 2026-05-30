@@ -142,6 +142,8 @@ pub struct VerificationRunDto {
     pub trigger_event_id: String,
     pub trigger_tool_use_id: Option<String>,
     pub status: String,
+    pub detection_basis: String,
+    pub status_basis: String,
     pub started_at: String,
     pub ended_at: Option<String>,
     pub exit_code: Option<i32>,

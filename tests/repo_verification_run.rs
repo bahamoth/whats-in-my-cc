@@ -23,6 +23,8 @@ async fn roundtrip_with_null_optionals() {
         trigger_event_id: "ev_rt_001".into(),
         trigger_tool_use_id: None,
         status: "unknown".into(),
+        detection_basis: "known_tool".into(),
+        status_basis: "exit".into(),
         started_at: "2026-05-27T11:00:00Z".into(),
         ended_at: None,
         exit_code: None,

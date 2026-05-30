@@ -100,6 +100,14 @@ async fn list_endpoint_returns_runs_for_session() {
         first["schema_version"].is_string(),
         "schema_version must be present"
     );
+    assert!(
+        first["detection_basis"].is_string(),
+        "detection_basis must be present in DTO"
+    );
+    assert!(
+        first["status_basis"].is_string(),
+        "status_basis must be present in DTO"
+    );
 }
 
 #[tokio::test]

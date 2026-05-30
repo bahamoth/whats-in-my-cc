@@ -336,6 +336,8 @@ async fn seed_final_state_mismatch_positive(pool: &sqlx::SqlitePool, sess: &str)
         trigger_event_id: "ev_001".into(),
         trigger_tool_use_id: Some("tu_001".into()),
         status: "failed".into(),
+        detection_basis: "known_tool".into(),
+        status_basis: "exit".into(),
         started_at: ts1.into(),
         ended_at: Some("2026-01-01T00:00:02Z".into()),
         exit_code: Some(1),
