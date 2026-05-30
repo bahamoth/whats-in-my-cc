@@ -61,3 +61,47 @@ describe('RawTab', () => {
     expect(screen.getByText('inner')).toBeInTheDocument();
   });
 });
+
+describe('RawTab source-split blocks (Task 8)', () => {
+  it('renders source-split blocks for entity + facets', () => {
+    render(<RawTab nodeId="call" record={null} blocks={[
+      { source: 'transcript', label: 'tool_call', record: { tool_name: 'Bash' } },
+      { source: 'log_record', label: 'tool_result', record: { event_name: 'tool_result' } },
+    ]} />);
+    expect(screen.getByText(/transcript/)).toBeInTheDocument();
+    expect(screen.getByText(/log_record/)).toBeInTheDocument();
+  });
+
+  it('falls back to single record when no blocks (back-compat)', () => {
+    render(<RawTab nodeId="x" record={{ a: 1 }} />);
+    // JsonTree renders the object key "a" as a span with the key class
+    expect(screen.getByText('a')).toBeInTheDocument();
+  });
+
+  it('shows empty hint when neither blocks nor record', () => {
+    render(<RawTab nodeId={null} record={null} />);
+    expect(screen.getByText(/select a node/i)).toBeInTheDocument();
+  });
+
+  it('isolates expansion between two blocks with the same source but different index', () => {
+    // key scheme is `${nodeId}:${source}:${i}` — two same-source blocks must
+    // get independent expansion sets, so expanding one leaves the other closed.
+    render(<RawTab nodeId="call" record={null} blocks={[
+      { source: 'log_record', label: 'first', record: { outer: { inner: 'A' } } },
+      { source: 'log_record', label: 'second', record: { outer: { inner: 'B' } } },
+    ]} />);
+
+    // both blocks render their own JsonTree: two `outer` toggles exist.
+    const outers = screen.getAllByText('outer');
+    expect(outers).toHaveLength(2);
+    // neither nested child is visible yet (each block's root '$' open, $.outer closed)
+    expect(screen.queryByText('"A"')).toBeNull();
+    expect(screen.queryByText('"B"')).toBeNull();
+
+    // expand $.outer in the FIRST block only
+    fireEvent.click(outers[0]);
+    expect(screen.getByText('"A"')).toBeInTheDocument();
+    // the second block stays collapsed — its expansion set is independent
+    expect(screen.queryByText('"B"')).toBeNull();
+  });
+});
