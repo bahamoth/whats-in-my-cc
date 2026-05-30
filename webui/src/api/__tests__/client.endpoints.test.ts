@@ -90,9 +90,30 @@ describe('getFindingEvidence', () => {
 describe('getSessionUsage', () => {
   it('getSessionUsage unwraps the usage envelope', async () => {
     const expected = {
-      session_id: 's1', turns: 3, input_tokens: 10,
-      cache_creation_input_tokens: 20, cache_read_input_tokens: 900,
-      output_tokens: 30, billed_tokens: 60, cache_hit_ratio: 0.96, by_model: [],
+      session_id: 's1',
+      turns: 3,
+      input_tokens: 10,
+      cache_creation_input_tokens: 20,
+      cache_read_input_tokens: 900,
+      output_tokens: 30,
+      billed_tokens: 60,
+      cache_hit_ratio: 0.96,
+      estimated_cost_usd: 0.0123,
+      cost_basis: 'estimate_public_pricing',
+      pricing_version: 'pricing_estimate@v1',
+      models_without_pricing: [],
+      by_model: [
+        {
+          model: 'claude-opus-4-7',
+          turns: 3,
+          input_tokens: 10,
+          cache_creation_input_tokens: 20,
+          cache_read_input_tokens: 900,
+          output_tokens: 30,
+          estimated_cost_usd: 0.0123,
+          priced: true,
+        },
+      ],
     };
     fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
     const out = await getSessionUsage('s1');
