@@ -143,6 +143,8 @@ export type VerificationRunDto = {
   trigger_event_id: string;
   trigger_tool_use_id: string | null;
   status: 'passed' | 'failed' | 'skipped' | string;
+  detection_basis: 'known_tool' | 'test_keyword' | string;
+  status_basis: 'exit' | 'piped' | string;
   started_at: string;
   ended_at: string | null;
   exit_code: number | null;

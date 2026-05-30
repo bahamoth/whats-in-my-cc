@@ -105,6 +105,8 @@ describe('types.ts contract', () => {
       trigger_event_id: 'e1',
       trigger_tool_use_id: null,
       status: 'passed',
+      detection_basis: 'known_tool',
+      status_basis: 'exit',
       started_at: '2026-05-29T00:00:00Z',
       ended_at: null,
       exit_code: 0,
@@ -127,6 +129,8 @@ describe('types.ts contract', () => {
     };
     expect(typeof ep.confidence).toBe('number');
     expect(vr.covered_diff_hunk_ids).toEqual(['dh1', 'dh2']);
+    expect(vr.detection_basis).toBe('known_tool');
+    expect(vr.status_basis).toBe('exit');
     expect(dh.file_path).toBe('a.rs');
   });
 });
