@@ -8,6 +8,7 @@ use crate::db::repo_verification_run::VerificationRunRow;
 use crate::db::{repo_diff_hunk, repo_graph, repo_observed, repo_verification_run};
 use crate::error::Result;
 use crate::ids::{derive_edge_id, derive_node_id};
+use crate::ingest::otel_metrics::flatten_attrs;
 use crate::insight::edge_inference::{all_rules, SessionGraphView};
 use crate::insight::episode::classifier::classify_session;
 use crate::insight::pipeline::run_extractors;
@@ -119,6 +120,11 @@ pub fn compute(
     let mut tool_call_node: HashMap<String, usize> = HashMap::new();
     // tool_use_id -> (event_uuid, node_id) for tool_result nodes before merge
     let mut tool_result_info: HashMap<String, (Option<String>, String)> = HashMap::new();
+    // request_id -> assistant_message node_id (for facet_of span→asst wiring).
+    // Stores stable node_id strings directly; assistant_message nodes are never
+    // removed by the merge step, so no post-merge snapshot is needed (unlike
+    // tool_call_nid_by_tid, which must snapshot before tool_result removal).
+    let mut assistant_nid_by_request_id: HashMap<String, String> = HashMap::new();
 
     // 1. Node materialization
     for e in events {
@@ -244,6 +250,11 @@ pub fn compute(
         if kind == "tool_result" {
             if let Some(tid) = &e.tool_use_id {
                 tool_result_info.insert(tid.clone(), (e.event_uuid.clone(), node_id.clone()));
+            }
+        }
+        if kind == "assistant_message" {
+            if let Some(rid) = &e.request_id {
+                assistant_nid_by_request_id.insert(rid.clone(), node_id.clone());
             }
         }
 
@@ -682,6 +693,35 @@ pub fn compute(
             call_nid,
             "facet_of",
             json!({"basis": "tool_use_id"}),
+        ));
+    }
+
+    // 3e(cont). facet_of (응답) — llm_request otel_span → assistant_message. 신뢰 키 request_id.
+    //     request_id는 otel_span 컬럼이 아닌 payload.raw_span.attributes[] OTLP 배열에서 추출.
+    for n in &nodes {
+        if n.node_kind != "otel_span" {
+            continue;
+        }
+        if n.payload.pointer("/raw_span/name").and_then(|v| v.as_str())
+            != Some("claude_code.llm_request")
+        {
+            continue;
+        }
+        // Reuse the OTLP attribute flattener (shared with otel_logs/metrics ingest)
+        // rather than hand-rolling the {key,value:{stringValue}} walk.
+        let attrs = flatten_attrs(n.payload.pointer("/raw_span/attributes"));
+        let rid = attrs.get("request_id").and_then(|v| v.as_str());
+        let Some(rid) = rid else { continue; };
+        let Some(asst_nid) = assistant_nid_by_request_id.get(rid) else { continue; };
+        if !valid_nodes.contains(asst_nid.as_str()) || !valid_nodes.contains(n.node_id.as_str()) {
+            continue;
+        }
+        edges.push(make_edge(
+            session_id,
+            &n.node_id,
+            asst_nid,
+            "facet_of",
+            json!({"basis": "request_id"}),
         ));
     }
 
