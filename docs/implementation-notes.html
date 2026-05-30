@@ -3141,8 +3141,68 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="facet-correlation">
+    <h2>Facet Correlation + 지표 중심 Insight 재설계 (2026-05-31)</h2>
+    <p>
+      세션 상세에서 하나의 논리적 행동(도구 호출 1건)이 transcript + <code>otel_span</code> + <code>log_record</code> +
+      <code>metric_sample</code>로 흩어져 스트림에 raw row 7~10개로 나열되던 문제. 조사 결론은
+      <strong>중복이 아니라 상호보완</strong>(겹치는 필드는 join key·상태 플래그뿐, 나머지 고유)이었다.
+      따라서 "합쳐질 수 있는(같은 엔티티를 신뢰 키로 가리키는) facet만 연관"하고, 그 위에 세 뷰를 얹는다.
+    </p>
+
+    <h3>Layer 1 — 백엔드 facet 연관 (graph-builder)</h3>
+    <ul>
+      <li>새 <code>edge_kind="facet_of"</code> (from=facet 노드, to=엔티티 노드, <code>attributes.basis</code>에 근거 기록).
+        <code>graph_edge</code> 스키마 그대로 → <strong>migration 불필요</strong>.</li>
+      <li>도구: <code>log_record</code> → <code>tool_call</code>, 키 <code>tool_use_id</code>. log은 컬럼이 비어
+        <code>payload.attributes.tool_use_id</code>(flat map)에서 추출.</li>
+      <li>응답: <code>claude_code.llm_request</code> <code>otel_span</code> → <code>assistant_message</code>, 키 <code>request_id</code>.
+        assistant는 컬럼, span은 <code>payload.raw_span.attributes[]</code>(OTLP 배열) — <code>flatten_attrs</code> 재사용으로 추출.</li>
+      <li><strong>도구 계열 span</strong>(<code>tool</code>/<code>execution</code>/<code>blocked_on_user</code>)은 <code>tool_use_id</code>가 없고
+        trace_id가 세션당 1개라 신뢰 키로 안 묶임 → facet 연관 안 함(지표는 log에 이미 중복).
+        <strong><code>metric_sample</code></strong>은 per-entity 키(request_id·prompt.id) 없음 → 세션 집계 전용,
+        이번 범위 밖(향후 시계열 뷰). 합쳐지지 않는 데이터는 합치지 않는다.</li>
+    </ul>
+
+    <h3>Layer 2 — 프론트 세 뷰</h3>
+    <ul>
+      <li><strong>메시지 뷰</strong>: <code>streamModel.classify</code>가 <code>metric_sample</code>·<code>otel_span</code>·facet성
+        <code>log_record</code>를 행에서 drop, 상태변화 log(<code>compaction</code>·<code>skill_activated</code>·
+        <code>permission_mode_changed</code>·<code>mcp_server_connection</code>)는 박자로 유지. 합치기가 아니라 분류.</li>
+      <li><strong>Insight 뷰</strong>(옵션 A, 지표 중심): <code>FocusedInsightGraph</code> 제거.
+        <code>EntityMetricsPanel</code>이 kind별 지표 — 도구는 log facet(<code>buildToolMetrics</code>: 소요·결과·결정출처·입출력 크기·seq),
+        응답·추론은 <code>llm_request</code> span(기존 <code>ResponseMetricsRows</code> 공유) — 의미 <code>InfoTip</code>과 함께.
+        공유 row 프리미티브는 중립 <code>metricsRows.tsx</code>로 분리(패널 간 역방향 import 제거).</li>
+      <li><strong>Raw 뷰</strong>: <code>buildEntityFacets</code>로 모은 엔티티+facet 노드 payload를 source별 분할 블록으로 표시.</li>
+      <li>신규 프론트 모듈: <code>facets/entityFacets.ts</code>, <code>detail/toolMetrics.ts</code>,
+        <code>detail/EntityMetricsPanel.tsx</code>, <code>detail/metricsRows.tsx</code>.</li>
+    </ul>
+
+    <h3 style="color:#ff9f0a">운영 주의 — 재ingest + 실행 중 serve 재시작 (필수)</h3>
+    <ul>
+      <li>그래프 로직 변경이므로 <strong>재ingest로 그래프 rebuild 필요</strong>. <code>witmcc ingest --path &lt;transcript&gt;</code>(또는 <code>--all</code>)가
+        세션을 touch하면 <code>rebuild_session</code>이 <em>DB에 이미 저장된 OTel 이벤트까지 함께</em> 읽어 facet 엣지를 생성한다.
+        <code>init-db</code>는 OTel 데이터를 지우므로 쓰지 말 것(그래프만 rebuild하면 됨, 마이그레이션 없음).</li>
+      <li><strong>이미 실행 중이던 <code>witmcc serve</code>를 반드시 재시작</strong>(옛 프로세스 kill 후 새 바이너리로). 검증 중 발견한 함정:
+        실행 중인 옛 서버는 메모리에 옛 코드를 들고 있어, 라이브 세션의 OTLP를 받을 때마다
+        <strong>옛 코드로 그래프를 rebuild → facet_of 엣지를 매번 덮어쓴다</strong>. 이 때문에 ingest 직후
+        in-process 조회는 facet 2158개를 보는데 외부에서 본 DB는 0이었다(동시 writer 경쟁). 디스크의 바이너리를 새로 빌드해도
+        실행 중 프로세스에는 반영되지 않는다.</li>
+    </ul>
+
+    <h3>검증</h3>
+    <p>
+      backend <code>cargo test</code> green(신규 <code>graph_facet_edges</code> + 실 fixture <code>graph_facet_real</code>로
+      <code>tests/fixtures/facet/real/facet_correlation_v01.json</code>의 동결된 실 payload에 대해 facet 연관 잠금);
+      webui <code>vitest</code> 352 passed / <code>tsc</code> 클린. 서버 graph API가 facet_of <strong>2183</strong>개 전달
+      (tool_call 1690 + assistant_message 493). 브라우저 smoke: 도구 노드 선택 시 Insight가
+      소요 26ms·결과 ok·결정 출처 accept·config·입력/결과 97 B→177 B·순서 #1620(서브그래프 없음),
+      Raw는 transcript + log_record(tool_result·tool_decision) source별 분할, 스트림은 박자만.
+    </p>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · <strong>MVP EXIT 2026-05-27</strong></p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · facet correlation + 지표 중심 insight · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>
