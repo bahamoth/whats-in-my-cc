@@ -222,6 +222,26 @@ export type SessionUsageDto = {
   by_model: ModelUsageDto[];
 };
 
+/** insight-redesign #6 — one baseline metric's quantile triple. All null
+ *  when no session in the store has usage_facet rows for the metric. */
+export type BaselineStat = {
+  p25: number | null;
+  median: number | null;
+  p75: number | null;
+};
+
+/** insight-redesign #6 — cross-session usage baseline. Median (+ p25/p75) of
+ *  each key metric across all stored sessions with usage_facet rows. The UI
+ *  renders a measured session value as a delta against `*.median`
+ *  ("vs your median"). */
+export type UsageBaselineDto = {
+  session_count: number;
+  cache_hit_ratio: BaselineStat;
+  billed_tokens: BaselineStat;
+  turns: BaselineStat;
+  output_tokens: BaselineStat;
+};
+
 export type RawEventResponse = {
   schema_version: string;
   event_id: string;
