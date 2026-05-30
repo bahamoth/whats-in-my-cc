@@ -264,7 +264,11 @@ pub struct FindingDetailResponse {
     pub data: FindingDto,
 }
 
-/// insight-redesign #1 — session token-usage aggregate.
+/// insight-redesign #1 + #5(cost) — session token-usage aggregate, now with a
+/// public-pricing **estimate** of dollar cost (Q2). `estimated_cost_usd` is
+/// NOT actual billing: `cost_basis = "estimate_public_pricing"` and the UI
+/// badges it 추정. Replaced by the OTel `claude_code.cost.usage` metric if/when
+/// it arrives (spec §6.5).
 #[derive(Serialize)]
 pub struct SessionUsageDto {
     pub session_id: String,
@@ -277,6 +281,16 @@ pub struct SessionUsageDto {
     pub billed_tokens: i64,
     /// cache_read / (cache_read + cache_creation + input); null when denom 0
     pub cache_hit_ratio: Option<f64>,
+    /// Estimated session cost in USD — public-pricing ESTIMATE, never actual
+    /// billing. See `cost_basis` / `pricing_version`.
+    pub estimated_cost_usd: f64,
+    /// Always "estimate_public_pricing" for this slice — drives the 추정 badge.
+    pub cost_basis: String,
+    /// Rate-table version the estimate was computed against.
+    pub pricing_version: String,
+    /// Models in this session we could not price (excluded from the total);
+    /// surfaced so the UI can disclose incomplete cost coverage.
+    pub models_without_pricing: Vec<String>,
     pub by_model: Vec<ModelUsageDto>,
 }
 
@@ -284,7 +298,14 @@ pub struct SessionUsageDto {
 pub struct ModelUsageDto {
     pub model: String,
     pub turns: i64,
+    pub input_tokens: i64,
+    pub cache_creation_input_tokens: i64,
+    pub cache_read_input_tokens: i64,
     pub output_tokens: i64,
+    /// Per-model public-pricing ESTIMATE in USD (0 when the model is unpriced).
+    pub estimated_cost_usd: f64,
+    /// false when no pricing entry exists for `model` (cost is then 0).
+    pub priced: bool,
 }
 
 /// Response for `GET /v1/findings/:id/evidence`.

@@ -393,6 +393,12 @@ pub async fn session_usage(
     } else {
         None
     };
+    let cost = crate::insight::pricing::estimate_session_cost(&agg.by_model);
+    let priced: std::collections::HashMap<&str, f64> = cost
+        .per_model
+        .iter()
+        .map(|c| (c.model.as_str(), c.estimated_cost_usd))
+        .collect();
     let data = SessionUsageDto {
         session_id: id,
         turns: agg.turns,
@@ -402,13 +408,26 @@ pub async fn session_usage(
         output_tokens: agg.output_tokens,
         billed_tokens: billed,
         cache_hit_ratio,
+        estimated_cost_usd: cost.total_usd,
+        cost_basis: crate::insight::pricing::COST_BASIS_ESTIMATE.to_string(),
+        pricing_version: crate::insight::pricing::PRICING_VERSION.to_string(),
+        models_without_pricing: cost.models_without_pricing.clone(),
         by_model: agg
             .by_model
             .into_iter()
-            .map(|m| ModelUsageDto {
-                model: m.model,
-                turns: m.turns,
-                output_tokens: m.output_tokens,
+            .map(|m| {
+                let est = priced.get(m.model.as_str()).copied().unwrap_or(0.0);
+                let is_priced = crate::insight::pricing::rates_for(&m.model).is_some();
+                ModelUsageDto {
+                    model: m.model,
+                    turns: m.turns,
+                    input_tokens: m.input_tokens,
+                    cache_creation_input_tokens: m.cache_creation_input_tokens,
+                    cache_read_input_tokens: m.cache_read_input_tokens,
+                    output_tokens: m.output_tokens,
+                    estimated_cost_usd: est,
+                    priced: is_priced,
+                }
             })
             .collect(),
     };
