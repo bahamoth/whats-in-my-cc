@@ -15,6 +15,7 @@ import {
   getFindings,
   getFindingEvidence,
   getSessionUsage,
+  getToolFailureSummary,
   getVerificationRuns,
   getDiffHunks,
   getEventRaw,
@@ -25,6 +26,7 @@ import type {
   EpisodeDto,
   FindingDto,
   SessionUsageDto,
+  ToolFailureSummaryDto,
   VerificationRunDto,
   DiffHunkDto,
   FindingEvidenceResponse,
@@ -40,6 +42,7 @@ export const sessionKeys = {
   events: (id: string) => ['session', id, 'events'] as const,
   episodes: (id: string) => ['session', id, 'episodes'] as const,
   findings: (id: string) => ['session', id, 'findings'] as const,
+  toolFailures: (id: string) => ['session', id, 'tool-failures'] as const,
   diffHunks: (id: string) => ['session', id, 'diff-hunks'] as const,
   verificationRuns: (id: string) => ['session', id, 'verification-runs'] as const,
   usage: (id: string) => ['session', id, 'usage'] as const,
@@ -83,6 +86,18 @@ export function useFindingsQuery(id: string, opts?: QOpts<FindingDto[]>) {
       // Evidence-linked invariant: drop empty evidence_refs.
       return all.filter((f) => Array.isArray(f.evidence_refs) && f.evidence_refs.length > 0);
     },
+    enabled: !!id,
+    ...opts,
+  });
+}
+
+export function useToolFailureSummaryQuery(
+  id: string,
+  opts?: QOpts<ToolFailureSummaryDto>,
+) {
+  return useQuery<ToolFailureSummaryDto>({
+    queryKey: sessionKeys.toolFailures(id),
+    queryFn: () => getToolFailureSummary(id),
     enabled: !!id,
     ...opts,
   });
