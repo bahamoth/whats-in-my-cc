@@ -2,8 +2,10 @@
 import { useState } from 'react';
 import { Braces } from 'lucide-react';
 import type { FindingDto, GraphNodeDto, GraphEdgeDto } from '../../../api/types';
+import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import { InsightTab } from './InsightTab';
 import { RawTab } from './RawTab';
+import { ResponseMetricsPanel } from './ResponseMetricsPanel';
 import styles from './DetailPanel.module.css';
 
 type TabId = 'insight' | 'raw';
@@ -16,13 +18,24 @@ interface DetailPanelProps {
   nodes: GraphNodeDto[];
   edges: GraphEdgeDto[];
   onSelectNode: (id: string) => void;
+  /** True when a thinking marker is selected (which has no graph node): the
+   *  panel shows the per-response metrics instead of node detail. */
+  thinkingSelected?: boolean;
+  /** Per-response metrics for the selected thinking marker (may be null when
+   *  the LLM-request span is outside the loaded window). */
+  thinkingMetrics?: LlmRequestMetrics | null;
 }
 
-export function DetailPanel({ node, record, findings, episodePhase, nodes, edges, onSelectNode }: DetailPanelProps) {
+export function DetailPanel({ node, record, findings, episodePhase, nodes, edges, onSelectNode, thinkingSelected, thinkingMetrics }: DetailPanelProps) {
   const [chosen, setChosen] = useState<TabId | null>(null);
   const active = chosen ?? 'insight';
 
   if (!node) {
+    // A thinking marker is selected (no graph node) → show response metrics
+    // (the panel handles a null metrics gracefully).
+    if (thinkingSelected) {
+      return <ResponseMetricsPanel metrics={thinkingMetrics ?? null} />;
+    }
     return <aside className={styles.panel}><p className={styles.empty}>Select a node to inspect it.</p></aside>;
   }
 

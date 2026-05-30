@@ -7,6 +7,7 @@ import { Fragment } from 'react';
 import { CornerDownRight } from 'lucide-react';
 import { MessageCard } from './MessageCard';
 import { ActivityStack } from './ActivityStack';
+import { ThinkingMarker } from './ThinkingMarker';
 import { splitRunByPhase } from './activityGroup';
 import type { SidechainGroup } from './streamModel';
 import styles from './SubagentGroup.module.css';
@@ -58,6 +59,16 @@ export function SubagentGroup({
                   />
                 ))}
               </Fragment>
+            );
+          }
+          if (it.type === 'thinking') {
+            return (
+              <ThinkingMarker
+                key={it.id}
+                marker={it}
+                selectedEventId={selectedEventId}
+                onSelect={onSelect}
+              />
             );
           }
           // nested sidechain groups do not occur (grouping is one level deep)

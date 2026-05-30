@@ -38,6 +38,16 @@ describe('AppShell', () => {
     expect(links.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('rail link keeps an accessible "Sessions" name even though its label text is visually hidden', () => {
+    // The 56px rail is icon-only (the breadcrumb carries the visible label),
+    // but the link must stay labelled for assistive tech via aria-label so
+    // hiding the text does not strip the accessible name (#dup-sessions).
+    renderShell();
+    const nav = screen.getByRole('navigation', { name: /primary/i });
+    const link = within(nav).getByRole('link', { name: /sessions/i });
+    expect(link).toHaveAttribute('href', '/sessions');
+  });
+
   it('renders a complementary right slot (drawer container) reachable by aria', () => {
     renderShell();
     // The right slot may be empty by default, but its landmark must exist

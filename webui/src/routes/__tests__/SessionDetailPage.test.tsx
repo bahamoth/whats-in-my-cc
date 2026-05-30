@@ -263,17 +263,19 @@ describe('SessionDetailPage', () => {
     expect(screen.getByTestId('timeline-canvas')).toBeInTheDocument();
   });
 
-  // Slice-9 — envelope-driven append + debounced graph refetch. Verifies
-  // that an envelope burst inside the debounce window collapses to ONE
-  // graph fetch (not one per envelope as slice-8 did) and that neither the
-  // summary nor the events endpoint is re-hit per envelope. This is the
-  // integration lock for DEV-S8-13 fix.
-  it('envelope burst triggers a single debounced graph refetch (not per-envelope)', async () => {
+  // Envelope-driven backfill + debounced graph refetch. An envelope burst
+  // inside the debounce window collapses to ONE graph fetch AND ONE forward
+  // events backfill (`?after=`) — not one per envelope. SSE envelopes carry
+  // no payload, so we fetch the real events instead of appending the empty
+  // envelope (the "live messages don't appear until refresh" fix). The
+  // summary endpoint is never re-hit.
+  it('envelope burst triggers a single debounced graph refetch + one events backfill', async () => {
     MockEventSource.install();
     const f = setupFetch({
       detail: env(sessionDetail),
       graph: env(graph),
-      events: env(eventsPayload),
+      // Non-empty window so the backfill has a tail cursor to page `?after=`.
+      events: env(eventsWithRows),
     });
     rendered('s1');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
@@ -288,9 +290,9 @@ describe('SessionDetailPage', () => {
     expect(graphAtMount).toBe(1);
     expect(eventsAtMount).toBe(1);
 
-    // Fire 5 envelopes in tight succession. They should all `appendOne`
-    // into useSessionWindow synchronously and arm exactly one graph
-    // debounce timer.
+    // Fire 5 envelopes in tight succession. They should collapse to exactly
+    // one debounced graph invalidation AND one debounced forward backfill
+    // (`?after=`) — not one fetch per envelope.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const es = MockEventSource.latest();
     expect(es).toBeDefined();
@@ -323,8 +325,12 @@ describe('SessionDetailPage', () => {
     await waitFor(() => {
       expect(callsOf((u) => u.includes('/graph'))).toBe(graphAtMount + 1);
     });
+    // Exactly one forward backfill fetch (?after=), regardless of burst size.
+    await waitFor(() => {
+      expect(callsOf((u) => u.includes('/events') && u.includes('after='))).toBe(1);
+    });
     expect(callsOf((u) => /\/v1\/sessions\/[^/]+$/.test(u))).toBe(summaryAtMount);
-    expect(callsOf((u) => u.includes('/events'))).toBe(eventsAtMount);
+    expect(callsOf((u) => u.includes('/events'))).toBe(eventsAtMount + 1);
   });
 
   // Slice-9 — IntersectionObserver-driven loadOlder. The mounted sentinel

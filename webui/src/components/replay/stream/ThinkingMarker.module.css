@@ -1,0 +1,63 @@
+/* Compact one-line marker for redacted (content-less) thinking events.
+ * Timestamp is pinned to the far right for consistency with MessageCard. */
+.wrap {
+  margin: 2px 0;
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: var(--witmcc-fg-subtle, #6a7180);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  text-align: left;
+}
+.line:hover {
+  background: var(--witmcc-surface-2, #161a23);
+  color: var(--witmcc-fg-muted, #aab0bd);
+}
+.wrap[data-selected='true'] .line {
+  background: var(--witmcc-surface-2, #161a23);
+  color: var(--witmcc-fg, #e6e8ee);
+  box-shadow: inset 2px 0 0 var(--witmcc-accent, #8a7cff);
+}
+
+.icon {
+  color: #8a7cff;
+  flex: none;
+}
+.label {
+  font-weight: 600;
+  color: var(--witmcc-fg-muted, #aab0bd);
+}
+.sep {
+  color: var(--witmcc-fg-subtle, #6a7180);
+  opacity: 0.55;
+}
+.metric {
+  font-variant-numeric: tabular-nums;
+  color: var(--witmcc-fg-muted, #aab0bd);
+}
+.metricMuted {
+  font-variant-numeric: tabular-nums;
+  color: var(--witmcc-fg-subtle, #6a7180);
+}
+.warn {
+  color: var(--witmcc-warn, #e0a23b);
+  flex: none;
+}
+
+/* Pin the elapsed time (duration) to the far right, matching the action
+ * rows' duration chip. */
+.duration {
+  margin-left: auto;
+  color: var(--witmcc-fg-subtle, #6a7180);
+  font-variant-numeric: tabular-nums;
+}

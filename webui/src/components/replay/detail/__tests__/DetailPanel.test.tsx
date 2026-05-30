@@ -73,4 +73,20 @@ describe('DetailPanel', () => {
     render(<DetailPanel node={null} record={null} findings={[]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} />);
     expect(screen.getByText(/select a node/i)).toBeInTheDocument();
   });
+
+  it('renders the response-metrics panel when a thinking marker is selected (no node)', () => {
+    const metrics = {
+      requestId: 'req-1', durationMs: 28900, ttftMs: 3100, inputTokens: 2,
+      outputTokens: 2300, cacheReadTokens: 290000, cacheCreationTokens: 2200,
+      stopReason: 'tool_use', attempt: 1, success: true, model: 'claude-opus-4-8',
+    };
+    render(<DetailPanel node={null} record={null} findings={[]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} thinkingSelected thinkingMetrics={metrics} />);
+    expect(screen.getByTestId('response-metrics')).toBeInTheDocument();
+    expect(screen.queryByText(/select a node/i)).toBeNull();
+  });
+
+  it('renders the response-metrics panel even when its metrics are null', () => {
+    render(<DetailPanel node={null} record={null} findings={[]} episodePhase={null} nodes={[]} edges={[]} onSelectNode={() => {}} thinkingSelected thinkingMetrics={null} />);
+    expect(screen.getByTestId('response-metrics')).toBeInTheDocument();
+  });
 });

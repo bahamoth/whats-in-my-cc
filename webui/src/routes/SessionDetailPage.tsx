@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import type { GraphPayload, ObservedEventDto } from '../api/types';
+import type { GraphPayload } from '../api/types';
 import { MetaStrip } from '../components/MetaStrip';
 import { DetailPanel } from '../components/replay/detail/DetailPanel';
 import { Timeline } from '../components/replay/timeline/Timeline';
@@ -25,32 +25,16 @@ import {
   useEventRawQuery,
 } from '../lib/queries';
 import { useSessionWindow } from '../hooks/useSessionWindow';
-import type { LiveEnvelope } from '../hooks/useLiveStream';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
 import { buildStreamModel } from '../components/replay/stream/streamModel';
+import { buildLlmRequestMetrics } from '../components/replay/stream/llmRequestMetrics';
 import styles from './SessionDetailPage.module.css';
 
-function envelopeToObserved(env: LiveEnvelope): ObservedEventDto {
-  return {
-    event_id: env.event_id,
-    raw_event_id: '',
-    session_id: env.session_id,
-    event_uuid: null,
-    parent_uuid: null,
-    observed_at: env.observed_at,
-    actor: 'unknown',
-    kind: env.kind,
-    subkind: null,
-    tool_use_id: null,
-    tool_name: null,
-    turn_id: null,
-    is_sidechain: false,
-    is_meta: false,
-    payload: {},
-  };
-}
-
 const EMPTY_GRAPH: GraphPayload = { nodes: [], edges: [] };
+
+// Debounce window for SSE-driven backfill: an envelope burst collapses to one
+// forward `?after=` page fetch (mirrors the bridge's graph-invalidate debounce).
+const BACKFILL_DEBOUNCE_MS = 600;
 
 function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const sel = useReplaySelection();
@@ -66,8 +50,29 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
 
   const window_ = useSessionWindow(sessionId);
 
+  // SSE envelopes are lightweight notifications WITHOUT a payload — appending
+  // them directly would yield content-less events that the stream model drops
+  // (the "live messages don't appear until refresh" bug). Instead, an envelope
+  // schedules a debounced forward backfill that fetches the real, full-payload
+  // events via `?after=`. A burst collapses to one fetch.
+  const backfillTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (backfillTimerRef.current !== null) {
+        clearTimeout(backfillTimerRef.current);
+        backfillTimerRef.current = null;
+      }
+    },
+    [],
+  );
   useLiveStreamBridge(sessionId, {
-    onEnvelope: (env) => window_.appendOne(envelopeToObserved(env)),
+    onEnvelope: () => {
+      if (backfillTimerRef.current !== null) return;
+      backfillTimerRef.current = setTimeout(() => {
+        backfillTimerRef.current = null;
+        void window_.loadNewer();
+      }, BACKFILL_DEBOUNCE_MS) as unknown as number;
+    },
     onGap: () => void window_.reload(),
     onResync: () => void window_.reload(),
   });
@@ -94,7 +99,17 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   // Findings drive the stream highlight + DetailPanel cross-reference (below).
   const findingsData = findings.data ?? [];
 
-  const streamItems = useMemo(() => buildStreamModel(window_.events), [window_.events]);
+  // Per-response (LLM request) metrics, joined to thinking events by
+  // request_id — the marker shows duration+tokens, selecting shows the rest.
+  const metricsByReq = useMemo(
+    () => buildLlmRequestMetrics(window_.events),
+    [window_.events],
+  );
+
+  const streamItems = useMemo(
+    () => buildStreamModel(window_.events, metricsByReq),
+    [window_.events, metricsByReq],
+  );
 
   // event_id -> node_id (graph nodes carry source_event_ids)
   const nodeIdByEventId = useMemo(() => {
@@ -158,13 +173,32 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const selectedStreamEventId = useMemo(() => {
     if (!sel.selectedNodeId) return null;
     const n = effectiveGraph.nodes.find((x) => x.node_id === sel.selectedNodeId);
-    return n?.source_event_ids[0] ?? null;
+    // Graph nodes resolve to their first source event; nodeless selections
+    // (e.g. a thinking marker) store the event id directly in `selected`.
+    return n?.source_event_ids[0] ?? sel.selectedNodeId;
   }, [sel.selectedNodeId, effectiveGraph]);
 
   const selectStreamCard = (eventId: string) => {
     const nid = nodeIdByEventId.get(eventId);
-    sel.setSelectedNodeId(nid ?? null);
+    // Thinking events are not graph nodes; select them by event id so the
+    // side panel can still resolve and show their per-response metrics.
+    sel.setSelectedNodeId(nid ?? eventId);
   };
+
+  // A selected thinking event (no graph node) → its per-response metrics for
+  // the side panel.
+  const selectedThinkingEvent = useMemo(() => {
+    if (!sel.selectedNodeId) return null;
+    return (
+      window_.events.find(
+        (e) => e.event_id === sel.selectedNodeId && e.kind === 'thinking',
+      ) ?? null
+    );
+  }, [sel.selectedNodeId, window_.events]);
+  const selectedThinkingMetrics = useMemo(() => {
+    const rid = selectedThinkingEvent?.request_id ?? null;
+    return rid ? metricsByReq.get(rid) ?? null : null;
+  }, [selectedThinkingEvent, metricsByReq]);
 
   // --- DetailPanel inputs ---
   const selectedNode =
@@ -256,6 +290,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               nodes={effectiveGraph.nodes}
               edges={effectiveGraph.edges}
               onSelectNode={(id) => sel.setSelectedNodeId(id)}
+              thinkingSelected={!!selectedThinkingEvent}
+              thinkingMetrics={selectedThinkingMetrics}
             />
           </div>
 

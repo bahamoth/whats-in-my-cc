@@ -49,6 +49,12 @@ export interface UseSessionWindowResult {
   /** Fetch the next older page using the current `oldest` cursor. No-op if
    *  loading, or if we already hit the start of the session. */
   loadOlder: () => Promise<void>;
+  /** Fetch any events newer than the window's last row (forward `?after=`
+   *  page) and append them with their full payloads. This is the live-tip
+   *  path: an SSE envelope is a lightweight notification (no payload), so we
+   *  backfill the real events instead of appending the empty envelope. No-op
+   *  while another load is in flight or the window is empty. */
+  loadNewer: () => Promise<void>;
   /** Push a single event (typically an SSE envelope). Dedupes by event_id and
    *  drops rows whose `(observed_at, event_id)` is ≤ the newest already in
    *  the window. */
@@ -86,6 +92,10 @@ export function useSessionWindow(
   const maxEvents = opts.maxEvents ?? DEFAULT_MAX_EVENTS;
 
   const [events, setEvents] = useState<ObservedEventDto[]>([]);
+  // Mirror of `events` so async `loadNewer` reads the freshest tail cursor
+  // without a stale closure (it derives `?after=` from the last row).
+  const eventsRef = useRef<ObservedEventDto[]>([]);
+  eventsRef.current = events;
   const [oldest, setOldest] = useState<string | null>(null);
   const [newest, setNewest] = useState<string | null>(null);
   const [atLiveTip, setAtLiveTip] = useState<boolean>(false);
@@ -143,6 +153,37 @@ export function useSessionWindow(
     }
   }, [sessionId, oldest, pageLimit, setLoadingBoth]);
 
+  const loadNewer = useCallback(async () => {
+    if (loadingRef.current !== 'idle') return;
+    const cur = eventsRef.current;
+    if (cur.length === 0) return;
+    const after = cursorOf(cur[cur.length - 1]);
+    setLoadingBoth('newer');
+    try {
+      const resp = await getSessionEvents(sessionId, { after, limit: pageLimit });
+      if (resp.events.length > 0) {
+        setEvents((prev) => {
+          const have = new Set(prev.map((p) => p.event_id));
+          const fresh = resp.events.filter((e) => !have.has(e.event_id));
+          if (fresh.length === 0) return prev;
+          let next = [...prev, ...fresh];
+          if (next.length > maxEvents) {
+            const trim = Math.max(1, Math.floor(maxEvents * LRU_TRIM_RATIO));
+            next = next.slice(trim);
+            if (next.length > 0) setOldest(cursorOf(next[0]));
+          }
+          return next;
+        });
+      }
+      setNewest(resp.next_cursor);
+      setAtLiveTip(resp.next_cursor === null);
+      setLoadingBoth('idle');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      setLoadingBoth('idle'); // recoverable — next envelope retries
+    }
+  }, [sessionId, pageLimit, maxEvents, setLoadingBoth]);
+
   const appendOne = useCallback(
     (e: ObservedEventDto) => {
       setEvents((prev) => {
@@ -178,6 +219,7 @@ export function useSessionWindow(
     loading,
     error,
     loadOlder,
+    loadNewer,
     appendOne,
     reload: doInitial,
   };

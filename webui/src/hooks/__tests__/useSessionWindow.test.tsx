@@ -222,6 +222,66 @@ describe('useSessionWindow', () => {
     expect(result.current.atLiveTip).toBe(true);
   });
 
+  it('loadNewer fetches ?after=<last cursor> and appends the newer events', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(1), makeEvent(2)], prev_cursor: 'pc', next_cursor: null }),
+    );
+    const { result } = renderHook(() => useSessionWindow('s'));
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(3), makeEvent(4)], prev_cursor: 'x', next_cursor: null }),
+    );
+    await act(async () => {
+      await result.current.loadNewer();
+    });
+
+    expect(result.current.events).toHaveLength(4);
+    expect(result.current.events[3].event_id).toContain('00000004');
+    expect(result.current.atLiveTip).toBe(true);
+    // The fetch must page forward from the LAST loaded event's cursor.
+    const lastCall = f.mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).toContain('after=');
+    expect(lastCall).toContain(
+      encodeURIComponent(`2026-05-21T00:00:02Z|${makeEvent(2).event_id}`),
+    );
+  });
+
+  it('loadNewer dedupes events already present (after-cursor boundary overlap)', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(1), makeEvent(2)], prev_cursor: 'pc', next_cursor: null }),
+    );
+    const { result } = renderHook(() => useSessionWindow('s'));
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+
+    // Server echoes event 2 (boundary overlap) plus a genuinely new event 3.
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(2), makeEvent(3)], prev_cursor: 'x', next_cursor: null }),
+    );
+    await act(async () => {
+      await result.current.loadNewer();
+    });
+
+    expect(result.current.events).toHaveLength(3);
+    expect(result.current.events.map((e) => e.event_id).filter((id) => id.includes('00000002'))).toHaveLength(1);
+  });
+
+  it('loadNewer is a no-op when the window is empty', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(
+      envelope({ events: [], prev_cursor: null, next_cursor: null }),
+    );
+    const { result } = renderHook(() => useSessionWindow('s'));
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+    const callsBefore = f.mock.calls.length;
+    await act(async () => {
+      await result.current.loadNewer();
+    });
+    expect(f.mock.calls.length).toBe(callsBefore); // no fetch issued
+  });
+
   it('LRU cap: appending past maxEvents trims oldest and shifts oldest cursor', async () => {
     const f = fetch as unknown as ReturnType<typeof vi.fn>;
     f.mockResolvedValueOnce(

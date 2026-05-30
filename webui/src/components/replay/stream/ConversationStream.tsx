@@ -4,6 +4,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { MessageCard } from './MessageCard';
 import { ActivityStack } from './ActivityStack';
 import { SubagentGroup } from './SubagentGroup';
+import { ThinkingMarker } from './ThinkingMarker';
 import { splitRunByPhase } from './activityGroup';
 import type { StreamItem } from './streamModel';
 import styles from './ConversationStream.module.css';
@@ -24,6 +25,7 @@ interface ConversationStreamProps {
 function itemContainsEvent(item: StreamItem, eventId: string): boolean {
   if (item.type === 'message') return item.eventId === eventId;
   if (item.type === 'sidechain-group') return item.items.some((i) => itemContainsEvent(i, eventId));
+  if (item.type === 'thinking') return item.events.some((e) => e.eventId === eventId);
   return item.events.some((ae) => ae.event.event_id === eventId);
 }
 
@@ -144,6 +146,15 @@ export function ConversationStream({
           onSelect={onSelect}
           findingEventIds={findingEventIds}
           phaseOf={phaseOf}
+        />
+      );
+    }
+    if (item.type === 'thinking') {
+      return (
+        <ThinkingMarker
+          marker={item}
+          selectedEventId={selectedEventId}
+          onSelect={onSelect}
         />
       );
     }

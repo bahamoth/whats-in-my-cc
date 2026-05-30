@@ -3067,8 +3067,82 @@ vitest: 69 passed
     </ul>
   </section>
 
+  <section>
+    <h2>Stream Live-Append + Redacted-Thinking Visualization (2026-05-30)</h2>
+    <p>
+      세 개의 버그 수정에서 출발해 추론(thinking) 가시화 기능으로 확장된 작업.
+      모든 주장은 실 transcript/OTel/DB(이 환경, Claude Code v2.1.158)에 대한 직접 조사로 잠갔다.
+    </p>
+
+    <h3>버그 1 — 라이브 스트리밍 append가 새로고침 전까지 보이지 않음</h3>
+    <p>
+      근본 원인: SSE <code>LiveEvent</code> envelope에는 <strong>payload가 없다</strong>
+      (<code>schema_version·session_id·event_id·kind·source_type·observed_at</code>만).
+      slice-9의 <code>SessionDetailPage</code>는 envelope을 <code>payload:{}</code>로 채워
+      <code>appendOne</code>했고, redesign(4268d40) 이후 스트림이 <code>buildStreamModel</code>(window 이벤트 기반)으로
+      바뀌면서 빈 payload 이벤트가 <code>user/assistant_message</code>는 drop, <code>thinking</code>은 activity로
+      강등돼 화면에 나타나지 않았다(새로고침 시 <code>getSessionEvents</code>가 full payload를 다시 받아 표시).
+    </p>
+    <p>
+      수정: <code>useSessionWindow.loadNewer()</code> 추가 — 윈도우 tail 커서로 forward
+      <code>?after=</code> 페이지를 가져와 full payload 이벤트를 append(dedupe·LRU trim·빈 윈도우 no-op).
+      SSE <code>onEnvelope</code>를 빈 payload append 대신 <strong>debounced(600ms) <code>loadNewer</code> backfill</strong>로 재배선.
+      backend <code>session_events</code>는 이미 <code>?after=</code>를 지원(ASC, tip에서 <code>next_cursor:null</code>) — curl로 확인.
+    </p>
+
+    <h3>스크롤 동작 — 탐색 중 비추적 / 최하단 추적</h3>
+    <p>
+      <code>ConversationStream</code>의 stick-to-bottom 로직(<code>stickRef</code> + 사용자 제스처 200ms 게이트 +
+      <code>items.length</code> autoscroll)은 이미 존재했으나, SSE append가 빈 payload로 drop돼
+      <strong>한 번도 실제로 작동한 적이 없었다.</strong> loadNewer로 진짜 append가 생기면서 비로소 발휘:
+      최하단에선 신규 메시지 자동 추적, 위로 탐색 중엔 고정. 브라우저로 검증(하단 run ×9→×18 무새로고침 증가, 위 스크롤 시 고정).
+    </p>
+
+    <h3>버그 2 → 추론(thinking) 가시화 (확장)</h3>
+    <p>
+      <strong>실데이터 단정</strong>: 이 환경 전 세션 transcript의 thinking 블록 668개(+DB 680개)가
+      <em>전부</em> <code>thinking:""</code>(평문 없음) + 암호화 <code>signature</code>만. OTel(log_record/otel_span/metric_sample)
+      어디에도 추론 평문 없음(<code>user_prompt</code> body조차 23자). 원본 파일 바이트(grep)로 직접 확인 — ingest 오류 아님.
+      따라서 "추론 발생 사실 + 실측 지표"만 표시 가능하며 <code>signature</code> 복호화는 시도하지 않는다(non-goal "hidden reasoning 복원" 준수).
+    </p>
+    <p>
+      구현: 빈 thinking을 activity 강등 대신 <strong>선택 가능한 인라인 마커</strong>로 분류
+      (<code>buildStreamModel</code>의 새 <code>thinking</code> StreamItem). 마커 한 줄 = <code>🧠 추론 · {출력토큰} … {소요시간}</code>
+      (우측 = 소요시간, action 행과 일관). 선택 시 우측 <code>DetailPanel</code>이
+      <code>ResponseMetricsPanel</code>로 전환돼 응답 지표 전체(소요시간·ttft·토큰 in/out/cache·종료사유·재시도·성공·모델) 표시,
+      토큰/캐시 행에는 <code>InfoTip</code> 설명 툴팁.
+    </p>
+    <p>
+      <strong>지표 조인</strong>: thinking 이벤트의 <code>request_id</code> ↔ <code>claude_code.llm_request</code> span(attribute의 <code>request_id</code>) →
+      <code>duration_ms·ttft_ms·input/output/cache tokens·stop_reason·attempt·success·model</code>.
+      thinking 이벤트엔 <code>latency_ms</code>가 없고(otel_span에만), thinking·assistant·span이 <code>request_id</code>를 공유. 조인 10/10 검증.
+      프론트가 윈도우 내 span에서 <code>buildLlmRequestMetrics</code>로 맵을 만들어 마커 entry에 부착.
+    </p>
+
+    <h3>버그 3 — 좌상단 "Sessions" 중복</h3>
+    <p>
+      <code>AppShell</code> 56px navRail의 "Sessions" 텍스트 + <code>TopBar</code> breadcrumb "Sessions"가 둘 다
+      <code>/sessions</code> 링크라 좌상단에 중복 노출. navRail은 아이콘 전용 의도였으므로
+      <code>.navText</code>를 visually-hidden 처리(◐ 아이콘만, <code>aria-label</code>로 접근 이름 유지). breadcrumb가 유일한 시각 라벨.
+    </p>
+
+    <h3>데이터 모델 / API 변경</h3>
+    <ul>
+      <li>events DTO(<code>observed_to_dto</code>)에 <code>request_id</code>·<code>message_id</code> 노출. <strong>migration·재ingest 불필요</strong>(이미 저장된 컬럼).</li>
+      <li>프론트 <code>ObservedEventDto</code>에 <code>request_id?</code>·<code>message_id?</code> 추가.</li>
+      <li>신규 프론트 모듈: <code>llmRequestMetrics.ts</code>(파서+포매터), <code>ThinkingMarker.tsx</code>, <code>ResponseMetricsPanel.tsx</code>.</li>
+    </ul>
+
+    <h3>검증</h3>
+    <p>
+      webui <code>vitest</code> 336 passed / <code>tsc</code> 클린; backend <code>cargo test</code> 510 passed·0 failed.
+      회귀충돌 테스트 2건 갱신: <code>SessionDetailPage.test</code>(envelope→events 미요청 → debounced backfill 1회),
+      <code>buildStreamModel.test</code>(redacted thinking → activity → 선택 가능 마커). 브라우저 smoke로 4개 증상 해소 시각 확인.
+    </p>
+  </section>
+
   <footer class="footer">
-    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · <strong>MVP EXIT 2026-05-27</strong></p>
+    <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
 </main>

@@ -616,6 +616,8 @@ fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Val
         "subkind": e.subkind,
         "tool_use_id": e.tool_use_id,
         "tool_name": e.tool_name,
+        "request_id": e.request_id,
+        "message_id": e.message_id,
         "turn_id": e.turn_id,
         "is_sidechain": e.is_sidechain,
         "is_meta": e.is_meta,

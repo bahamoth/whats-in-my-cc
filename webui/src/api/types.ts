@@ -22,6 +22,8 @@ export type ObservedEventDto = {
   subkind: string | null;
   tool_use_id: string | null;
   tool_name: string | null;
+  request_id?: string | null;
+  message_id?: string | null;
   turn_id: string | null;
   is_sidechain: boolean | number;
   is_meta: boolean | number;

@@ -28,14 +28,36 @@ describe('buildStreamModel', () => {
     expect(items.some((i) => i.type === 'activity-run')).toBe(true);
   });
 
-  it('keeps readable thinking as a message, redacted thinking goes to activity', () => {
+  it('keeps readable thinking as a message; redacted thinking becomes a selectable thinking marker (not activity)', () => {
     const items = buildStreamModel([
       ev({ event_id: 't1', kind: 'thinking', actor: 'assistant', payload: { thinking: '먼저 확인하자' } }),
-      ev({ event_id: 't2', kind: 'thinking', actor: 'assistant', payload: { thinking: '' } }),
+      ev({ event_id: 't2', kind: 'thinking', actor: 'assistant', payload: { thinking: '', signature: 'sig' } }),
     ]);
     const msgs = items.filter((i: any) => i.type === 'message' && i.role === 'thinking');
     expect(msgs).toHaveLength(1);
     expect((msgs[0] as any).text).toBe('먼저 확인하자');
+    // Redacted (content-less) thinking is surfaced as its own thinking marker
+    // — not buried in an activity run, not dropped.
+    const markers = items.filter((i: any) => i.type === 'thinking');
+    expect(markers).toHaveLength(1);
+    expect((markers[0] as any).events[0].eventId).toBe('t2');
+    expect(items.some((i: any) => i.type === 'activity-run')).toBe(false);
+  });
+
+  it('attaches per-response metrics to a thinking marker via request_id join', () => {
+    const metricsByReq = new Map([
+      ['req-1', { requestId: 'req-1', durationMs: 11900, ttftMs: 3100, inputTokens: 2,
+        outputTokens: 1540, cacheReadTokens: 290000, cacheCreationTokens: 2200,
+        stopReason: 'tool_use', attempt: 1, success: true, model: 'claude-opus-4-8' }],
+    ]);
+    const items = buildStreamModel(
+      [ev({ event_id: 't1', kind: 'thinking', actor: 'assistant', request_id: 'req-1', payload: { thinking: '', signature: 'sig' } })],
+      metricsByReq,
+    );
+    const marker: any = items.find((i: any) => i.type === 'thinking');
+    expect(marker.events[0].requestId).toBe('req-1');
+    expect(marker.events[0].metrics?.durationMs).toBe(11900);
+    expect(marker.events[0].metrics?.outputTokens).toBe(1540);
   });
 
   it('groups a contiguous run of non-message events into one activity-run with its events', () => {

@@ -1,5 +1,6 @@
 // webui/src/components/replay/stream/streamModel.ts
 import type { ObservedEventDto } from '../../../api/types';
+import type { LlmRequestMetrics } from './llmRequestMetrics';
 
 function asObj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
@@ -45,7 +46,32 @@ export interface SidechainGroup {
   items: StreamItem[];
 }
 
-export type StreamItem = MessageItem | ActivityRun | SidechainGroup;
+/** One redacted (content-less) thinking event. Claude Code transcripts store
+ *  thinking blocks with an empty `thinking` text and an opaque `signature`
+ *  only — the plaintext reasoning is recorded nowhere (not transcript, not
+ *  OTel). So we can surface only that reasoning OCCURRED, when, and a rough
+ *  size proxy from the signature length. We never attempt to decode it. */
+export interface ThinkingEntry {
+  eventId: string;
+  timestamp: string;
+  /** length of the encrypted `signature` — a rough proxy for reasoning size. */
+  sigLen: number;
+  /** request_id of the LLM response this thinking belongs to (join key). */
+  requestId: string | null;
+  /** per-response metrics (duration, tokens, …) joined via requestId. */
+  metrics: LlmRequestMetrics | null;
+}
+
+/** One redacted thinking event, shown as a single compact, selectable inline
+ *  marker in the conversation flow rather than buried in the activity stack.
+ *  Selecting it surfaces the full per-response metrics in the side panel. */
+export interface ThinkingMarker {
+  type: 'thinking';
+  id: string;
+  events: ThinkingEntry[];
+}
+
+export type StreamItem = MessageItem | ActivityRun | SidechainGroup | ThinkingMarker;
 
 const SCAFFOLD =
   /^\s*(<command-name>|<command-message>|<command-args>|<local-command-stdout>|<local-command-caveat>|Base directory for this skill:|\[Request interrupted)/;
@@ -61,7 +87,13 @@ function userText(p: Record<string, unknown>): string {
 
 function classify(
   e: ObservedEventDto,
-): { cat: 'message' | 'activity' | 'drop'; role?: StreamRole; text?: string; model?: string | null } {
+): {
+  cat: 'message' | 'activity' | 'drop' | 'thinking';
+  role?: StreamRole;
+  text?: string;
+  model?: string | null;
+  sigLen?: number;
+} {
   const p = asObj(e.payload);
   if (e.kind === 'user_message') {
     const t = userText(p);
@@ -77,13 +109,20 @@ function classify(
   }
   if (e.kind === 'thinking') {
     const t = (typeof p.thinking === 'string' ? p.thinking : '').trim();
-    return t ? { cat: 'message', role: 'thinking', text: t, model: null } : { cat: 'activity' };
+    if (t) return { cat: 'message', role: 'thinking', text: t, model: null };
+    // Redacted thinking: no plaintext anywhere, only an encrypted signature.
+    // Surface it as a compact marker (not activity) so reasoning stays visible.
+    const sig = typeof p.signature === 'string' ? p.signature : '';
+    return { cat: 'thinking', sigLen: sig.length };
   }
   if (e.kind === 'system_summary') return { cat: 'drop' };
   return { cat: 'activity' };
 }
 
-export function buildStreamModel(events: ObservedEventDto[]): StreamItem[] {
+export function buildStreamModel(
+  events: ObservedEventDto[],
+  metricsByReq?: Map<string, LlmRequestMetrics>,
+): StreamItem[] {
   const resultByUse = new Map<string, ObservedEventDto>();
   for (const e of events) {
     if (e.kind === 'tool_result' && e.tool_use_id) resultByUse.set(e.tool_use_id, e);
@@ -136,6 +175,29 @@ export function buildStreamModel(events: ObservedEventDto[]): StreamItem[] {
           text: c.text!,
           timestamp: e.observed_at,
           sidechain: sc,
+        },
+        sc,
+      );
+    } else if (c.cat === 'thinking') {
+      // Close any open activity run first so order stays chronological. Each
+      // redacted thinking is one LLM response → its own selectable marker
+      // (no merging), so the side panel shows that one response's metrics.
+      flush();
+      const requestId = e.request_id ?? null;
+      const metrics = requestId ? metricsByReq?.get(requestId) ?? null : null;
+      emit(
+        {
+          type: 'thinking',
+          id: `th-${e.event_id}`,
+          events: [
+            {
+              eventId: e.event_id,
+              timestamp: e.observed_at,
+              sigLen: c.sigLen ?? 0,
+              requestId,
+              metrics,
+            },
+          ],
         },
         sc,
       );
