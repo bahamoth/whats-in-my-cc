@@ -5,7 +5,7 @@ import type { FindingDto, GraphNodeDto } from '../../../api/types';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import type { ToolMetrics } from './toolMetrics';
 import { InsightTab } from './InsightTab';
-import { RawTab } from './RawTab';
+import { RawTab, type RawBlock } from './RawTab';
 import { ResponseMetricsPanel } from './ResponseMetricsPanel';
 import styles from './DetailPanel.module.css';
 
@@ -25,9 +25,13 @@ interface DetailPanelProps {
   toolMetrics?: ToolMetrics | null;
   /** Per-response metrics for the selected `assistant_message` node (Insight tab). */
   llmMetrics?: LlmRequestMetrics | null;
+  /** Source-split blocks for the Raw tab (entity node + facet nodes).
+   *  When provided, the Raw tab renders each block as a separate labelled
+   *  section; falls back to the single `record` when absent. */
+  rawBlocks?: RawBlock[];
 }
 
-export function DetailPanel({ node, record, findings, thinkingSelected, thinkingMetrics, toolMetrics, llmMetrics }: DetailPanelProps) {
+export function DetailPanel({ node, record, findings, thinkingSelected, thinkingMetrics, toolMetrics, llmMetrics, rawBlocks }: DetailPanelProps) {
   const [chosen, setChosen] = useState<TabId | null>(null);
   const active = chosen ?? 'insight';
 
@@ -55,7 +59,7 @@ export function DetailPanel({ node, record, findings, thinkingSelected, thinking
   // The Raw tab is secondary to Insight, so the raw source record was easy to
   // miss (#2). Mark it with a braces glyph and, when a record is loaded but the
   // tab isn't open, an accent dot to invite the click.
-  const hasRecord = record != null;
+  const hasRecord = record != null || (rawBlocks != null && rawBlocks.length > 0);
   const rawTab = (
     <button
       type="button"
@@ -86,7 +90,7 @@ export function DetailPanel({ node, record, findings, thinkingSelected, thinking
             llmMetrics={llmMetrics ?? null}
           />
         )}
-        {active === 'raw' && <RawTab nodeId={node.node_id} record={record} />}
+        {active === 'raw' && <RawTab nodeId={node.node_id} record={record} blocks={rawBlocks} />}
       </div>
     </aside>
   );

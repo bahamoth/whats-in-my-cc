@@ -8,3 +8,10 @@
 .value { color: var(--witmcc-fg, #e6e8ee); white-space: pre-wrap; word-break: break-word; }
 .preview { color: var(--witmcc-fg-subtle, #6a7180); }
 .empty { color: var(--witmcc-fg-subtle, #6a7180); padding: 12px; }
+
+/* Raw view source-split blocks (RawTab) */
+.blockList { display: flex; flex-direction: column; gap: 12px; }
+.block { display: flex; flex-direction: column; gap: 4px; }
+.blockHeader { display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: var(--witmcc-mono, ui-monospace, monospace); padding: 2px 0 4px 0; border-bottom: 1px solid var(--witmcc-border, #1d212c); }
+.blockSource { color: var(--witmcc-accent, #4f8cff); font-weight: 600; }
+.blockLabel { color: var(--witmcc-fg-subtle, #6a7180); }

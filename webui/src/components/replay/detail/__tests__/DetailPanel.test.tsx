@@ -68,6 +68,23 @@ describe('DetailPanel', () => {
     expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('data-has-record', 'false');
   });
 
+  it('emphasizes the Raw tab when only rawBlocks are available (no record)', () => {
+    render(
+      <DetailPanel
+        node={someNode}
+        record={null}
+        findings={[]}
+        rawBlocks={[{ source: 'transcript', label: 'tool_call', record: { tool_name: 'Bash' } }]}
+      />,
+    );
+    expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('data-has-record', 'true');
+  });
+
+  it('does not emphasize the Raw tab when record is null and rawBlocks is empty', () => {
+    render(<DetailPanel node={someNode} record={null} findings={[]} rawBlocks={[]} />);
+    expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('data-has-record', 'false');
+  });
+
   it('shows an empty hint when no node is selected', () => {
     render(<DetailPanel node={null} record={null} findings={[]} />);
     expect(screen.getByText(/select a node/i)).toBeInTheDocument();
