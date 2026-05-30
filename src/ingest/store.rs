@@ -214,6 +214,8 @@ pub async fn ingest_file(
                         trigger_event_id: rec.trigger_event_id,
                         trigger_tool_use_id: rec.trigger_tool_use_id,
                         status: rec.status,
+                        detection_basis: rec.detection_basis,
+                        status_basis: rec.status_basis,
                         started_at: rec.started_at,
                         ended_at: rec.ended_at,
                         exit_code: rec.exit_code,
