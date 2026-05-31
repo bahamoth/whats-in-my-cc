@@ -1,11 +1,35 @@
 import { describe, it, expect } from 'vitest';
 import { buildStreamModel } from '../streamModel';
+import { buildLlmRequestMetrics } from '../llmRequestMetrics';
 import type { ObservedEventDto } from '../../../../api/types';
 
 function ev(p: Partial<ObservedEventDto> & { event_id: string; kind: string }): ObservedEventDto {
   return { raw_event_id: '', session_id: 's', event_uuid: null, parent_uuid: null,
     observed_at: '2026-05-28T00:00:00Z', actor: 'user', subkind: null, tool_use_id: null,
     tool_name: null, turn_id: null, is_sidechain: false, is_meta: false, payload: {}, ...p } as ObservedEventDto;
+}
+
+/** A claude_code.llm_request OTel span event in the real OTLP attribute shape
+ *  (`attributes: [{ key, value: { stringValue | intValue } }]`). */
+function llmRequestSpan(
+  eventId: string,
+  attrs: Record<string, string | number | boolean>,
+): ObservedEventDto {
+  const attributes = Object.entries(attrs).map(([key, v]) => {
+    const value =
+      typeof v === 'number'
+        ? Number.isInteger(v) ? { intValue: String(v) } : { doubleValue: v }
+        : typeof v === 'boolean'
+        ? { boolValue: v }
+        : { stringValue: v };
+    return { key, value };
+  });
+  return ev({
+    event_id: eventId,
+    kind: 'otel_span',
+    actor: 'system',
+    payload: { raw_span: { name: 'claude_code.llm_request', attributes } },
+  });
 }
 
 describe('buildStreamModel', () => {
@@ -191,5 +215,78 @@ describe('buildStreamModel — sidechain grouping (#3)', () => {
       ev({ event_id: 's2', kind: 'user_message', is_sidechain: true, payload: { content: 'sub2' } }),
     ]);
     expect(items.map((i: any) => i.type)).toEqual(['sidechain-group', 'message', 'sidechain-group']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REGRESSION GUARD: thinking metrics survive the telemetry display-drop.
+//
+// Invariant locked: telemetry dropped from the VISIBLE stream must remain a
+// METRIC SOURCE; thinking metrics come ONLY from the request_id ↔
+// claude_code.llm_request span join (the thinking event itself stores no
+// plaintext metrics — empty `thinking` text + an opaque signature).
+//
+// The danger this protects against: a future change that filters
+// claude_code.llm_request spans out of the event window/source entirely
+// (not just from display) would silently kill every thinking beat's metrics.
+// We build ONE window holding both a redacted thinking event and its matching
+// span, then assert the full chain end-to-end on real-shaped data.
+// ---------------------------------------------------------------------------
+describe('buildStreamModel — thinking metrics survive telemetry display-drop (#regression)', () => {
+  const window: ObservedEventDto[] = [
+    ev({
+      event_id: 'th-1',
+      kind: 'thinking',
+      actor: 'assistant',
+      request_id: 'req_X',
+      // Redacted thinking: empty plaintext, only an opaque signature.
+      payload: { thinking: '', signature: 'opaque-sig-bytes' },
+    }),
+    llmRequestSpan('sp-1', {
+      request_id: 'req_X',
+      output_tokens: 1540,
+      duration_ms: 11869,
+    }),
+  ];
+
+  it('(a) buildLlmRequestMetrics extracts req_X from the llm_request span attributes', () => {
+    // Locks request_id extraction + the `claude_code.llm_request` name filter.
+    const metrics = buildLlmRequestMetrics(window);
+    const got = metrics.get('req_X');
+    expect(got).toBeDefined();
+    expect(got!.outputTokens).toBe(1540);
+    expect(got!.durationMs).toBe(11869);
+  });
+
+  it('(b) the otel_span produces NO visible stream item (telemetry not shown as a card)', () => {
+    const items = buildStreamModel(window, buildLlmRequestMetrics(window));
+    // No item (message/activity-run/sidechain-group/thinking) is sourced from
+    // the span event — telemetry is dropped from the displayed stream.
+    const fromSpan = items.filter((i: any) => {
+      if (i.type === 'message') return i.eventId === 'sp-1';
+      if (i.type === 'thinking') return i.events.some((e: any) => e.eventId === 'sp-1');
+      if (i.type === 'activity-run')
+        return i.events.some((e: any) => e.event.event_id === 'sp-1');
+      if (i.type === 'sidechain-group') return false;
+      return false;
+    });
+    expect(fromSpan).toHaveLength(0);
+    // The only visible item is the thinking marker.
+    expect(items).toHaveLength(1);
+    expect((items[0] as any).type).toBe('thinking');
+  });
+
+  it('(c) the thinking beat CARRIES req_X metrics from the same window (dropped span still feeds it)', () => {
+    // Core guard: the span is dropped from DISPLAY (b) yet still feeds the
+    // thinking beat's metrics via the request_id join. Build metrics from the
+    // same window so the only metric source is the in-window span.
+    const items = buildStreamModel(window, buildLlmRequestMetrics(window));
+    const marker: any = items.find((i: any) => i.type === 'thinking');
+    expect(marker).toBeDefined();
+    const beat = marker.events[0];
+    expect(beat.requestId).toBe('req_X');
+    expect(beat.metrics).not.toBeNull();
+    expect(beat.metrics.outputTokens).toBe(1540);
+    expect(beat.metrics.durationMs).toBe(11869);
   });
 });
