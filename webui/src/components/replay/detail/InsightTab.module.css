@@ -6,6 +6,16 @@
 .nodeHeader { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .nodeIcon { font-size: 14px; }
 .nodePrimary { font-size: 15px; font-weight: 600; color: var(--witmcc-fg, #e6e8ee); }
+.nodeSecondary {
+  font-family: var(--witmcc-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--witmcc-fg-muted, #aab0bd);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .nodeId { font-size: 11px; color: var(--witmcc-fg-subtle, #6a7180); font-family: var(--witmcc-mono, ui-monospace, monospace); margin-left: auto; }
 
 /* Findings section */
