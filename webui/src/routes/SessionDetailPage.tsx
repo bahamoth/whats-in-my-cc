@@ -24,6 +24,7 @@ import {
 } from '../lib/queries';
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
+import { UntaggedBashPanel } from '../components/replay/stream/UntaggedBashPanel';
 import { buildStreamModel } from '../components/replay/stream/streamModel';
 import {
   buildLlmRequestMetrics,
@@ -358,6 +359,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               onSelect={(id) => sel.setSelectedNodeId(id)}
             />
           </div>
+
+          <UntaggedBashPanel events={window_.events} />
         </div>
       )}
 
