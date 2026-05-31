@@ -84,16 +84,17 @@ fn tool_log_folds_into_tool_call_payload_no_facet_of_edge() {
     );
 }
 
-// An orphan tool log (no matching tool_call) cannot be folded; it stays a
-// standalone log_record node and still produces no facet_of edge.
+// An orphan tool log (no matching tool_call) cannot be folded, so it produces no
+// facet_of edge. Slice 2: an unfolded orphan log is no longer kept as a standalone
+// node — it is dropped from the graph (the data stays in observed_event/SSOT).
 #[test]
 fn facet_of_not_emitted_when_no_matching_tool_call() {
     let evs = vec![tool_log_ev("evt-log-orphan", "toolu_orphan")];
     let (nodes, edges) = compute("sess_t", &evs, &[], &[]);
     assert!(edges.iter().all(|e| e.edge_kind != "facet_of"));
     assert!(
-        nodes.iter().any(|n| n.node_kind == "log_record"),
-        "unfolded orphan log remains a standalone node"
+        !nodes.iter().any(|n| n.node_kind == "log_record"),
+        "Slice 2: unfolded orphan log is dropped from the graph, not kept as a node"
     );
 }
 
@@ -125,20 +126,20 @@ fn llm_span_folds_into_assistant_payload_by_request_id() {
 }
 
 // A non-llm_request span (e.g. a tool span) carrying a request_id attribute must
-// NOT be folded: it stays a standalone otel_span node and the assistant gets no
-// facet for it.
+// NOT be folded: the assistant gets no facet for it. Slice 2: as orphan
+// telemetry, the span is then dropped from the graph (it stays in observed_event).
 #[test]
 fn non_llm_request_span_is_not_folded() {
     let evs = vec![assistant_ev("evt-asst", "req_A"), tool_span_ev("evt-tool-span", "req_A")];
     let (nodes, _edges) = compute("sess_t", &evs, &[], &[]);
-    assert!(
-        nodes.iter().any(|n| n.node_kind == "otel_span"),
-        "non-llm_request span stays a standalone node"
-    );
     let asst = nodes.iter().find(|n| n.node_kind == "assistant_message").unwrap();
     let facets = asst.payload.get("facets").and_then(|f| f.as_array());
     assert!(
         facets.map(|a| a.is_empty()).unwrap_or(true),
         "assistant must have no facet for a non-llm_request span"
+    );
+    assert!(
+        !nodes.iter().any(|n| n.node_kind == "otel_span"),
+        "Slice 2: the unfolded non-llm_request span is dropped as orphan telemetry"
     );
 }

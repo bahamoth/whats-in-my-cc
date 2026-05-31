@@ -42,8 +42,14 @@ async fn deterministic_minimal_graph() {
     }
 }
 
+// Slice 2 (telemetry fold): hook_event is orphan telemetry — it carries no
+// conversation/action backbone role, so `compute()` drops it from the graph.
+// The hook record itself remains in observed_event (SSOT). (Pre-Slice-2 these
+// tests asserted the hook_event node's merge_key derivation; that derivation
+// code still runs during materialization but its output is dropped before the
+// graph is returned.)
 #[test]
-fn external_hook_node_keys_by_hook_event_name_and_tool_use_id() {
+fn external_hook_produces_no_graph_node() {
     use chrono::Utc;
     use serde_json::json;
     let session = "sess_HK";
@@ -60,27 +66,15 @@ fn external_hook_node_keys_by_hook_event_name_and_tool_use_id() {
         ..Default::default()
     };
     let (nodes, _) = build::compute(session, &[ev], &[], &[]);
-    assert_eq!(nodes.len(), 1);
-    let n = &nodes[0];
-    assert_eq!(n.node_kind, "hook_event");
-    assert_eq!(
-        n.merge_keys
-            .get("hook_event_name")
-            .and_then(|v| v.as_str()),
-        Some("pre_tool_use")
-    );
-    assert_eq!(
-        n.merge_keys.get("tool_use_id").and_then(|v| v.as_str()),
-        Some("toolu_01")
-    );
     assert!(
-        n.merge_keys.get("event_uuid").is_none(),
-        "external hook must not key by event_uuid"
+        !nodes.iter().any(|n| n.node_kind == "hook_event"),
+        "external hook_event is dropped from the graph (orphan telemetry); got {:?}",
+        nodes.iter().map(|n| n.node_kind.as_str()).collect::<Vec<_>>()
     );
 }
 
 #[test]
-fn transcript_internal_hook_keeps_event_uuid_merge_keys() {
+fn transcript_internal_hook_produces_no_graph_node() {
     use chrono::Utc;
     use serde_json::json;
     let session = "sess_HK";
@@ -97,13 +91,9 @@ fn transcript_internal_hook_keeps_event_uuid_merge_keys() {
         ..Default::default()
     };
     let (nodes, _) = build::compute(session, &[ev], &[], &[]);
-    assert_eq!(nodes.len(), 1);
-    assert_eq!(
-        nodes[0].merge_keys.get("event_uuid").and_then(|v| v.as_str()),
-        Some("uuid-abc")
-    );
     assert!(
-        nodes[0].merge_keys.get("hook_event_name").is_none(),
-        "internal hook must not key by hook_event_name"
+        !nodes.iter().any(|n| n.node_kind == "hook_event"),
+        "internal hook_event is dropped from the graph (orphan telemetry); got {:?}",
+        nodes.iter().map(|n| n.node_kind.as_str()).collect::<Vec<_>>()
     );
 }

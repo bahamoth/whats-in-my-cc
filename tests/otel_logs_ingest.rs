@@ -101,8 +101,12 @@ async fn observed_log_record_count(pool: &sqlx::SqlitePool) -> i64 {
     row.0
 }
 
+// Slice 2 (telemetry fold): the real logs fixture carries *orphan* log records
+// (hook_execution_complete + mcp_server_connection — none of which is a foldable
+// tool_result/tool_decision/api_request). They are normalised into observed_event
+// (SSOT) but dropped from the graph.
 #[tokio::test]
-async fn post_logs_real_fixture_normalises_records_and_builds_graph() {
+async fn post_logs_real_fixture_normalises_records_to_observed_event_not_graph() {
     let (s, pool) = http_setup().await;
     let body = fixture_bytes("tests/fixtures/otel/real/logs_v01.json");
     let resp = s
@@ -118,8 +122,10 @@ async fn post_logs_real_fixture_normalises_records_and_builds_graph() {
     assert_eq!(touched.len(), 1);
     let session_id = touched[0].as_str().unwrap().to_string();
 
+    // SSOT: every accepted log record is an observed_event row.
     assert_eq!(observed_log_record_count(&pool).await, accepted as i64);
 
+    // Graph: zero log_record nodes after the Slice-2 drop (these are orphan logs).
     let graph_row: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM graph_node WHERE session_id = ? AND node_kind = 'log_record'",
     )
@@ -127,7 +133,7 @@ async fn post_logs_real_fixture_normalises_records_and_builds_graph() {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(graph_row.0, accepted as i64, "one graph_node per log record");
+    assert_eq!(graph_row.0, 0, "Slice 2: orphan log_record dropped from graph");
 }
 
 #[tokio::test]

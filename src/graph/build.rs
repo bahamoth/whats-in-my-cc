@@ -881,6 +881,37 @@ pub fn compute(
         !folded_node_ids.contains(&e.from_node_id) && !folded_node_ids.contains(&e.to_node_id)
     });
 
+    // --- Slice 2: drop orphan telemetry nodes (no owner, no backbone role) ----
+    // The foldable telemetry (llm_request span + api_request/tool_result/
+    // tool_decision logs) was already folded into owner payload.facets and
+    // removed above. What remains in these kinds is *orphan* telemetry: a
+    // non-llm_request otel_span, a non-fold log_record, a metric_sample, or a
+    // hook_event — none of which carries a conversation/action backbone role.
+    // Remove them so the graph holds only the backbone (user_message,
+    // assistant_message, tool_call, verification_run, diff_hunk).
+    //
+    // Telemetry data itself is preserved in observed_event/raw_event (SSOT);
+    // compute() builds graph nodes/edges from events and never writes those
+    // tables, so nothing is lost. metric → session-facet + a metric view is a
+    // deferred separate slice; metric data stays in observed_event for now.
+    //
+    // MUST run AFTER the Slice-1 fold (above) — folding reads telemetry node
+    // payloads (e.g. the llm_request span's raw_span) before they are dropped.
+    //
+    // Verified safe: turn_order already excludes these kinds; the episode
+    // classifier and all insight extractors read observed_event (not graph
+    // nodes); no edge inference rule consumes these node kinds. API/MCP/
+    // frontend impact is cosmetic (telemetry timeline lanes thin out).
+    const ORPHAN_TELEMETRY_KINDS: &[&str] =
+        &["metric_sample", "hook_event", "otel_span", "log_record"];
+    let dropped: std::collections::HashSet<String> = nodes
+        .iter()
+        .filter(|n| ORPHAN_TELEMETRY_KINDS.contains(&n.node_kind.as_str()))
+        .map(|n| n.node_id.clone())
+        .collect();
+    nodes.retain(|n| !ORPHAN_TELEMETRY_KINDS.contains(&n.node_kind.as_str()));
+    edges.retain(|e| !dropped.contains(&e.from_node_id) && !dropped.contains(&e.to_node_id));
+
     (nodes, edges)
 }
 
