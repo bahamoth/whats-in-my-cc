@@ -71,6 +71,12 @@ export function InsightTab({ findings, node, toolMetrics, llmMetrics }: InsightT
           <div className={styles.nodeHeader}>
             <span className={styles.nodeIcon} aria-hidden="true">{icon}</span>
             <span className={styles.nodePrimary}>{label?.primary}</span>
+            {/* For a tool call, surface WHAT it did (the operation summary) right
+                in the header — the metrics below say how long/how big, but not
+                what the call actually operated on. */}
+            {label?.kind === 'tool' && label.secondary && (
+              <span className={styles.nodeSecondary}>{label.secondary}</span>
+            )}
             <span className={styles.nodeId}>{node.node_id}</span>
           </div>
           <EntityMetricsPanel

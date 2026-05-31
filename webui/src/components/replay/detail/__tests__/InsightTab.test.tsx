@@ -55,6 +55,15 @@ describe('InsightTab', () => {
     expect(screen.getByText('Bash')).toBeInTheDocument();
   });
 
+  it('shows what a tool call did (operation summary) in the header', () => {
+    const computer = n('c', 'tool_call', {
+      tool_name: 'mcp__claude-in-chrome__computer',
+      input: { action: 'left_click', coordinate: [638, 220] },
+    });
+    render(<InsightTab findings={[]} node={computer} toolMetrics={toolMetrics} llmMetrics={null} />);
+    expect(screen.getByText('left_click (638, 220)')).toBeInTheDocument();
+  });
+
   it('renders the entity metrics panel for the selected node', () => {
     render(<InsightTab findings={[]} node={toolNode} toolMetrics={toolMetrics} llmMetrics={null} />);
     expect(screen.getByTestId('entity-metrics')).toBeInTheDocument();
