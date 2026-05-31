@@ -36,11 +36,6 @@ import styles from './SessionDetailPage.module.css';
 
 const EMPTY_GRAPH: GraphPayload = { nodes: [], edges: [] };
 
-// Episode/phase classification was removed; the stream's activity-run fold no
-// longer splits by phase. A stable no-op keeps the run grouping intact (one
-// ActivityStack per run) without recomputing on every render.
-const NO_PHASE = (): null => null;
-
 // Node kinds whose raw source is the transcript (Raw-tab source label).
 const TRANSCRIPT_NODE_KINDS = new Set(['tool_call', 'assistant_message', 'user_message']);
 
@@ -336,7 +331,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
             />
             <ConversationStream
               items={streamItems}
-              phaseOf={NO_PHASE}
               selectedEventId={selectedStreamEventId}
               findingEventIds={findingEventIds}
               onSelect={selectStreamCard}

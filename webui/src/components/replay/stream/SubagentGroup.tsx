@@ -3,12 +3,10 @@
 // block: a "Subagent" header + the inner stream (dispatched prompt, the
 // subagent's replies, its tool activity) so it reads as separate from — but
 // nested under — the main human↔agent conversation.
-import { Fragment } from 'react';
 import { CornerDownRight } from 'lucide-react';
 import { MessageCard } from './MessageCard';
 import { ActivityStack } from './ActivityStack';
 import { ThinkingMarker } from './ThinkingMarker';
-import { splitRunByPhase } from './activityGroup';
 import type { SidechainGroup } from './streamModel';
 import styles from './SubagentGroup.module.css';
 
@@ -17,7 +15,6 @@ interface SubagentGroupProps {
   selectedEventId: string | null;
   onSelect: (eventId: string) => void;
   findingEventIds: Set<string>;
-  phaseOf: (eventId: string) => string | null;
 }
 
 export function SubagentGroup({
@@ -25,7 +22,6 @@ export function SubagentGroup({
   selectedEventId,
   onSelect,
   findingEventIds,
-  phaseOf,
 }: SubagentGroupProps) {
   return (
     <section data-testid="subagent-group" className={styles.group}>
@@ -47,18 +43,13 @@ export function SubagentGroup({
             );
           }
           if (it.type === 'activity-run') {
-            const stacks = splitRunByPhase(it.events, phaseOf);
             return (
-              <Fragment key={it.id}>
-                {stacks.map((stack, i) => (
-                  <ActivityStack
-                    key={`${it.id}-${i}`}
-                    stack={stack}
-                    selectedEventId={selectedEventId}
-                    onSelect={onSelect}
-                  />
-                ))}
-              </Fragment>
+              <ActivityStack
+                key={it.id}
+                stack={{ events: it.events }}
+                selectedEventId={selectedEventId}
+                onSelect={onSelect}
+              />
             );
           }
           if (it.type === 'thinking') {

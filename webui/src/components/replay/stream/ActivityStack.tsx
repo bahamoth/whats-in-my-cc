@@ -28,12 +28,9 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
     selectedEventId != null && stack.events.some((ae) => ae.event.event_id === selectedEventId);
   const expanded = userExpanded || containsSelected;
 
-  const phase = summary.phase ?? '';
-
   return (
     <div
       data-testid="activity-stack"
-      data-phase={phase}
       data-count={String(summary.count)}
       data-errors={String(summary.errorCount)}
       className={styles.stack}
@@ -48,7 +45,6 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
           ? <ChevronDown size={13} aria-hidden className={styles.chevron} />
           : <ChevronRight size={13} aria-hidden className={styles.chevron} />}
         <Wrench size={12} aria-hidden />
-        {phase && <span className={styles.phase}>{phase}</span>}
         {summary.topTools.length > 0 && (
           <span className={styles.topTools}>{summary.topTools.join(' · ')}</span>
         )}

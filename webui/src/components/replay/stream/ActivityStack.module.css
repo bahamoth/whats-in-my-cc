@@ -32,26 +32,6 @@
   color: var(--witmcc-fg-subtle, #6a7180);
 }
 
-.phase {
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: var(--witmcc-accent-soft, #1f3a78);
-  color: var(--witmcc-fg, #e6e8ee);
-  text-transform: lowercase;
-  font-weight: 600;
-  font-size: 10px;
-}
-
-/* Per-phase color overrides */
-.stack[data-phase='intake']       .phase { background: color-mix(in srgb, var(--witmcc-phase-intake, #4f8cff) 20%, transparent); color: var(--witmcc-phase-intake, #4f8cff); }
-.stack[data-phase='exploration']  .phase { background: color-mix(in srgb, var(--witmcc-phase-exploration, #b07dff) 20%, transparent); color: var(--witmcc-phase-exploration, #b07dff); }
-.stack[data-phase='diagnosis']    .phase { background: color-mix(in srgb, var(--witmcc-phase-diagnosis, #f0b429) 20%, transparent); color: var(--witmcc-phase-diagnosis, #f0b429); }
-.stack[data-phase='action']       .phase { background: color-mix(in srgb, var(--witmcc-phase-action, #41c285) 20%, transparent); color: var(--witmcc-phase-action, #41c285); }
-.stack[data-phase='verification'] .phase { background: color-mix(in srgb, var(--witmcc-phase-verification, #2bd0d0) 20%, transparent); color: var(--witmcc-phase-verification, #2bd0d0); }
-.stack[data-phase='repair']       .phase { background: color-mix(in srgb, var(--witmcc-phase-repair, #ff8a4c) 20%, transparent); color: var(--witmcc-phase-repair, #ff8a4c); }
-.stack[data-phase='drift']        .phase { background: color-mix(in srgb, var(--witmcc-phase-drift, #ef4747) 20%, transparent); color: var(--witmcc-phase-drift, #ef4747); }
-.stack[data-phase='stall']        .phase { background: color-mix(in srgb, var(--witmcc-phase-stall, #9a6b73) 20%, transparent); color: var(--witmcc-phase-stall, #9a6b73); }
-
 .topTools {
   color: var(--witmcc-fg, #e6e8ee);
   font-weight: 500;

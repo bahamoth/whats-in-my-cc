@@ -1,11 +1,10 @@
 // webui/src/components/replay/stream/ConversationStream.tsx
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { MessageCard } from './MessageCard';
 import { ActivityStack } from './ActivityStack';
 import { SubagentGroup } from './SubagentGroup';
 import { ThinkingMarker } from './ThinkingMarker';
-import { splitRunByPhase } from './activityGroup';
 import type { StreamItem } from './streamModel';
 import styles from './ConversationStream.module.css';
 
@@ -14,7 +13,6 @@ const STICK_THRESHOLD = 48;
 
 interface ConversationStreamProps {
   items: StreamItem[];
-  phaseOf: (eventId: string) => string | null;
   selectedEventId: string | null;
   onSelect: (eventId: string) => void;
   findingEventIds: Set<string>;
@@ -31,7 +29,6 @@ function itemContainsEvent(item: StreamItem, eventId: string): boolean {
 
 export function ConversationStream({
   items,
-  phaseOf,
   selectedEventId,
   onSelect,
   findingEventIds,
@@ -113,16 +110,6 @@ export function ConversationStream({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEventId]);
 
-  // Memoize phase-split stacks per activity-run so splitRunByPhase isn't
-  // recomputed for every unaffected row on each render.
-  const stacksByRunId = useMemo(() => {
-    const m = new Map<string, ReturnType<typeof splitRunByPhase>>();
-    for (const it of items) {
-      if (it.type === 'activity-run') m.set(it.id, splitRunByPhase(it.events, phaseOf));
-    }
-    return m;
-  }, [items, phaseOf]);
-
   if (items.length === 0) {
     return <p className={styles.empty}>No conversation events yet.</p>;
   }
@@ -145,7 +132,6 @@ export function ConversationStream({
           selectedEventId={selectedEventId}
           onSelect={onSelect}
           findingEventIds={findingEventIds}
-          phaseOf={phaseOf}
         />
       );
     }
@@ -158,18 +144,13 @@ export function ConversationStream({
         />
       );
     }
-    const stacks = stacksByRunId.get(item.id) ?? splitRunByPhase(item.events, phaseOf);
+    // An activity-run renders as ONE contiguous ActivityStack (its events).
     return (
-      <>
-        {stacks.map((stack, i) => (
-          <ActivityStack
-            key={`${item.id}-${i}`}
-            stack={stack}
-            selectedEventId={selectedEventId}
-            onSelect={onSelect}
-          />
-        ))}
-      </>
+      <ActivityStack
+        stack={{ events: item.events }}
+        selectedEventId={selectedEventId}
+        onSelect={onSelect}
+      />
     );
   };
 
