@@ -29,15 +29,13 @@ import {
   buildLlmRequestMetrics,
   parseLlmRequestSpan,
 } from '../components/replay/stream/llmRequestMetrics';
-import { asRecord, buildEntityFacets } from '../components/replay/facets/entityFacets';
+import { buildEntityFacets } from '../components/replay/facets/entityFacets';
 import { buildToolMetrics } from '../components/replay/detail/toolMetrics';
 import type { RawBlock } from '../components/replay/detail/RawTab';
+import { buildRawBlocks } from '../components/replay/detail/rawBlocks';
 import styles from './SessionDetailPage.module.css';
 
 const EMPTY_GRAPH: GraphPayload = { nodes: [], edges: [] };
-
-// Node kinds whose raw source is the transcript (Raw-tab source label).
-const TRANSCRIPT_NODE_KINDS = new Set(['tool_call', 'assistant_message', 'user_message']);
 
 // Debounce window for SSE-driven backfill: an envelope burst collapses to one
 // forward `?after=` page fetch (mirrors the bridge's graph-invalidate debounce).
@@ -244,46 +242,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   // (rawQuery) remains as a back-compat fallback for the no-blocks path.
   const rawBlocks = useMemo<RawBlock[] | undefined>(() => {
     if (!selectedNode) return undefined;
-
-    // Determine transcript-side source label from node_kind
-    const entitySource = TRANSCRIPT_NODE_KINDS.has(selectedNode.node_kind)
-      ? 'transcript'
-      : selectedNode.node_kind;
-
-    // Label for the entity block: prefer tool_name from payload for tool_call
-    const p = selectedNode.payload as Record<string, unknown> | null | undefined;
-    const entityLabel =
-      selectedNode.node_kind === 'tool_call' && typeof p?.tool_name === 'string'
-        ? p.tool_name
-        : selectedNode.node_kind;
-
-    const entityBlock: RawBlock = {
-      source: entitySource,
-      label: entityLabel,
-      record: selectedNode.payload,
-    };
-
-    // Gather folded-facet blocks from node.payload.facets. Each facet's `data`
-    // is the verbatim folded telemetry payload; label by event_name (logs) or
-    // raw_span.name (span), falling back to the facet_kind.
     const facets = entityFacets.get(selectedNode.node_id)?.facets ?? [];
-    const facetBlocks: RawBlock[] = facets.map((f) => {
-      const fd = asRecord(f.data);
-      const rawSpan = asRecord(fd.raw_span);
-      const facetLabel =
-        typeof fd.event_name === 'string'
-          ? fd.event_name
-          : typeof rawSpan.name === 'string'
-            ? rawSpan.name
-            : f.facet_kind;
-      return { source: f.facet_kind, label: facetLabel, record: f.data };
-    });
-
-    // No facets → no multi-source split. Return undefined so RawTab falls back
-    // to the bare single-record JsonTree (and DetailPanel's accent dot stays a
-    // meaningful "this node has a loaded raw record" signal, not always-on).
-    if (facetBlocks.length === 0) return undefined;
-    return [entityBlock, ...facetBlocks];
+    return buildRawBlocks(selectedNode, facets);
   }, [selectedNode, entityFacets]);
 
   // --- render branches ---
