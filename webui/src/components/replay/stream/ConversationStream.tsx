@@ -91,6 +91,16 @@ export function ConversationStream({
     const el = parentRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [totalSize, items.length]);
+  // Safety net: the initial bottom-pin normally disengages on the reader's
+  // first scroll gesture (markUserScroll). If a gesture is somehow missed, stop
+  // auto-pinning once the measurement settle window has passed, so it can never
+  // keep yanking the viewport back to the bottom while the reader scrolls up.
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      followInitRef.current = false;
+    }, 2000);
+    return () => window.clearTimeout(t);
+  }, []);
 
   // Paging OLDER history is driven by the stream's own scroll (the previous
   // IntersectionObserver sentinel lived in a non-scrolling container and

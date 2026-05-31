@@ -323,9 +323,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
                 이전 메시지 불러오는 중…
               </div>
             )}
-            {window_.loading !== 'older' && window_.oldest === null && window_.events.length > 0 && (
-              <div className={styles.historyStart} role="status">세션 시작 · 이전 기록 없음</div>
-            )}
             <ConversationStream
               items={streamItems}
               selectedEventId={selectedStreamEventId}
