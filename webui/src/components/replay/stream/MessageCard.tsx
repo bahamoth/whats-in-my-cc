@@ -1,5 +1,5 @@
 // webui/src/components/replay/stream/MessageCard.tsx
-import { User, Bot, BrainCog, Lightbulb, CornerDownRight } from 'lucide-react';
+import { User, Bot, BrainCog, Lightbulb, CornerDownRight, Info } from 'lucide-react';
 import type { MessageItem } from './streamModel';
 import { formatModel } from './nodeLabel';
 import styles from './MessageCard.module.css';
@@ -35,6 +35,8 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
     ? 'subagent'
     : item.role === 'user'
     ? 'external'
+    : item.role === 'system'
+    ? 'system'
     : 'agent';
 
   if (isSubagentPrompt) {
@@ -49,6 +51,11 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
     Icon = Bot;
     label = formatModel(item.model);
     bubbleClass = styles.assistantBubble;
+  } else if (item.role === 'system') {
+    // system_summary — a CC work recap (away_summary) or a thinner status beat.
+    Icon = Info;
+    label = '요약';
+    bubbleClass = styles.systemBubble;
   } else {
     // thinking
     Icon = BrainCog;

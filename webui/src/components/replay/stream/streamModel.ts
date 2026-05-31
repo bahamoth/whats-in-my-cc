@@ -10,7 +10,7 @@ function asObj(v: unknown): Record<string, unknown> {
 // buildStreamModel — Slice S2: stream classifier (message / activity / drop)
 // ---------------------------------------------------------------------------
 
-export type StreamRole = 'user' | 'assistant' | 'thinking';
+export type StreamRole = 'user' | 'assistant' | 'thinking' | 'system';
 
 export interface MessageItem {
   type: 'message';
@@ -125,7 +125,31 @@ function classify(
     const sig = typeof p.signature === 'string' ? p.signature : '';
     return { cat: 'thinking', sigLen: sig.length };
   }
-  if (e.kind === 'system_summary') return { cat: 'drop' };
+  if (e.kind === 'system_summary') {
+    // system_summary is heterogeneous. `subkind` here is the real CC transcript
+    // `type:"system"` `subtype`, passed through verbatim by the Rust ingest
+    // (`src/ingest/mapping.rs`: `e.subkind = s.subtype`). These literals are
+    // real-data-anchored, observed in live CC sessions (e.g. 01fe9550):
+    //   away_summary (recap, has `content`), turn_duration, stop_hook_summary,
+    //   local_command — and across other sessions compact_boundary
+    //   (`content:"Conversation compacted"` + `compactMetadata`). Not guessed.
+    // Only the insightful, content-bearing subkinds are card-worthy in the
+    // message view: away_summary (a CC work recap) and compact_boundary. Every
+    // other subkind — and any away_summary/compact_boundary with empty content
+    // — is meaningful data but not card-worthy → dropped (mirroring how empty
+    // user_message/assistant_message drop).
+    const sk = e.subkind ?? '';
+    if (sk === 'away_summary' || sk === 'compact_boundary') {
+      const content = typeof p.content === 'string' ? p.content.trim() : '';
+      if (content === '') return { cat: 'drop' };
+      return { cat: 'message', role: 'system', text: content, model: null };
+    }
+    return { cat: 'drop' };
+  }
+  // attachment_meta (file / deferred_tools_delta metadata) and session_state
+  // (leafUuid / permissionMode) carry no display signal → not shown in the
+  // message view.
+  if (e.kind === 'attachment_meta' || e.kind === 'session_state') return { cat: 'drop' };
   if (e.kind === 'metric_sample' || e.kind === 'otel_span') return { cat: 'drop' };
   if (e.kind === 'log_record') {
     const name = (asObj(e.payload).event_name as string) ?? '';
