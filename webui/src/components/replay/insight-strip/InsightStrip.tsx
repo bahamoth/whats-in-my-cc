@@ -6,7 +6,7 @@
  * tiles (Risk / Episodes / Outcome / latency, spec §1/§5/§11 P1) are gone.
  *
  * All derivation is pure in `insightCards.ts`; this component only renders and
- * owns the expand state. The phase bar (EpisodeStrip) stays in the page below.
+ * owns the expand state.
  */
 import { useState } from 'react';
 import type {

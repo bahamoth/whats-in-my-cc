@@ -7,7 +7,6 @@ import styles from './NodeDetail.module.css';
 interface NodeDetailProps {
   node: GraphNodeDto;
   record: unknown;
-  episodePhase: string | null;
   findings: FindingDto[];
 }
 
@@ -165,7 +164,7 @@ function KindSection({ node, record }: { node: GraphNodeDto; record: unknown }) 
   }
 }
 
-export function NodeDetail({ node, record, episodePhase, findings }: NodeDetailProps) {
+export function NodeDetail({ node, record, findings }: NodeDetailProps) {
   const label = nodeLabel(node);
   const icon = KIND_ICON[label.kind] ?? KIND_ICON.other;
 
@@ -173,7 +172,6 @@ export function NodeDetail({ node, record, episodePhase, findings }: NodeDetailP
     ['started', fmtTime(node.started_at)],
     ['ended', fmtTime(node.ended_at)],
   ];
-  if (episodePhase) rows.push(['episode', episodePhase]);
 
   return (
     <div className={styles.root}>
@@ -190,9 +188,7 @@ export function NodeDetail({ node, record, episodePhase, findings }: NodeDetailP
           {rows.map(([k, v]) => (
             <tr key={k}>
               <td className={styles.k}>{k}</td>
-              <td className={styles.v}>
-                {k === 'episode' ? <span className={styles.phase}>{v}</span> : v}
-              </td>
+              <td className={styles.v}>{v}</td>
             </tr>
           ))}
         </tbody>
