@@ -120,7 +120,8 @@ pub fn compute(
     let mut tool_call_node: HashMap<String, usize> = HashMap::new();
     // tool_use_id -> (event_uuid, node_id) for tool_result nodes before merge
     let mut tool_result_info: HashMap<String, (Option<String>, String)> = HashMap::new();
-    // request_id -> assistant_message node_id (for facet_of span→asst wiring).
+    // request_id -> assistant_message node_id (fold ownership for llm_request
+    // span + api_request log).
     // Stores stable node_id strings directly; assistant_message nodes are never
     // removed by the merge step, so no post-merge snapshot is needed (unlike
     // tool_call_nid_by_tid, which must snapshot before tool_result removal).
@@ -674,55 +675,82 @@ pub fn compute(
         }
     }
 
-    // 3e. facet_of (도구) — log_record facet → tool_call 엔티티. 신뢰 키 tool_use_id.
-    //     log_record는 tool_use_id 컬럼이 비어 payload.attributes.tool_use_id에서 추출.
-    for n in &nodes {
-        if n.node_kind != "log_record" {
-            continue;
-        }
-        let Some(tid) = n.payload
-            .pointer("/attributes/tool_use_id")
-            .and_then(|v| v.as_str()) else { continue; };
-        let Some(call_nid) = tool_call_nid_by_tid.get(tid) else { continue; };
-        if !valid_nodes.contains(call_nid.as_str()) || !valid_nodes.contains(n.node_id.as_str()) {
-            continue;
-        }
-        edges.push(make_edge(
-            session_id,
-            &n.node_id,
-            call_nid,
-            "facet_of",
-            json!({"basis": "tool_use_id"}),
-        ));
-    }
+    // --- Group A telemetry fold (Slice 1) ---------------------------------------
+    // tool_result/tool_decision log_record events are folded INTO their owning
+    // tool_call node's payload.facets array (keyed by tool_use_id). Earlier
+    // designs promoted them to standalone nodes linked by a display-only
+    // facet_of edge (the now-removed mechanism); the fold supersedes that.
+    // The collect pass below gathers facet entries + the node_ids to drop; the
+    // apply + retain pass runs just before the function returns (after all edge
+    // wiring) so folded node_ids are excluded from both nodes and edges.
+    let mut folded_node_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut facets_by_owner: HashMap<String, Vec<Value>> = HashMap::new();
 
-    // 3e(cont). facet_of (응답) — llm_request otel_span → assistant_message. 신뢰 키 request_id.
-    //     request_id는 otel_span 컬럼이 아닌 payload.raw_span.attributes[] OTLP 배열에서 추출.
+    // Shared guard-push-mark for all fold branches. Each branch supplies only its
+    // detection predicate + key extraction, then calls this with the owner node_id,
+    // the folded node, its facet_kind, and the correlation basis. The owner-survival
+    // guard (valid_nodes) mirrors the old facet_of pass's check: only fold when the
+    // owning node still exists in the final graph, preventing silent data loss if a
+    // future change drops the owner.
+    let mut fold = |owner: &str, node: &GraphNode, facet_kind: &str, basis: &str| {
+        if valid_nodes.contains(owner) {
+            facets_by_owner.entry(owner.to_string()).or_default().push(json!({
+                "facet_kind": facet_kind,
+                "basis": basis,
+                "source_event_id": node.source_event_ids.first().cloned().unwrap_or_default(),
+                "data": node.payload.clone(),
+            }));
+            folded_node_ids.insert(node.node_id.clone());
+        }
+    };
+
     for n in &nodes {
-        if n.node_kind != "otel_span" {
-            continue;
+        if n.node_kind == "log_record" {
+            let ename = n.payload.get("event_name").and_then(|v| v.as_str());
+            let facet_kind = match ename {
+                Some("tool_result") => Some("tool_result_log"),
+                Some("tool_decision") => Some("tool_decision_log"),
+                _ => None,
+            };
+            if let Some(fk) = facet_kind {
+                if let Some(tid) = n
+                    .payload
+                    .pointer("/attributes/tool_use_id")
+                    .and_then(|v| v.as_str())
+                {
+                    if let Some(owner) = tool_call_nid_by_tid.get(tid) {
+                        fold(owner, n, fk, "tool_use_id");
+                    }
+                }
+            }
         }
-        if n.payload.pointer("/raw_span/name").and_then(|v| v.as_str())
-            != Some("claude_code.llm_request")
+
+        // api_request log_record → assistant_message by request_id.
+        if n.node_kind == "log_record"
+            && n.payload.get("event_name").and_then(|v| v.as_str()) == Some("api_request")
         {
-            continue;
+            if let Some(rid) = n.payload.pointer("/attributes/request_id").and_then(|v| v.as_str()) {
+                if let Some(owner) = assistant_nid_by_request_id.get(rid) {
+                    fold(owner, n, "api_request_log", "request_id");
+                }
+            }
         }
-        // Reuse the OTLP attribute flattener (shared with otel_logs/metrics ingest)
-        // rather than hand-rolling the {key,value:{stringValue}} walk.
-        let attrs = flatten_attrs(n.payload.pointer("/raw_span/attributes"));
-        let rid = attrs.get("request_id").and_then(|v| v.as_str());
-        let Some(rid) = rid else { continue; };
-        let Some(asst_nid) = assistant_nid_by_request_id.get(rid) else { continue; };
-        if !valid_nodes.contains(asst_nid.as_str()) || !valid_nodes.contains(n.node_id.as_str()) {
-            continue;
+
+        // llm_request otel_span → assistant_message by request_id. request_id는
+        // otel_span 컬럼이 아닌 payload.raw_span.attributes[] OTLP 배열에서 추출.
+        if n.node_kind == "otel_span"
+            && n.payload.pointer("/raw_span/name").and_then(|v| v.as_str())
+                == Some("claude_code.llm_request")
+        {
+            // Reuse the OTLP attribute flattener (shared with otel_logs/metrics
+            // ingest) rather than hand-rolling the {key,value:{stringValue}} walk.
+            let attrs = flatten_attrs(n.payload.pointer("/raw_span/attributes"));
+            if let Some(rid) = attrs.get("request_id").and_then(|v| v.as_str()) {
+                if let Some(owner) = assistant_nid_by_request_id.get(rid) {
+                    fold(owner, n, "llm_request_span", "request_id");
+                }
+            }
         }
-        edges.push(make_edge(
-            session_id,
-            &n.node_id,
-            asst_nid,
-            "facet_of",
-            json!({"basis": "request_id"}),
-        ));
     }
 
     // 3c. turn_order — adjacent pairs of nodes ordered by (started_at, node_id).
@@ -837,6 +865,22 @@ pub fn compute(
 
     // Re-sort so inferred edges are interleaved with deterministic edges by edge_id.
     edges.sort_by(|a, b| a.edge_id.cmp(&b.edge_id));
+
+    // --- Group A telemetry fold (Slice 1) — apply + exclude -----------------
+    // Attach collected facet arrays onto each owner node's payload, then drop
+    // the now-folded standalone log_record nodes and any edges touching them.
+    for n in nodes.iter_mut() {
+        if let Some(fs) = facets_by_owner.remove(&n.node_id) {
+            if let Value::Object(map) = &mut n.payload {
+                map.insert("facets".to_string(), Value::Array(fs));
+            }
+        }
+    }
+    nodes.retain(|n| !folded_node_ids.contains(&n.node_id));
+    edges.retain(|e| {
+        !folded_node_ids.contains(&e.from_node_id) && !folded_node_ids.contains(&e.to_node_id)
+    });
+
     (nodes, edges)
 }
 
