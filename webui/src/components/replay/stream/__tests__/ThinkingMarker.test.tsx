@@ -9,7 +9,7 @@ function metrics(over: Partial<LlmRequestMetrics> = {}): LlmRequestMetrics {
   return {
     requestId: 'req-1', durationMs: 11900, ttftMs: 3100, inputTokens: 2,
     outputTokens: 1540, cacheReadTokens: 290000, cacheCreationTokens: 2200,
-    stopReason: 'tool_use', attempt: 1, success: true, model: 'claude-opus-4-8', ...over,
+    stopReason: 'tool_use', attempt: 1, success: true, model: 'claude-opus-4-8', costUsd: null, ...over,
   };
 }
 function marker(over: Partial<ThinkingMarkerData['events'][number]> = {}): ThinkingMarkerData {

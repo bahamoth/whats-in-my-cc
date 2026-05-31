@@ -25,6 +25,10 @@ export interface LlmRequestMetrics {
   attempt: number | null;
   success: boolean | null;
   model: string | null;
+  /** measured request cost in USD (Claude Code's own figure, from the
+   *  api_request_log facet — NOT the token×public-rate estimate). null when
+   *  the log facet is absent. */
+  costUsd: number | null;
 }
 
 type OtlpAttrValue =
@@ -87,7 +91,23 @@ export function parseLlmRequestSpan(payload: unknown): LlmRequestMetrics | null 
     attempt: num(attrs['attempt']),
     success: bool(attrs['success']),
     model: str(attrs['model']),
+    // cost lives in the api_request_log facet, not the span — null here, merged
+    // in by the caller via parseApiRequestLog.
+    costUsd: num(attrs['cost_usd']),
   };
+}
+
+/** Parse the folded `api_request_log` facet's `data`. Unlike the OTLP span,
+ *  its `attributes` is a plain key→value record, and it carries Claude Code's
+ *  own measured per-request `cost_usd` (the authoritative cost, distinct from
+ *  the WebUI's token×public-rate estimate). Returns null when the payload is
+ *  not an api_request_log with an attributes record. */
+export function parseApiRequestLog(
+  payload: unknown,
+): { costUsd: number | null; querySource: string | null } | null {
+  const attrs = (payload as { attributes?: Record<string, unknown> } | null)?.attributes;
+  if (!attrs || typeof attrs !== 'object') return null;
+  return { costUsd: num(attrs['cost_usd']), querySource: str(attrs['query_source']) };
 }
 
 /** Build a `request_id → LlmRequestMetrics` map from `claude_code.llm_request`
@@ -112,4 +132,11 @@ export function formatTokens(n: number | null): string | null {
   if (n == null) return null;
   if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
   return `${n}`;
+}
+
+/** Format a USD cost: 4 decimals under $1 (per-request costs are often
+ *  sub-cent), 2 at/above. */
+export function formatUsd(n: number | null): string | null {
+  if (n == null) return null;
+  return `$${n.toFixed(n < 1 ? 4 : 2)}`;
 }

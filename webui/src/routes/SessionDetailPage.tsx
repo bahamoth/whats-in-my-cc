@@ -27,6 +27,7 @@ import { UntaggedBashPanel } from '../components/replay/stream/UntaggedBashPanel
 import { buildStreamModel } from '../components/replay/stream/streamModel';
 import {
   buildLlmRequestMetrics,
+  parseApiRequestLog,
   parseLlmRequestSpan,
 } from '../components/replay/stream/llmRequestMetrics';
 import { buildEntityFacets } from '../components/replay/facets/entityFacets';
@@ -232,7 +233,14 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     if (selectedNode?.node_kind !== 'assistant_message') return null;
     const group = entityFacets.get(selectedNode.node_id);
     const span = group?.facets.find((f) => f.facet_kind === 'llm_request_span');
-    return span ? parseLlmRequestSpan(span.data) : null;
+    const metrics = span ? parseLlmRequestSpan(span.data) : null;
+    if (!metrics) return null;
+    // Measured per-request cost lives in the api_request_log facet (not the
+    // span); merge it in so the Insight panel shows the real cost, not the
+    // token×rate estimate.
+    const log = group?.facets.find((f) => f.facet_kind === 'api_request_log');
+    const cost = log ? parseApiRequestLog(log.data)?.costUsd ?? null : null;
+    return { ...metrics, costUsd: cost };
   }, [selectedNode, entityFacets]);
 
   // Source-split raw blocks for the Raw tab. When a node is selected, build:

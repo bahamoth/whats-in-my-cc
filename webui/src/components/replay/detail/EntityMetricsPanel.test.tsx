@@ -40,6 +40,7 @@ describe('EntityMetricsPanel', () => {
           attempt: 1,
           success: true,
           model: 'claude-opus-4-8',
+          costUsd: null,
         }}
       />,
     );
