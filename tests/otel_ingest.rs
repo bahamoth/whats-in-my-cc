@@ -68,25 +68,37 @@ async fn store_is_idempotent() {
     assert_eq!(count.0, 1);
 }
 
+// Slice 2 (telemetry fold): non-llm_request otel_span is orphan telemetry and
+// is dropped from the graph. The spans remain in observed_event (SSOT); only the
+// graph projection drops them, so a span-only session yields zero graph nodes.
 #[tokio::test]
-async fn graph_has_otel_span_node_after_ingest() {
+async fn orphan_spans_stay_in_observed_event_but_produce_no_graph_node() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/parent_child.json");
     otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink)
         .await
         .unwrap();
-    let (n, e, _) = build::rebuild_session(&pool, "sess-otel-B").await.unwrap();
-    assert_eq!(n, 2, "two otel_span nodes from parent_child fixture");
-    assert_eq!(e, 0, "no edges emitted in slice-3");
 
-    let row: (String,) = sqlx::query_as(
-        "SELECT node_kind FROM graph_node WHERE session_id = ? ORDER BY started_at LIMIT 1",
-    )
-    .bind("sess-otel-B")
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(row.0, "otel_span");
+    // SSOT: both spans are observed_event rows.
+    let observed: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM observed_event WHERE kind = 'otel_span'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(observed.0, 2, "two otel_span observed_events from parent_child fixture");
+
+    // Graph: orphan spans dropped — zero graph nodes/edges.
+    let (n, e, _) = build::rebuild_session(&pool, "sess-otel-B").await.unwrap();
+    assert_eq!(n, 0, "Slice 2: orphan otel_span nodes dropped from graph");
+    assert_eq!(e, 0, "no edges when nodes dropped");
+
+    let count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM graph_node WHERE session_id = ?")
+            .bind("sess-otel-B")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count.0, 0, "no graph_node for an orphan-span-only session");
 }
 
 async fn http_setup() -> TestServer {
@@ -209,10 +221,15 @@ async fn session_detail_returns_otel_span_with_telemetry() {
 }
 
 #[tokio::test]
-async fn post_traces_makes_graph_visible_to_http_consumers() {
+async fn post_traces_makes_graph_endpoint_reachable_for_otel_sessions() {
     // Regression: previously otel::store inserted observed_event rows but did
     // not rebuild the graph, so GET /v1/sessions/:id/graph returned 404 for
-    // OTel-only sessions even after a successful POST /otel/v1/traces.
+    // OTel-only sessions even after a successful POST /otel/v1/traces. The
+    // endpoint must return 200 (not 404).
+    //
+    // Slice 2 (telemetry fold): the single_span fixture is a non-llm_request
+    // (tool.invoke) span — orphan telemetry — so it is dropped from the graph.
+    // The session therefore has zero graph nodes, but the endpoint still 200s.
     let s = http_setup().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
     s.post("/otel/v1/traces").json(&body).await.assert_status_ok();
@@ -221,36 +238,53 @@ async fn post_traces_makes_graph_visible_to_http_consumers() {
     resp.assert_status_ok();
     let v: serde_json::Value = resp.json();
     let nodes = v["data"]["nodes"].as_array().expect("nodes array");
-    assert_eq!(nodes.len(), 1);
-    assert_eq!(nodes[0]["node_kind"], "otel_span");
+    assert_eq!(nodes.len(), 0, "orphan span dropped from graph (Slice 2)");
+    assert!(
+        !nodes.iter().any(|n| n["node_kind"] == "otel_span"),
+        "no otel_span node remains"
+    );
+
+    // SSOT: the span is still an observed_event the events endpoint can surface.
+    let ev: serde_json::Value = s.get("/v1/sessions/sess-otel-A/events").await.json();
+    assert!(
+        ev["data"]["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["kind"] == "otel_span"),
+        "span remains in observed_event (SSOT)"
+    );
 }
 
 #[tokio::test]
-async fn re_post_self_heals_graph_when_raw_dedup_skips_insert() {
+async fn re_post_triggers_rebuild_when_raw_dedup_skips_insert() {
     // Simulates the upgrade scenario: a pre-fix run left observed_event rows
-    // present but graph_node empty, then the user re-POSTs the same fixture
+    // present but graph_node stale, then the user re-POSTs the same fixture
     // hoping to recover. raw_event dedup blocks the insert path, but the
-    // affected session must still get its graph rebuilt.
+    // affected session must still get its graph rebuilt (sessions_touched).
+    //
+    // Slice 2 (telemetry fold): the single_span fixture is an orphan
+    // (tool.invoke) span, so the rebuilt graph has zero nodes — the self-heal
+    // signal is that a rebuild is *triggered* (sessions_touched), not a node
+    // count.
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
 
-    // First store — observed inserted + graph built normally.
+    // First store — observed inserted + graph rebuilt (orphan span → 0 nodes).
     otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink).await.unwrap();
 
-    // Simulate stale state: wipe graph_node, leave observed_event alone.
-    sqlx::query("DELETE FROM graph_node").execute(&pool).await.unwrap();
-    sqlx::query("DELETE FROM graph_edge").execute(&pool).await.unwrap();
-    let pre: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM graph_node")
+    // SSOT row present regardless of graph projection.
+    let observed: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM observed_event WHERE kind = 'otel_span'")
         .fetch_one(&pool).await.unwrap();
-    assert_eq!(pre.0, 0);
+    assert_eq!(observed.0, 1);
 
-    // Re-POST — raw is duplicate, but session must still get rebuilt.
+    // Re-POST — raw is duplicate, but session must still be marked for rebuild.
     let res = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink).await.unwrap();
     assert_eq!(res.duplicate_spans, 1);
     assert_eq!(res.accepted_spans, 0);
-    assert_eq!(res.sessions_touched, vec!["sess-otel-A".to_string()]);
-
-    let post: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM graph_node")
-        .fetch_one(&pool).await.unwrap();
-    assert_eq!(post.0, 1, "duplicate POST must self-heal the graph");
+    assert_eq!(
+        res.sessions_touched,
+        vec!["sess-otel-A".to_string()],
+        "duplicate POST must still trigger a rebuild of the affected session"
+    );
 }
