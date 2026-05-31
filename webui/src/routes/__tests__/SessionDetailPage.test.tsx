@@ -34,6 +34,12 @@ type Routes = {
 function setupFetch(routes: Routes) {
   const fn = vi.fn((input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString();
+    // Older-history page (`?before=`): return an empty page (as the server does
+    // at the session start). This exercises the loadOlder fetch without the
+    // mock re-returning already-loaded rows (which would duplicate keys).
+    if (url.includes('/events?') && url.includes('before=')) {
+      return Promise.resolve(env({ events: [], prev_cursor: null, next_cursor: null }));
+    }
     if (url.includes('/events?') || url.endsWith('/events')) {
       // window endpoint
       const m = url.match(/\/v1\/sessions\/[^/]+\/events/);
@@ -330,48 +336,37 @@ describe('SessionDetailPage', () => {
     expect(callsOf((u) => u.includes('/events'))).toBe(eventsAtMount + 1);
   });
 
-  // Slice-9 — IntersectionObserver-driven loadOlder. The mounted sentinel
-  // must exist in the DOM; we observe via a fake IO that fires immediately
-  // and assert getSessionEvents is called with `?before=...`.
-  it('IntersectionObserver triggers loadOlder when sentinel intersects', async () => {
+  // Windowing: older history is paged by the stream's own near-top scroll
+  // (the IntersectionObserver sentinel was removed — it auto-loaded the whole
+  // session). A genuine gesture that lands near the top fetches the next older
+  // window (`?before=...`). prev_cursor is non-null so `canLoadOlder` is true.
+  it('a near-top user scroll pages the next older window (?before=)', async () => {
     const f = setupFetch({
       detail: env(sessionDetail),
       graph: env(graph),
       events: env({
-        events: [],
-        prev_cursor: '2026-05-19T10:00:00Z|01J',
+        events: eventsWithRows.events, // real rows → the stream scroller mounts
+        prev_cursor: '2026-05-19T10:00:00Z|01J', // older history remains
         next_cursor: null,
       }),
     });
-
-    // Install a fake IntersectionObserver that triggers on observe().
-    let triggered = false;
-    class FakeIO {
-      cb: IntersectionObserverCallback;
-      constructor(cb: IntersectionObserverCallback) { this.cb = cb; }
-      observe(_el: Element) {
-        // Defer to allow the page to finish initial fetches before
-        // triggering loadOlder.
-        setTimeout(() => {
-          if (triggered) return;
-          triggered = true;
-          this.cb(
-            [{ isIntersecting: true, intersectionRatio: 1 } as IntersectionObserverEntry],
-            this as unknown as IntersectionObserver,
-          );
-        }, 0);
+    const { container } = rendered('s1');
+    // Wait until the window has loaded: rows mounted (so the scroll container
+    // exists) and `oldest` is set (so canLoadOlder is true).
+    const scroller = await waitFor(() => {
+      const el = container.querySelector('[data-testid="conversation-stream"]');
+      if (!el || !container.querySelector('[data-event-id="ev1"]')) {
+        throw new Error('stream not mounted yet');
       }
-      disconnect() {}
-      unobserve() {}
-      root = null;
-      rootMargin = '';
-      thresholds = [];
-      takeRecords() { return []; }
-    }
-    vi.stubGlobal('IntersectionObserver', FakeIO);
-
-    rendered('s1');
-    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+      return el as HTMLElement;
+    });
+    // A genuine gesture (wheel) + an UPWARD near-top scroll pages the next
+    // older window (start below the zone, then scroll up into it).
+    fireEvent.wheel(scroller, { deltaY: -120 });
+    scroller.scrollTop = 400;
+    fireEvent.scroll(scroller);
+    scroller.scrollTop = 0;
+    fireEvent.scroll(scroller);
     await waitFor(() => {
       const calls = f.mock.calls.map((c) => String(c[0]));
       expect(calls.some((u) => u.includes('/events?before='))).toBe(true);

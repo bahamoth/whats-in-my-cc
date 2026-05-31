@@ -6,7 +6,7 @@ import { ActivityStack } from './ActivityStack';
 import { SubagentGroup } from './SubagentGroup';
 import { ThinkingMarker } from './ThinkingMarker';
 import type { StreamItem } from './streamModel';
-import { nextStickState } from './scrollAnchor';
+import { shouldLoadOlder } from './scrollAnchor';
 import styles from './ConversationStream.module.css';
 
 const FALLBACK_CAP = 200;
@@ -16,6 +16,12 @@ interface ConversationStreamProps {
   selectedEventId: string | null;
   onSelect: (eventId: string) => void;
   findingEventIds: Set<string>;
+  /** Page in the next older window. Called when the reader scrolls near the top
+   *  with a genuine gesture and `canLoadOlder` is true. */
+  onLoadOlder?: () => void;
+  /** Whether older history remains to be paged in (drives the near-top trigger
+   *  and stops it once the session start is reached). */
+  canLoadOlder?: boolean;
 }
 
 /** True when the item is a message with the given eventId, or an activity-run
@@ -32,9 +38,10 @@ export function ConversationStream({
   selectedEventId,
   onSelect,
   findingEventIds,
+  onLoadOlder,
+  canLoadOlder = false,
 }: ConversationStreamProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
-  const stickRef = useRef(true);
 
   const virtualizer = useVirtualizer({
     count: items.length,
@@ -45,6 +52,24 @@ export function ConversationStream({
     // heights map to the wrong items → rows overlap. Stable ids remap correctly.
     getItemKey: (index) => items[index]?.id ?? index,
     overscan: 8,
+    // End-anchored chat/log scrolling (react-virtual native):
+    //  - anchorTo 'end': when older pages are PREPENDED, the virtualizer
+    //    captures the visible keyed item and re-anchors scroll so it stays in
+    //    place — including as those above-viewport rows re-measure (which the
+    //    hand-rolled distance-from-bottom anchoring could not survive).
+    //  - followOnAppend: when the reader is parked at the tip, new appended
+    //    events (SSE backfill) keep the viewport pinned to the newest row;
+    //    when scrolled up, the position is left alone.
+    // NOTE: this behaviour needs real layout, so it is verified by browser
+    // smoke + the options-contract test, not by jsdom unit assertions.
+    anchorTo: 'end',
+    followOnAppend: true,
+    // "At the tip" tolerance. Rows measure lazily (estimate 64 → real height),
+    // so the viewport lands a couple of rows short of the true bottom right
+    // after the initial scroll-to-end; a tolerance lets the end-anchor re-pin
+    // converge to the exact bottom AND keeps live-append following when the
+    // reader is parked near (not pixel-exact at) the tip.
+    scrollEndThreshold: 160,
   });
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -52,37 +77,57 @@ export function ConversationStream({
   // items so behavior is observable in tests and on first paint before measure.
   const useVirtual = virtualItems.length > 0;
 
-  // "Stick to bottom" follows live appends ONLY while the reader is parked at
-  // the tip. The hard part: the virtualizer fires synthetic scroll events as it
-  // measures rows, and those must NOT flip the stick decision (that re-engaged
-  // autoscroll and yanked the viewport — the "can't focus while streaming"
-  // bug). So we only let a scroll that closely follows a genuine user gesture
-  // (wheel / pointer / key) change `stickRef`; measurement-driven scrolls are
-  // ignored.
-  const lastUserScrollRef = useRef(0);
+  // Start at the newest event (the bottom): the window loads the NEWEST page,
+  // so the reader should land at the live tip, not the top of the window. Rows
+  // measure lazily (estimate 64 → real height), so a single scroll-to-end lands
+  // a little short; we re-pin to the bottom on each measurement tick
+  // (getTotalSize change) UNTIL the reader makes a genuine scroll gesture. From
+  // then on native anchorTo:'end' + followOnAppend own the scroll (prepend
+  // stability + live-tip follow). followInitRef is cleared in markUserScroll.
+  const followInitRef = useRef(true);
+  const totalSize = virtualizer.getTotalSize();
+  useLayoutEffect(() => {
+    if (!followInitRef.current || items.length === 0) return;
+    const el = parentRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [totalSize, items.length]);
+
+  // Paging OLDER history is driven by the stream's own scroll (the previous
+  // IntersectionObserver sentinel lived in a non-scrolling container and
+  // re-fired every render, auto-loading the whole session). We page the next
+  // older window only when the reader — who has interacted at least once —
+  // scrolls UP into the near-top zone. The interaction latch excludes the
+  // initial bottom-pin and any pre-interaction programmatic scroll; the upward
+  // direction excludes the native anchorTo:'end' re-anchor (which scrolls DOWN
+  // after a prepend), so a load can never re-trigger itself into a cascade.
+  const hasInteractedRef = useRef(false);
+  const prevScrollTopRef = useRef(0);
   const markUserScroll = () => {
-    lastUserScrollRef.current = performance.now();
+    hasInteractedRef.current = true;
+    followInitRef.current = false; // a genuine gesture ends the initial bottom-pin
   };
   const onScroll = () => {
     const el = parentRef.current;
     if (!el) return;
-    const next = nextStickState(performance.now(), lastUserScrollRef.current, el);
-    if (next !== null) stickRef.current = next; // null = measurement/programmatic → ignore
+    const prevScrollTop = prevScrollTopRef.current;
+    prevScrollTopRef.current = el.scrollTop;
+    if (!onLoadOlder) return;
+    if (
+      shouldLoadOlder({
+        scrollTop: el.scrollTop,
+        prevScrollTop,
+        hasInteracted: hasInteractedRef.current,
+        canLoadOlder,
+      })
+    ) {
+      onLoadOlder();
+    }
   };
 
-  // Single source of autoscroll: when new items arrive and the reader is stuck
-  // to the tip, jump to the bottom via native scrollTop. We deliberately do NOT
-  // also call virtualizer.scrollToIndex — driving the same scroll position from
-  // two mechanisms fights the virtualizer's measurement pass and oscillates.
-  useLayoutEffect(() => {
-    const el = parentRef.current;
-    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [items.length]);
-
   // Scroll the selected item into view when selection changes from an external
-  // source (e.g. timeline or subgraph click). Keyed on selectedEventId only so
-  // it does not conflict with the bottom-autoscroll effect above. When the
-  // selected event lives inside an activity-run, ActivityStack auto-expands on
+  // source (e.g. subgraph click). Keyed on selectedEventId only so it does not
+  // fire on every append. When the selected event lives inside an activity-run,
+  // ActivityStack auto-expands on
   // its own (it receives selectedEventId), so the row is mounted by the time
   // the fallback querySelector runs.
   useEffect(() => {

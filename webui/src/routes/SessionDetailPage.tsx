@@ -83,22 +83,10 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     onResync: () => void window_.reload(),
   });
 
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        const e = entries[0];
-        if (e && e.intersectionRatio >= 0.5) {
-          void window_.loadOlder();
-        }
-      },
-      { threshold: [0, 0.5, 1] },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [window_]);
+  // Older history is paged by ConversationStream's own near-top scroll (see its
+  // onLoadOlder). The previous IntersectionObserver sentinel lived in this
+  // (non-scrolling) container and re-fired on every render, auto-loading the
+  // whole session — so it has been removed.
 
   const effectiveGraph = graph.data ?? EMPTY_GRAPH;
 
@@ -322,18 +310,13 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
           </div>
 
           <div className={styles.stream} data-slot="stream">
-            {/* Sentinel parked at the top of the stream slot: scrolling up to here triggers loadOlder. */}
-            <div
-              ref={sentinelRef}
-              aria-hidden
-              style={{ height: 1 }}
-              data-testid="scroll-sentinel"
-            />
             <ConversationStream
               items={streamItems}
               selectedEventId={selectedStreamEventId}
               findingEventIds={findingEventIds}
               onSelect={selectStreamCard}
+              onLoadOlder={window_.loadOlder}
+              canLoadOlder={window_.oldest !== null}
             />
           </div>
 
