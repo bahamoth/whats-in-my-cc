@@ -123,32 +123,6 @@ export type ToolFailureSummaryDto = {
   user_visible_findings: FindingDto[];
 };
 
-export type EpisodeDto = {
-  episode_id: string;
-  schema_version: string;
-  session_id: string;
-  phase:
-    | 'intake'
-    | 'exploration'
-    | 'diagnosis'
-    | 'action'
-    | 'verification'
-    | 'repair'
-    | 'drift'
-    | 'stall'
-    | string;
-  start_event_id: string;
-  end_event_id: string;
-  started_at: string;
-  ended_at: string;
-  evidence_node_ids: unknown[];
-  classification_basis: unknown[];
-  confidence: number;
-  summary: string | null;
-  classifier_version: string;
-  created_at: string;
-};
-
 export type VerificationRunDto = {
   verification_run_id: string;
   schema_version: string;

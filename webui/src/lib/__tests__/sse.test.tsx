@@ -9,7 +9,7 @@
  *    are too small to refetch per-envelope; we coalesce).
  *  - `event: gap` invalidates events + graph.
  *  - `event: resync` invalidates EVERY session-scoped query (summary,
- *    graph, events, episodes, findings, verification, diff-hunks).
+ *    graph, events, findings, verification, diff-hunks).
  *
  * The backend does NOT emit `graph.updated` / `finding.generated` named
  * events — those were assumed in the original plan and removed during

@@ -17,7 +17,6 @@ import { createQueryClient } from '../queryClient';
 import {
   useSessionDetailQuery,
   useSessionGraphQuery,
-  useEpisodesQuery,
   useFindingsQuery,
   useUsageBaselineQuery,
   sessionKeys,
@@ -56,7 +55,6 @@ describe('sessionKeys', () => {
   it('produces stable, hierarchical query keys', () => {
     expect(sessionKeys.detail('S1')).toEqual(['session', 'S1', 'detail']);
     expect(sessionKeys.graph('S1')).toEqual(['session', 'S1', 'graph']);
-    expect(sessionKeys.episodes('S1')).toEqual(['session', 'S1', 'episodes']);
     expect(sessionKeys.findings('S1')).toEqual(['session', 'S1', 'findings']);
   });
 });
@@ -80,17 +78,6 @@ describe('useSessionGraphQuery', () => {
     const { result } = renderHook(() => useSessionGraphQuery('S1'), { wrapper: wrap(qc) });
     await waitFor(() => expect(result.current.data).toEqual(payload));
     expect(qc.getQueryData(sessionKeys.graph('S1'))).toEqual(payload);
-  });
-});
-
-describe('useEpisodesQuery', () => {
-  it('caches the episodes array under sessionKeys.episodes(id)', async () => {
-    const payload = [{ episode_id: 'ep1', phase: 'action', confidence: 0.7 }];
-    // Backend returns the array directly under `data` (no `meta` envelope).
-    fetchSpy.mockResolvedValue(mockOk({ data: payload }));
-    const qc = createQueryClient();
-    const { result } = renderHook(() => useEpisodesQuery('S1'), { wrapper: wrap(qc) });
-    await waitFor(() => expect(result.current.data).toEqual(payload));
   });
 });
 

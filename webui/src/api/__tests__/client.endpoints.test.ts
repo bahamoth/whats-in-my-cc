@@ -7,7 +7,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getDiffHunks,
-  getEpisodes,
   getFindings,
   getFindingEvidence,
   getSessionUsage,
@@ -44,17 +43,6 @@ describe('getDiffHunks', () => {
     fetchSpy.mockImplementation(mockJson(ENVELOPE({ hunks: expected })));
     const out = await getDiffHunks('SES-1');
     expect(fetchSpy).toHaveBeenCalledWith('/v1/sessions/SES-1/diff-hunks', expect.any(Object));
-    expect(out).toEqual(expected);
-  });
-});
-
-describe('getEpisodes', () => {
-  it('hits GET /v1/sessions/:id/episodes (backend has no meta envelope here)', async () => {
-    const expected = [{ episode_id: 'ep1', phase: 'action', confidence: 0.8 }];
-    // Backend response shape: { data: [...] } — no `meta` field.
-    fetchSpy.mockImplementation(mockJson({ data: expected }));
-    const out = await getEpisodes('SES-2');
-    expect(fetchSpy).toHaveBeenCalledWith('/v1/sessions/SES-2/episodes', expect.any(Object));
     expect(out).toEqual(expected);
   });
 });
