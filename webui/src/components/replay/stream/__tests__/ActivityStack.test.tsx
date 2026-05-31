@@ -29,11 +29,17 @@ describe('ActivityStack', () => {
     expect(onSelect).toHaveBeenCalledWith('c2');
   });
 
-  it('marks the selected item', () => {
+  it('marks the selected item (auto-expanded via selection, no manual click needed)', () => {
     render(<ActivityStack stack={stack} selectedEventId="c1" onSelect={() => {}} />);
-    fireEvent.click(screen.getByTestId('activity-stack-toggle'));
     const items = screen.getAllByTestId('activity-item');
     expect(items[0].getAttribute('data-selected')).toBe('true');
+  });
+
+  it('can fold the run even while a child is selected (regression: stuck-open bug)', () => {
+    render(<ActivityStack stack={stack} selectedEventId="c1" onSelect={() => {}} />);
+    expect(screen.getAllByTestId('activity-item').length).toBeGreaterThan(0); // auto-expanded (c1 selected)
+    fireEvent.click(screen.getByTestId('activity-stack-toggle')); // user collapses
+    expect(screen.queryByTestId('activity-item')).toBeNull(); // folded, even though c1 still selected
   });
 
   it('auto-expands when selectedEventId matches one of its events', () => {
