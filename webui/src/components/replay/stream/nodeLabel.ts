@@ -29,6 +29,11 @@ export function formatModel(raw: unknown): string {
 function toolArg(input: unknown): string {
   const i = asObj(input);
 
+  // Prefer the tool's own human-readable `description` when present (Bash and
+  // Task accept one) — it states the INTENT better than a raw command/args,
+  // e.g. "Add costUsd:null to the 5 fixtures via perl" beats the perl one-liner.
+  if (typeof i.description === 'string' && i.description.trim()) return i.description.trim();
+
   // action-style tools (e.g. mcp__claude-in-chrome__computer): "action (x, y)"
   // / 'action "text"' / "action url".
   if (typeof i.action === 'string') {
@@ -42,7 +47,7 @@ function toolArg(input: unknown): string {
   // common single-value argument keys, in priority order.
   for (const k of [
     'command', 'file_path', 'pattern', 'query', 'url', 'path', 'skill',
-    'description', 'prompt', 'subagent_type', 'name',
+    'prompt', 'subagent_type', 'name',
   ]) {
     const val = i[k];
     if (typeof val === 'string' && val) {

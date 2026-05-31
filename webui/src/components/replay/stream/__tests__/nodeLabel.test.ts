@@ -38,6 +38,13 @@ describe('nodeLabel', () => {
     expect(L('tool_call', { tool_name: 'mcp__claude-in-chrome__navigate', input: { url: 'http://localhost:5173', tabId: 1 } }).secondary)
       .toBe('http://localhost:5173');
   });
+  it('tool_call: prefers a human description over the raw command/args', () => {
+    // Bash carries both — show the intent, not the gnarly command.
+    expect(L('tool_call', { tool_name: 'Bash', input: { command: 'perl -0pi -e "s/a/b/" f1 f2 f3 f4 f5', description: 'Add costUsd:null to the 5 fixtures via perl' } }).secondary)
+      .toBe('Add costUsd:null to the 5 fixtures via perl');
+    // no description → falls back to the (cd-stripped) command
+    expect(L('tool_call', { tool_name: 'Bash', input: { command: 'cd /x && grep y' } }).secondary).toBe('grep y');
+  });
   it('tool_call: Task shows its description; unknown shapes fall back to first field', () => {
     expect(L('tool_call', { tool_name: 'Task', input: { description: 'find flaky tests', subagent_type: 'general-purpose' } }).secondary)
       .toBe('find flaky tests');
