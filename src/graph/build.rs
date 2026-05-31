@@ -22,10 +22,14 @@ use crate::model::observed::{EventKind, ObservedEvent};
 /// `graph_node` either see the pre-rebuild rows or the post-rebuild rows,
 /// never the empty mid-rebuild state. Fixes DEV-S8-12.
 ///
-/// Slice-12 — also classifies episodes and persists them. Episode writes
-/// use `INSERT OR REPLACE` (idempotent). The episode classifier is wrapped
-/// in catch_unwind per spec §8: a classifier panic logs a warning and
-/// leaves existing episode rows unchanged (does NOT abort the graph rebuild).
+/// Slice-12 — also classifies episodes and persists them. Slice 3 B2: on a
+/// successful classification the session's existing episodes are DELETED
+/// before the fresh set is inserted (content-hashed ids mean a growing live
+/// session's trailing episode would otherwise accumulate stale rows under
+/// `INSERT OR REPLACE`). The episode classifier is wrapped in catch_unwind per
+/// spec §8: a classifier panic logs a warning and leaves existing episode rows
+/// unchanged — the delete lives inside the Ok arm so a panic never wipes
+/// episodes without a replacement set (does NOT abort the graph rebuild).
 ///
 /// Slice-14 — also runs the L1 insight extractor pipeline and persists
 /// finding rows. Runs in its own transaction AFTER the graph commit
@@ -53,6 +57,28 @@ pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usi
     }));
     match episodes_result {
         Ok(episodes) => {
+            // Slice 3 B2 — delete the session's existing episodes before
+            // inserting the fresh set. Episode ids are content-hashed over
+            // (session_id, phase, start_event_id, end_event_id); as a live
+            // session grows the trailing episode's end_event_id shifts → a new
+            // id, so `insert`'s INSERT OR REPLACE would ADD a row rather than
+            // replace the old trailing episode, accumulating stale rows.
+            //
+            // Ordering / panic-safety: the delete lives INSIDE the Ok arm,
+            // BEFORE the insert loop — never in the catch_unwind Err arm. A
+            // classifier panic must NOT wipe episodes without a replacement
+            // set, so on panic the existing rows are left intact (Err arm
+            // below). The delete runs unconditionally for a successful
+            // classification even when `episodes` is empty, so a session that
+            // legitimately drops to zero episodes does not retain stale rows.
+            if let Err(err) = repo_episode::delete_session(pool, session_id).await {
+                tracing::warn!(
+                    session_id = session_id,
+                    err = %err,
+                    "episode delete_session failed before insert; \
+                     stale rows may remain for this rebuild"
+                );
+            }
             for ep in &episodes {
                 let row = repo_episode::EpisodeRow {
                     episode_id: ep.episode_id.clone(),
