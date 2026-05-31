@@ -37,7 +37,7 @@
 | `src/api/routes.rs` | `/episodes` 목록(667행 `episodes_list`)·`/episodes/{id}` 단건(686행 `episode_detail`) 핸들러 제거 |
 | `src/api/mod.rs` | 위 두 라우트 등록 제거 |
 | `src/api/dto.rs` | episode DTO(189행 부근 `episode_id` 등) 제거 |
-| 마이그레이션 | **신규 forward 마이그레이션** `20260531xxxxxx_0014_drop_episode.sql`에 `DROP TABLE IF EXISTS episode;`. 기존 `0006_episode.sql`은 히스토리에 보존(forward-only, sqlx 규약). |
+| 마이그레이션 | **신규 forward 마이그레이션** `20260531xxxxxx_0017_drop_episode.sql`에 `DROP TABLE IF EXISTS episode;`. 기존 `0006_episode.sql`은 히스토리에 보존(forward-only, sqlx 규약). |
 
 ## 4. 제거 범위 — 프론트엔드
 
@@ -72,7 +72,7 @@
 - `docs/04_api_mcp_spec.html` — `/episodes`* 엔드포인트 제거.
 - `docs/00_prd_revised.html`, `02_technical_architecture_spec.html`, `06_mvp_execution_plan.html`, `index.html` — episode/phase 언급 정리.
 - `docs/implementation-notes.html` — 제거 결정·근거·마이그레이션 노트 추가.
-- `CLAUDE.md` — episode 상태 노트(3건) 제거 + "episode/phase 제거됨, migration 0014, init-db 필요" 운영 주의 추가.
+- `CLAUDE.md` — episode 상태 노트(3건) 제거 + "episode/phase 제거됨, migration 0017, init-db 필요" 운영 주의 추가.
 
 ## 7. 제거 후 결과 상태
 

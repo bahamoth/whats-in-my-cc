@@ -35,7 +35,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <a href="#raw">RawEvent</a>
 <a href="#observed">ObservedEvent</a>
 <a href="#graph">Graph</a>
-<a href="#episode">Episode</a>
+<a href="#context">ContextArtifact</a>
 <a href="#lineage">Lineage</a>
 <a href="#insight">Insight</a>
 <a href="#resource">Resource</a>
@@ -51,14 +51,13 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <rect x="300" y="40" width="200" height="62" class="nodebox"/><text x="400" y="77" text-anchor="middle" class="svgtext">ObservedEvent</text>
 <rect x="580" y="40" width="180" height="62" class="nodebox2"/><text x="670" y="77" text-anchor="middle" class="svgtext">GraphNode</text>
 <rect x="840" y="40" width="180" height="62" class="nodebox2"/><text x="930" y="77" text-anchor="middle" class="svgtext">GraphEdge</text>
-<rect x="160" y="180" width="180" height="62" class="nodebox3"/><text x="250" y="217" text-anchor="middle" class="svgtext">Episode</text>
 <rect x="420" y="180" width="210" height="62" class="nodebox3"/><text x="525" y="217" text-anchor="middle" class="svgtext">ContextArtifact</text>
 <rect x="710" y="180" width="190" height="62" class="nodebox3"/><text x="805" y="217" text-anchor="middle" class="svgtext">DiffHunk</text>
 <rect x="120" y="320" width="220" height="62" class="nodebox2"/><text x="230" y="357" text-anchor="middle" class="svgtext">VerificationRun</text>
 <rect x="430" y="320" width="180" height="62" class="nodebox"/><text x="520" y="357" text-anchor="middle" class="svgtext">Finding</text>
 <rect x="700" y="320" width="220" height="62" class="nodebox"/><text x="810" y="357" text-anchor="middle" class="svgtext">FeedbackResource</text>
 <rect x="430" y="448" width="180" height="62" class="nodebox2"/><text x="520" y="485" text-anchor="middle" class="svgtext">ExportBundle</text>
-<path d="M220 71 L300 71" class="edge" marker-end="url(#arrd)"/><path d="M500 71 L580 71" class="edge" marker-end="url(#arrd)"/><path d="M760 71 L840 71" class="edge" marker-end="url(#arrd)"/><path d="M670 102 C590 140 330 140 250 180" class="edge" marker-end="url(#arrd)"/><path d="M670 102 C640 140 560 150 525 180" class="edge" marker-end="url(#arrd)"/><path d="M670 102 C720 138 780 148 805 180" class="edge" marker-end="url(#arrd)"/><path d="M805 242 C730 286 600 296 520 320" class="edge" marker-end="url(#arrd)"/><path d="M230 382 C330 420 450 400 520 382" class="edge" marker-end="url(#arrd)"/><path d="M520 382 L700 351" class="edge" marker-end="url(#arrd)"/><path d="M810 382 C720 430 620 438 520 448" class="edge" marker-end="url(#arrd)"/></svg></div>
+<path d="M220 71 L300 71" class="edge" marker-end="url(#arrd)"/><path d="M500 71 L580 71" class="edge" marker-end="url(#arrd)"/><path d="M760 71 L840 71" class="edge" marker-end="url(#arrd)"/><path d="M670 102 C640 140 560 150 525 180" class="edge" marker-end="url(#arrd)"/><path d="M670 102 C720 138 780 148 805 180" class="edge" marker-end="url(#arrd)"/><path d="M805 242 C730 286 600 296 520 320" class="edge" marker-end="url(#arrd)"/><path d="M230 382 C330 420 450 400 520 382" class="edge" marker-end="url(#arrd)"/><path d="M520 382 L700 351" class="edge" marker-end="url(#arrd)"/><path d="M810 382 C720 430 620 438 520 448" class="edge" marker-end="url(#arrd)"/></svg></div>
 </section>
 <section id="raw"><h2><span class="num">03</span>RawEvent</h2>
 <pre><code>{
@@ -125,20 +124,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 }</code></pre></div></div>
 <table><thead><tr><th>Edge type</th><th>Meaning</th><th>Origin</th></tr></thead><tbody><tr><td>same_logical_event</td><td>multiple source events merged</td><td>deterministic</td></tr><tr><td>parent_child</td><td>trace/span or task/subtask relation</td><td>deterministic</td></tr><tr><td>mutates</td><td>tool/file event changed state</td><td>deterministic/inferred</td></tr><tr><td>verifies</td><td>command/test verified diff or state</td><td>deterministic/inferred</td></tr><tr><td>causes</td><td>observed event likely influenced later action</td><td>inferred</td></tr><tr><td>blocks/allows</td><td>permission/hook impacted action</td><td>deterministic</td></tr></tbody></table>
 </section>
-<section id="episode"><h2><span class="num">06</span>Episode and ContextArtifact</h2>
-<pre><code>{
-  "episode_id": "ep_01J...",
-  "schema_version": "episode.v1",
-  "session_id": "sess_123",
-  "phase": "diagnosis",
-  "start_node_id": "node_001",
-  "end_node_id": "node_018",
-  "summary": "Assistant inspected failing test output and searched related files.",
-  "evidence_nodes": ["node_001", "node_007", "node_018"],
-  "confidence": 0.81,
-  "classification_basis": ["read/search actions", "error output referenced", "no mutation"]
-}</code></pre>
-<table><thead><tr><th>Episode phase</th><th>Observed basis</th></tr></thead><tbody><tr><td>intake</td><td>user request, requirement clarification</td></tr><tr><td>exploration</td><td>read/search/list actions</td></tr><tr><td>diagnosis</td><td>error interpretation, related file inspection</td></tr><tr><td>action</td><td>edit/write/bash mutation</td></tr><tr><td>verification</td><td>test/build/lint/diff inspection</td></tr><tr><td>repair</td><td>failure followed by corrective action</td></tr><tr><td>drift/stall</td><td>goal divergence or repeated non-progressive loop</td></tr></tbody></table>
+<section id="context"><h2><span class="num">06</span>ContextArtifact</h2>
+<div class="callout"><strong>Episode/phase removed:</strong> the derived Episode object and its phase enumeration (intake/exploration/diagnosis/action/verification/repair/drift) were removed. Classification belongs on individual events, not on a derived episode; see <a href="implementation-notes.html#episode-removal">implementation-notes</a>. The message view's activity-run fold replaces it without classification.</div>
 <pre><code>{
   "artifact_id": "ctx_01J...",
   "schema_version": "context_artifact.v1",
