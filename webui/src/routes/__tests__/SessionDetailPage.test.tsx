@@ -374,6 +374,40 @@ describe('SessionDetailPage', () => {
     expect(callsOf((u) => /\/events\?limit=/.test(u))).toBe(initialWindowFetches);
   });
 
+  // A `resync` frame (SSE reconnected with a cursor the backend can't backfill
+  // — frequent when the shared broadcast is under load and the connection
+  // drops) must ALSO not wipe the window. The older pages are REST-fetched and
+  // authoritative; only the live tip needs catching up. So resync, like gap,
+  // backfills forward (`?after=`) and never re-runs the initial window fetch.
+  it('a resync catches the tip up with loadNewer, not a window-wiping reload', async () => {
+    MockEventSource.install();
+    const f = setupFetch({
+      detail: env(sessionDetail),
+      graph: env(graph),
+      events: env({
+        events: eventsWithRows.events,
+        prev_cursor: '2026-05-19T10:00:00Z|01J',
+        next_cursor: null,
+      }),
+    });
+    rendered('s1');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+
+    const callsOf = (m: (u: string) => boolean) =>
+      f.mock.calls.filter((c) => m(String(c[0]))).length;
+    const initialWindowFetches = callsOf((u) => /\/events\?limit=/.test(u));
+    expect(initialWindowFetches).toBe(1);
+
+    const es = MockEventSource.latest();
+    expect(es).toBeDefined();
+    act(() => es!.emit('resync', JSON.stringify({ reason: 'cursor invalidated' })));
+
+    await waitFor(() => {
+      expect(callsOf((u) => u.includes('/events') && u.includes('after='))).toBe(1);
+    });
+    expect(callsOf((u) => /\/events\?limit=/.test(u))).toBe(initialWindowFetches);
+  });
+
   // Windowing: older history is paged by the stream's own near-top scroll
   // (the IntersectionObserver sentinel was removed — it auto-loaded the whole
   // session). A genuine gesture that lands near the top fetches the next older
