@@ -33,7 +33,10 @@ export const GIT_SUBCOMMAND_TAGS: Record<string, BashTag> = {
 };
 export const DESTRUCTIVE_FIRST_TOKENS = new Set(['rm', 'mv', 'rmdir']);
 export const CONTROL_TOKENS = new Set(['cd', 'echo', 'sleep', 'for', 'export', 'source', 'set', 'pgrep', 'kill', 'wait', 'true', ':']);
-export const BASH_COMPOUND_MARKERS = ['&&', '||', ';', '|', '>', '>>', '<', '$(', '`'];
+// Command SEQUENCERS — split a compound into independent commands. We split on
+// these only (NOT redirects `>`/`<` or subshells `$(`/backtick, which live
+// inside a single command), then classify by the first meaningful command.
+const COMMAND_SEPARATORS = /(?:&&|\|\||;|&|\|)/;
 
 function ext(path: string): string {
   const base = path.split('/').pop() ?? '';
@@ -44,6 +47,33 @@ function firstToken(cmd: string): string {
   const t = cmd.trim();
   const sp = t.indexOf(' ');
   return (sp > 0 ? t.slice(0, sp) : t).toLowerCase();
+}
+
+/** Split a compound shell command into its sequenced sub-commands. */
+export function segmentCommand(cmd: string): string[] {
+  return cmd.split(COMMAND_SEPARATORS).map((s) => s.trim()).filter(Boolean);
+}
+
+/** The first segment whose first token is NOT a control token (the "work"), or
+ *  null when every segment is control (e.g. `cd x && echo y`). */
+function firstMeaningfulSegment(segments: string[]): string | null {
+  return segments.find((s) => !CONTROL_TOKENS.has(firstToken(s))) ?? null;
+}
+
+/** The command from its first meaningful sub-command onward, for DISPLAY —
+ *  leading control prefixes like `cd /path &&` are dropped so the shown command
+ *  leads with the actual work. Falls back to the trimmed original when every
+ *  sub-command is control (e.g. a bare `cd /tmp`). */
+export function meaningfulCommand(cmd: string): string {
+  let s = cmd.trim();
+  for (let guard = 0; guard < 6; guard++) {
+    const m = s.match(/^(.*?)(?:&&|\|\||;|&|\|)(.*)$/s); // split at the FIRST separator
+    if (!m) break;
+    const head = m[1].trim();
+    if (!head || !CONTROL_TOKENS.has(firstToken(head))) break;
+    s = m[2].trim();
+  }
+  return s || cmd.trim();
 }
 
 export function tagForEvent(e: ObservedEventDto): TagResult {
@@ -58,18 +88,26 @@ export function tagForEvent(e: ObservedEventDto): TagResult {
   if (tool === 'Bash' || tool === 'bash') {
     const cmd = typeof input.command === 'string' ? input.command.trim() : '';
     if (!cmd) return { tag: null, disposition: 'control' };
-    if (BASH_COMPOUND_MARKERS.some((m) => cmd.includes(m))) return { tag: null, disposition: 'ambiguous' };
-    const tok = firstToken(cmd);
-    if (DESTRUCTIVE_FIRST_TOKENS.has(tok)) return { tag: 'destructive', disposition: 'tagged' };
-    if (tok === 'git') {
-      const sub = firstToken(cmd.slice(3).trim());
-      const t = GIT_SUBCOMMAND_TAGS[sub];
-      return t ? { tag: t, disposition: 'tagged' } : { tag: null, disposition: 'unmatched' };
+    // Classify a compound (`cd … && git add … && git status`) by its first
+    // MEANINGFUL sub-command: split on separators, skip control prefixes (cd),
+    // and tag by the first real command (here: `git add` → vcs-write). A
+    // meaningful-but-unknown first command is `unmatched` (panel candidate);
+    // all-control is `control`.
+    for (const seg of segmentCommand(cmd)) {
+      const tok = firstToken(seg);
+      if (!tok) continue;
+      if (DESTRUCTIVE_FIRST_TOKENS.has(tok)) return { tag: 'destructive', disposition: 'tagged' };
+      if (tok === 'git') {
+        const sub = firstToken(seg.slice(3).trim());
+        const t = GIT_SUBCOMMAND_TAGS[sub];
+        return t ? { tag: t, disposition: 'tagged' } : { tag: null, disposition: 'unmatched' };
+      }
+      const t = BASH_FIRST_TOKEN_TAGS[tok];
+      if (t) return { tag: t, disposition: 'tagged' };
+      if (CONTROL_TOKENS.has(tok)) continue; // skip control, look at the next segment
+      return { tag: null, disposition: 'unmatched' }; // first meaningful but unknown
     }
-    const t = BASH_FIRST_TOKEN_TAGS[tok];
-    if (t) return { tag: t, disposition: 'tagged' };
-    if (CONTROL_TOKENS.has(tok)) return { tag: null, disposition: 'control' };
-    return { tag: null, disposition: 'unmatched' };
+    return { tag: null, disposition: 'control' }; // every segment was control
   }
   // every other tool: tool name is the label → no chip
   return { tag: null, disposition: 'control' };
@@ -82,8 +120,11 @@ export function collectUntagged(events: ObservedEventDto[]): UntaggedRow[] {
   for (const e of events) {
     if (tagForEvent(e).disposition !== 'unmatched') continue;
     const input = ((e.payload as Record<string, unknown>)?.input ?? {}) as Record<string, unknown>;
-    const cmd = typeof input.command === 'string' ? input.command.trim() : (typeof input.file_path === 'string' ? input.file_path : '');
-    const tok = firstToken(cmd);
+    const isCmd = typeof input.command === 'string';
+    const cmd = isCmd ? (input.command as string).trim() : (typeof input.file_path === 'string' ? input.file_path : '');
+    // Aggregate a compound under its first MEANINGFUL token (e.g. `gh`), not a
+    // `cd` prefix — so the panel hint points at the command worth tagging.
+    const tok = firstToken(isCmd ? (firstMeaningfulSegment(segmentCommand(cmd)) ?? cmd) : cmd);
     const cur = byToken.get(tok);
     if (cur) cur.count++;
     else byToken.set(tok, { count: 1, sample: cmd.slice(0, 80) });
