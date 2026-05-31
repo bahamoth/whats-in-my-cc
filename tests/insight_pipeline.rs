@@ -7,11 +7,9 @@
 //! intentional: the pipeline tests verify finding generation, not ingest FK
 //! integrity (which is covered by ingest_store.rs).
 
-use chrono::Utc;
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::{migrate, repo_diff_hunk, repo_episode};
+use witmcc::db::{migrate, repo_diff_hunk};
 use witmcc::db::repo_diff_hunk::NewDiffHunk;
-use witmcc::db::repo_episode::EpisodeRow;
 
 async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -60,7 +58,9 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
         (2, "tool", "tool_result"),
     ] {
         let payload = if kind == "tool_result" {
-            r#"{"tool_use_id":"tid_0","is_error":true,"content":"FAILED"}"#.to_string()
+            // Nested shape matching the real-fixture structure the tool_failure
+            // extractor reads via pointer("/tool_result/is_error").
+            r#"{"tool_result":{"tool_use_id":"tid_0","is_error":true,"content":"FAILED"}}"#.to_string()
         } else if kind == "tool_call" {
             r#"{"tool_use_id":"tid_0","name":"Bash","input":{"command":"cargo test"}}"#.to_string()
         } else {
@@ -110,7 +110,7 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
         let _ = q;
     }
 
-    // diff_hunk inside action episode range (ev_001).
+    // diff_hunk introduced by the tool_call event (ev_001).
     repo_diff_hunk::insert(&pool, &NewDiffHunk {
         diff_hunk_id: "dh_001".into(),
         schema_version: "diff_hunk.v1".into(),
@@ -126,27 +126,6 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
         lines_removed: 0,
         user_modified: false,
     }).await.unwrap();
-
-    // Episodes: intake (ev_000), then action (ev_001..ev_002), no verification.
-    let mk_ep = |eid: &str, phase: &str, start: &str, end: &str, started: &str, ended: &str| EpisodeRow {
-        episode_id: eid.into(),
-        schema_version: "episode.v1".into(),
-        session_id: sess.into(),
-        phase: phase.into(),
-        start_event_id: start.into(),
-        end_event_id: end.into(),
-        started_at: started.into(),
-        ended_at: ended.into(),
-        evidence_node_ids: "[]".into(),
-        classification_basis: "[]".into(),
-        confidence: 0.9,
-        summary: None,
-        classifier_version: "episode_classifier@v1".into(),
-        created_at: Utc::now().to_rfc3339(),
-    };
-
-    repo_episode::insert(&pool, &mk_ep("ep_001", "intake", "ev_000", "ev_000", &ts(0), &ts(0))).await.unwrap();
-    repo_episode::insert(&pool, &mk_ep("ep_002", "action", "ev_001", "ev_002", &ts(1), &ts(2))).await.unwrap();
 
     pool
 }

@@ -1,6 +1,5 @@
 pub mod repo_audit;
 pub mod repo_diff_hunk;
-pub mod repo_episode;
 pub mod repo_finding;
 pub mod repo_findings_pending;
 pub mod repo_graph;

@@ -1,6 +1,7 @@
-//! Locks that the extractor registry contains exactly the 5 MVP categories
+//! Locks that the extractor registry contains exactly the 4 MVP categories
 //! in the defined order. Adding/removing categories without updating this
 //! invariant fails the test (per architecture spec §4).
+//! (missing_verification was removed with the episode/phase system.)
 
 #[test]
 fn registry_contains_all_mvp_categories_in_locked_order() {
@@ -9,7 +10,6 @@ fn registry_contains_all_mvp_categories_in_locked_order() {
         .map(|e| e.category())
         .collect();
     let expected = vec![
-        "missing_verification",
         "tool_failure",
         "risky_action",
         "context_bloat",
@@ -21,13 +21,11 @@ fn registry_contains_all_mvp_categories_in_locked_order() {
 #[test]
 fn registry_floor_values() {
     let exts = witmcc::insight::registry::all_extractors();
-    let mv = exts.iter().find(|e| e.category() == "missing_verification").unwrap();
     let tf = exts.iter().find(|e| e.category() == "tool_failure").unwrap();
     let ra = exts.iter().find(|e| e.category() == "risky_action").unwrap();
     let cb = exts.iter().find(|e| e.category() == "context_bloat").unwrap();
     let fsm = exts.iter().find(|e| e.category() == "final_state_mismatch").unwrap();
     // Architecture spec §3 confidence policy
-    assert!((mv.floor() - 0.9).abs() < f32::EPSILON, "mv floor must be 0.9, got {}", mv.floor());
     assert!((tf.floor() - 1.0).abs() < f32::EPSILON, "tf floor must be 1.0, got {}", tf.floor());
     assert!((ra.floor() - 0.7).abs() < f32::EPSILON, "ra floor must be 0.7, got {}", ra.floor());
     assert!((cb.floor() - 0.5).abs() < f32::EPSILON, "cb floor must be 0.5, got {}", cb.floor());

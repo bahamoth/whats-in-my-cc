@@ -1,6 +1,5 @@
 //! Extractor implementations, one module per category.
-//! Slice-14: two L1 deterministic extractors:
-//!   - `missing_verification`: action episode with no following verification.
+//! Slice-14: `tool_failure` L1 deterministic extractor:
 //!   - `tool_failure`: is_error=true with no compensating retry within 5 events.
 //!
 //! Slice-15: `noop_test` extractor added under `cfg(test)` — exercises the full
@@ -14,7 +13,6 @@
 
 pub mod context_bloat;
 pub mod final_state_mismatch;
-pub mod missing_verification;
 pub mod risky_action;
 pub mod tool_failure;
 

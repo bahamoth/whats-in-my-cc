@@ -3,14 +3,12 @@ use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 
 use crate::db::repo_diff_hunk::DiffHunkRow;
-use crate::db::repo_episode;
 use crate::db::repo_verification_run::VerificationRunRow;
 use crate::db::{repo_diff_hunk, repo_graph, repo_observed, repo_verification_run};
 use crate::error::Result;
 use crate::ids::{derive_edge_id, derive_node_id};
 use crate::ingest::otel_metrics::flatten_attrs;
 use crate::insight::edge_inference::{all_rules, SessionGraphView};
-use crate::insight::episode::classifier::classify_session;
 use crate::insight::pipeline::run_extractors;
 use crate::model::graph::{GraphEdge, GraphNode};
 use crate::model::meta::SCHEMA_VERSION;
@@ -21,15 +19,6 @@ use crate::model::observed::{EventKind, ObservedEvent};
 /// transaction holds DELETE + INSERT. Concurrent SELECTs against
 /// `graph_node` either see the pre-rebuild rows or the post-rebuild rows,
 /// never the empty mid-rebuild state. Fixes DEV-S8-12.
-///
-/// Slice-12 — also classifies episodes and persists them. Slice 3 B2: on a
-/// successful classification the session's existing episodes are DELETED
-/// before the fresh set is inserted (content-hashed ids mean a growing live
-/// session's trailing episode would otherwise accumulate stale rows under
-/// `INSERT OR REPLACE`). The episode classifier is wrapped in catch_unwind per
-/// spec §8: a classifier panic logs a warning and leaves existing episode rows
-/// unchanged — the delete lives inside the Ok arm so a panic never wipes
-/// episodes without a replacement set (does NOT abort the graph rebuild).
 ///
 /// Slice-14 — also runs the L1 insight extractor pipeline and persists
 /// finding rows. Runs in its own transaction AFTER the graph commit
@@ -46,75 +35,6 @@ pub async fn rebuild_session(pool: &SqlitePool, session_id: &str) -> Result<(usi
     repo_graph::delete_session_in_tx(&mut tx, session_id).await?;
     repo_graph::insert_nodes_edges_in_tx(&mut tx, &nodes, &edges).await?;
     tx.commit().await?;
-
-    // Slice-12 — episode classification (side-table, not graph nodes per DEV-S12-01).
-    // Wrapped in catch_unwind so a classifier bug never aborts a graph rebuild.
-    let evs_clone = evs.clone();
-    let runs_clone = runs.clone();
-    let sid = session_id.to_string();
-    let episodes_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        classify_session(&sid, &evs_clone, &runs_clone)
-    }));
-    match episodes_result {
-        Ok(episodes) => {
-            // Slice 3 B2 — delete the session's existing episodes before
-            // inserting the fresh set. Episode ids are content-hashed over
-            // (session_id, phase, start_event_id, end_event_id); as a live
-            // session grows the trailing episode's end_event_id shifts → a new
-            // id, so `insert`'s INSERT OR REPLACE would ADD a row rather than
-            // replace the old trailing episode, accumulating stale rows.
-            //
-            // Ordering / panic-safety: the delete lives INSIDE the Ok arm,
-            // BEFORE the insert loop — never in the catch_unwind Err arm. A
-            // classifier panic must NOT wipe episodes without a replacement
-            // set, so on panic the existing rows are left intact (Err arm
-            // below). The delete runs unconditionally for a successful
-            // classification even when `episodes` is empty, so a session that
-            // legitimately drops to zero episodes does not retain stale rows.
-            if let Err(err) = repo_episode::delete_session(pool, session_id).await {
-                tracing::warn!(
-                    session_id = session_id,
-                    err = %err,
-                    "episode delete_session failed before insert; \
-                     stale rows may remain for this rebuild"
-                );
-            }
-            for ep in &episodes {
-                let row = repo_episode::EpisodeRow {
-                    episode_id: ep.episode_id.clone(),
-                    schema_version: ep.schema_version.clone(),
-                    session_id: ep.session_id.clone(),
-                    phase: format!("{:?}", ep.phase).to_lowercase(),
-                    start_event_id: ep.start_event_id.clone(),
-                    end_event_id: ep.end_event_id.clone(),
-                    started_at: ep.started_at.to_rfc3339(),
-                    ended_at: ep.ended_at.to_rfc3339(),
-                    evidence_node_ids: serde_json::to_string(&ep.evidence_node_ids)
-                        .unwrap_or_else(|_| "[]".into()),
-                    classification_basis: serde_json::to_string(&ep.classification_basis)
-                        .unwrap_or_else(|_| "[]".into()),
-                    confidence: ep.confidence as f64,
-                    summary: ep.summary.clone(),
-                    classifier_version: ep.classifier_version.clone(),
-                    created_at: chrono::Utc::now().to_rfc3339(),
-                };
-                if let Err(err) = repo_episode::insert(pool, &row).await {
-                    tracing::warn!(
-                        session_id = session_id,
-                        episode_id = %row.episode_id,
-                        err = %err,
-                        "episode insert failed; continuing"
-                    );
-                }
-            }
-        }
-        Err(_) => {
-            tracing::warn!(
-                session_id = session_id,
-                "episode classifier panicked; episode rows not updated for this rebuild"
-            );
-        }
-    }
 
     // Slice-14 — insight extractor pipeline (DEV-S14-06: separate transaction,
     // runs after graph commit so extractors read the fresh graph).

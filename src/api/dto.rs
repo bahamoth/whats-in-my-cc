@@ -181,37 +181,6 @@ pub struct RawEventResponse {
     pub telemetry: Option<serde_json::Value>,
 }
 
-/// Slice-12 — single episode in the Pull API response.
-/// `evidence_node_ids` and `classification_basis` are parsed from JSON columns
-/// before serialisation so callers receive typed arrays.
-#[derive(Serialize)]
-pub struct EpisodeDto {
-    pub episode_id: String,
-    pub schema_version: String,
-    pub session_id: String,
-    pub phase: String,
-    pub start_event_id: String,
-    pub end_event_id: String,
-    pub started_at: String,
-    pub ended_at: String,
-    pub evidence_node_ids: Vec<serde_json::Value>,
-    pub classification_basis: Vec<serde_json::Value>,
-    pub confidence: f64,
-    pub summary: Option<String>,
-    pub classifier_version: String,
-    pub created_at: String,
-}
-
-#[derive(Serialize)]
-pub struct EpisodesResponse {
-    pub data: Vec<EpisodeDto>,
-}
-
-#[derive(Serialize)]
-pub struct EpisodeDetailResponse {
-    pub data: EpisodeDto,
-}
-
 /// Slice-14 — a single Finding in the Pull API response.
 /// `evidence_refs` and `evidence_projection` and `provenance` are parsed from
 /// JSON columns before serialisation so callers receive typed values.
