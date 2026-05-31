@@ -19,16 +19,39 @@ export function formatModel(raw: unknown): string {
   return `${fam} ${m[2]}.${m[3]}`;
 }
 
+// A short "what this tool call did" summary from its input. Beyond the obvious
+// single-value keys (command / file_path / …), it handles action-style tools
+// (browser/computer: `action` + coordinate/text/url) and falls back to the
+// first scalar field so MCP and unknown tools still show *something* instead of
+// a bare tool name. The view truncates with ellipsis, so no length cap here.
 function toolArg(input: unknown): string {
   const i = asObj(input);
-  for (const k of ['command', 'file_path', 'pattern', 'skill', 'path', 'query', 'url']) {
-    if (typeof i[k] === 'string') {
-      const val = i[k] as string;
-      if (k === 'file_path' || k === 'path') {
-        return val.split('/').pop() ?? val;
-      }
-      return val;
+
+  // action-style tools (e.g. mcp__claude-in-chrome__computer): "action (x, y)"
+  // / 'action "text"' / "action url".
+  if (typeof i.action === 'string') {
+    const a = i.action;
+    if (Array.isArray(i.coordinate)) return `${a} (${i.coordinate.join(', ')})`;
+    if (typeof i.text === 'string' && i.text) return `${a} "${i.text}"`;
+    if (typeof i.url === 'string' && i.url) return `${a} ${i.url}`;
+    return a;
+  }
+
+  // common single-value argument keys, in priority order.
+  for (const k of [
+    'command', 'file_path', 'pattern', 'query', 'url', 'path', 'skill',
+    'description', 'prompt', 'subagent_type', 'name',
+  ]) {
+    const val = i[k];
+    if (typeof val === 'string' && val) {
+      return k === 'file_path' || k === 'path' ? (val.split('/').pop() ?? val) : val;
     }
+  }
+
+  // fallback: the first scalar string field, labelled, so unknown/MCP tools
+  // still convey what they operated on.
+  for (const [k, v] of Object.entries(i)) {
+    if (typeof v === 'string' && v) return `${k}: ${v}`;
   }
   return '';
 }

@@ -24,6 +24,25 @@ describe('nodeLabel', () => {
     expect(L('tool_call', { tool_name: 'Skill', input: { skill: 'corp-pptx-style' } }))
       .toEqual({ kind: 'tool', primary: 'Skill', secondary: 'corp-pptx-style' });
   });
+  it('tool_call: action-style (browser/computer) tools show what they did', () => {
+    // mcp computer: action + coordinate → "what work was done"
+    expect(L('tool_call', { tool_name: 'mcp__claude-in-chrome__computer', input: { action: 'left_click', coordinate: [638, 220], tabId: 1 } }).secondary)
+      .toBe('left_click (638, 220)');
+    // action + text
+    expect(L('tool_call', { tool_name: 'mcp__claude-in-chrome__computer', input: { action: 'type', text: 'hello' } }).secondary)
+      .toBe('type "hello"');
+    // navigate: url
+    expect(L('tool_call', { tool_name: 'mcp__claude-in-chrome__navigate', input: { url: 'http://localhost:5173', tabId: 1 } }).secondary)
+      .toBe('http://localhost:5173');
+  });
+  it('tool_call: Task shows its description; unknown shapes fall back to first field', () => {
+    expect(L('tool_call', { tool_name: 'Task', input: { description: 'find flaky tests', subagent_type: 'general-purpose' } }).secondary)
+      .toBe('find flaky tests');
+    // no known key → labelled first string value, so something always shows
+    expect(L('tool_call', { tool_name: 'mcp__x__y', input: { foo: 'bar', n: 3 } }).secondary)
+      .toBe('foo: bar');
+    expect(L('tool_call', { tool_name: 'Weird', input: {} }).secondary).toBe('');
+  });
   it('assistant_message: model + message head', () => {
     expect(L('assistant_message', { model: 'claude-opus-4-8', text: 'NC 브랜드 스타일로 다시 만들겠습니다.' }))
       .toEqual({ kind: 'assistant', primary: 'Opus 4.8', secondary: 'NC 브랜드 스타일로 다시 만들겠습니다.' });
