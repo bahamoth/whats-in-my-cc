@@ -336,6 +336,44 @@ describe('SessionDetailPage', () => {
     expect(callsOf((u) => u.includes('/events'))).toBe(eventsAtMount + 1);
   });
 
+  // A `gap` frame (SSE broadcast lagged — the channel is shared across all
+  // sessions, so it lags whenever ANY session is busy) must NOT wipe the
+  // windowed buffer. Reloading on gap discarded every older page the reader had
+  // scrolled back to load and snapped the view to the newest event. Instead it
+  // catches the live tip up with a forward backfill (`?after=`); the initial
+  // window fetch (`?limit=`) is NOT repeated (no reload).
+  it('a gap catches the tip up with loadNewer, not a window-wiping reload', async () => {
+    MockEventSource.install();
+    const f = setupFetch({
+      detail: env(sessionDetail),
+      graph: env(graph),
+      events: env({
+        events: eventsWithRows.events, // non-empty → loadNewer has a tail cursor
+        prev_cursor: '2026-05-19T10:00:00Z|01J',
+        next_cursor: null,
+      }),
+    });
+    rendered('s1');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+
+    const callsOf = (m: (u: string) => boolean) =>
+      f.mock.calls.filter((c) => m(String(c[0]))).length;
+    const initialWindowFetches = callsOf((u) => /\/events\?limit=/.test(u));
+    expect(initialWindowFetches).toBe(1);
+
+    // A gap frame arrives on the shared SSE stream.
+    const es = MockEventSource.latest();
+    expect(es).toBeDefined();
+    act(() => es!.emit('gap', JSON.stringify({ dropped: 7 })));
+
+    // It backfills the tip forward (?after=) ...
+    await waitFor(() => {
+      expect(callsOf((u) => u.includes('/events') && u.includes('after='))).toBe(1);
+    });
+    // ... and never re-runs the initial window fetch (i.e. never reloads/wipes).
+    expect(callsOf((u) => /\/events\?limit=/.test(u))).toBe(initialWindowFetches);
+  });
+
   // Windowing: older history is paged by the stream's own near-top scroll
   // (the IntersectionObserver sentinel was removed — it auto-loaded the whole
   // session). A genuine gesture that lands near the top fetches the next older

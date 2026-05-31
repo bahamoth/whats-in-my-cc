@@ -14,10 +14,47 @@
   height: calc(100vh - 56px);
 }
 .kpi { grid-area: kpi; }
-/* min-height:0 is required for grid children to allow their own overflow. */
-.stream { grid-area: stream; min-height: 0; overflow: auto; }
+/* min-height:0 is required for grid children to allow their own overflow.
+   position:relative anchors the loadOlder status pill (below). */
+.stream { grid-area: stream; min-height: 0; overflow: auto; position: relative; }
 .detail { grid-area: detail; min-height: 0; overflow: auto; }
 .placeholder { color: var(--witmcc-fg-subtle, #6a7180); }
+
+/* loadOlder feedback — floats over the top of the stream so it does not shift
+   the virtualized content or its scroll position. */
+.loadingOlder,
+.historyStart {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--witmcc-border-strong, #2a3040);
+  background: var(--witmcc-surface-2, #161a23);
+  color: var(--witmcc-fg-muted, #aab0bd);
+  font-size: 12px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--witmcc-border-strong, #2a3040);
+  border-top-color: var(--witmcc-accent, #4f8cff);
+  border-radius: 50%;
+  animation: witmcc-spin 0.7s linear infinite;
+}
+@keyframes witmcc-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
 
 @media (max-width: 860px) {
   .grid {
