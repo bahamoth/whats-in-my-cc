@@ -674,26 +674,42 @@ pub fn compute(
         }
     }
 
-    // 3e. facet_of (도구) — log_record facet → tool_call 엔티티. 신뢰 키 tool_use_id.
-    //     log_record는 tool_use_id 컬럼이 비어 payload.attributes.tool_use_id에서 추출.
+    // --- Group A telemetry fold (Slice 1) ---------------------------------------
+    // tool_result/tool_decision log_record events are folded INTO their owning
+    // tool_call node's payload.facets array (keyed by tool_use_id) rather than
+    // promoted to standalone nodes linked by a display-only facet_of edge.
+    // The collect pass below gathers facet entries + the node_ids to drop; the
+    // apply + retain pass runs just before the function returns (after all edge
+    // wiring) so folded node_ids are excluded from both nodes and edges.
+    let mut folded_node_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut facets_by_owner: HashMap<String, Vec<Value>> = HashMap::new();
+
     for n in &nodes {
-        if n.node_kind != "log_record" {
-            continue;
+        if n.node_kind == "log_record" {
+            let ename = n.payload.get("event_name").and_then(|v| v.as_str());
+            let facet_kind = match ename {
+                Some("tool_result") => Some("tool_result_log"),
+                Some("tool_decision") => Some("tool_decision_log"),
+                _ => None,
+            };
+            if let Some(fk) = facet_kind {
+                if let Some(tid) = n
+                    .payload
+                    .pointer("/attributes/tool_use_id")
+                    .and_then(|v| v.as_str())
+                {
+                    if let Some(owner) = tool_call_nid_by_tid.get(tid) {
+                        facets_by_owner.entry(owner.clone()).or_default().push(json!({
+                            "facet_kind": fk,
+                            "basis": "tool_use_id",
+                            "source_event_id": n.source_event_ids.first().cloned().unwrap_or_default(),
+                            "data": n.payload.clone(),
+                        }));
+                        folded_node_ids.insert(n.node_id.clone());
+                    }
+                }
+            }
         }
-        let Some(tid) = n.payload
-            .pointer("/attributes/tool_use_id")
-            .and_then(|v| v.as_str()) else { continue; };
-        let Some(call_nid) = tool_call_nid_by_tid.get(tid) else { continue; };
-        if !valid_nodes.contains(call_nid.as_str()) || !valid_nodes.contains(n.node_id.as_str()) {
-            continue;
-        }
-        edges.push(make_edge(
-            session_id,
-            &n.node_id,
-            call_nid,
-            "facet_of",
-            json!({"basis": "tool_use_id"}),
-        ));
     }
 
     // 3e(cont). facet_of (응답) — llm_request otel_span → assistant_message. 신뢰 키 request_id.
@@ -837,6 +853,22 @@ pub fn compute(
 
     // Re-sort so inferred edges are interleaved with deterministic edges by edge_id.
     edges.sort_by(|a, b| a.edge_id.cmp(&b.edge_id));
+
+    // --- Group A telemetry fold (Slice 1) — apply + exclude -----------------
+    // Attach collected facet arrays onto each owner node's payload, then drop
+    // the now-folded standalone log_record nodes and any edges touching them.
+    for n in nodes.iter_mut() {
+        if let Some(fs) = facets_by_owner.get(&n.node_id) {
+            if let Value::Object(map) = &mut n.payload {
+                map.insert("facets".to_string(), Value::Array(fs.clone()));
+            }
+        }
+    }
+    nodes.retain(|n| !folded_node_ids.contains(&n.node_id));
+    edges.retain(|e| {
+        !folded_node_ids.contains(&e.from_node_id) && !folded_node_ids.contains(&e.to_node_id)
+    });
+
     (nodes, edges)
 }
 

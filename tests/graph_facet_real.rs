@@ -42,18 +42,34 @@ fn real_payloads_produce_facet_of_with_valid_entity_targets() {
         nodes.iter().map(|n| (n.node_id.as_str(), n.node_kind.as_str())).collect();
     let facets: Vec<_> = edges.iter().filter(|e| e.edge_kind == "facet_of").collect();
 
-    // 2 logs → tool_call, 1 span → assistant_message
-    assert_eq!(facets.len(), 3, "expected 3 facet_of edges from real payloads, got {}", facets.len());
+    // Slice 1 (Group A): the 2 tool logs (tool_result + tool_decision) now fold
+    // INTO the tool_call node's payload.facets keyed by tool_use_id; only the
+    // span → assistant_message facet_of edge (request_id basis) remains.
+    assert_eq!(facets.len(), 1, "expected 1 surviving span facet_of edge, got {}", facets.len());
     for f in &facets {
         let to_kind = kind_by_id.get(f.to_node_id.as_str()).copied().unwrap_or("");
-        assert!(
-            matches!(to_kind, "tool_call" | "assistant_message"),
-            "facet_of target must be an entity node, got kind={to_kind}"
-        );
+        assert_eq!(to_kind, "assistant_message", "surviving facet_of target is assistant_message");
     }
-    // basis values present and correct
     let bases: std::collections::HashSet<_> = facets.iter()
         .filter_map(|f| f.attributes.get("basis").and_then(|v| v.as_str())).collect();
-    assert!(bases.contains("tool_use_id"), "tool_use_id basis present");
     assert!(bases.contains("request_id"), "request_id basis present");
+
+    // The two tool logs are folded into the tool_call payload, not left as nodes.
+    let call = nodes.iter().find(|n| n.node_kind == "tool_call").expect("tool_call node");
+    let payload_facets = call
+        .payload
+        .get("facets")
+        .and_then(|f| f.as_array())
+        .expect("tool_call has payload.facets");
+    assert_eq!(payload_facets.len(), 2, "both real tool logs folded");
+    let fkinds: std::collections::HashSet<_> = payload_facets
+        .iter()
+        .filter_map(|f| f.get("facet_kind").and_then(|v| v.as_str()))
+        .collect();
+    assert!(fkinds.contains("tool_result_log"), "tool_result_log folded");
+    assert!(fkinds.contains("tool_decision_log"), "tool_decision_log folded");
+    assert!(
+        !nodes.iter().any(|n| n.node_kind == "log_record"),
+        "folded tool logs must not remain as standalone nodes"
+    );
 }
