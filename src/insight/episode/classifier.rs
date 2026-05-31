@@ -66,6 +66,91 @@ fn is_mutation_tool(tool: &str) -> bool {
     MUTATION_TOOLS.contains(&tool)
 }
 
+/// First-token allowlist of read-only-by-default shell commands (matches the
+/// design spec §B1 line 22). `sed`/`awk` are deliberately excluded: they
+/// commonly mutate via `-i`, and per the conservative-default they err toward
+/// Action. `find`/`sort` stay here but are forced to mutation by the
+/// `-delete` / ` -o ` markers when they actually write.
+const BASH_READ_ONLY_FIRST_TOKENS: &[&str] = &[
+    "grep", "rg", "egrep", "fgrep", "ls", "cat", "find", "head", "tail", "wc",
+    "which", "pwd", "echo", "env", "file", "stat", "du", "df", "tree", "sort",
+    "uniq",
+];
+
+/// Read-only `git` subcommands (used only when the first token is `git`).
+const GIT_READ_ONLY_SUBCOMMANDS: &[&str] = &[
+    "status", "log", "diff", "show", "branch", "blame", "rev-parse", "describe",
+];
+
+/// Substrings whose presence forces a Bash command to be treated as mutating,
+/// even if its first token is on the read-only allowlist. Covers output
+/// redirection, compound/sequenced commands (ambiguous → mutation), explicit
+/// mutating utilities, package/build tooling, and write flags on otherwise
+/// read-only utilities (`find -delete`, `sort -o`, in-place `-i`). Note that
+/// ` -o ` also catches `find ... -o ...` (logical OR) — over-classifying a
+/// read-only find as Action is the safe direction (conservative default).
+const BASH_MUTATING_MARKERS: &[&str] = &[
+    ">", ">>", "rm ", "mv ", "cp ", "mkdir", "touch", "tee", "&&", ";", "||",
+    "-delete", " -o ", "-i ", "-i'",
+    "git commit", "git push", "git add", "git reset", "git checkout", "git rm",
+    "npm", "pnpm", "yarn", "cargo build", "cargo run", "cargo test",
+];
+
+/// Heuristic: decide whether a `Bash` command is *unambiguously* read-only.
+///
+/// HEURISTIC — documented in the Slice 3 design spec
+/// `docs/superpowers/specs/2026-05-31-episode-redesign-slice3-design.md`
+/// §B1/§D2 (autonomous decision flag #2). Shell parsing is inherently
+/// incomplete (pipes, subshells, variable expansion, aliases, novel write
+/// flags), so the rule **errs toward mutation**: it returns `true` only for a
+/// narrow, recognized read-only shape and `false` for everything else,
+/// including commands it cannot confidently parse. This is a best-effort
+/// denylist, NOT a soundness guarantee — a sufficiently exotic mutating
+/// command with a read-only first token and no recognized marker could slip
+/// through; the marker set below is widened as such cases surface (e.g. the
+/// review that added `-delete` / ` -o ` / `-i`).
+///
+/// A command is classified read-only iff:
+///   1. its first token is on [`BASH_READ_ONLY_FIRST_TOKENS`], OR it is
+///      `git <read-only-subcommand>` per [`GIT_READ_ONLY_SUBCOMMANDS`], AND
+///   2. it contains none of [`BASH_MUTATING_MARKERS`] (redirection, compound
+///      operators, mutating utilities, package/build tools, write flags).
+///
+/// Anything else → `false` (treated as mutation).
+///
+/// Note: VerificationRun handling (Bash-on-verify-allowlist → Verification) is
+/// orthogonal and happens before this is consulted; `cargo test` etc. are in
+/// the mutating-marker denylist here so they are never mislabeled read-only.
+fn bash_is_read_only(command: &str) -> bool {
+    let cmd = command.trim();
+    if cmd.is_empty() {
+        return false;
+    }
+    // Any mutating marker anywhere → not read-only.
+    if BASH_MUTATING_MARKERS.iter().any(|m| cmd.contains(m)) {
+        return false;
+    }
+    let mut tokens = cmd.split_whitespace();
+    let first = match tokens.next() {
+        Some(t) => t,
+        None => return false,
+    };
+    if first == "git" {
+        return tokens
+            .next()
+            .map(|sub| GIT_READ_ONLY_SUBCOMMANDS.contains(&sub))
+            .unwrap_or(false);
+    }
+    BASH_READ_ONLY_FIRST_TOKENS.contains(&first)
+}
+
+/// Extract the Bash command string from a tool_call payload. The ingest mapping
+/// builds tool_call payloads as `{"tool_name":..,"input":{"command":..}}`, so
+/// the command lives at `/input/command`.
+fn bash_command(ev: &ObservedEvent) -> Option<&str> {
+    ev.payload.pointer("/input/command").and_then(|v| v.as_str())
+}
+
 /// Returns true if the event's payload carries `is_error == true`.
 fn is_error_result(ev: &ObservedEvent) -> bool {
     ev.payload
@@ -283,14 +368,22 @@ fn classify_event_phase(
     // 3. ToolCall with a mutating tool.
     if ev.kind == EventKind::ToolCall {
         if let Some(tool) = ev.tool_name.as_deref() {
-            if is_mutation_tool(tool) {
+            // Bash is in MUTATION_TOOLS by default, but a command that is
+            // unambiguously read-only (Slice 3 B1 heuristic) should follow the
+            // read-only path instead of being mislabeled Action/Repair. The
+            // conservative default (ambiguous → mutation) is enforced by
+            // `bash_is_read_only` returning false when unsure.
+            let bash_read_only =
+                tool == "Bash" && bash_command(ev).map(bash_is_read_only).unwrap_or(false);
+
+            if is_mutation_tool(tool) && !bash_read_only {
                 // Repair if we had a recent failure or failed verification.
                 if st.had_failure {
                     return Phase::Repair;
                 }
                 return Phase::Action;
             }
-            if is_read_only_tool(tool) {
+            if is_read_only_tool(tool) || bash_read_only {
                 // Check if there's a mutation ahead in the lookahead window;
                 // if so, don't classify as exploration yet — stay in current
                 // phase for now (the boundary fires at the mutation event).
@@ -355,6 +448,18 @@ mod tests {
         }
     }
 
+    /// Bash tool_call event with the given command at the canonical payload
+    /// path `/input/command` (matches `ingest::mapping`, which builds
+    /// `{"tool_name":..,"input":{"command":..}}`).
+    fn bash_call(i: usize, command: &str) -> ObservedEvent {
+        let mut e = ev(i, Actor::Assistant, EventKind::ToolCall, Some("Bash"));
+        e.payload = serde_json::json!({
+            "tool_name": "Bash",
+            "input": { "command": command }
+        });
+        e
+    }
+
     #[test]
     fn empty_yields_zero() {
         assert!(classify_session("s", &[], &[]).is_empty());
@@ -366,5 +471,106 @@ mod tests {
         let eps = classify_session("s", &evs, &[]);
         assert_eq!(eps.len(), 1);
         assert_eq!(eps[0].phase, Phase::Intake);
+    }
+
+    // --- Slice 3 B1: read-only Bash classification ---------------------------
+
+    /// The phase that the tool_call at index 1 (after an Intake user_message at
+    /// index 0) gets classified into.
+    fn phase_of_call(call: ObservedEvent) -> Phase {
+        let evs = vec![ev(0, Actor::User, EventKind::UserMessage, None), call];
+        let eps = classify_session("s", &evs, &[]);
+        // Last episode covers the tool_call (Intake is emitted first).
+        eps.last().unwrap().phase
+    }
+
+    #[test]
+    fn read_only_bash_grep_is_exploration_not_action() {
+        // `grep -n foo src/` is unambiguously read-only → Exploration, not Action.
+        assert_eq!(phase_of_call(bash_call(1, "grep -n foo src/")), Phase::Exploration);
+    }
+
+    #[test]
+    fn mutating_bash_rm_is_action() {
+        assert_eq!(phase_of_call(bash_call(1, "rm -rf build")), Phase::Action);
+    }
+
+    #[test]
+    fn compound_bash_is_action_conservative() {
+        // Compound command (`&&`) is ambiguous → conservative mutation default.
+        assert_eq!(phase_of_call(bash_call(1, "cat x && rm y")), Phase::Action);
+    }
+
+    #[test]
+    fn git_status_bash_is_read_only() {
+        assert_eq!(phase_of_call(bash_call(1, "git status")), Phase::Exploration);
+    }
+
+    #[test]
+    fn git_commit_bash_is_action() {
+        assert_eq!(phase_of_call(bash_call(1, "git commit -m x")), Phase::Action);
+    }
+
+    #[test]
+    fn non_bash_tools_unchanged() {
+        // Edit is mutation → Action; Read is read-only → Exploration. The Bash
+        // command inspection must not alter behaviour for non-Bash tools.
+        assert_eq!(
+            phase_of_call(ev(1, Actor::Assistant, EventKind::ToolCall, Some("Edit"))),
+            Phase::Action
+        );
+        assert_eq!(
+            phase_of_call(ev(1, Actor::Assistant, EventKind::ToolCall, Some("Read"))),
+            Phase::Exploration
+        );
+    }
+
+    #[test]
+    fn read_only_bash_after_error_is_diagnosis() {
+        // Read-only Bash should follow the read-only path, which routes to
+        // Diagnosis when there is a recent error (same as Read/Grep).
+        let evs = vec![
+            ev(0, Actor::User, EventKind::UserMessage, None),
+            ev(1, Actor::Assistant, EventKind::ToolCall, Some("Edit")),
+            {
+                let mut e = ev(2, Actor::Tool, EventKind::ToolResult, Some("Edit"));
+                e.payload = serde_json::json!({"is_error": true});
+                e
+            },
+            bash_call(3, "grep -n boom src/"),
+        ];
+        let eps = classify_session("s", &evs, &[]);
+        assert!(
+            eps.iter().any(|e| e.phase == Phase::Diagnosis),
+            "expected diagnosis for read-only Bash after error; got {:?}",
+            eps.iter().map(|e| e.phase).collect::<Vec<_>>()
+        );
+    }
+
+    /// Conservative-invariant table: commands that mutate (even with a
+    /// read-only first token) MUST classify as Action; clearly read-only
+    /// commands stay Exploration. Locks the review finding (sed -i / find
+    /// -delete / sort -o were false-positive read-only).
+    #[test]
+    fn bash_conservative_invariant_table() {
+        let cases: &[(&str, Phase)] = &[
+            // Mutating despite read-only-looking first token → Action.
+            ("sed -i 's/a/b/' f", Phase::Action),
+            ("find . -name x -delete", Phase::Action),
+            ("sort f -o f", Phase::Action),
+            // Clearly read-only → Exploration.
+            ("grep -n foo src/", Phase::Exploration),
+            ("ls", Phase::Exploration),
+            ("cat f", Phase::Exploration),
+            ("git status", Phase::Exploration),
+            ("find . -name x", Phase::Exploration),
+        ];
+        for (cmd, want) in cases {
+            assert_eq!(
+                phase_of_call(bash_call(1, cmd)),
+                *want,
+                "command {cmd:?} expected {want:?}"
+            );
+        }
     }
 }

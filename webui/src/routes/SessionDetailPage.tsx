@@ -32,6 +32,7 @@ import {
   parseLlmRequestSpan,
 } from '../components/replay/stream/llmRequestMetrics';
 import { asRecord, buildEntityFacets } from '../components/replay/facets/entityFacets';
+import { phaseAt } from './episodePhase';
 import { buildToolMetrics } from '../components/replay/detail/toolMetrics';
 import type { RawBlock } from '../components/replay/detail/RawTab';
 import styles from './SessionDetailPage.module.css';
@@ -171,13 +172,17 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   // event_id -> episode phase (by observed_at within [started_at, ended_at]).
   // Computed over ALL window events — activity events (not just messages) need
   // phases now so ActivityStack can split runs by phase.
+  //
+  // Episodes can OVERLAP (a stale/wide episode covering the same instant as a
+  // narrow accurate one). `phaseAt` resolves this deterministically by picking
+  // the NARROWEST covering episode rather than the first-listed/widest, so an
+  // event gets the most-specific phase badge (Slice 3 B3).
   const phaseByEventId = useMemo(() => {
     const eps = episodes.data ?? [];
     const out = new Map<string, string>();
     for (const ev of window_.events) {
-      const t = ev.observed_at;
-      const ep = eps.find((e) => e.started_at <= t && t <= e.ended_at);
-      if (ep) out.set(ev.event_id, ep.phase);
+      const phase = phaseAt(eps, ev.observed_at);
+      if (phase) out.set(ev.event_id, phase);
     }
     return out;
   }, [window_.events, episodes.data]);

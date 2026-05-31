@@ -61,6 +61,23 @@ pub async fn insert(pool: &SqlitePool, row: &NewEpisode) -> Result<()> {
     Ok(())
 }
 
+/// Delete every episode row for a session.
+///
+/// Slice 3 B2 — episode ids are content-hashed over
+/// `(session_id, phase, start_event_id, end_event_id)`. When a live session
+/// grows and rebuilds, the trailing episode's `end_event_id` shifts → a new id,
+/// so `insert`'s `INSERT OR REPLACE` ADDS a row instead of replacing the old
+/// trailing episode, leaving stale rows behind. `rebuild_session` calls this
+/// before re-inserting the fresh set so the rebuild fully replaces the
+/// session's episodes (mirrors `repo_graph::delete_session_in_tx` for nodes).
+pub async fn delete_session(pool: &SqlitePool, session_id: &str) -> Result<()> {
+    sqlx::query("DELETE FROM episode WHERE session_id = ?")
+        .bind(session_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// List all episodes for a session, ordered by `started_at`, then `episode_id`.
 pub async fn list_session(pool: &SqlitePool, session_id: &str) -> Result<Vec<EpisodeRow>> {
     let rows = sqlx::query(
