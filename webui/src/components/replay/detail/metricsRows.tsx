@@ -11,7 +11,13 @@
 //   - `responseWarns`       — truncation / retry / failure signal
 //   - `formatBytes`         — shared byte formatter
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
-import { formatDuration, formatTokens, formatUsd } from '../stream/llmRequestMetrics';
+import {
+  formatDuration,
+  formatQuerySource,
+  formatThroughput,
+  formatTokens,
+  formatUsd,
+} from '../stream/llmRequestMetrics';
 import { InfoTip } from '../insight-strip/InfoTip';
 import styles from './metricsRows.module.css';
 
@@ -23,6 +29,8 @@ export const TIPS: Record<string, string> = {
   '캐시 읽기': '프롬프트 캐시에서 재사용한 토큰 수입니다. 클수록 컨텍스트 대부분을 캐시로 재활용 — 비용·지연을 줄입니다.',
   '캐시 생성': '이번에 새로 캐시에 기록한 토큰 수입니다. 다음 요청부터 캐시 읽기로 재사용됩니다.',
   '비용': '이 요청의 실측 비용(USD)입니다. Claude Code가 보고한 값(api_request_log)으로, 토큰×공개요금 추정과는 다릅니다.',
+  '출력 속도': '생성 처리량입니다 — 출력 토큰 ÷ 요청 소요 시간(초). 추론 토큰도 출력에 포함됩니다.',
+  '요청 출처': '이 요청을 보낸 주체입니다. 메인 스레드(사용자 대화) 또는 서브에이전트(general-purpose·Explore 등) — 누가 호출했는지.',
   '결정 출처': '이 도구 실행이 허용된 경위입니다. config = 설정에 의해 자동 허용, user = 사용자가 직접 승인 등 — 권한 결정의 출처.',
   '입력/결과 크기': '도구에 전달한 입력과 도구가 반환한 결과의 크기(바이트)입니다. 결과가 클수록 컨텍스트를 많이 차지합니다.',
 };
@@ -54,6 +62,9 @@ export function ResponseMetricsRows({ metrics }: { metrics: LlmRequestMetrics })
       <Row label="소요 시간" value={formatDuration(metrics.durationMs) ?? '—'} />
       <Row label="첫 토큰까지(ttft)" value={formatDuration(metrics.ttftMs) ?? '—'} />
       <Row label="출력 토큰" value={formatTokens(metrics.outputTokens) ?? '—'} />
+      {formatThroughput(metrics.outputTokens, metrics.durationMs) && (
+        <Row label="출력 속도" value={formatThroughput(metrics.outputTokens, metrics.durationMs)!} />
+      )}
       <Row label="입력 토큰" value={formatTokens(metrics.inputTokens) ?? '—'} />
       <Row label="캐시 읽기" value={formatTokens(metrics.cacheReadTokens) ?? '—'} />
       <Row label="캐시 생성" value={formatTokens(metrics.cacheCreationTokens) ?? '—'} />
@@ -74,6 +85,9 @@ export function ResponseMetricsRows({ metrics }: { metrics: LlmRequestMetrics })
         warn={metrics.success === false}
       />
       <Row label="모델" value={metrics.model ?? '—'} />
+      {formatQuerySource(metrics.querySource) && (
+        <Row label="요청 출처" value={formatQuerySource(metrics.querySource)!} />
+      )}
     </div>
   );
 }

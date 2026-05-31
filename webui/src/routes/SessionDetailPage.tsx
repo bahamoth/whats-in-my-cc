@@ -239,8 +239,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     // span); merge it in so the Insight panel shows the real cost, not the
     // token×rate estimate.
     const log = group?.facets.find((f) => f.facet_kind === 'api_request_log');
-    const cost = log ? parseApiRequestLog(log.data)?.costUsd ?? null : null;
-    return { ...metrics, costUsd: cost };
+    const extra = log ? parseApiRequestLog(log.data) : null;
+    return { ...metrics, costUsd: extra?.costUsd ?? null, querySource: extra?.querySource ?? null };
   }, [selectedNode, entityFacets]);
 
   // Source-split raw blocks for the Raw tab. When a node is selected, build:

@@ -29,6 +29,10 @@ export interface LlmRequestMetrics {
    *  api_request_log facet — NOT the token×public-rate estimate). null when
    *  the log facet is absent. */
   costUsd: number | null;
+  /** what issued the request — `repl_main_thread` (the main conversation) or
+   *  `agent:builtin:<name>` / `agent:custom` (a subagent). From the
+   *  api_request_log facet; optional so span-only callers need not set it. */
+  querySource?: string | null;
 }
 
 type OtlpAttrValue =
@@ -139,4 +143,20 @@ export function formatTokens(n: number | null): string | null {
 export function formatUsd(n: number | null): string | null {
   if (n == null) return null;
   return `$${n.toFixed(n < 1 ? 4 : 2)}`;
+}
+
+/** Human label for the request's query_source (who issued it). */
+export function formatQuerySource(qs: string | null | undefined): string | null {
+  if (!qs) return null;
+  if (qs === 'repl_main_thread') return '메인 스레드';
+  if (qs.startsWith('agent:builtin:')) return `서브에이전트 · ${qs.slice('agent:builtin:'.length)}`;
+  if (qs.startsWith('agent:')) return `서브에이전트 · ${qs.slice('agent:'.length)}`;
+  return qs;
+}
+
+/** Output generation throughput (tokens/sec) from output tokens + wall-clock,
+ *  or null when either is missing/zero. */
+export function formatThroughput(outputTokens: number | null, durationMs: number | null): string | null {
+  if (outputTokens == null || durationMs == null || durationMs <= 0) return null;
+  return `${Math.round(outputTokens / (durationMs / 1000))} tok/s`;
 }
