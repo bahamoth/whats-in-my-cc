@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   buildLlmRequestMetrics,
   formatDuration,
+  formatQuerySource,
+  formatThroughput,
   formatTokens,
   formatUsd,
   parseApiRequestLog,
@@ -100,5 +102,25 @@ describe('formatUsd', () => {
     expect(formatUsd(0.0098)).toBe('$0.0098');
     expect(formatUsd(3.4239)).toBe('$3.42');
     expect(formatUsd(null)).toBeNull();
+  });
+});
+
+describe('formatQuerySource', () => {
+  it('labels the main thread and subagents (builtin + custom)', () => {
+    expect(formatQuerySource('repl_main_thread')).toBe('메인 스레드');
+    expect(formatQuerySource('agent:builtin:general-purpose')).toBe('서브에이전트 · general-purpose');
+    expect(formatQuerySource('agent:builtin:Explore')).toBe('서브에이전트 · Explore');
+    expect(formatQuerySource('agent:custom')).toBe('서브에이전트 · custom');
+    expect(formatQuerySource(null)).toBeNull();
+    expect(formatQuerySource(undefined)).toBeNull();
+  });
+});
+
+describe('formatThroughput', () => {
+  it('computes output tokens / seconds; null when missing or zero duration', () => {
+    expect(formatThroughput(608, 9594)).toBe('63 tok/s');
+    expect(formatThroughput(null, 1000)).toBeNull();
+    expect(formatThroughput(100, 0)).toBeNull();
+    expect(formatThroughput(100, null)).toBeNull();
   });
 });
