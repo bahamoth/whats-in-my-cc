@@ -39,4 +39,44 @@ describe('buildToolMetrics', () => {
     const m = buildToolMetrics([facet('llm_request_span', { duration_ms: '99' })]);
     expect(m.durationMs).toBeNull();
   });
+  it('degrades to all-null when data has no attributes', () => {
+    const f: FacetEntry = {
+      facet_kind: 'tool_result_log',
+      basis: 'tool_use_id',
+      source_event_id: 'e',
+      data: {},
+    };
+    let m!: ReturnType<typeof buildToolMetrics>;
+    expect(() => {
+      m = buildToolMetrics([f]);
+    }).not.toThrow();
+    expect(m.durationMs).toBeNull();
+    expect(m.success).toBeNull();
+    expect(m.decisionSource).toBeNull();
+    expect(m.decisionType).toBeNull();
+    expect(m.inputBytes).toBeNull();
+    expect(m.resultBytes).toBeNull();
+    expect(m.sequence).toBeNull();
+  });
+  it('degrades to all-null when data.attributes is a non-object truthy value', () => {
+    // `data.attributes` is `unknown` at the boundary — a string (or any
+    // non-object) must not throw and must yield all-null.
+    const f = {
+      facet_kind: 'tool_result_log',
+      basis: 'tool_use_id',
+      source_event_id: 'e',
+      data: { attributes: 'oops' },
+    } as unknown as FacetEntry;
+    let m!: ReturnType<typeof buildToolMetrics>;
+    expect(() => {
+      m = buildToolMetrics([f]);
+    }).not.toThrow();
+    expect(m.durationMs).toBeNull();
+    expect(m.success).toBeNull();
+    expect(m.decisionSource).toBeNull();
+    expect(m.decisionType).toBeNull();
+    expect(m.inputBytes).toBeNull();
+    expect(m.resultBytes).toBeNull();
+    expect(m.sequence).toBeNull();
+  });
 });

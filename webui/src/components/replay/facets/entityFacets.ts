@@ -19,13 +19,20 @@ export interface FacetGroup {
   byKind: Record<string, number>;
 }
 
+/** Narrow an `unknown` to a plain object by a runtime check, returning an empty
+ *  object for null/non-object inputs. Lets callers read fields off untrusted
+ *  payloads/facet `data` without throwing or blind `as` casts. */
+export function asRecord(v: unknown): Record<string, unknown> {
+  return v != null && typeof v === 'object' ? (v as Record<string, unknown>) : {};
+}
+
 /** Group folded telemetry facets by owner node. Reads `node.payload.facets`
  *  (set by the backend telemetry-fold pass); `facet_of` edges no longer exist.
  *  Owner nodes without a non-empty `facets` array are omitted. */
 export function buildEntityFacets(nodes: GraphNodeDto[]): Map<string, FacetGroup> {
   const out = new Map<string, FacetGroup>();
   for (const n of nodes) {
-    const p = (n.payload ?? {}) as Record<string, unknown>;
+    const p = asRecord(n.payload);
     const facets = Array.isArray(p.facets) ? (p.facets as FacetEntry[]) : [];
     if (facets.length === 0) continue;
     const byKind: Record<string, number> = {};

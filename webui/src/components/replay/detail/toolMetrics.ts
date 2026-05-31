@@ -9,7 +9,7 @@
 //   data: { event_name: "tool_result" | "tool_decision", attributes: { … } }
 //   attributes는 flat object; 값은 대부분 string ("57", "true") 이지만
 //   event.sequence 등 number인 경우도 있다.
-import type { FacetEntry } from '../facets/entityFacets';
+import { asRecord, type FacetEntry } from '../facets/entityFacets';
 
 export interface ToolMetrics {
   durationMs: number | null;
@@ -45,7 +45,7 @@ export function buildToolMetrics(facets: FacetEntry[]): ToolMetrics {
   };
   for (const f of facets) {
     if (f.facet_kind !== 'tool_result_log' && f.facet_kind !== 'tool_decision_log') continue;
-    const a = (((f.data ?? {}) as Record<string, unknown>).attributes as Record<string, unknown>) ?? {};
+    const a = asRecord(asRecord(f.data).attributes);
     if (m.durationMs == null) m.durationMs = num(a.duration_ms);
     if (m.success == null && typeof a.success === 'string') m.success = a.success === 'true';
     if (m.inputBytes == null) m.inputBytes = num(a.tool_input_size_bytes);

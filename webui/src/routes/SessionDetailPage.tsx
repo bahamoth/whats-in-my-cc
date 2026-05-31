@@ -31,7 +31,7 @@ import {
   buildLlmRequestMetrics,
   parseLlmRequestSpan,
 } from '../components/replay/stream/llmRequestMetrics';
-import { buildEntityFacets } from '../components/replay/facets/entityFacets';
+import { asRecord, buildEntityFacets } from '../components/replay/facets/entityFacets';
 import { buildToolMetrics } from '../components/replay/detail/toolMetrics';
 import type { RawBlock } from '../components/replay/detail/RawTab';
 import styles from './SessionDetailPage.module.css';
@@ -291,12 +291,12 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     // raw_span.name (span), falling back to the facet_kind.
     const facets = entityFacets.get(selectedNode.node_id)?.facets ?? [];
     const facetBlocks: RawBlock[] = facets.map((f) => {
-      const fd = (f.data ?? {}) as Record<string, unknown>;
-      const rawSpan = fd.raw_span as Record<string, unknown> | undefined;
+      const fd = asRecord(f.data);
+      const rawSpan = asRecord(fd.raw_span);
       const facetLabel =
         typeof fd.event_name === 'string'
           ? fd.event_name
-          : typeof rawSpan?.name === 'string'
+          : typeof rawSpan.name === 'string'
             ? rawSpan.name
             : f.facet_kind;
       return { source: f.facet_kind, label: facetLabel, record: f.data };
