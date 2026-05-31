@@ -21,6 +21,9 @@ describe('nodeLabel', () => {
       .toEqual({ kind: 'tool', primary: 'Read', secondary: 'slide_logo-17.jpg' });
     expect(L('tool_call', { tool_name: 'Bash', input: { command: 'rm -f x.jpg && ls' } }))
       .toEqual({ kind: 'tool', primary: 'Bash', secondary: 'rm -f x.jpg && ls' });
+    // a leading `cd …` is stripped so the shown command leads with the work
+    expect(L('tool_call', { tool_name: 'Bash', input: { command: 'cd /repo && git add -A && git status' } }).secondary)
+      .toBe('git add -A && git status');
     expect(L('tool_call', { tool_name: 'Skill', input: { skill: 'corp-pptx-style' } }))
       .toEqual({ kind: 'tool', primary: 'Skill', secondary: 'corp-pptx-style' });
   });

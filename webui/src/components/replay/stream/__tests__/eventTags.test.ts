@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tagForEvent, collectUntagged } from '../eventTags';
+import { tagForEvent, collectUntagged, meaningfulCommand } from '../eventTags';
 import type { ObservedEventDto } from '../../../../api/types';
 
 const bash = (command: string): ObservedEventDto =>
@@ -30,11 +30,23 @@ describe('tagForEvent — Bash (real-data anchored tokens)', () => {
     expect(tagForEvent(bash('rm -rf target')).tag).toBe('destructive');
     expect(tagForEvent(bash('mv a b')).tag).toBe('destructive');
   });
-  it('treats compound/redirect commands as ambiguous (no tag, show command)', () => {
-    expect(tagForEvent(bash('cd x && grep y')).disposition).toBe('ambiguous');
-    expect(tagForEvent(bash('grep y > out.txt')).disposition).toBe('ambiguous');
-    expect(tagForEvent(bash('grep a | grep b | wc -l')).disposition).toBe('ambiguous');
-    expect(tagForEvent(bash('cd x && grep y')).tag).toBeNull();
+  it('classifies compound commands by the first MEANINGFUL command, skipping control prefixes', () => {
+    // `cd … && git add … && git status` is a git-add (vcs-write), not an
+    // untaggable compound — split on separators, skip the `cd`, read `git add`.
+    const r = tagForEvent(bash('cd /repo && git add -A && git status'));
+    expect(r.tag).toBe('vcs-write');
+    expect(r.disposition).toBe('tagged');
+    // cd skipped → grep is the work
+    expect(tagForEvent(bash('cd x && grep y')).tag).toBe('search·read');
+    // redirects / pipes do not block tagging — classify by the first command
+    expect(tagForEvent(bash('grep y > out.txt')).tag).toBe('search·read');
+    expect(tagForEvent(bash('grep a | grep b | wc -l')).tag).toBe('search·read');
+    // destructive after a control prefix is still caught
+    expect(tagForEvent(bash('cd x && rm -rf y')).tag).toBe('destructive');
+  });
+  it('compound of only control tokens → control; first meaningful unknown → unmatched', () => {
+    expect(tagForEvent(bash('cd /tmp && echo done')).disposition).toBe('control');
+    expect(tagForEvent(bash('cd x && gh pr view')).disposition).toBe('unmatched');
   });
   it('treats shell-control tokens as control (no chip, not untagged)', () => {
     expect(tagForEvent(bash('cd /tmp')).disposition).toBe('control');
@@ -64,13 +76,30 @@ describe('tagForEvent — other tools get no chip', () => {
   });
 });
 
+describe('meaningfulCommand — strip leading control prefixes for display', () => {
+  it('drops a leading cd so the command leads with the real work', () => {
+    expect(meaningfulCommand('cd /repo && git add -A && git status')).toBe('git add -A && git status');
+    expect(meaningfulCommand('cd x && grep y')).toBe('grep y');
+  });
+  it('leaves a command that already leads with work unchanged', () => {
+    expect(meaningfulCommand('grep a | grep b')).toBe('grep a | grep b');
+    expect(meaningfulCommand('rm -f x && ls')).toBe('rm -f x && ls');
+    expect(meaningfulCommand('cd /tmp')).toBe('cd /tmp'); // all control → as-is
+  });
+});
+
 describe('collectUntagged', () => {
-  it('aggregates only unmatched simple Bash by first token with count + sample, excludes control/ambiguous, and drops a token once a rule is added', () => {
-    const events = [bash('gh pr view 1'), bash('gh pr view 2'), bash('cd /tmp'), bash('cd x && grep y'), bash('grep z')];
+  it('aggregates unmatched Bash by the first MEANINGFUL token (skips control prefixes), with count + sample', () => {
+    const events = [
+      bash('gh pr view 1'), bash('gh pr view 2'),
+      bash('cd /tmp'),                 // control → excluded
+      bash('cd x && grep y'),          // now tagged search·read → excluded
+      bash('grep z'),                  // tagged → excluded
+      bash('cd /repo && gh pr merge'), // unmatched; meaningful token is gh, not cd
+    ];
     const rows = collectUntagged(events);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ token: 'gh', count: 2 });
-    expect(rows[0].sample).toContain('gh pr view');
-    expect(rows[0].hint).toContain("BASH_FIRST_TOKEN_TAGS");
+    expect(rows[0]).toMatchObject({ token: 'gh', count: 3 });
+    expect(rows[0].hint).toContain('BASH_FIRST_TOKEN_TAGS');
   });
 });

@@ -1,3 +1,5 @@
+import { meaningfulCommand } from './eventTags';
+
 export interface NodeLabel {
   kind: 'user' | 'assistant' | 'thinking' | 'tool' | 'hook' | 'span' | 'verify' | 'diff' | 'other';
   primary: string;
@@ -44,6 +46,7 @@ function toolArg(input: unknown): string {
   ]) {
     const val = i[k];
     if (typeof val === 'string' && val) {
+      if (k === 'command') return meaningfulCommand(val); // strip a leading `cd …`
       return k === 'file_path' || k === 'path' ? (val.split('/').pop() ?? val) : val;
     }
   }
