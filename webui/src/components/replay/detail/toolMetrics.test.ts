@@ -1,18 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { buildToolMetrics } from './toolMetrics';
-import type { GraphNodeDto } from '../../../api/types';
+import type { FacetEntry } from '../facets/entityFacets';
 
-const logNode = (eventName: string, attrs: Record<string, unknown>): GraphNodeDto => ({
-  node_id: 'log-' + eventName, schema_version: '1', session_id: 's', node_kind: 'log_record',
-  started_at: '', ended_at: null, merge_keys: {}, source_event_ids: [], source_uris: [],
-  payload: { event_name: eventName, attributes: attrs },
+const facet = (kind: string, attrs: Record<string, unknown>): FacetEntry => ({
+  facet_kind: kind,
+  basis: 'tool_use_id',
+  source_event_id: `ev-${kind}`,
+  data: { attributes: attrs },
 });
 
 describe('buildToolMetrics', () => {
-  it('merges tool_result + tool_decision log attributes', () => {
+  it('merges tool_result + tool_decision facet attributes', () => {
     const facets = [
-      logNode('tool_result', { duration_ms: '57', success: 'true', tool_input_size_bytes: '362', tool_result_size_bytes: '302', 'event.sequence': 763 }),
-      logNode('tool_decision', { decision_source: 'config', decision_type: 'accept' }),
+      facet('tool_result_log', {
+        duration_ms: '57',
+        success: 'true',
+        tool_input_size_bytes: '362',
+        tool_result_size_bytes: '302',
+        'event.sequence': 763,
+      }),
+      facet('tool_decision_log', { decision_source: 'config', decision_type: 'accept' }),
     ];
     const m = buildToolMetrics(facets);
     expect(m.durationMs).toBe(57);
@@ -28,9 +35,8 @@ describe('buildToolMetrics', () => {
     expect(m.durationMs).toBeNull();
     expect(m.success).toBeNull();
   });
-  it('ignores non-log_record nodes', () => {
-    const span = { ...logNode('x', {}), node_kind: 'otel_span' } as GraphNodeDto;
-    const m = buildToolMetrics([span]);
+  it('ignores non-tool facet kinds', () => {
+    const m = buildToolMetrics([facet('llm_request_span', { duration_ms: '99' })]);
     expect(m.durationMs).toBeNull();
   });
 });

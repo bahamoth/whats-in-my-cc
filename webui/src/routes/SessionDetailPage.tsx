@@ -27,7 +27,10 @@ import {
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
 import { buildStreamModel } from '../components/replay/stream/streamModel';
-import { buildLlmRequestMetrics } from '../components/replay/stream/llmRequestMetrics';
+import {
+  buildLlmRequestMetrics,
+  parseLlmRequestSpan,
+} from '../components/replay/stream/llmRequestMetrics';
 import { buildEntityFacets } from '../components/replay/facets/entityFacets';
 import { buildToolMetrics } from '../components/replay/detail/toolMetrics';
 import type { RawBlock } from '../components/replay/detail/RawTab';
@@ -102,16 +105,11 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
 
   const effectiveGraph = graph.data ?? EMPTY_GRAPH;
 
-  // entity → its facet group (facet_of edges). Used to gather a tool_call's
-  // log_record facet nodes for tool-execution metrics in the Insight tab.
+  // entity → its folded facet group (node.payload.facets). Used to gather a
+  // tool_call's tool-execution facets + an assistant_message's llm_request_span
+  // for metrics in the Insight tab.
   const entityFacets = useMemo(
-    () => buildEntityFacets(effectiveGraph.nodes, effectiveGraph.edges),
-    [effectiveGraph],
-  );
-
-  // node_id → node lookup, shared by selectedToolMetrics and rawBlocks.
-  const nodeById = useMemo(
-    () => new Map(effectiveGraph.nodes.map((n) => [n.node_id, n])),
+    () => buildEntityFacets(effectiveGraph.nodes),
     [effectiveGraph],
   );
 
@@ -241,35 +239,30 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     );
   }, [sel.selectedNodeId, effectiveGraph, findingsData]);
 
-  // Tool-execution metrics for a selected tool_call node: gather its log_record
-  // facet nodes (via facet_of edges) and fold them into one ToolMetrics.
+  // Tool-execution metrics for a selected tool_call node: fold its tool facets
+  // (node.payload.facets) into one ToolMetrics.
   const selectedToolMetrics = useMemo(() => {
     if (selectedNode?.node_kind !== 'tool_call') return null;
     const group = entityFacets.get(selectedNode.node_id);
     if (!group) return null;
-    const facetNodes = group.facetNodeIds.flatMap((id) => {
-      const n = nodeById.get(id);
-      return n ? [n] : [];
-    });
-    return buildToolMetrics(facetNodes);
-  }, [selectedNode, entityFacets, nodeById]);
+    return buildToolMetrics(group.facets);
+  }, [selectedNode, entityFacets]);
 
-  // Per-response metrics for a selected assistant_message node: resolve the
-  // node's request_id (via its source event) then look up the joined span map.
-  // thinking is not a graph node (graph/build.rs `_ => continue`); thinking
-  // markers use the nodeless thinkingMetrics path → ResponseMetricsPanel.
+  // Per-response metrics for a selected assistant_message node: parse the
+  // node's folded llm_request_span facet (data carries the same
+  // raw_span.attributes[] shape as the windowed otel_span event). thinking is
+  // not a graph node (graph/build.rs `_ => continue`); thinking markers use the
+  // nodeless thinkingMetrics path → ResponseMetricsPanel.
   const selectedNodeLlmMetrics = useMemo(() => {
     if (selectedNode?.node_kind !== 'assistant_message') return null;
-    const eid = selectedNode.source_event_ids[0];
-    if (!eid) return null;
-    const ev = window_.events.find((e) => e.event_id === eid);
-    const rid = ev?.request_id ?? null;
-    return rid ? metricsByReq.get(rid) ?? null : null;
-  }, [selectedNode, window_.events, metricsByReq]);
+    const group = entityFacets.get(selectedNode.node_id);
+    const span = group?.facets.find((f) => f.facet_kind === 'llm_request_span');
+    return span ? parseLlmRequestSpan(span.data) : null;
+  }, [selectedNode, entityFacets]);
 
   // Source-split raw blocks for the Raw tab. When a node is selected, build:
   //   - entity block: the selected node's own payload, labelled by source
-  //   - facet blocks: each facet node's payload, labelled by node_kind
+  //   - facet blocks: each folded facet's verbatim `data`, labelled by kind
   // Node payloads are used directly (no extra fetch). The existing `record`
   // (rawQuery) remains as a back-compat fallback for the no-blocks path.
   const rawBlocks = useMemo<RawBlock[] | undefined>(() => {
@@ -293,20 +286,20 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
       record: selectedNode.payload,
     };
 
-    // Gather facet node blocks
-    const facetIds = entityFacets.get(selectedNode.node_id)?.facetNodeIds ?? [];
-    const facetBlocks: RawBlock[] = facetIds.flatMap((fid) => {
-      const fn = nodeById.get(fid);
-      if (!fn) return [];
-      const fp = fn.payload as Record<string, unknown> | null | undefined;
-      const rawSpan = fp?.raw_span as Record<string, unknown> | undefined;
+    // Gather folded-facet blocks from node.payload.facets. Each facet's `data`
+    // is the verbatim folded telemetry payload; label by event_name (logs) or
+    // raw_span.name (span), falling back to the facet_kind.
+    const facets = entityFacets.get(selectedNode.node_id)?.facets ?? [];
+    const facetBlocks: RawBlock[] = facets.map((f) => {
+      const fd = (f.data ?? {}) as Record<string, unknown>;
+      const rawSpan = fd.raw_span as Record<string, unknown> | undefined;
       const facetLabel =
-        typeof fp?.event_name === 'string'
-          ? fp.event_name
+        typeof fd.event_name === 'string'
+          ? fd.event_name
           : typeof rawSpan?.name === 'string'
             ? rawSpan.name
-            : fn.node_kind;
-      return [{ source: fn.node_kind, label: facetLabel, record: fn.payload }];
+            : f.facet_kind;
+      return { source: f.facet_kind, label: facetLabel, record: f.data };
     });
 
     // No facets → no multi-source split. Return undefined so RawTab falls back
@@ -314,7 +307,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     // meaningful "this node has a loaded raw record" signal, not always-on).
     if (facetBlocks.length === 0) return undefined;
     return [entityBlock, ...facetBlocks];
-  }, [selectedNode, entityFacets, nodeById]);
+  }, [selectedNode, entityFacets]);
 
   // --- render branches ---
   const detailError = detail.error as ApiError | null;

@@ -1,27 +1,36 @@
-import type { GraphNodeDto, GraphEdgeDto } from '../../../api/types';
+import type { GraphNodeDto } from '../../../api/types';
+
+/** A folded telemetry facet carried on an owner node's `payload.facets`.
+ *  `data` is the folded telemetry event's verbatim payload:
+ *    - tool_result_log / tool_decision_log / api_request_log → `data.attributes`
+ *      is a flat map (string-valued metrics).
+ *    - llm_request_span → `data.raw_span.attributes` is an OTLP `{key,value}[]`.
+ *  See src/graph/build.rs (telemetry fold) for the producer. */
+export interface FacetEntry {
+  facet_kind: string;
+  basis: string;
+  source_event_id: string;
+  data: Record<string, unknown>;
+}
 
 export interface FacetGroup {
   entityNodeId: string;
-  facetNodeIds: string[];
+  facets: FacetEntry[];
   byKind: Record<string, number>;
 }
 
-/** facet_of 엣지(from=facet, to=엔티티)를 따라 엔티티별 facet 묶음을 만든다. */
-export function buildEntityFacets(
-  nodes: GraphNodeDto[],
-  edges: GraphEdgeDto[],
-): Map<string, FacetGroup> {
-  const kindById = new Map(nodes.map((n) => [n.node_id, n.node_kind]));
+/** Group folded telemetry facets by owner node. Reads `node.payload.facets`
+ *  (set by the backend telemetry-fold pass); `facet_of` edges no longer exist.
+ *  Owner nodes without a non-empty `facets` array are omitted. */
+export function buildEntityFacets(nodes: GraphNodeDto[]): Map<string, FacetGroup> {
   const out = new Map<string, FacetGroup>();
-  for (const e of edges) {
-    if (e.edge_kind !== 'facet_of') continue;
-    const entity = e.to_node_id;
-    const facet = e.from_node_id;
-    let g = out.get(entity);
-    if (!g) { g = { entityNodeId: entity, facetNodeIds: [], byKind: {} }; out.set(entity, g); }
-    g.facetNodeIds.push(facet);
-    const k = kindById.get(facet) ?? 'unknown';
-    g.byKind[k] = (g.byKind[k] ?? 0) + 1;
+  for (const n of nodes) {
+    const p = (n.payload ?? {}) as Record<string, unknown>;
+    const facets = Array.isArray(p.facets) ? (p.facets as FacetEntry[]) : [];
+    if (facets.length === 0) continue;
+    const byKind: Record<string, number> = {};
+    for (const f of facets) byKind[f.facet_kind] = (byKind[f.facet_kind] ?? 0) + 1;
+    out.set(n.node_id, { entityNodeId: n.node_id, facets, byKind });
   }
   return out;
 }

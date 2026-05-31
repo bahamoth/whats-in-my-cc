@@ -1,37 +1,61 @@
 import { describe, expect, it } from 'vitest';
 import { buildEntityFacets } from '../entityFacets';
-import type { GraphNodeDto, GraphEdgeDto } from '../../../../api/types';
+import type { GraphNodeDto } from '../../../../api/types';
 
-const node = (id: string, kind: string): GraphNodeDto => ({
-  node_id: id, schema_version: '1', session_id: 's', node_kind: kind,
-  started_at: '', ended_at: null, merge_keys: {}, source_event_ids: [id + '-ev'],
-  source_uris: [], payload: {},
-});
-const facetEdge = (from: string, to: string, basis: string): GraphEdgeDto => ({
-  edge_id: `${from}->${to}`, schema_version: '1', session_id: 's',
-  from_node_id: from, to_node_id: to, edge_kind: 'facet_of',
-  origin: 'deterministic', attributes: { basis },
+const node = (id: string, kind: string, payload: unknown): GraphNodeDto => ({
+  node_id: id,
+  schema_version: 'graph_node.v1',
+  session_id: 's',
+  node_kind: kind,
+  started_at: '2026-05-31T00:00:00Z',
+  ended_at: null,
+  merge_keys: {},
+  source_event_ids: [id],
+  source_uris: [],
+  payload,
 });
 
-describe('buildEntityFacets', () => {
-  it('maps an entity to its facet node ids via facet_of edges', () => {
-    const nodes = [node('call', 'tool_call'), node('log', 'log_record')];
-    const edges = [facetEdge('log', 'call', 'tool_use_id')];
-    const m = buildEntityFacets(nodes, edges);
-    expect(m.get('call')?.facetNodeIds).toEqual(['log']);
-    expect(m.get('call')?.byKind['log_record']).toBe(1);
+describe('buildEntityFacets (payload.facets)', () => {
+  it('groups folded facets from owner node payload', () => {
+    const nodes: GraphNodeDto[] = [
+      node('call-1', 'tool_call', {
+        facets: [
+          { facet_kind: 'tool_result_log', basis: 'tool_use_id', source_event_id: 'e1', data: {} },
+          { facet_kind: 'tool_decision_log', basis: 'tool_use_id', source_event_id: 'e2', data: {} },
+        ],
+      }),
+      node('asst-1', 'assistant_message', {
+        facets: [
+          { facet_kind: 'llm_request_span', basis: 'request_id', source_event_id: 'e3', data: {} },
+        ],
+      }),
+      node('plain-1', 'user_message', {}),
+    ];
+    const groups = buildEntityFacets(nodes);
+    expect(groups.get('call-1')?.facets.length).toBe(2);
+    expect(groups.get('asst-1')?.facets.length).toBe(1);
+    expect(groups.has('plain-1')).toBe(false);
   });
-  it('groups multiple facets under one entity', () => {
-    const nodes = [node('call', 'tool_call'), node('l1', 'log_record'), node('l2', 'log_record')];
-    const edges = [facetEdge('l1', 'call', 'tool_use_id'), facetEdge('l2', 'call', 'tool_use_id')];
-    const m = buildEntityFacets(nodes, edges);
-    expect(m.get('call')?.facetNodeIds.sort()).toEqual(['l1', 'l2']);
-    expect(m.get('call')?.byKind['log_record']).toBe(2);
+
+  it('counts facets by kind', () => {
+    const nodes: GraphNodeDto[] = [
+      node('call-1', 'tool_call', {
+        facets: [
+          { facet_kind: 'tool_result_log', basis: 'tool_use_id', source_event_id: 'e1', data: {} },
+          { facet_kind: 'tool_decision_log', basis: 'tool_use_id', source_event_id: 'e2', data: {} },
+        ],
+      }),
+    ];
+    const g = buildEntityFacets(nodes).get('call-1');
+    expect(g?.byKind.tool_result_log).toBe(1);
+    expect(g?.byKind.tool_decision_log).toBe(1);
   });
-  it('ignores non-facet_of edges', () => {
-    const nodes = [node('a', 'tool_call'), node('b', 'tool_result')];
-    const edges: GraphEdgeDto[] = [{ edge_id: 'x', schema_version: '1', session_id: 's',
-      from_node_id: 'a', to_node_id: 'b', edge_kind: 'tool_call_to_result', origin: 'deterministic', attributes: {} }];
-    expect(buildEntityFacets(nodes, edges).size).toBe(0);
+
+  it('ignores nodes without a facets array', () => {
+    const nodes: GraphNodeDto[] = [
+      node('a', 'tool_call', { facets: 'not-an-array' }),
+      node('b', 'tool_call', null),
+    ];
+    expect(buildEntityFacets(nodes).size).toBe(0);
   });
 });

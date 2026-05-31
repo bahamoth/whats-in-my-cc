@@ -1,14 +1,15 @@
 // webui/src/components/replay/detail/toolMetrics.ts
 //
-// log_record facet 노드들(payload.attributes)에서 도구 실행 지표를 추출한다.
-// `facet_of` 엣지로 연결된 tool_call 노드의 log_record 패싯들을 받아
-// ToolMetrics 구조체 하나로 합친다.
+// Folded tool-execution facets (FacetEntry[]) → one ToolMetrics struct.
+// The tool_result_log / tool_decision_log facets carry their telemetry under
+// `facet.data.attributes` (a flat map). `facet_of` edges no longer exist; the
+// facets are read from the owner node's payload via buildEntityFacets.
 //
 // Real-data shape (tests/fixtures/facet/real/facet_correlation_v01.json):
-//   payload: { event_name: "tool_result" | "tool_decision", attributes: { … } }
+//   data: { event_name: "tool_result" | "tool_decision", attributes: { … } }
 //   attributes는 flat object; 값은 대부분 string ("57", "true") 이지만
 //   event.sequence 등 number인 경우도 있다.
-import type { GraphNodeDto } from '../../../api/types';
+import type { FacetEntry } from '../facets/entityFacets';
 
 export interface ToolMetrics {
   durationMs: number | null;
@@ -30,16 +31,21 @@ function str(v: unknown): string | null {
   return typeof v === 'string' ? v : null;
 }
 
-/** log_record facet 노드들(payload.attributes)에서 도구 실행 지표를 합친다. */
-export function buildToolMetrics(facetNodes: GraphNodeDto[]): ToolMetrics {
+/** Fold tool_result_log + tool_decision_log facets (data.attributes) into one
+ *  ToolMetrics. Non-tool facet kinds are ignored. */
+export function buildToolMetrics(facets: FacetEntry[]): ToolMetrics {
   const m: ToolMetrics = {
-    durationMs: null, success: null, decisionSource: null, decisionType: null,
-    inputBytes: null, resultBytes: null, sequence: null,
+    durationMs: null,
+    success: null,
+    decisionSource: null,
+    decisionType: null,
+    inputBytes: null,
+    resultBytes: null,
+    sequence: null,
   };
-  for (const n of facetNodes) {
-    if (n.node_kind !== 'log_record') continue;
-    const p = (n.payload ?? {}) as Record<string, unknown>;
-    const a = (p.attributes ?? {}) as Record<string, unknown>;
+  for (const f of facets) {
+    if (f.facet_kind !== 'tool_result_log' && f.facet_kind !== 'tool_decision_log') continue;
+    const a = (((f.data ?? {}) as Record<string, unknown>).attributes as Record<string, unknown>) ?? {};
     if (m.durationMs == null) m.durationMs = num(a.duration_ms);
     if (m.success == null && typeof a.success === 'string') m.success = a.success === 'true';
     if (m.inputBytes == null) m.inputBytes = num(a.tool_input_size_bytes);

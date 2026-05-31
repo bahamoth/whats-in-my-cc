@@ -56,6 +56,40 @@ function str(x: unknown): string | null {
   return typeof x === 'string' && x.length > 0 ? x : null;
 }
 
+type LlmRequestSpanPayload = {
+  raw_span?: { name?: string; attributes?: Array<{ key: string; value: OtlpAttrValue }> };
+} | null;
+
+/** Parse a single `claude_code.llm_request` span payload into LlmRequestMetrics.
+ *  Accepts either a windowed otel_span event payload or a folded
+ *  `llm_request_span` facet's `data` — both carry the same
+ *  `raw_span.attributes[]` OTLP shape. Returns null if the payload is not a
+ *  `claude_code.llm_request` span or has no resolvable request_id. */
+export function parseLlmRequestSpan(payload: unknown): LlmRequestMetrics | null {
+  const span = (payload as LlmRequestSpanPayload)?.raw_span;
+  if (!span || span.name !== 'claude_code.llm_request') return null;
+
+  const attrs: Record<string, string | number | boolean | null> = {};
+  for (const a of span.attributes ?? []) attrs[a.key] = attrVal(a.value);
+
+  const rid = str(attrs['request_id']) ?? str(attrs['gen_ai.response.id']);
+  if (!rid) return null;
+
+  return {
+    requestId: rid,
+    durationMs: num(attrs['duration_ms']),
+    ttftMs: num(attrs['ttft_ms']),
+    inputTokens: num(attrs['input_tokens']),
+    outputTokens: num(attrs['output_tokens']),
+    cacheReadTokens: num(attrs['cache_read_tokens']),
+    cacheCreationTokens: num(attrs['cache_creation_tokens']),
+    stopReason: str(attrs['stop_reason']),
+    attempt: num(attrs['attempt']),
+    success: bool(attrs['success']),
+    model: str(attrs['model']),
+  };
+}
+
 /** Build a `request_id → LlmRequestMetrics` map from `claude_code.llm_request`
  *  spans present in the given event window. Events without the span simply
  *  have no entry (the marker then omits the metrics, degrading gracefully). */
@@ -63,29 +97,8 @@ export function buildLlmRequestMetrics(events: ObservedEventDto[]): Map<string, 
   const map = new Map<string, LlmRequestMetrics>();
   for (const e of events) {
     if (e.kind !== 'otel_span') continue;
-    const payload = e.payload as { raw_span?: { name?: string; attributes?: Array<{ key: string; value: OtlpAttrValue }> } } | null;
-    const span = payload?.raw_span;
-    if (!span || span.name !== 'claude_code.llm_request') continue;
-
-    const attrs: Record<string, string | number | boolean | null> = {};
-    for (const a of span.attributes ?? []) attrs[a.key] = attrVal(a.value);
-
-    const rid = str(attrs['request_id']) ?? str(attrs['gen_ai.response.id']);
-    if (!rid) continue;
-
-    map.set(rid, {
-      requestId: rid,
-      durationMs: num(attrs['duration_ms']),
-      ttftMs: num(attrs['ttft_ms']),
-      inputTokens: num(attrs['input_tokens']),
-      outputTokens: num(attrs['output_tokens']),
-      cacheReadTokens: num(attrs['cache_read_tokens']),
-      cacheCreationTokens: num(attrs['cache_creation_tokens']),
-      stopReason: str(attrs['stop_reason']),
-      attempt: num(attrs['attempt']),
-      success: bool(attrs['success']),
-      model: str(attrs['model']),
-    });
+    const m = parseLlmRequestSpan(e.payload);
+    if (m) map.set(m.requestId, m);
   }
   return map;
 }
