@@ -79,7 +79,14 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
         void window_.loadNewer();
       }, BACKFILL_DEBOUNCE_MS) as unknown as number;
     },
-    onGap: () => void window_.reload(),
+    // A `gap` (SSE broadcast lagged) means some live-tip envelopes were
+    // dropped — NOT that the loaded window is invalid. Catch the tip up with
+    // loadNewer; do NOT reload. The SSE broadcast channel is shared across all
+    // sessions, so it lags whenever another session is busy; reloading on gap
+    // discarded every older page the reader had scrolled back to load and
+    // snapped the view to the newest event (the "loaded history disappears /
+    // focus jumps" bug). Only a genuine `resync` (cursor invalidated) reloads.
+    onGap: () => void window_.loadNewer(),
     onResync: () => void window_.reload(),
   });
 
@@ -310,6 +317,15 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
           </div>
 
           <div className={styles.stream} data-slot="stream">
+            {window_.loading === 'older' && (
+              <div className={styles.loadingOlder} role="status" aria-live="polite">
+                <span className={styles.spinner} aria-hidden />
+                이전 메시지 불러오는 중…
+              </div>
+            )}
+            {window_.loading !== 'older' && window_.oldest === null && window_.events.length > 0 && (
+              <div className={styles.historyStart} role="status">세션 시작 · 이전 기록 없음</div>
+            )}
             <ConversationStream
               items={streamItems}
               selectedEventId={selectedStreamEventId}
