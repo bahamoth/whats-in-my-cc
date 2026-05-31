@@ -11,7 +11,6 @@ import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
 import {
   getSession,
   getGraph,
-  getEpisodes,
   getFindings,
   getFindingEvidence,
   getSessionUsage,
@@ -24,7 +23,6 @@ import {
 import type {
   SessionDetail,
   GraphPayload,
-  EpisodeDto,
   FindingDto,
   SessionUsageDto,
   UsageBaselineDto,
@@ -42,7 +40,6 @@ export const sessionKeys = {
   detail: (id: string) => ['session', id, 'detail'] as const,
   graph: (id: string) => ['session', id, 'graph'] as const,
   events: (id: string) => ['session', id, 'events'] as const,
-  episodes: (id: string) => ['session', id, 'episodes'] as const,
   findings: (id: string) => ['session', id, 'findings'] as const,
   toolFailures: (id: string) => ['session', id, 'tool-failures'] as const,
   diffHunks: (id: string) => ['session', id, 'diff-hunks'] as const,
@@ -71,15 +68,6 @@ export function useSessionGraphQuery(id: string, opts?: QOpts<GraphPayload>) {
   return useQuery<GraphPayload>({
     queryKey: sessionKeys.graph(id),
     queryFn: () => getGraph(id),
-    enabled: !!id,
-    ...opts,
-  });
-}
-
-export function useEpisodesQuery(id: string, opts?: QOpts<EpisodeDto[]>) {
-  return useQuery<EpisodeDto[]>({
-    queryKey: sessionKeys.episodes(id),
-    queryFn: () => getEpisodes(id),
     enabled: !!id,
     ...opts,
   });

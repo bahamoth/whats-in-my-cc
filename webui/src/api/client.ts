@@ -5,7 +5,6 @@ import type {
   SessionEventsResponse,
   GraphPayload,
   RawEventResponse,
-  EpisodeDto,
   FindingDto,
   VerificationRunDto,
   DiffHunkDto,
@@ -64,7 +63,6 @@ export function getSessionEvents(
 
 // ---- PR-2/PR-6: read-only Pull API helpers ---------------------------
 // Backend response shapes are NOT consistent today:
-//   /episodes   -> { data: [...] }                  (no meta envelope)
 //   /findings   -> { data: [...] }                  (no meta envelope)
 //   /verification-runs -> { meta, data: [...] }      (data IS the array)
 //   /diff-hunks        -> { meta, data: { hunks: [...] } }
@@ -73,9 +71,6 @@ export function getSessionEvents(
 // `jsonGet` already returns `body.data` for us, so the *one* unwrap below
 // targets the inner shape only. PR-6 fixed the original PR-2 helpers
 // that assumed every endpoint was double-wrapped.
-
-export const getEpisodes = (id: string): Promise<EpisodeDto[]> =>
-  jsonGet<EpisodeDto[]>(`/v1/sessions/${encodeURIComponent(id)}/episodes`);
 
 export const getFindings = (id: string): Promise<FindingDto[]> =>
   jsonGet<FindingDto[]>(`/v1/sessions/${encodeURIComponent(id)}/findings`);

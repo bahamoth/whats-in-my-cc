@@ -8,7 +8,6 @@
  *  - `GraphEdgeDto.inference_rule_id` is `string | null | undefined`
  *  - `GraphEdgeDto.confidence` is `number | null | undefined`
  *  - `FindingDto.evidence_refs` is an array (cannot be omitted)
- *  - `EpisodeDto.confidence` is a number
  *  - `VerificationRunDto.covered_diff_hunk_ids` is `string[]`
  *
  * See plan §10.1 PR-2.
@@ -17,7 +16,6 @@ import { describe, expect, it } from 'vitest';
 import type {
   GraphEdgeDto,
   FindingDto,
-  EpisodeDto,
   VerificationRunDto,
   DiffHunkDto,
 } from '../types';
@@ -78,23 +76,7 @@ describe('types.ts contract', () => {
     expect(Array.isArray(f.evidence_refs)).toBe(true);
   });
 
-  it('EpisodeDto.confidence is a number; VerificationRunDto and DiffHunkDto wire fields', () => {
-    const ep: EpisodeDto = {
-      episode_id: 'ep1',
-      schema_version: 'v1',
-      session_id: 'S1',
-      phase: 'action',
-      start_event_id: 'e1',
-      end_event_id: 'e2',
-      started_at: '2026-05-29T00:00:00Z',
-      ended_at: '2026-05-29T00:00:10Z',
-      evidence_node_ids: [],
-      classification_basis: [],
-      confidence: 0.6,
-      summary: null,
-      classifier_version: 'v1',
-      created_at: '2026-05-29T00:00:00Z',
-    };
+  it('VerificationRunDto and DiffHunkDto wire fields', () => {
     const vr: VerificationRunDto = {
       verification_run_id: 'vr1',
       schema_version: 'v1',
@@ -127,7 +109,6 @@ describe('types.ts contract', () => {
       lines_removed: 1,
       user_modified: false,
     };
-    expect(typeof ep.confidence).toBe('number');
     expect(vr.covered_diff_hunk_ids).toEqual(['dh1', 'dh2']);
     expect(vr.detection_basis).toBe('known_tool');
     expect(vr.status_basis).toBe('exit');

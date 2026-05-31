@@ -5,7 +5,7 @@
  * Spec: §5 (time-series UI), §7 (memory / density cap).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GraphNodeDto, GraphEdgeDto, EpisodeDto } from '../../../api/types';
+import type { GraphNodeDto, GraphEdgeDto } from '../../../api/types';
 import { LANES } from '../../../api/laneMapping';
 import { causalEdgeStyle } from '../causalEdgeStyle';
 import { useMediaQuery } from '../../../hooks/useMediaQuery';
@@ -19,7 +19,6 @@ import styles from './Timeline.module.css';
 export interface TimelineProps {
   nodes: GraphNodeDto[];
   edges: GraphEdgeDto[];
-  episodes: EpisodeDto[];
   selectedNodeId: string | null;
   onSelect: (nodeId: string | null) => void;
   width?: number;
@@ -30,7 +29,6 @@ const MAX_NODES_PER_LANE = 200;
 
 // Layout constants
 const AXIS_HEIGHT = 24;      // px for the time axis row
-const EPISODE_HEIGHT = 12;   // px for the episode band row
 const LANE_LABEL_W = 52;     // px for lane label column
 const NODE_RADIUS = 5;       // circle radius for instant nodes
 const NODE_BAR_H = 8;        // bar height for span nodes
@@ -48,18 +46,6 @@ const LANE_COLORS: Record<string, string> = {
   Quality: 'var(--witmcc-lane-quality, #ff8a4c)',
 };
 
-// Episode phase colours
-const PHASE_COLORS: Record<string, string> = {
-  intake:       'var(--witmcc-phase-intake,       #4f8cff)',
-  exploration:  'var(--witmcc-phase-exploration,  #b07dff)',
-  diagnosis:    'var(--witmcc-phase-diagnosis,    #f0b429)',
-  action:       'var(--witmcc-phase-action,       #41c285)',
-  verification: 'var(--witmcc-phase-verification, #2bd0d0)',
-  repair:       'var(--witmcc-phase-repair,       #ff8a4c)',
-  drift:        'var(--witmcc-phase-drift,        #ef4747)',
-  stall:        'var(--witmcc-phase-stall,        #9a6b73)',
-};
-
 interface TooltipState {
   visible: boolean;
   x: number;
@@ -74,7 +60,6 @@ interface TooltipState {
 export function Timeline({
   nodes,
   edges,
-  episodes,
   selectedNodeId,
   onSelect,
   width,
@@ -136,7 +121,7 @@ export function Timeline({
   // SVG drawable area — responsive width, content-driven height (fixed rows).
   const svgW = width ?? measuredW;
   const laneH = LANE_H;
-  const svgH = EPISODE_HEIGHT + 4 + LANE_H * visibleLanes.length + AXIS_HEIGHT;
+  const svgH = LANE_H * visibleLanes.length + AXIS_HEIGHT;
   const drawW = svgW - LANE_LABEL_W;
   const axisY = svgH - AXIS_HEIGHT;
 
@@ -255,8 +240,8 @@ export function Timeline({
     setTooltip((t) => ({ ...t, visible: false }));
   }, []);
 
-  // Compute lane Y offsets (lanes rendered below episode band + some padding)
-  const laneStartY = EPISODE_HEIGHT + 4;
+  // Compute lane Y offsets (lanes start at the top of the SVG surface).
+  const laneStartY = 0;
 
   return (
     <div ref={rootRef} className={styles.root} style={{ width: width ?? '100%', height }}>
@@ -308,28 +293,6 @@ export function Timeline({
           onMouseLeave={onMouseUp}
           onClick={onSvgClick}
         >
-          {/* ── Episode band ── */}
-          <g data-testid="episode-band">
-            {episodes.map((ep) => {
-              const x0 = scale(new Date(ep.started_at));
-              const x1 = scale(new Date(ep.ended_at));
-              const w = Math.max(1, x1 - x0);
-              const color = PHASE_COLORS[ep.phase] ?? 'var(--witmcc-fg-subtle, #6a7180)';
-              return (
-                <rect
-                  key={ep.episode_id}
-                  data-phase={ep.phase}
-                  x={x0}
-                  y={0}
-                  width={w}
-                  height={EPISODE_HEIGHT}
-                  fill={color}
-                  opacity={0.25}
-                />
-              );
-            })}
-          </g>
-
           {/* ── Lane rows (only non-empty lanes, packed without gaps) ── */}
           {visibleLanes.map((lane, laneIdx) => {
             const y = laneStartY + laneIdx * laneH;

@@ -1,9 +1,9 @@
 // webui/src/components/replay/stream/__tests__/ConversationStream.test.tsx
 /**
- * ConversationStream renders a StreamItem[] (MessageCard for messages,
- * ActivityStack(s) for activity-runs via splitRunByPhase), oldest→newest
- * (newest at the DOM bottom), forwards clicks, reflects selection, and
- * preserves virtualization / scroll-into-view / autoscroll. Spec §3.
+ * ConversationStream renders a StreamItem[] (MessageCard for messages, one
+ * ActivityStack per activity-run), oldest→newest (newest at the DOM bottom),
+ * forwards clicks, reflects selection, and preserves virtualization /
+ * scroll-into-view / autoscroll. Spec §3.
  */
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -66,8 +66,6 @@ function run(id: string, events: ActivityEvent[]): ActivityRun {
   return { type: 'activity-run', id, events };
 }
 
-const noPhase = () => null;
-
 describe('ConversationStream', () => {
   // Regression: rows overlapped because the virtualizer cached measured row
   // heights by INDEX, but useSessionWindow.loadOlder PREPENDS pages — shifting
@@ -81,7 +79,6 @@ describe('ConversationStream', () => {
     render(
       <ConversationStream
         items={items}
-        phaseOf={noPhase}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={() => {}}
@@ -103,7 +100,6 @@ describe('ConversationStream', () => {
           run('r1', [ae('c1', 'Read'), ae('c2', 'Bash')]),
           msg('b', 'second', { role: 'assistant' }),
         ]}
-        phaseOf={noPhase}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={() => {}}
@@ -119,7 +115,6 @@ describe('ConversationStream', () => {
     render(
       <ConversationStream
         items={[msg('a', 'first'), msg('b', 'second')]}
-        phaseOf={noPhase}
         selectedEventId="b"
         findingEventIds={new Set()}
         onSelect={() => {}}
@@ -134,7 +129,6 @@ describe('ConversationStream', () => {
     render(
       <ConversationStream
         items={[msg('a', 'first')]}
-        phaseOf={noPhase}
         selectedEventId={null}
         findingEventIds={new Set(['a'])}
         onSelect={() => {}}
@@ -147,7 +141,6 @@ describe('ConversationStream', () => {
     render(
       <ConversationStream
         items={[]}
-        phaseOf={noPhase}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={() => {}}
@@ -161,7 +154,6 @@ describe('ConversationStream', () => {
     render(
       <ConversationStream
         items={[msg('a', 'first')]}
-        phaseOf={noPhase}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={onSelect}
@@ -177,7 +169,6 @@ describe('ConversationStream', () => {
     const { container, rerender } = render(
       <ConversationStream
         items={items}
-        phaseOf={noPhase}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={() => {}}
@@ -186,7 +177,6 @@ describe('ConversationStream', () => {
     rerender(
       <ConversationStream
         items={items}
-        phaseOf={noPhase}
         selectedEventId="b"
         findingEventIds={new Set()}
         onSelect={() => {}}
@@ -202,7 +192,6 @@ describe('ConversationStream', () => {
     render(
       <ConversationStream
         items={[msg('a', 'first')]}
-        phaseOf={noPhase}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={() => {}}
@@ -217,7 +206,6 @@ describe('ConversationStream', () => {
     const { container } = render(
       <ConversationStream
         items={many}
-        phaseOf={noPhase}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={() => {}}
@@ -235,7 +223,6 @@ describe('ConversationStream', () => {
     const { container, rerender } = render(
       <ConversationStream
         items={items}
-        phaseOf={noPhase}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={() => {}}
@@ -247,7 +234,6 @@ describe('ConversationStream', () => {
     rerender(
       <ConversationStream
         items={[...items, msg('z', 'third')]}
-        phaseOf={noPhase}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={() => {}}
@@ -261,7 +247,6 @@ describe('ConversationStream', () => {
     const { container, rerender } = render(
       <ConversationStream
         items={items}
-        phaseOf={noPhase}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={() => {}}
@@ -278,7 +263,6 @@ describe('ConversationStream', () => {
     rerender(
       <ConversationStream
         items={[...items, msg('z', 'third')]}
-        phaseOf={noPhase}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={() => {}}
@@ -295,7 +279,7 @@ describe('ConversationStream', () => {
     const nowSpy = vi.spyOn(performance, 'now');
     const items = [msg('a', 'first'), msg('b', 'second')];
     const { container, rerender } = render(
-      <ConversationStream items={items} phaseOf={noPhase} selectedEventId={null} findingEventIds={new Set()} onSelect={() => {}} />,
+      <ConversationStream items={items} selectedEventId={null} findingEventIds={new Set()} onSelect={() => {}} />,
     );
     const scroller = container.querySelector('[data-testid="conversation-stream"]') as HTMLElement;
     Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true });
@@ -314,7 +298,7 @@ describe('ConversationStream', () => {
     fireEvent.scroll(scroller);
 
     rerender(
-      <ConversationStream items={[...items, msg('z', 'third')]} phaseOf={noPhase} selectedEventId={null} findingEventIds={new Set()} onSelect={() => {}} />,
+      <ConversationStream items={[...items, msg('z', 'third')]} selectedEventId={null} findingEventIds={new Set()} onSelect={() => {}} />,
     );
     // If the measurement scroll had wrongly re-stuck, append would pin to 1000.
     expect(scroller.scrollTop).toBe(700);

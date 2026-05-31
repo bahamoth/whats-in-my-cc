@@ -1,7 +1,6 @@
 //! Slice-14 — locks that L1 findings always have null judge, layer="L1",
 //! and the correct extractor version stamp.
 
-use chrono::Utc;
 use sqlx::sqlite::SqlitePoolOptions;
 use witmcc::db::migrate;
 
@@ -59,11 +58,14 @@ async fn l1_finding_has_null_judge_and_l1_layer() {
     );
 }
 
+/// Pipeline-generated L1 findings must carry the right provenance: layer="L1",
+/// null judge, and an `<extractor>@v1` stamp matching the firing extractor.
+///
+/// We drive the deterministic `tool_failure` extractor: a Bash tool_call whose
+/// paired tool_result has `is_error=true` and no compensating successful retry
+/// (`tool_failure` is L1/Always → confidence 1.0, judge never consulted).
 #[tokio::test]
 async fn pipeline_l1_findings_have_null_judge() {
-    use witmcc::db::repo_diff_hunk::{self, NewDiffHunk};
-    use witmcc::db::repo_episode::{self, EpisodeRow};
-
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect("sqlite::memory:")
@@ -81,7 +83,7 @@ async fn pipeline_l1_findings_have_null_judge() {
     let sess = "sess_prov";
     let ts = |i: usize| format!("2026-01-01T00:00:{:02}Z", i);
 
-    // Seed minimal raw + observed events.
+    // Seed minimal raw rows for the two events below.
     for i in 0..2usize {
         sqlx::query(
             "INSERT OR IGNORE INTO raw_event \
@@ -99,59 +101,37 @@ async fn pipeline_l1_findings_have_null_judge() {
         .bind(b"{}" as &[u8])
         .bind(&ts(i))
         .execute(&pool).await.unwrap();
-
-        sqlx::query(
-            "INSERT OR IGNORE INTO observed_event \
-             (event_id, raw_event_id, schema_version, session_id, observed_at, \
-              actor, kind, parser_version, payload) \
-             VALUES (?,?,?,?,?,?,?,?,?)"
-        )
-        .bind(format!("ev_p{i}"))
-        .bind(format!("raw_p{i}"))
-        .bind("observed_event.v1")
-        .bind(sess)
-        .bind(&ts(i))
-        .bind("user").bind("user_message")
-        .bind("test").bind("{}")
-        .execute(&pool).await.unwrap();
     }
 
-    // diff_hunk + episodes.
-    repo_diff_hunk::insert(&pool, &NewDiffHunk {
-        diff_hunk_id: "dh_prov001".into(),
-        schema_version: "diff_hunk.v1".into(),
-        session_id: sess.into(),
-        file_path: "src/lib.rs".into(),
-        change_type: "modify".into(),
-        line_range_after_start: Some(1),
-        line_range_after_end: Some(2),
-        introduced_by_event_id: "ev_p0".into(),
-        introduced_by_tool_use_id: None,
-        patch_preview: "+".into(),
-        lines_added: 1,
-        lines_removed: 0,
-        user_modified: false,
-    }).await.unwrap();
+    // ev_p0: assistant Bash tool_call.
+    sqlx::query(
+        "INSERT OR IGNORE INTO observed_event \
+         (event_id, raw_event_id, schema_version, session_id, observed_at, \
+          actor, kind, tool_name, tool_use_id, parser_version, payload) \
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+    )
+    .bind("ev_p0").bind("raw_p0")
+    .bind("observed_event.v1").bind(sess)
+    .bind(ts(0))
+    .bind("assistant").bind("tool_call").bind("Bash").bind("tid_p0")
+    .bind("test")
+    .bind(r#"{"tool_use_id":"tid_p0","name":"Bash","input":{"command":"cargo test"}}"#)
+    .execute(&pool).await.unwrap();
 
-    let mk_ep = |eid: &str, phase: &str, start: &str, end: &str, started: &str, ended: &str| EpisodeRow {
-        episode_id: eid.into(),
-        schema_version: "episode.v1".into(),
-        session_id: sess.into(),
-        phase: phase.into(),
-        start_event_id: start.into(),
-        end_event_id: end.into(),
-        started_at: started.into(),
-        ended_at: ended.into(),
-        evidence_node_ids: "[]".into(),
-        classification_basis: "[]".into(),
-        confidence: 0.9,
-        summary: None,
-        classifier_version: "episode_classifier@v1".into(),
-        created_at: Utc::now().to_rfc3339(),
-    };
-
-    repo_episode::insert(&pool, &mk_ep("ep_prov_intake", "intake", "ev_p0", "ev_p0", &ts(0), &ts(0))).await.unwrap();
-    repo_episode::insert(&pool, &mk_ep("ep_prov_action", "action", "ev_p0", "ev_p1", &ts(1), &ts(1))).await.unwrap();
+    // ev_p1: failing tool_result for the same tool_use_id (no successful retry follows).
+    sqlx::query(
+        "INSERT OR IGNORE INTO observed_event \
+         (event_id, raw_event_id, schema_version, session_id, observed_at, \
+          actor, kind, tool_use_id, parser_version, payload) \
+         VALUES (?,?,?,?,?,?,?,?,?,?)"
+    )
+    .bind("ev_p1").bind("raw_p1")
+    .bind("observed_event.v1").bind(sess)
+    .bind(ts(1))
+    .bind("tool").bind("tool_result").bind("tid_p0")
+    .bind("test")
+    .bind(r#"{"tool_result":{"tool_use_id":"tid_p0","is_error":true,"content":"compile error E0001"}}"#)
+    .execute(&pool).await.unwrap();
 
     witmcc::insight::pipeline::run_extractors(&pool, sess).await.unwrap();
 
@@ -164,11 +144,18 @@ async fn pipeline_l1_findings_have_null_judge() {
 
     assert!(!provenance_rows.is_empty(), "pipeline must produce at least one finding");
 
+    // The deterministic tool_failure finding must be present with correct provenance.
+    let mut saw_tool_failure = false;
     for (prov_str,) in &provenance_rows {
         let prov: serde_json::Value = serde_json::from_str(prov_str).unwrap();
         assert_eq!(prov["layer"].as_str().unwrap(), "L1",
             "all pipeline-generated findings must have layer=L1");
         assert!(prov["judge"].is_null(),
             "all pipeline-generated L1 findings must have null judge");
+        if prov["extractor"].as_str() == Some("tool_failure@v1") {
+            saw_tool_failure = true;
+        }
     }
+    assert!(saw_tool_failure,
+        "expected a finding stamped with extractor=tool_failure@v1 in provenance");
 }

@@ -4,7 +4,6 @@
 use chrono::{TimeZone, Utc};
 use serde_json::json;
 use witmcc::db::repo_diff_hunk::DiffHunkRow;
-use witmcc::db::repo_episode::EpisodeRow;
 use witmcc::db::repo_verification_run::VerificationRunRow;
 use witmcc::insight::extractor::InsightExtractor;
 use witmcc::insight::extractors::context_bloat::ContextBloat;
@@ -71,7 +70,6 @@ fn empty_view<'a>(events: &'a [ObservedEvent]) -> SessionInsightView<'a> {
         events,
         diff_hunks: &[],
         verification_runs: &[],
-        episodes: &[],
         nodes: &[],
         edges: &[],
     }

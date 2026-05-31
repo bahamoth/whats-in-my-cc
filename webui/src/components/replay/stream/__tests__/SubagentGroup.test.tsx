@@ -20,7 +20,6 @@ describe('SubagentGroup', () => {
         selectedEventId={null}
         onSelect={() => {}}
         findingEventIds={new Set()}
-        phaseOf={() => null}
       />,
     );
     expect(screen.getByTestId('subagent-group')).toBeInTheDocument();

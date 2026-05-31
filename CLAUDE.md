@@ -15,7 +15,7 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
 - 현재 단계: **MVP EXIT — 2026-05-27. slice-1~19 완료. M3·M5·M6·M7 모두 closed. AC-1~7 모두 green.**
   - slice-1~10a: transcript / OTel / hook / ObservedEvent + telemetry facet · graph builder · WebUI replay · SSE · windowed events
   - slice-11: VerificationRun ingest + graph edges + Pull API (M3 일부)
-  - slice-12: Episode segmentation + Pull API (M3 일부)
+  - slice-12: ~~Episode segmentation + Pull API~~ — **제거됨** (episode-phase-removal, 2026-05-31). message-view activity-run fold로 대체.
   - slice-13: Causal-edge inference v1 — three rules (M3 CLOSED)
   - slice-14: Insight L1 deterministic extractors + /v1/findings* (M5 일부)
   - slice-15: Insight L2 infra — JudgeRuntime + BudgetGuard + CachedProvider + CLI
@@ -31,8 +31,7 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
 - **운영 주의 (slice-14):** `finding` 테이블 추가 (migration 0008). 기존 dev DB는
   `witmcc init-db`로 재생성 후 재ingest 필요.
 - **운영 주의 (slice-13):** `graph_edge` 테이블에 `inference_rule_id`, `confidence` 컬럼 추가 (migration 0007). 기존 dev DB는 `witmcc init-db`로 재생성 후 재ingest 필요.
-- **운영 주의 (slice-12):** `episode` 테이블 추가 (migration 0006). 기존 dev DB는
-  `witmcc init-db`로 재생성 후 재ingest 필요. rebuild_session이 자동으로 episode rows를 생성함.
+- **운영 주의 (episode-phase-removal, 2026-05-31):** Episode/phase 분류 + `missing_verification` extractor + `episode` 테이블 + `/episodes` endpoint 제거됨. migration `0017`이 `DROP TABLE episode` (직전 최신은 0016) — 기존 dev DB는 `witmcc init-db` 필요. message-view activity-run fold + telemetry fold/facets는 유지. 상세는 `docs/implementation-notes.html#episode-removal`.
 - **운영 주의 (slice-11):** `verification_run` 테이블 추가 (migration 0005). 기존 dev DB는
   `witmcc init-db`로 재생성 후 재ingest 필요. `witmcc ingest --all` 시 세션당 VR 자동 추출.
 - **운영 주의 (slice-10a):** 기존 dev DB (`.witmcc.sqlite*`)는 폐기 후

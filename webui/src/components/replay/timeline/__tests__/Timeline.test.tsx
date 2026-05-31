@@ -3,7 +3,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Timeline } from '../Timeline';
-import type { GraphNodeDto, GraphEdgeDto, EpisodeDto } from '../../../../api/types';
+import type { GraphNodeDto, GraphEdgeDto } from '../../../../api/types';
 
 const T = (s: string) => new Date(s).toISOString();
 function node(id: string, kind: string, start: string, end: string | null, payload: unknown = {}): GraphNodeDto {
@@ -18,25 +18,9 @@ const nodes = [
 ];
 const edges = [edge('e1', 'a', 'b', 'inferred', 'triggered_by_user_message@v1')];
 const deterministicEdge = edge('e2', 'a', 'b', 'deterministic');
-const episodes: EpisodeDto[] = [{
-  episode_id: 'ep',
-  schema_version: '1',
-  session_id: 's',
-  phase: 'action',
-  start_event_id: '',
-  end_event_id: '',
-  started_at: T('2026-05-28T00:00:00Z'),
-  ended_at: T('2026-05-28T00:02:00Z'),
-  evidence_node_ids: [],
-  classification_basis: [],
-  confidence: 1,
-  summary: null,
-  classifier_version: '1',
-  created_at: T('2026-05-28T00:00:00Z'),
-}];
 
 function renderTL(props = {}) {
-  return render(<Timeline nodes={nodes} edges={edges} episodes={episodes} selectedNodeId={null} onSelect={() => {}} width={800} height={300} {...props} />);
+  return render(<Timeline nodes={nodes} edges={edges} selectedNodeId={null} onSelect={() => {}} width={800} height={300} {...props} />);
 }
 
 describe('Timeline', () => {
@@ -91,7 +75,6 @@ describe('Timeline', () => {
       <Timeline
         nodes={[left, mid, right]}
         edges={[]}
-        episodes={[]}
         selectedNodeId={null}
         onSelect={() => {}}
         width={800}
@@ -120,13 +103,6 @@ describe('Timeline', () => {
     renderTL();
     const axis = screen.getByTestId('time-axis');
     expect(axis.querySelectorAll('text').length).toBeGreaterThan(0);
-  });
-
-  // --- Episode band ---
-  it('renders an episode band with a rect per episode phase', () => {
-    renderTL();
-    const band = screen.getByTestId('episode-band');
-    expect(band.querySelector('[data-phase="action"]')).not.toBeNull();
   });
 
   // --- Edges ---
@@ -166,7 +142,6 @@ describe('Timeline', () => {
       <Timeline
         nodes={nodes}
         edges={[deterministicEdge]}
-        episodes={episodes}
         selectedNodeId={null}
         onSelect={() => {}}
         width={800}
@@ -204,7 +179,6 @@ describe('Timeline', () => {
       <Timeline
         nodes={nodes}
         edges={[...edges, extraEdge]}
-        episodes={episodes}
         selectedNodeId={null}
         onSelect={() => {}}
         width={800}
@@ -223,7 +197,6 @@ describe('Timeline', () => {
       <Timeline
         nodes={[...nodes, nodeC]}
         edges={[...edges, edgeCtoC]}
-        episodes={episodes}
         selectedNodeId={'a'}
         onSelect={() => {}}
         width={800}
@@ -300,7 +273,6 @@ describe('Timeline', () => {
       <Timeline
         nodes={manyNodes}
         edges={[]}
-        episodes={[]}
         selectedNodeId={null}
         onSelect={() => {}}
         width={800}
@@ -337,7 +309,6 @@ describe('Timeline', () => {
       <Timeline
         nodes={[nodes[0], bWithPayload]}
         edges={edges}
-        episodes={episodes}
         selectedNodeId={null}
         onSelect={() => {}}
         width={800}

@@ -1,5 +1,5 @@
 {
-  "risky_action||5115e13f7314ff51bba3240d575994f8d3baafda1c9bfbc305b0ea3414143866": {
+  "risky_action||c04bcad47401bd3f6fe1f39d97bff560286d66a0f017f612b5a329d728a041a1": {
     "promote": true,
     "confidence_l2": 0.8,
     "reason": "destructive_bash rm -rf without preceding explicit user authorization in user_message",

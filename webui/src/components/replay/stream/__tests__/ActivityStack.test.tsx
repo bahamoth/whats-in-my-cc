@@ -3,16 +3,15 @@ import { describe, it, expect, vi } from 'vitest';
 import { ActivityStack } from '../ActivityStack';
 import type { ActivityStackData } from '../activityGroup';
 
-const stack: ActivityStackData = { phase: 'exploration', events: [
+const stack: ActivityStackData = { events: [
   { event: { event_id: 'c1', kind: 'tool_call', observed_at: 'z', tool_name: 'Read', payload: { tool_name: 'Read', input: { file_path: '/a/x.jpg' } } } as any, result: { isError: false } },
   { event: { event_id: 'c2', kind: 'tool_call', observed_at: 'z', tool_name: 'Bash', payload: { tool_name: 'Bash', input: { command: 'ls' } } } as any, result: { isError: true } },
 ] };
 
 describe('ActivityStack', () => {
-  it('renders a collapsed summary with phase, top tools, count, error badge', () => {
+  it('renders a collapsed summary with top tools, count, error badge', () => {
     render(<ActivityStack stack={stack} selectedEventId={null} onSelect={() => {}} />);
     const s = screen.getByTestId('activity-stack');
-    expect(s).toHaveAttribute('data-phase', 'exploration');
     expect(s).toHaveAttribute('data-count', '2');
     expect(s).toHaveAttribute('data-errors', '1');
     expect(within(s).getByText(/Read/)).toBeInTheDocument();

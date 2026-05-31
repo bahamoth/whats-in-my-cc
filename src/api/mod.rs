@@ -124,11 +124,6 @@ pub fn router(state: AppState) -> Router {
             "/v1/verification-runs/:id",
             get(routes::verification_run_detail),
         )
-        .route(
-            "/v1/sessions/:id/episodes",
-            get(routes::session_episodes),
-        )
-        .route("/v1/episodes/:id", get(routes::episode_detail))
         .route("/v1/findings", get(routes::list_findings))
         .route("/v1/findings/:id", get(routes::finding_detail))
         .route("/v1/findings/:id/evidence", get(routes::finding_evidence))

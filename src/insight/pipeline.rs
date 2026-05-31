@@ -301,13 +301,11 @@ fn all_extractors_for_pipeline() -> Vec<Box<dyn crate::insight::extractor::Insig
     use crate::insight::extractors::{
         context_bloat::ContextBloat,
         final_state_mismatch::FinalStateMismatch,
-        missing_verification::MissingVerification,
         risky_action::RiskyAction,
         tool_failure::ToolFailure,
     };
     #[allow(unused_mut)]
     let mut v: Vec<Box<dyn crate::insight::extractor::InsightExtractor>> = vec![
-        Box::new(MissingVerification),
         Box::new(ToolFailure),
         Box::new(RiskyAction),
         Box::new(ContextBloat),

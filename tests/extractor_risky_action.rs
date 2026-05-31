@@ -4,7 +4,6 @@
 use chrono::{TimeZone, Utc};
 use serde_json::json;
 use witmcc::db::repo_diff_hunk::DiffHunkRow;
-use witmcc::db::repo_episode::EpisodeRow;
 use witmcc::db::repo_verification_run::VerificationRunRow;
 use witmcc::insight::extractor::InsightExtractor;
 use witmcc::insight::extractors::risky_action::RiskyAction;
@@ -50,7 +49,6 @@ fn synth_view_with_bash<'a>(
         events,
         diff_hunks,
         verification_runs: &[],
-        episodes: &[],
         nodes: &[],
         edges: &[],
     }
@@ -225,7 +223,6 @@ fn projection_includes_required_fields_for_destructive_bash() {
     assert_eq!(proj["category"], "risky_action");
     assert!(proj["trigger"]["kind"].is_string());
     assert!(proj["trigger"]["command_redacted"].is_string());
-    assert!(proj["context"]["episode_phase"].is_string());
 }
 
 #[test]

@@ -28,7 +28,6 @@ type Routes = {
   graph?: Response;
   events?: Response;
   raw?: Response;
-  episodes?: Response;
   findings?: Response;
 };
 
@@ -45,9 +44,6 @@ function setupFetch(routes: Routes) {
     }
     if (url.match(/\/v1\/events\//) && url.endsWith('/raw')) {
       if (routes.raw) return Promise.resolve(routes.raw.clone());
-    }
-    if (url.includes('/episodes')) {
-      if (routes.episodes) return Promise.resolve(routes.episodes.clone());
     }
     if (url.includes('/findings')) {
       if (routes.findings) return Promise.resolve(routes.findings.clone());

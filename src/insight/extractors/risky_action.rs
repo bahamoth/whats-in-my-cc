@@ -104,8 +104,7 @@ impl InsightExtractor for RiskyAction {
                 },
                 "context": {
                     "preceding_user_message_excerpt_redacted": preceding_user_excerpt,
-                    "preceding_assistant_message_excerpt_redacted": preceding_assistant_excerpt,
-                    "episode_phase": "action"
+                    "preceding_assistant_message_excerpt_redacted": preceding_assistant_excerpt
                 }
             });
 
@@ -158,8 +157,7 @@ impl InsightExtractor for RiskyAction {
                 },
                 "context": {
                     "preceding_user_message_excerpt_redacted": "",
-                    "preceding_assistant_message_excerpt_redacted": "",
-                    "episode_phase": "action"
+                    "preceding_assistant_message_excerpt_redacted": ""
                 }
             });
 

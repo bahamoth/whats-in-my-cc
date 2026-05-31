@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import type { GraphPayload } from '../api/types';
@@ -7,7 +7,6 @@ import { DetailPanel } from '../components/replay/detail/DetailPanel';
 import { Timeline } from '../components/replay/timeline/Timeline';
 import { TopBar } from '../components/layout/TopBar';
 import { InsightStrip } from '../components/replay/insight-strip/InsightStrip';
-import { EpisodeStrip } from '../components/replay/EpisodeStrip';
 import {
   ReplaySelectionProvider,
   useReplaySelection,
@@ -16,7 +15,6 @@ import { useLiveStreamBridge } from '../lib/sse';
 import {
   useSessionDetailQuery,
   useSessionGraphQuery,
-  useEpisodesQuery,
   useFindingsQuery,
   useVerificationRunsQuery,
   useToolFailureSummaryQuery,
@@ -32,7 +30,6 @@ import {
   parseLlmRequestSpan,
 } from '../components/replay/stream/llmRequestMetrics';
 import { asRecord, buildEntityFacets } from '../components/replay/facets/entityFacets';
-import { phaseAt } from './episodePhase';
 import { buildToolMetrics } from '../components/replay/detail/toolMetrics';
 import type { RawBlock } from '../components/replay/detail/RawTab';
 import styles from './SessionDetailPage.module.css';
@@ -51,7 +48,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
 
   const detail = useSessionDetailQuery(sessionId);
   const graph = useSessionGraphQuery(sessionId);
-  const episodes = useEpisodesQuery(sessionId);
   const findings = useFindingsQuery(sessionId);
   const verificationRuns = useVerificationRunsQuery(sessionId);
   const toolFailures = useToolFailureSummaryQuery(sessionId);
@@ -168,29 +164,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     }
     return eids;
   }, [findingsData, effectiveGraph]);
-
-  // event_id -> episode phase (by observed_at within [started_at, ended_at]).
-  // Computed over ALL window events — activity events (not just messages) need
-  // phases now so ActivityStack can split runs by phase.
-  //
-  // Episodes can OVERLAP (a stale/wide episode covering the same instant as a
-  // narrow accurate one). `phaseAt` resolves this deterministically by picking
-  // the NARROWEST covering episode rather than the first-listed/widest, so an
-  // event gets the most-specific phase badge (Slice 3 B3).
-  const phaseByEventId = useMemo(() => {
-    const eps = episodes.data ?? [];
-    const out = new Map<string, string>();
-    for (const ev of window_.events) {
-      const phase = phaseAt(eps, ev.observed_at);
-      if (phase) out.set(ev.event_id, phase);
-    }
-    return out;
-  }, [window_.events, episodes.data]);
-
-  const phaseOf = useCallback(
-    (eventId: string) => phaseByEventId.get(eventId) ?? null,
-    [phaseByEventId],
-  );
 
   const selectedStreamEventId = useMemo(() => {
     if (!sel.selectedNodeId) return null;
@@ -345,7 +318,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
                   : undefined
               }
             />
-            <EpisodeStrip episodes={episodes.data ?? []} />
             <MetaStrip session={detail.data} events={window_.events} />
           </div>
 
@@ -359,7 +331,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
             />
             <ConversationStream
               items={streamItems}
-              phaseOf={phaseOf}
               selectedEventId={selectedStreamEventId}
               findingEventIds={findingEventIds}
               onSelect={selectStreamCard}
@@ -383,7 +354,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
             <Timeline
               nodes={effectiveGraph.nodes}
               edges={effectiveGraph.edges}
-              episodes={episodes.data ?? []}
               selectedNodeId={sel.selectedNodeId}
               onSelect={(id) => sel.setSelectedNodeId(id)}
             />

@@ -54,7 +54,6 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <tr><td>GET</td><td><code>/v1/sessions</code></td><td>list sessions with filters</td><td>No</td></tr>
 <tr><td>GET</td><td><code>/v1/sessions/{session_id}</code></td><td>session summary</td><td>No</td></tr>
 <tr><td>GET</td><td><code>/v1/sessions/{session_id}/graph</code></td><td>nodes, edges, source refs</td><td>No</td></tr>
-<tr><td>GET</td><td><code>/v1/sessions/{session_id}/episodes</code></td><td>episode list</td><td>No</td></tr>
 <tr><td>GET</td><td><code>/v1/sessions/{session_id}/findings</code></td><td>findings for session</td><td>No</td></tr>
 <tr><td>GET</td><td><code>/v1/findings/{finding_id}</code></td><td>finding detail</td><td>No</td></tr>
 <tr><td>GET</td><td><code>/v1/resources/{resource_id}</code></td><td>feedback/insight resource</td><td>No</td></tr>
@@ -79,7 +78,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 }</code></pre>
 </section>
 <section id="filters"><h2><span class="num">04</span>Filtering and Pagination</h2>
-<table><thead><tr><th>Parameter</th><th>Applies to</th><th>Example</th></tr></thead><tbody><tr><td><code>session_id</code></td><td>findings, resources, lineage</td><td><code>?session_id=sess_123</code></td></tr><tr><td><code>category</code></td><td>findings</td><td><code>?category=missing_verification</code></td></tr><tr><td><code>severity</code></td><td>findings</td><td><code>?severity=high</code></td></tr><tr><td><code>file_path</code></td><td>file-lineage</td><td><code>?file_path=src/service.ts</code></td></tr><tr><td><code>trace_id</code></td><td>graph, OTel</td><td><code>?trace_id=trace_abc</code></td></tr><tr><td><code>cursor</code></td><td>list endpoints</td><td><code>?cursor=eyJvZmZzZXQiOjEwMH0=</code></td></tr></tbody></table>
+<table><thead><tr><th>Parameter</th><th>Applies to</th><th>Example</th></tr></thead><tbody><tr><td><code>session_id</code></td><td>findings, resources, lineage</td><td><code>?session_id=sess_123</code></td></tr><tr><td><code>category</code></td><td>findings</td><td><code>?category=tool_failure</code></td></tr><tr><td><code>severity</code></td><td>findings</td><td><code>?severity=high</code></td></tr><tr><td><code>file_path</code></td><td>file-lineage</td><td><code>?file_path=src/service.ts</code></td></tr><tr><td><code>trace_id</code></td><td>graph, OTel</td><td><code>?trace_id=trace_abc</code></td></tr><tr><td><code>cursor</code></td><td>list endpoints</td><td><code>?cursor=eyJvZmZzZXQiOjEwMH0=</code></td></tr></tbody></table>
 </section>
 <section id="mcp"><h2><span class="num">05</span>MCP Streamable HTTP Contract</h2>
 <p>서비스는 로컬 MCP server로도 동작한다. 기본 endpoint는 <code>http://127.0.0.1:{port}/mcp</code>이며, POST로 JSON-RPC messages를 받고 GET + SSE로 server-to-client streaming을 제공할 수 있다.</p>
@@ -123,8 +122,8 @@ data: {
   "schema_version": "stream_event.v1",
   "finding_id": "find_01J...",
   "session_id": "sess_123",
-  "category": "missing_verification",
-  "severity": "medium"
+  "category": "tool_failure",
+  "severity": "high"
 }</code></pre>
 </section>
 <section id="auth"><h2><span class="num">07</span>Auth, Origin, and Local Binding</h2>
