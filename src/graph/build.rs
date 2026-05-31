@@ -120,7 +120,8 @@ pub fn compute(
     let mut tool_call_node: HashMap<String, usize> = HashMap::new();
     // tool_use_id -> (event_uuid, node_id) for tool_result nodes before merge
     let mut tool_result_info: HashMap<String, (Option<String>, String)> = HashMap::new();
-    // request_id -> assistant_message node_id (for facet_of span→asst wiring).
+    // request_id -> assistant_message node_id (fold ownership for llm_request
+    // span + api_request log).
     // Stores stable node_id strings directly; assistant_message nodes are never
     // removed by the merge step, so no post-merge snapshot is needed (unlike
     // tool_call_nid_by_tid, which must snapshot before tool_result removal).
@@ -676,13 +677,32 @@ pub fn compute(
 
     // --- Group A telemetry fold (Slice 1) ---------------------------------------
     // tool_result/tool_decision log_record events are folded INTO their owning
-    // tool_call node's payload.facets array (keyed by tool_use_id) rather than
-    // promoted to standalone nodes linked by a display-only facet_of edge.
+    // tool_call node's payload.facets array (keyed by tool_use_id). Earlier
+    // designs promoted them to standalone nodes linked by a display-only
+    // facet_of edge (the now-removed mechanism); the fold supersedes that.
     // The collect pass below gathers facet entries + the node_ids to drop; the
     // apply + retain pass runs just before the function returns (after all edge
     // wiring) so folded node_ids are excluded from both nodes and edges.
     let mut folded_node_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut facets_by_owner: HashMap<String, Vec<Value>> = HashMap::new();
+
+    // Shared guard-push-mark for all fold branches. Each branch supplies only its
+    // detection predicate + key extraction, then calls this with the owner node_id,
+    // the folded node, its facet_kind, and the correlation basis. The owner-survival
+    // guard (valid_nodes) mirrors the old facet_of pass's check: only fold when the
+    // owning node still exists in the final graph, preventing silent data loss if a
+    // future change drops the owner.
+    let mut fold = |owner: &str, node: &GraphNode, facet_kind: &str, basis: &str| {
+        if valid_nodes.contains(owner) {
+            facets_by_owner.entry(owner.to_string()).or_default().push(json!({
+                "facet_kind": facet_kind,
+                "basis": basis,
+                "source_event_id": node.source_event_ids.first().cloned().unwrap_or_default(),
+                "data": node.payload.clone(),
+            }));
+            folded_node_ids.insert(node.node_id.clone());
+        }
+    };
 
     for n in &nodes {
         if n.node_kind == "log_record" {
@@ -699,19 +719,7 @@ pub fn compute(
                     .and_then(|v| v.as_str())
                 {
                     if let Some(owner) = tool_call_nid_by_tid.get(tid) {
-                        // Owner-survival guard: only fold when the owning tool_call
-                        // node still exists in the final graph (mirrors the old
-                        // facet_of pass's valid_nodes check). Prevents silent data
-                        // loss if a future change drops the owner node.
-                        if valid_nodes.contains(owner.as_str()) {
-                            facets_by_owner.entry(owner.clone()).or_default().push(json!({
-                                "facet_kind": fk,
-                                "basis": "tool_use_id",
-                                "source_event_id": n.source_event_ids.first().cloned().unwrap_or_default(),
-                                "data": n.payload.clone(),
-                            }));
-                            folded_node_ids.insert(n.node_id.clone());
-                        }
+                        fold(owner, n, fk, "tool_use_id");
                     }
                 }
             }
@@ -723,15 +731,7 @@ pub fn compute(
         {
             if let Some(rid) = n.payload.pointer("/attributes/request_id").and_then(|v| v.as_str()) {
                 if let Some(owner) = assistant_nid_by_request_id.get(rid) {
-                    if valid_nodes.contains(owner.as_str()) {
-                        facets_by_owner.entry(owner.clone()).or_default().push(json!({
-                            "facet_kind": "api_request_log",
-                            "basis": "request_id",
-                            "source_event_id": n.source_event_ids.first().cloned().unwrap_or_default(),
-                            "data": n.payload.clone(),
-                        }));
-                        folded_node_ids.insert(n.node_id.clone());
-                    }
+                    fold(owner, n, "api_request_log", "request_id");
                 }
             }
         }
@@ -747,15 +747,7 @@ pub fn compute(
             let attrs = flatten_attrs(n.payload.pointer("/raw_span/attributes"));
             if let Some(rid) = attrs.get("request_id").and_then(|v| v.as_str()) {
                 if let Some(owner) = assistant_nid_by_request_id.get(rid) {
-                    if valid_nodes.contains(owner.as_str()) {
-                        facets_by_owner.entry(owner.clone()).or_default().push(json!({
-                            "facet_kind": "llm_request_span",
-                            "basis": "request_id",
-                            "source_event_id": n.source_event_ids.first().cloned().unwrap_or_default(),
-                            "data": n.payload.clone(),
-                        }));
-                        folded_node_ids.insert(n.node_id.clone());
-                    }
+                    fold(owner, n, "llm_request_span", "request_id");
                 }
             }
         }
