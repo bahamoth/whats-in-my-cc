@@ -898,13 +898,26 @@ pub fn compute(
     // MUST run AFTER the Slice-1 fold (above) — folding reads telemetry node
     // payloads (e.g. the llm_request span's raw_span) before they are dropped.
     //
+    // Why materialize-then-drop (a FINAL-projection step) rather than skip these
+    // kinds at the materialization match arm: (a) the foldable telemetry —
+    // llm_request otel_span and tool/api log_record — must be materialized so the
+    // Slice-1 fold loop can read their payloads to build the owner facets; and
+    // (b) transcript-internal hook_event nodes carry an event_uuid that is
+    // inserted into by_event_uuid and participates in message_reply edge
+    // resolution during the build. Skipping at the source would break the fold
+    // and/or message_reply wiring, so the removal must happen here at the end.
+    //
+    // Blocklist (not a backbone whitelist) is chosen because the set of backbone
+    // node kinds is still expanding across slices; revisit a whitelist when it
+    // stabilizes.
+    //
     // Verified safe: turn_order already excludes these kinds; the episode
     // classifier and all insight extractors read observed_event (not graph
     // nodes); no edge inference rule consumes these node kinds. API/MCP/
     // frontend impact is cosmetic (telemetry timeline lanes thin out).
     const ORPHAN_TELEMETRY_KINDS: &[&str] =
         &["metric_sample", "hook_event", "otel_span", "log_record"];
-    let dropped: std::collections::HashSet<String> = nodes
+    let dropped: HashSet<String> = nodes
         .iter()
         .filter(|n| ORPHAN_TELEMETRY_KINDS.contains(&n.node_kind.as_str()))
         .map(|n| n.node_id.clone())
