@@ -102,6 +102,8 @@
   max-width: 160px;
 }
 
+.tagChip { font-size: 10px; padding: 0 5px; border-radius: 6px; background: var(--witmcc-surface-2, #2a2f3a); color: var(--witmcc-text-dim, #9aa4b2); white-space: nowrap; }
+
 .itemBadgeOk {
   font-size: 10px;
   padding: 1px 5px;

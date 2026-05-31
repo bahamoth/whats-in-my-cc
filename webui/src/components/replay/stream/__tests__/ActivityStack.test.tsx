@@ -29,11 +29,17 @@ describe('ActivityStack', () => {
     expect(onSelect).toHaveBeenCalledWith('c2');
   });
 
-  it('marks the selected item', () => {
+  it('marks the selected item (auto-expanded via selection, no manual click needed)', () => {
     render(<ActivityStack stack={stack} selectedEventId="c1" onSelect={() => {}} />);
-    fireEvent.click(screen.getByTestId('activity-stack-toggle'));
     const items = screen.getAllByTestId('activity-item');
     expect(items[0].getAttribute('data-selected')).toBe('true');
+  });
+
+  it('can fold the run even while a child is selected (regression: stuck-open bug)', () => {
+    render(<ActivityStack stack={stack} selectedEventId="c1" onSelect={() => {}} />);
+    expect(screen.getAllByTestId('activity-item').length).toBeGreaterThan(0); // auto-expanded (c1 selected)
+    fireEvent.click(screen.getByTestId('activity-stack-toggle')); // user collapses
+    expect(screen.queryByTestId('activity-item')).toBeNull(); // folded, even though c1 still selected
   });
 
   it('auto-expands when selectedEventId matches one of its events', () => {
@@ -48,5 +54,14 @@ describe('ActivityStack', () => {
   it('stays collapsed when selectedEventId is for a different stack', () => {
     render(<ActivityStack stack={stack} selectedEventId="other" onSelect={() => {}} />);
     expect(screen.queryByTestId('activity-item')).toBeNull();
+  });
+
+  it('renders a tag chip for a tagged Bash event (search·read) and none for control', () => {
+    const ev = (command: string, id: string) => ({ event_id: id, kind: 'tool_call', tool_name: 'Bash', observed_at: '2026-05-31T00:00:00Z', payload: { input: { command } } });
+    const stack = { events: [ { event: ev('grep -n x', 'a'), result: null }, { event: ev('cd /tmp', 'b'), result: null } ] };
+    render(<ActivityStack stack={stack as any} selectedEventId={'a'} onSelect={() => {}} />); // selected → expanded
+    expect(screen.getByText('search·read')).toBeInTheDocument();
+    // control event 'cd' produces no chip text
+    expect(screen.queryByText('control')).toBeNull();
   });
 });

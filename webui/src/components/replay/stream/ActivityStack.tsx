@@ -4,6 +4,7 @@ import { ChevronRight, ChevronDown, Wrench, AlertTriangle } from 'lucide-react';
 import { summarizeStack } from './activityGroup';
 import type { ActivityStackData } from './activityGroup';
 import { nodeLabel } from './nodeLabel';
+import { tagForEvent } from './eventTags';
 import styles from './ActivityStack.module.css';
 
 interface ActivityStackProps {
@@ -18,15 +19,17 @@ function formatDuration(ms: number): string {
 }
 
 export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStackProps) {
-  const [userExpanded, setUserExpanded] = useState(false);
+  // `null` = no explicit user choice yet → follow `containsSelected` (auto-open
+  // when a selection lands inside this run so the host can scroll it into view).
+  // Once the user toggles, their explicit true/false wins — so they CAN COLLAPSE
+  // the run even while a child is selected (bug: "can't fold after selecting a
+  // sub-item", caused by the old unconditional `userExpanded || containsSelected`).
+  const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const summary = useMemo(() => summarizeStack(stack), [stack]);
 
-  // Auto-expand when the host selects one of our events (e.g. timeline /
-  // subgraph click): the host needs the selected activity item mounted so it
-  // can scroll it into view. Manual toggling still works on top of this.
   const containsSelected =
     selectedEventId != null && stack.events.some((ae) => ae.event.event_id === selectedEventId);
-  const expanded = userExpanded || containsSelected;
+  const expanded = userOverride ?? containsSelected;
 
   return (
     <div
@@ -38,7 +41,7 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
       <button
         data-testid="activity-stack-toggle"
         className={styles.toggle}
-        onClick={() => setUserExpanded((v) => !v)}
+        onClick={() => setUserOverride(!expanded)}
         aria-expanded={expanded}
       >
         {expanded
@@ -82,6 +85,8 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
                 }}
               >
                 <span className={styles.itemPrimary}>{label.primary}</span>
+                {(() => { const tr = tagForEvent(ae.event); return tr.disposition === 'tagged' && tr.tag
+                  ? <span data-testid="event-tag-chip" className={styles.tagChip}>{tr.tag}</span> : null; })()}
                 {label.secondary && (
                   <span className={styles.itemSecondary}>{label.secondary}</span>
                 )}
