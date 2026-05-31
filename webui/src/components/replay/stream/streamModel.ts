@@ -126,18 +126,23 @@ function classify(
     return { cat: 'thinking', sigLen: sig.length };
   }
   if (e.kind === 'system_summary') {
-    // system_summary is heterogeneous. Only the insightful subkinds are
-    // card-worthy in the message view: away_summary (a CC work recap) and
-    // compact_boundary ("Conversation compacted"), both carrying a readable
-    // `content` string. Thin/telemetry-ish subkinds (turn_duration,
-    // stop_hook_summary, local_command, informational, scheduled_task_fire)
-    // and any unknown/missing subkind are meaningful data but not card-worthy
-    // → conservatively dropped from the stream.
+    // system_summary is heterogeneous. `subkind` here is the real CC transcript
+    // `type:"system"` `subtype`, passed through verbatim by the Rust ingest
+    // (`src/ingest/mapping.rs`: `e.subkind = s.subtype`). These literals are
+    // real-data-anchored, observed in live CC sessions (e.g. 01fe9550):
+    //   away_summary (recap, has `content`), turn_duration, stop_hook_summary,
+    //   local_command — and across other sessions compact_boundary
+    //   (`content:"Conversation compacted"` + `compactMetadata`). Not guessed.
+    // Only the insightful, content-bearing subkinds are card-worthy in the
+    // message view: away_summary (a CC work recap) and compact_boundary. Every
+    // other subkind — and any away_summary/compact_boundary with empty content
+    // — is meaningful data but not card-worthy → dropped (mirroring how empty
+    // user_message/assistant_message drop).
     const sk = e.subkind ?? '';
     if (sk === 'away_summary' || sk === 'compact_boundary') {
       const content = typeof p.content === 'string' ? p.content.trim() : '';
-      const text = content || `system_summary: ${sk}`;
-      return { cat: 'message', role: 'system', text, model: null };
+      if (content === '') return { cat: 'drop' };
+      return { cat: 'message', role: 'system', text: content, model: null };
     }
     return { cat: 'drop' };
   }
