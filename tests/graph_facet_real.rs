@@ -38,21 +38,40 @@ fn real_payloads_produce_facet_of_with_valid_entity_targets() {
     let evs = vec![tool_call, log_result, log_decision, assistant, span];
     let (nodes, edges) = compute("sess-real-facet", &evs, &[], &[]);
 
-    let kind_by_id: std::collections::HashMap<_, _> =
-        nodes.iter().map(|n| (n.node_id.as_str(), n.node_kind.as_str())).collect();
-    let facets: Vec<_> = edges.iter().filter(|e| e.edge_kind == "facet_of").collect();
+    // Slice 1 (Group A): every Group-A telemetry kind now folds INTO its owner
+    // node's payload.facets — the 2 tool logs (tool_result + tool_decision) into
+    // the tool_call (tool_use_id), and the llm_request span into the
+    // assistant_message (request_id). No facet_of edges remain.
+    assert!(
+        !edges.iter().any(|e| e.edge_kind == "facet_of"),
+        "no facet_of edges remain after the fold"
+    );
 
-    // Slice 1 (Group A): the 2 tool logs (tool_result + tool_decision) now fold
-    // INTO the tool_call node's payload.facets keyed by tool_use_id; only the
-    // span → assistant_message facet_of edge (request_id basis) remains.
-    assert_eq!(facets.len(), 1, "expected 1 surviving span facet_of edge, got {}", facets.len());
-    for f in &facets {
-        let to_kind = kind_by_id.get(f.to_node_id.as_str()).copied().unwrap_or("");
-        assert_eq!(to_kind, "assistant_message", "surviving facet_of target is assistant_message");
-    }
-    let bases: std::collections::HashSet<_> = facets.iter()
-        .filter_map(|f| f.attributes.get("basis").and_then(|v| v.as_str())).collect();
-    assert!(bases.contains("request_id"), "request_id basis present");
+    // The llm_request span folds into the assistant_message payload, not left as
+    // a node nor linked by a facet_of edge.
+    let asst = nodes
+        .iter()
+        .find(|n| n.node_kind == "assistant_message")
+        .expect("assistant_message node");
+    let asst_facets = asst
+        .payload
+        .get("facets")
+        .and_then(|f| f.as_array())
+        .expect("assistant_message has payload.facets");
+    let asst_fkinds: std::collections::HashSet<_> = asst_facets
+        .iter()
+        .filter_map(|f| f.get("facet_kind").and_then(|v| v.as_str()))
+        .collect();
+    assert!(asst_fkinds.contains("llm_request_span"), "llm_request span folded");
+    let span_facet = asst_facets
+        .iter()
+        .find(|f| f["facet_kind"] == "llm_request_span")
+        .unwrap();
+    assert_eq!(span_facet["basis"], "request_id");
+    assert!(
+        !nodes.iter().any(|n| n.node_kind == "otel_span"),
+        "folded llm_request span must not remain as a standalone node"
+    );
 
     // The two tool logs are folded into the tool_call payload, not left as nodes.
     let call = nodes.iter().find(|n| n.node_kind == "tool_call").expect("tool_call node");

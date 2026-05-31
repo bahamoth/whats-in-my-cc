@@ -1,8 +1,8 @@
 //! Slice 1 (Group A) — telemetry fold into owner node payload.
-//! Covers tool_result/tool_decision log_record → tool_call by tool_use_id.
+//! Covers both folds:
+//!   - tool_result/tool_decision log_record → tool_call by tool_use_id
+//!   - llm_request otel_span + api_request log_record → assistant_message by request_id
 //! Folded events MUST NOT remain as standalone nodes and MUST NOT get facet_of edges.
-//! (The llm_request span + api_request log → assistant_message fold lands in a
-//! follow-up task and is not exercised by this file yet.)
 
 mod common;
 
@@ -75,4 +75,61 @@ fn tool_logs_fold_into_tool_call_payload() {
         !edges.iter().any(|e| e.edge_kind == "facet_of"),
         "fold replaces facet_of edges"
     );
+}
+
+fn assistant_ev(event_id: &str, rid: &str) -> ObservedEvent {
+    let mut e = common::base_event(EventKind::AssistantMessage, event_id);
+    e.request_id = Some(rid.into());
+    e.payload = json!({"role":"assistant","content":[]});
+    e
+}
+
+fn llm_span_ev(event_id: &str, rid: &str) -> ObservedEvent {
+    let mut e = common::base_event(EventKind::OtelSpan, event_id);
+    e.trace_id = Some("trace-1".into());
+    e.span_id = Some("span-1".into());
+    e.payload = json!({
+        "raw_span":{
+            "name":"claude_code.llm_request",
+            "attributes":[
+                {"key":"request_id","value":{"stringValue":rid}},
+                {"key":"duration_ms","value":{"stringValue":"1521"}}
+            ]
+        }
+    });
+    e
+}
+
+fn api_request_log_ev(event_id: &str, rid: &str) -> ObservedEvent {
+    let mut e = common::base_event(EventKind::LogRecord, event_id);
+    e.payload = json!({
+        "event_name":"api_request",
+        "attributes":{"request_id":rid,"cost_usd":0.000906,"duration_ms":"1521","model":"claude-haiku-4-5-20251001"}
+    });
+    e
+}
+
+#[test]
+fn span_and_api_log_fold_into_assistant_payload() {
+    let evs = vec![
+        assistant_ev("evt-asst", "req_A"),
+        llm_span_ev("evt-span", "req_A"),
+        api_request_log_ev("evt-api", "req_A"),
+    ];
+    let (nodes, edges) = compute("sess_t", &evs, &[], &[]);
+
+    let facets = facets_of(&nodes, "assistant_message");
+    let kinds: Vec<&str> = facets
+        .iter()
+        .filter_map(|f| f.get("facet_kind").and_then(|v| v.as_str()))
+        .collect();
+    assert!(kinds.contains(&"llm_request_span"), "span folded; got {kinds:?}");
+    assert!(kinds.contains(&"api_request_log"), "api log folded; got {kinds:?}");
+
+    let api = facets.iter().find(|f| f["facet_kind"] == "api_request_log").unwrap();
+    assert_eq!(api["data"]["attributes"]["cost_usd"], 0.000906);
+
+    assert!(!nodes.iter().any(|n| n.node_kind == "otel_span"));
+    assert!(!nodes.iter().any(|n| n.node_kind == "log_record"));
+    assert!(!edges.iter().any(|e| e.edge_kind == "facet_of"));
 }

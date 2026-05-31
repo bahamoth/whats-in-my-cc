@@ -97,25 +97,48 @@ fn facet_of_not_emitted_when_no_matching_tool_call() {
     );
 }
 
+// Slice 1 (Group A): the llm_request otel_span folds INTO the owning
+// assistant_message node's payload.facets (keyed by request_id) instead of being
+// linked by a facet_of edge. The folded span must not remain as a node and must
+// not produce a facet_of edge.
 #[test]
-fn facet_of_links_llm_span_to_assistant_by_request_id() {
+fn llm_span_folds_into_assistant_payload_by_request_id() {
     let evs = vec![assistant_ev("evt-asst", "req_A"), llm_span_ev("evt-span", "req_A")];
     let (nodes, edges) = compute("sess_t", &evs, &[], &[]);
     let asst = nodes.iter().find(|n| n.node_kind == "assistant_message").unwrap();
-    let span = nodes.iter().find(|n| n.node_kind == "otel_span").unwrap();
-    let f = edges.iter().find(|e| e.edge_kind == "facet_of"
-        && e.from_node_id == span.node_id).expect("span→asst facet_of");
-    assert_eq!(f.to_node_id, asst.node_id);
-    assert_eq!(f.attributes.get("basis").and_then(|v| v.as_str()), Some("request_id"));
+    let facets = asst
+        .payload
+        .get("facets")
+        .and_then(|f| f.as_array())
+        .expect("assistant_message has payload.facets");
+    assert_eq!(facets.len(), 1, "one llm_request span folded");
+    assert_eq!(facets[0]["facet_kind"], "llm_request_span");
+    assert_eq!(facets[0]["basis"], "request_id");
+    assert!(
+        !nodes.iter().any(|n| n.node_kind == "otel_span"),
+        "folded llm_request span must not remain as a node"
+    );
+    assert!(
+        !edges.iter().any(|e| e.edge_kind == "facet_of"),
+        "fold replaces the span facet_of edge"
+    );
 }
 
+// A non-llm_request span (e.g. a tool span) carrying a request_id attribute must
+// NOT be folded: it stays a standalone otel_span node and the assistant gets no
+// facet for it.
 #[test]
-fn facet_of_not_emitted_for_non_llm_request_span_with_request_id() {
+fn non_llm_request_span_is_not_folded() {
     let evs = vec![assistant_ev("evt-asst", "req_A"), tool_span_ev("evt-tool-span", "req_A")];
-    let (nodes, edges) = compute("sess_t", &evs, &[], &[]);
-    let span = nodes.iter().find(|n| n.node_kind == "otel_span").unwrap();
+    let (nodes, _edges) = compute("sess_t", &evs, &[], &[]);
     assert!(
-        edges.iter().all(|e| !(e.edge_kind == "facet_of" && e.from_node_id == span.node_id)),
-        "non-llm_request span must not produce a facet_of edge"
+        nodes.iter().any(|n| n.node_kind == "otel_span"),
+        "non-llm_request span stays a standalone node"
+    );
+    let asst = nodes.iter().find(|n| n.node_kind == "assistant_message").unwrap();
+    let facets = asst.payload.get("facets").and_then(|f| f.as_array());
+    assert!(
+        facets.map(|a| a.is_empty()).unwrap_or(true),
+        "assistant must have no facet for a non-llm_request span"
     );
 }

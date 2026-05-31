@@ -716,35 +716,49 @@ pub fn compute(
                 }
             }
         }
-    }
 
-    // 3e(cont). facet_of (응답) — llm_request otel_span → assistant_message. 신뢰 키 request_id.
-    //     request_id는 otel_span 컬럼이 아닌 payload.raw_span.attributes[] OTLP 배열에서 추출.
-    for n in &nodes {
-        if n.node_kind != "otel_span" {
-            continue;
-        }
-        if n.payload.pointer("/raw_span/name").and_then(|v| v.as_str())
-            != Some("claude_code.llm_request")
+        // api_request log_record → assistant_message by request_id.
+        if n.node_kind == "log_record"
+            && n.payload.get("event_name").and_then(|v| v.as_str()) == Some("api_request")
         {
-            continue;
+            if let Some(rid) = n.payload.pointer("/attributes/request_id").and_then(|v| v.as_str()) {
+                if let Some(owner) = assistant_nid_by_request_id.get(rid) {
+                    if valid_nodes.contains(owner.as_str()) {
+                        facets_by_owner.entry(owner.clone()).or_default().push(json!({
+                            "facet_kind": "api_request_log",
+                            "basis": "request_id",
+                            "source_event_id": n.source_event_ids.first().cloned().unwrap_or_default(),
+                            "data": n.payload.clone(),
+                        }));
+                        folded_node_ids.insert(n.node_id.clone());
+                    }
+                }
+            }
         }
-        // Reuse the OTLP attribute flattener (shared with otel_logs/metrics ingest)
-        // rather than hand-rolling the {key,value:{stringValue}} walk.
-        let attrs = flatten_attrs(n.payload.pointer("/raw_span/attributes"));
-        let rid = attrs.get("request_id").and_then(|v| v.as_str());
-        let Some(rid) = rid else { continue; };
-        let Some(asst_nid) = assistant_nid_by_request_id.get(rid) else { continue; };
-        if !valid_nodes.contains(asst_nid.as_str()) || !valid_nodes.contains(n.node_id.as_str()) {
-            continue;
+
+        // llm_request otel_span → assistant_message by request_id. request_id는
+        // otel_span 컬럼이 아닌 payload.raw_span.attributes[] OTLP 배열에서 추출.
+        if n.node_kind == "otel_span"
+            && n.payload.pointer("/raw_span/name").and_then(|v| v.as_str())
+                == Some("claude_code.llm_request")
+        {
+            // Reuse the OTLP attribute flattener (shared with otel_logs/metrics
+            // ingest) rather than hand-rolling the {key,value:{stringValue}} walk.
+            let attrs = flatten_attrs(n.payload.pointer("/raw_span/attributes"));
+            if let Some(rid) = attrs.get("request_id").and_then(|v| v.as_str()) {
+                if let Some(owner) = assistant_nid_by_request_id.get(rid) {
+                    if valid_nodes.contains(owner.as_str()) {
+                        facets_by_owner.entry(owner.clone()).or_default().push(json!({
+                            "facet_kind": "llm_request_span",
+                            "basis": "request_id",
+                            "source_event_id": n.source_event_ids.first().cloned().unwrap_or_default(),
+                            "data": n.payload.clone(),
+                        }));
+                        folded_node_ids.insert(n.node_id.clone());
+                    }
+                }
+            }
         }
-        edges.push(make_edge(
-            session_id,
-            &n.node_id,
-            asst_nid,
-            "facet_of",
-            json!({"basis": "request_id"}),
-        ));
     }
 
     // 3c. turn_order — adjacent pairs of nodes ordered by (started_at, node_id).
