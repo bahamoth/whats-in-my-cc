@@ -167,19 +167,18 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <pre><code>{
   "finding_id": "find_01J...",
   "schema_version": "finding.v1",
-  "category": "missing_verification",
-  "severity": "medium",
-  "claim": "File changes were made but no successful verification run was observed.",
+  "category": "tool_failure",
+  "severity": "high",
+  "claim": "A tool invocation returned an error with no compensating retry in the following events.",
   "evidence_refs": [
-    { "node_id": "node_edit_001", "role": "supporting" },
-    { "node_id": "node_final_001", "role": "supporting" }
+    { "node_id": "node_tool_result_001", "role": "supporting" }
   ],
   "counter_evidence_refs": [],
-  "confidence": 0.86,
-  "limitations": ["Verification may have occurred outside the observed session."],
-  "downstream_topics": ["verification_policy"]
+  "confidence": 1.0,
+  "limitations": ["A compensating retry may have occurred outside the observed window."],
+  "downstream_topics": ["tool_reliability"]
 }</code></pre>
-<table><thead><tr><th>Finding category</th><th>Evidence requirement</th></tr></thead><tbody><tr><td>missing_verification</td><td>mutation node + finalization node + no successful verification edge</td></tr><tr><td>context_bloat</td><td>large/repeated context artifact + token/cost signal</td></tr><tr><td>tool_failure</td><td>failed tool result or OTel error event</td></tr><tr><td>risky_action</td><td>permission event, destructive command, sensitive file/path</td></tr><tr><td>final_state_mismatch</td><td>final answer claim conflicts with file/git/verification state</td></tr></tbody></table>
+<table><thead><tr><th>Finding category</th><th>Evidence requirement</th></tr></thead><tbody><tr><td>context_bloat</td><td>large/repeated context artifact + token/cost signal</td></tr><tr><td>tool_failure</td><td>failed tool result or OTel error event</td></tr><tr><td>risky_action</td><td>permission event, destructive command, sensitive file/path</td></tr><tr><td>final_state_mismatch</td><td>final answer claim conflicts with file/git/verification state</td></tr></tbody></table>
 </section>
 <section id="resource"><h2><span class="num">09</span>FeedbackResource and ExportBundle</h2>
 <pre><code>{
