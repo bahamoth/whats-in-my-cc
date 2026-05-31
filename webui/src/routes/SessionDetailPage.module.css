@@ -20,10 +20,9 @@
 .detail { grid-area: detail; min-height: 0; overflow: auto; }
 .placeholder { color: var(--witmcc-fg-subtle, #6a7180); }
 
-/* loadOlder feedback — floats over the top of the stream so it does not shift
-   the virtualized content or its scroll position. */
-.loadingOlder,
-.historyStart {
+/* loadOlder feedback — a transient pill that floats over the top of the stream
+   so it does not shift the virtualized content or its scroll position. */
+.loadingOlder {
   position: absolute;
   top: 8px;
   left: 50%;
