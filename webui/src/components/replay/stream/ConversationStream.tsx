@@ -6,10 +6,10 @@ import { ActivityStack } from './ActivityStack';
 import { SubagentGroup } from './SubagentGroup';
 import { ThinkingMarker } from './ThinkingMarker';
 import type { StreamItem } from './streamModel';
+import { nextStickState } from './scrollAnchor';
 import styles from './ConversationStream.module.css';
 
 const FALLBACK_CAP = 200;
-const STICK_THRESHOLD = 48;
 
 interface ConversationStreamProps {
   items: StreamItem[];
@@ -66,8 +66,8 @@ export function ConversationStream({
   const onScroll = () => {
     const el = parentRef.current;
     if (!el) return;
-    if (performance.now() - lastUserScrollRef.current > 200) return; // measurement/programmatic → ignore
-    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD;
+    const next = nextStickState(performance.now(), lastUserScrollRef.current, el);
+    if (next !== null) stickRef.current = next; // null = measurement/programmatic → ignore
   };
 
   // Single source of autoscroll: when new items arrive and the reader is stuck
@@ -89,8 +89,14 @@ export function ConversationStream({
     if (!selectedEventId) return;
     const idx = items.findIndex((it) => itemContainsEvent(it, selectedEventId));
     if (idx < 0) return;
-    // Virtual path: scroll the virtualizer to that index
-    if (virtualizer.getVirtualItems().length > 0) {
+    // Virtual path: scroll the virtualizer to that index — but ONLY when the
+    // selected row is not already on screen. Clicking a row that is already
+    // visible (in-stream selection) must not re-center it and yank the
+    // viewport; scroll-into-view is for OFF-SCREEN (external timeline/subgraph)
+    // selection only.
+    const vItems = virtualizer.getVirtualItems();
+    const alreadyVisible = vItems.some((vi) => vi.index === idx);
+    if (vItems.length > 0 && !alreadyVisible) {
       virtualizer.scrollToIndex(idx, { align: 'center' });
     }
     // Fallback path (jsdom / zero-height): find the element by data-event-id
