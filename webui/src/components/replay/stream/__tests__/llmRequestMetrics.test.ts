@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildLlmRequestMetrics, formatDuration, formatTokens } from '../llmRequestMetrics';
+import {
+  buildLlmRequestMetrics,
+  formatDuration,
+  formatTokens,
+  formatUsd,
+  parseApiRequestLog,
+} from '../llmRequestMetrics';
 import type { ObservedEventDto } from '../../../../api/types';
 
 function span(attrs: Record<string, string | number | boolean>, name = 'claude_code.llm_request'): ObservedEventDto {
@@ -69,5 +75,30 @@ describe('formatDuration / formatTokens', () => {
     expect(formatTokens(1540)).toBe('1.5k');
     expect(formatTokens(204707)).toBe('205k');
     expect(formatTokens(null)).toBeNull();
+  });
+});
+
+describe('parseApiRequestLog — measured per-request cost from the api_request_log facet', () => {
+  it('extracts cost_usd (the measured cost, NOT the token×rate estimate)', () => {
+    const got = parseApiRequestLog({
+      event_name: 'api_request',
+      attributes: { cost_usd: 0.2360595, model: 'claude-opus-4-8', query_source: 'repl_main_thread' },
+    });
+    expect(got).not.toBeNull();
+    expect(got!.costUsd).toBeCloseTo(0.2360595, 6);
+  });
+  it('returns null cost when absent / data is not an api_request_log', () => {
+    expect(parseApiRequestLog({ attributes: {} })!.costUsd).toBeNull();
+    expect(parseApiRequestLog(null)).toBeNull();
+    expect(parseApiRequestLog({})).toBeNull();
+  });
+});
+
+describe('formatUsd', () => {
+  it('uses 4 decimals under $1 (sub-cent precision) and 2 at/above', () => {
+    expect(formatUsd(0.2360595)).toBe('$0.2361');
+    expect(formatUsd(0.0098)).toBe('$0.0098');
+    expect(formatUsd(3.4239)).toBe('$3.42');
+    expect(formatUsd(null)).toBeNull();
   });
 });

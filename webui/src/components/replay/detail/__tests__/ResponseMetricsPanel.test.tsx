@@ -7,7 +7,7 @@ import type { LlmRequestMetrics } from '../../stream/llmRequestMetrics';
 const m: LlmRequestMetrics = {
   requestId: 'req-1', durationMs: 28900, ttftMs: 3100, inputTokens: 2,
   outputTokens: 2300, cacheReadTokens: 290000, cacheCreationTokens: 2200,
-  stopReason: 'tool_use', attempt: 1, success: true, model: 'claude-opus-4-8',
+  stopReason: 'tool_use', attempt: 1, success: true, model: 'claude-opus-4-8', costUsd: null,
 };
 
 function rowFor(label: string): HTMLElement {

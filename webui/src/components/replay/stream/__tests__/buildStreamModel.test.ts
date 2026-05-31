@@ -72,7 +72,7 @@ describe('buildStreamModel', () => {
     const metricsByReq = new Map([
       ['req-1', { requestId: 'req-1', durationMs: 11900, ttftMs: 3100, inputTokens: 2,
         outputTokens: 1540, cacheReadTokens: 290000, cacheCreationTokens: 2200,
-        stopReason: 'tool_use', attempt: 1, success: true, model: 'claude-opus-4-8' }],
+        stopReason: 'tool_use', attempt: 1, success: true, model: 'claude-opus-4-8', costUsd: null }],
     ]);
     const items = buildStreamModel(
       [ev({ event_id: 't1', kind: 'thinking', actor: 'assistant', request_id: 'req-1', payload: { thinking: '', signature: 'sig' } })],
