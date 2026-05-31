@@ -122,16 +122,26 @@ describe('buildStreamModel — signal-less meta dropped, system_summary surfaced
     expect(item.text).toBe(recap);
   });
 
-  it('keeps a content-less system_summary subkind visible, labelled by its subkind', () => {
+  it('surfaces a compact_boundary system_summary as a visible marker', () => {
     const items = buildStreamModel([
-      ev({ event_id: 'td', kind: 'system_summary', actor: 'system', subkind: 'turn_duration', payload: { durationMs: 1200 } }),
+      ev({ event_id: 'cb', kind: 'system_summary', actor: 'system', subkind: 'compact_boundary', payload: { content: 'Conversation compacted' } }),
     ]);
     expect(items).toHaveLength(1);
     const item: any = items[0];
     expect(item.type).toBe('message');
     expect(item.role).toBe('system');
-    // No content → falls back to a compact, non-empty label derived from subkind.
-    expect(item.text).toContain('turn_duration');
+    expect(item.text).toBe('Conversation compacted');
+  });
+
+  it('drops thin/telemetry-ish system_summary subkinds (only away_summary/compact_boundary are card-worthy)', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'td', kind: 'system_summary', actor: 'system', subkind: 'turn_duration', payload: { durationMs: 1200 } }),
+      ev({ event_id: 'sh', kind: 'system_summary', actor: 'system', subkind: 'stop_hook_summary', payload: { content: 'hook ran' } }),
+      ev({ event_id: 'lc', kind: 'system_summary', actor: 'system', subkind: 'local_command', payload: {} }),
+      ev({ event_id: 'no', kind: 'system_summary', actor: 'system', subkind: null, payload: { content: 'x' } }),
+    ]);
+    // Conservative default: every system_summary except away_summary/compact_boundary drops.
+    expect(items).toHaveLength(0);
   });
 });
 

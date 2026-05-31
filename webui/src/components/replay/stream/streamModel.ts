@@ -126,14 +126,20 @@ function classify(
     return { cat: 'thinking', sigLen: sig.length };
   }
   if (e.kind === 'system_summary') {
-    // Heterogeneous CC work-recaps. Always VISIBLE — the user wants these in
-    // the message view. away_summary / compact_boundary carry a `content`
-    // string (the readable recap); thinner subkinds (turn_duration,
-    // stop_hook_summary, …) have none, so we fall back to a compact label
-    // derived from the top-level `subkind` so the beat still renders.
-    const content = typeof p.content === 'string' ? p.content.trim() : '';
-    const text = content || `system_summary: ${e.subkind ?? 'summary'}`;
-    return { cat: 'message', role: 'system', text, model: null };
+    // system_summary is heterogeneous. Only the insightful subkinds are
+    // card-worthy in the message view: away_summary (a CC work recap) and
+    // compact_boundary ("Conversation compacted"), both carrying a readable
+    // `content` string. Thin/telemetry-ish subkinds (turn_duration,
+    // stop_hook_summary, local_command, informational, scheduled_task_fire)
+    // and any unknown/missing subkind are meaningful data but not card-worthy
+    // → conservatively dropped from the stream.
+    const sk = e.subkind ?? '';
+    if (sk === 'away_summary' || sk === 'compact_boundary') {
+      const content = typeof p.content === 'string' ? p.content.trim() : '';
+      const text = content || `system_summary: ${sk}`;
+      return { cat: 'message', role: 'system', text, model: null };
+    }
+    return { cat: 'drop' };
   }
   // attachment_meta (file / deferred_tools_delta metadata) and session_state
   // (leafUuid / permissionMode) carry no display signal → not shown in the
