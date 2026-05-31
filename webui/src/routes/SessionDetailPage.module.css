@@ -3,13 +3,12 @@
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  /* Middle row flexes and scrolls internally so the stream doesn't push the
-     timeline off-screen; minmax(0,1fr) lets the slots shrink below content. */
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* The stream/detail row flexes and scrolls internally; minmax(0,1fr) lets the
+     slots shrink below content so they own their own overflow. */
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas:
-    "kpi      kpi"
-    "stream   detail"
-    "timeline timeline";
+    "kpi    kpi"
+    "stream detail";
   gap: 16px;
   margin-top: 8px;
   height: calc(100vh - 56px);
@@ -18,7 +17,6 @@
 /* min-height:0 is required for grid children to allow their own overflow. */
 .stream { grid-area: stream; min-height: 0; overflow: auto; }
 .detail { grid-area: detail; min-height: 0; overflow: auto; }
-.timeline { grid-area: timeline; }
 .placeholder { color: var(--witmcc-fg-subtle, #6a7180); }
 
 @media (max-width: 860px) {
@@ -29,7 +27,6 @@
     grid-template-areas:
       "kpi"
       "stream"
-      "detail"
-      "timeline";
+      "detail";
   }
 }

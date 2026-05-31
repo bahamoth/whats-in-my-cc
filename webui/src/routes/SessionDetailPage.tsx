@@ -4,7 +4,6 @@ import { ApiError } from '../api/client';
 import type { GraphPayload } from '../api/types';
 import { MetaStrip } from '../components/MetaStrip';
 import { DetailPanel } from '../components/replay/detail/DetailPanel';
-import { Timeline } from '../components/replay/timeline/Timeline';
 import { TopBar } from '../components/layout/TopBar';
 import { InsightStrip } from '../components/replay/insight-strip/InsightStrip';
 import {
@@ -348,15 +347,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               toolMetrics={selectedToolMetrics}
               llmMetrics={selectedNodeLlmMetrics}
               rawBlocks={rawBlocks}
-            />
-          </div>
-
-          <div className={styles.timeline} data-slot="timeline">
-            <Timeline
-              nodes={effectiveGraph.nodes}
-              edges={effectiveGraph.edges}
-              selectedNodeId={sel.selectedNodeId}
-              onSelect={(id) => sel.setSelectedNodeId(id)}
             />
           </div>
 

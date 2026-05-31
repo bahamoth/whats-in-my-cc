@@ -94,9 +94,9 @@ const eventsPayload = {
 };
 
 // Real conversation rows whose event_ids match the graph nodes'
-// source_event_ids (n1→ev1, n2→ev2). Used to exercise timeline↔stream
-// cross-sync end-to-end (empty `eventsPayload` mounts zero StreamCards and
-// therefore cannot prove the wiring).
+// source_event_ids (n1→ev1, n2→ev2). Used to exercise stream-card selection
+// end-to-end (empty `eventsPayload` mounts zero StreamCards and therefore
+// cannot prove the wiring).
 const eventsWithRows = {
   events: [
     {
@@ -150,42 +150,41 @@ describe('SessionDetailPage', () => {
     cleanup();
   });
 
-  it('renders meta strip + timeline + DetailPanel empty hint before node selection', async () => {
+  it('renders meta strip + DetailPanel empty hint before node selection', async () => {
     setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
     rendered('s1');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
     expect(screen.getByText(/select a node to inspect it/i)).toBeInTheDocument();
   });
 
-  it('clicking a node shows the DetailPanel tablist', async () => {
+  it('clicking a stream card shows the DetailPanel tablist', async () => {
     setupFetch({
       detail: env(sessionDetail),
       graph: env(graph),
-      events: env(eventsPayload),
+      events: env(eventsWithRows),
       raw: env(raw),
     });
-    rendered('s1');
-    const marker = await waitFor(() => {
-      const el = document.querySelector('[data-node-id="n1"]');
-      if (!el) throw new Error('marker not found');
+    const { container } = rendered('s1');
+    const card = await waitFor(() => {
+      const el = container.querySelector(
+        '[data-event-id="ev1"] [data-testid="message-card"]',
+      );
+      if (!el) throw new Error('card not found');
       return el;
     });
-    fireEvent.click(marker);
+    fireEvent.click(card);
     await waitFor(() => expect(screen.getByRole('tablist')).toBeInTheDocument());
     expect(screen.getByRole('tab', { name: /insight/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /raw/i })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /^detail$/i })).toBeNull();
   });
 
-  // The headline cross-sync requirement (spec §2/§3/§5.7): selection is
-  // bidirectionally synced across the timeline and the conversation stream,
-  // and a node click brings the matching stream card into view. Every other
-  // integration test uses an empty events payload, so this is the ONLY place
-  // the timeline↔stream wiring is proven end-to-end with real cards mounted.
-  it('cross-syncs selection between timeline nodes and stream cards', async () => {
-    const scrollSpy = vi
-      .spyOn(Element.prototype, 'scrollIntoView')
-      .mockImplementation(() => {});
+  // The headline selection requirement: clicking a conversation stream card
+  // selects it, and clicking another moves selection (reflected on the card's
+  // data-selected). With the bottom timeline view removed, the stream is the
+  // sole in-page selection source; empty-events tests mount zero cards and so
+  // cannot prove this wiring — this is the only place it is proven end-to-end.
+  it('syncs selection across stream cards', async () => {
     setupFetch({
       detail: env(sessionDetail),
       graph: env(graph),
@@ -201,20 +200,21 @@ describe('SessionDetailPage', () => {
       ).not.toBeNull();
     });
 
-    // Timeline node → stream: clicking node n1 selects the ev1 card AND
-    // scrolls it into view.
-    const node1 = container.querySelector('[data-node-id="n1"]');
-    expect(node1).not.toBeNull();
-    fireEvent.click(node1!);
+    // Click the ev1 card → it becomes selected.
+    const card1 = container.querySelector(
+      '[data-event-id="ev1"] [data-testid="message-card"]',
+    );
+    expect(card1).not.toBeNull();
+    fireEvent.click(card1!);
     await waitFor(() => {
-      const card1 = container.querySelector(
-        '[data-event-id="ev1"] [data-testid="message-card"]',
-      );
-      expect(card1?.getAttribute('data-selected')).toBe('true');
+      expect(
+        container
+          .querySelector('[data-event-id="ev1"] [data-testid="message-card"]')
+          ?.getAttribute('data-selected'),
+      ).toBe('true');
     });
-    expect(scrollSpy).toHaveBeenCalled();
 
-    // Stream → timeline: clicking the ev2 card moves selection to node n2.
+    // Click the ev2 card → selection moves to ev2, off ev1.
     const card2 = container.querySelector(
       '[data-event-id="ev2"] [data-testid="message-card"]',
     );
@@ -222,17 +222,16 @@ describe('SessionDetailPage', () => {
     fireEvent.click(card2!);
     await waitFor(() => {
       expect(
-        container.querySelector('[data-node-id="n2"][data-selected="true"]'),
-      ).not.toBeNull();
+        container
+          .querySelector('[data-event-id="ev2"] [data-testid="message-card"]')
+          ?.getAttribute('data-selected'),
+      ).toBe('true');
     });
-    // ...and selection has moved off ev1.
     expect(
       container
         .querySelector('[data-event-id="ev1"] [data-testid="message-card"]')
         ?.getAttribute('data-selected'),
     ).toBe('false');
-
-    scrollSpy.mockRestore();
   });
 
   it('shows 404 when session detail missing', async () => {
@@ -245,18 +244,20 @@ describe('SessionDetailPage', () => {
     await waitFor(() => expect(screen.getByText(/session not found/i)).toBeInTheDocument());
   });
 
-  it('renders empty timeline when getGraph 404s but getSession succeeds', async () => {
+  it('renders the page (no timeline) when getGraph 404s but getSession succeeds', async () => {
     setupFetch({
       detail: env(sessionDetail),
       graph: new Response('{"detail":"no graph"}', { status: 404 }),
       events: env(eventsPayload),
     });
-    rendered('s1');
+    const { container } = rendered('s1');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
     expect(screen.queryByText(/session not found/i)).not.toBeInTheDocument();
-    // Timeline still renders (its SVG canvas) even with an empty graph; lane
-    // rows are now hidden when empty (#4), so assert the canvas, not a lane.
-    expect(screen.getByTestId('timeline-canvas')).toBeInTheDocument();
+    // The stream slot still renders; the bottom timeline view has been removed,
+    // so a graph 404 must not surface any timeline canvas.
+    expect(container.querySelector('[data-slot="stream"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="timeline"]')).toBeNull();
+    expect(screen.queryByTestId('timeline-canvas')).toBeNull();
   });
 
   // Envelope-driven backfill + debounced graph refetch. An envelope burst
@@ -407,14 +408,14 @@ describe('R1 layout shell', () => {
     });
   });
 
-  it('exposes named grid slots for kpi, stream, detail, and timeline', async () => {
+  it('exposes named grid slots for kpi, stream, and detail (timeline removed)', async () => {
     setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
     const { container } = rendered('aac68973');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
     expect(container.querySelector('[data-slot="kpi"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="stream"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="detail"]')).not.toBeNull();
-    expect(container.querySelector('[data-slot="timeline"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="timeline"]')).toBeNull();
   });
 
   it('does not render the Waterfall/Graph ViewToggle', async () => {
