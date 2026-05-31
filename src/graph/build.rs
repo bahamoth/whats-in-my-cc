@@ -699,13 +699,19 @@ pub fn compute(
                     .and_then(|v| v.as_str())
                 {
                     if let Some(owner) = tool_call_nid_by_tid.get(tid) {
-                        facets_by_owner.entry(owner.clone()).or_default().push(json!({
-                            "facet_kind": fk,
-                            "basis": "tool_use_id",
-                            "source_event_id": n.source_event_ids.first().cloned().unwrap_or_default(),
-                            "data": n.payload.clone(),
-                        }));
-                        folded_node_ids.insert(n.node_id.clone());
+                        // Owner-survival guard: only fold when the owning tool_call
+                        // node still exists in the final graph (mirrors the old
+                        // facet_of pass's valid_nodes check). Prevents silent data
+                        // loss if a future change drops the owner node.
+                        if valid_nodes.contains(owner.as_str()) {
+                            facets_by_owner.entry(owner.clone()).or_default().push(json!({
+                                "facet_kind": fk,
+                                "basis": "tool_use_id",
+                                "source_event_id": n.source_event_ids.first().cloned().unwrap_or_default(),
+                                "data": n.payload.clone(),
+                            }));
+                            folded_node_ids.insert(n.node_id.clone());
+                        }
                     }
                 }
             }
@@ -858,9 +864,9 @@ pub fn compute(
     // Attach collected facet arrays onto each owner node's payload, then drop
     // the now-folded standalone log_record nodes and any edges touching them.
     for n in nodes.iter_mut() {
-        if let Some(fs) = facets_by_owner.get(&n.node_id) {
+        if let Some(fs) = facets_by_owner.remove(&n.node_id) {
             if let Value::Object(map) = &mut n.payload {
-                map.insert("facets".to_string(), Value::Array(fs.clone()));
+                map.insert("facets".to_string(), Value::Array(fs));
             }
         }
     }

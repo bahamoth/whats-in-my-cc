@@ -1,7 +1,8 @@
 //! Slice 1 (Group A) — telemetry fold into owner node payload.
-//! tool_result/tool_decision log_record → tool_call by tool_use_id;
-//! llm_request span + api_request log → assistant_message by request_id.
+//! Covers tool_result/tool_decision log_record → tool_call by tool_use_id.
 //! Folded events MUST NOT remain as standalone nodes and MUST NOT get facet_of edges.
+//! (The llm_request span + api_request log → assistant_message fold lands in a
+//! follow-up task and is not exercised by this file yet.)
 
 mod common;
 
