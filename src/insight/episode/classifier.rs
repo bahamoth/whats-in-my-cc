@@ -66,11 +66,15 @@ fn is_mutation_tool(tool: &str) -> bool {
     MUTATION_TOOLS.contains(&tool)
 }
 
-/// First-token allowlist of unambiguously read-only shell commands.
+/// First-token allowlist of read-only-by-default shell commands (matches the
+/// design spec §B1 line 22). `sed`/`awk` are deliberately excluded: they
+/// commonly mutate via `-i`, and per the conservative-default they err toward
+/// Action. `find`/`sort` stay here but are forced to mutation by the
+/// `-delete` / ` -o ` markers when they actually write.
 const BASH_READ_ONLY_FIRST_TOKENS: &[&str] = &[
     "grep", "rg", "egrep", "fgrep", "ls", "cat", "find", "head", "tail", "wc",
     "which", "pwd", "echo", "env", "file", "stat", "du", "df", "tree", "sort",
-    "uniq", "awk", "sed",
+    "uniq",
 ];
 
 /// Read-only `git` subcommands (used only when the first token is `git`).
@@ -81,9 +85,13 @@ const GIT_READ_ONLY_SUBCOMMANDS: &[&str] = &[
 /// Substrings whose presence forces a Bash command to be treated as mutating,
 /// even if its first token is on the read-only allowlist. Covers output
 /// redirection, compound/sequenced commands (ambiguous → mutation), explicit
-/// mutating utilities, and package/build tooling.
+/// mutating utilities, package/build tooling, and write flags on otherwise
+/// read-only utilities (`find -delete`, `sort -o`, in-place `-i`). Note that
+/// ` -o ` also catches `find ... -o ...` (logical OR) — over-classifying a
+/// read-only find as Action is the safe direction (conservative default).
 const BASH_MUTATING_MARKERS: &[&str] = &[
     ">", ">>", "rm ", "mv ", "cp ", "mkdir", "touch", "tee", "&&", ";", "||",
+    "-delete", " -o ", "-i ", "-i'",
     "git commit", "git push", "git add", "git reset", "git checkout", "git rm",
     "npm", "pnpm", "yarn", "cargo build", "cargo run", "cargo test",
 ];
@@ -93,16 +101,22 @@ const BASH_MUTATING_MARKERS: &[&str] = &[
 /// HEURISTIC — documented in the Slice 3 design spec
 /// `docs/superpowers/specs/2026-05-31-episode-redesign-slice3-design.md`
 /// §B1/§D2 (autonomous decision flag #2). Shell parsing is inherently
-/// incomplete (pipes, subshells, variable expansion, aliases), so the rule is
-/// deliberately conservative: when in doubt, return `false` (mutation). This
-/// never *downgrades* a possibly-mutating command to read-only; it only lifts
-/// a clearly-safe inspection command out of the Action path.
+/// incomplete (pipes, subshells, variable expansion, aliases, novel write
+/// flags), so the rule **errs toward mutation**: it returns `true` only for a
+/// narrow, recognized read-only shape and `false` for everything else,
+/// including commands it cannot confidently parse. This is a best-effort
+/// denylist, NOT a soundness guarantee — a sufficiently exotic mutating
+/// command with a read-only first token and no recognized marker could slip
+/// through; the marker set below is widened as such cases surface (e.g. the
+/// review that added `-delete` / ` -o ` / `-i`).
 ///
-/// A command is read-only iff:
-///   1. it contains none of [`BASH_MUTATING_MARKERS`] (redirection, compound
-///      operators, mutating utilities, package/build tools), AND
-///   2. its first token is on [`BASH_READ_ONLY_FIRST_TOKENS`], OR it is
-///      `git <read-only-subcommand>` per [`GIT_READ_ONLY_SUBCOMMANDS`].
+/// A command is classified read-only iff:
+///   1. its first token is on [`BASH_READ_ONLY_FIRST_TOKENS`], OR it is
+///      `git <read-only-subcommand>` per [`GIT_READ_ONLY_SUBCOMMANDS`], AND
+///   2. it contains none of [`BASH_MUTATING_MARKERS`] (redirection, compound
+///      operators, mutating utilities, package/build tools, write flags).
+///
+/// Anything else → `false` (treated as mutation).
 ///
 /// Note: VerificationRun handling (Bash-on-verify-allowlist → Verification) is
 /// orthogonal and happens before this is consulted; `cargo test` etc. are in
@@ -531,5 +545,32 @@ mod tests {
             "expected diagnosis for read-only Bash after error; got {:?}",
             eps.iter().map(|e| e.phase).collect::<Vec<_>>()
         );
+    }
+
+    /// Conservative-invariant table: commands that mutate (even with a
+    /// read-only first token) MUST classify as Action; clearly read-only
+    /// commands stay Exploration. Locks the review finding (sed -i / find
+    /// -delete / sort -o were false-positive read-only).
+    #[test]
+    fn bash_conservative_invariant_table() {
+        let cases: &[(&str, Phase)] = &[
+            // Mutating despite read-only-looking first token → Action.
+            ("sed -i 's/a/b/' f", Phase::Action),
+            ("find . -name x -delete", Phase::Action),
+            ("sort f -o f", Phase::Action),
+            // Clearly read-only → Exploration.
+            ("grep -n foo src/", Phase::Exploration),
+            ("ls", Phase::Exploration),
+            ("cat f", Phase::Exploration),
+            ("git status", Phase::Exploration),
+            ("find . -name x", Phase::Exploration),
+        ];
+        for (cmd, want) in cases {
+            assert_eq!(
+                phase_of_call(bash_call(1, cmd)),
+                *want,
+                "command {cmd:?} expected {want:?}"
+            );
+        }
     }
 }
