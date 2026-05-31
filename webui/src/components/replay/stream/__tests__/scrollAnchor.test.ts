@@ -1,36 +1,43 @@
 import { describe, it, expect } from 'vitest';
-import { isNearBottom, nextStickState, STICK_THRESHOLD } from '../scrollAnchor';
+import { isNearTop, shouldLoadOlder, LOAD_OLDER_TOP_PX } from '../scrollAnchor';
 
-describe('isNearBottom', () => {
-  it('true when parked at the bottom', () => {
-    expect(isNearBottom({ scrollHeight: 1000, scrollTop: 900, clientHeight: 100 })).toBe(true); // dist 0
+describe('isNearTop', () => {
+  it('true at the very top', () => {
+    expect(isNearTop({ scrollHeight: 5000, scrollTop: 0, clientHeight: 800 })).toBe(true);
   });
-  it('true within the stick threshold', () => {
-    expect(isNearBottom({ scrollHeight: 1000, scrollTop: 870, clientHeight: 100 })).toBe(true); // dist 30 < 48
+  it('true within the top threshold', () => {
+    expect(isNearTop({ scrollHeight: 5000, scrollTop: LOAD_OLDER_TOP_PX - 1, clientHeight: 800 })).toBe(true);
   });
-  it('false once scrolled up beyond the threshold', () => {
-    expect(isNearBottom({ scrollHeight: 1000, scrollTop: 700, clientHeight: 100 })).toBe(false); // dist 200
+  it('false once scrolled down past the threshold', () => {
+    expect(isNearTop({ scrollHeight: 5000, scrollTop: LOAD_OLDER_TOP_PX + 200, clientHeight: 800 })).toBe(false);
   });
 });
 
-describe('nextStickState — only genuine user gestures change stick', () => {
-  const atBottom = { scrollHeight: 1000, scrollTop: 900, clientHeight: 100 };
-  const scrolledUp = { scrollHeight: 1000, scrollTop: 600, clientHeight: 100 };
+describe('shouldLoadOlder — page older history only on an upward near-top user scroll', () => {
+  const base = { hasInteracted: true, canLoadOlder: true };
 
-  it('returns null (ignore) for a measurement/programmatic scroll long after the last user gesture', () => {
-    // This is the "can't focus while streaming" guard: the virtualizer fires
-    // synthetic scrolls as it measures rows; those must NOT re-engage autoscroll.
-    expect(nextStickState(5000, 100, scrolledUp)).toBeNull(); // 4900ms > 200ms window
-    expect(nextStickState(5000, 100, atBottom)).toBeNull();
+  it('true: interacted, scrolling up, near top, older pages remain', () => {
+    expect(shouldLoadOlder({ ...base, scrollTop: 20, prevScrollTop: 400 })).toBe(true);
   });
-  it('follows (true) on a user scroll that lands at the bottom', () => {
-    expect(nextStickState(300, 250, atBottom)).toBe(true); // 50ms <= 200ms window
+
+  // The cascade / mount guard: before the reader interacts, the initial
+  // pin-to-bottom and any programmatic scroll must NOT page older history
+  // (that was the auto-load-the-whole-session bug).
+  it('false: not yet interacted (mount / programmatic scroll)', () => {
+    expect(shouldLoadOlder({ ...base, hasInteracted: false, scrollTop: 0, prevScrollTop: 400 })).toBe(false);
   });
-  it('anchors (false) on a user scroll up — keeps position, no follow', () => {
-    expect(nextStickState(300, 250, scrolledUp)).toBe(false);
+
+  // Excludes the native anchorTo:'end' re-anchor + initial bottom-pin, which
+  // scroll DOWN — so a load can never re-trigger itself into a cascade.
+  it('false: scrolling DOWN (anchorTo re-anchor / bottom-pin), even near the top', () => {
+    expect(shouldLoadOlder({ ...base, scrollTop: 20, prevScrollTop: 5 })).toBe(false);
   });
-  it('honors a custom gesture window + threshold', () => {
-    expect(nextStickState(300, 250, scrolledUp, { gestureWindowMs: 30 })).toBeNull(); // 50ms > 30ms → ignore
-    expect(STICK_THRESHOLD).toBeGreaterThan(0);
+
+  it('false: scrolling up but not near the top', () => {
+    expect(shouldLoadOlder({ ...base, scrollTop: 2000, prevScrollTop: 3000 })).toBe(false);
+  });
+
+  it('false: no older pages remain (canLoadOlder=false)', () => {
+    expect(shouldLoadOlder({ ...base, canLoadOlder: false, scrollTop: 20, prevScrollTop: 400 })).toBe(false);
   });
 });

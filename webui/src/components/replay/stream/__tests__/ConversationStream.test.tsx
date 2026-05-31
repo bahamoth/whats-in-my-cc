@@ -3,7 +3,9 @@
  * ConversationStream renders a StreamItem[] (MessageCard for messages, one
  * ActivityStack per activity-run), oldest→newest (newest at the DOM bottom),
  * forwards clicks, reflects selection, and preserves virtualization /
- * scroll-into-view / autoscroll. Spec §3.
+ * scroll-into-view. Live-append follow + prepend-anchor are delegated to
+ * react-virtual's anchorTo:'end' (verified by the options-contract test below
+ * + browser smoke, since they need real layout). Spec §3.
  */
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -90,6 +92,26 @@ describe('ConversationStream', () => {
     expect(opts.getItemKey(0)).toBe('e1');
     expect(opts.getItemKey(1)).toBe('r1');
     expect(opts.getItemKey(2)).toBe('e2');
+  });
+
+  // Contract lock for the windowing fix: the stream delegates live-append
+  // follow + prepend-anchor to react-virtual's end-anchored mode. These need
+  // real layout (jsdom can't exercise them), so we assert the wiring here and
+  // verify the behaviour itself by browser smoke.
+  it('configures end-anchored chat scrolling (anchorTo:end + followOnAppend)', () => {
+    hoisted.captured.opts = null;
+    render(
+      <ConversationStream
+        items={[msg('e1', 'a'), msg('e2', 'b', { role: 'assistant' })]}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    const opts = hoisted.captured.opts;
+    expect(opts).not.toBeNull();
+    expect(opts.anchorTo).toBe('end');
+    expect(opts.followOnAppend).toBe(true);
   });
 
   it('renders messages and activity stacks in source order', () => {
@@ -218,90 +240,95 @@ describe('ConversationStream', () => {
     ).toBe('true');
   });
 
-  it('autoscrolls to the bottom when an item is appended and the user is at the tip', () => {
-    const items = [msg('a', 'first'), msg('b', 'second')];
-    const { container, rerender } = render(
+  // Windowing: paging older history is driven by the stream's own scroll —
+  // only an UPWARD near-top scroll by a reader who has interacted.
+  it('pages older history when the user scrolls up into the near-top zone', () => {
+    const onLoadOlder = vi.fn();
+    const { container } = render(
       <ConversationStream
-        items={items}
+        items={[msg('a', 'first'), msg('b', 'second')]}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={() => {}}
+        onLoadOlder={onLoadOlder}
+        canLoadOlder
       />,
     );
     const scroller = container.querySelector('[data-testid="conversation-stream"]') as HTMLElement;
-    Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true });
-    Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true });
-    rerender(
-      <ConversationStream
-        items={[...items, msg('z', 'third')]}
-        selectedEventId={null}
-        findingEventIds={new Set()}
-        onSelect={() => {}}
-      />,
-    );
-    expect(scroller.scrollTop).toBe(1000);
+    fireEvent.wheel(scroller, { deltaY: -120 }); // latches "reader has interacted"
+    scroller.scrollTop = 400; // start below the trigger zone
+    fireEvent.scroll(scroller);
+    scroller.scrollTop = 20; // scroll UP into the near-top zone
+    fireEvent.scroll(scroller);
+    expect(onLoadOlder).toHaveBeenCalled();
   });
 
-  it('does NOT autoscroll on append when the user has scrolled up', () => {
-    const items = [msg('a', 'first'), msg('b', 'second')];
-    const { container, rerender } = render(
+  // Cascade / mount guard: before the reader interacts, the initial bottom-pin
+  // and any measurement/programmatic scroll must NOT page older history —
+  // otherwise the whole session auto-loads (the windowing bug).
+  it('does NOT page older history before the reader interacts (mount/measurement scroll)', () => {
+    const onLoadOlder = vi.fn();
+    const { container } = render(
       <ConversationStream
-        items={items}
+        items={[msg('a', 'first'), msg('b', 'second')]}
         selectedEventId={null}
         findingEventIds={new Set()}
         onSelect={() => {}}
+        onLoadOlder={onLoadOlder}
+        canLoadOlder
       />,
     );
     const scroller = container.querySelector('[data-testid="conversation-stream"]') as HTMLElement;
-    Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true });
-    Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true });
-    // A genuine user gesture (wheel) marks the ensuing scroll as user-driven, so
-    // it disengages stick-to-bottom. (Measurement-only scrolls are ignored.)
-    fireEvent.wheel(scroller, { deltaY: -120 });
-    scroller.scrollTop = 100;
+    // Scroll up into the near-top zone, but with no preceding wheel/pointer/key.
+    scroller.scrollTop = 400;
     fireEvent.scroll(scroller);
-    rerender(
-      <ConversationStream
-        items={[...items, msg('z', 'third')]}
-        selectedEventId={null}
-        findingEventIds={new Set()}
-        onSelect={() => {}}
-      />,
-    );
-    expect(scroller.scrollTop).toBe(100);
+    scroller.scrollTop = 0;
+    fireEvent.scroll(scroller);
+    expect(onLoadOlder).not.toHaveBeenCalled();
   });
 
-  // Regression lock for the "can't focus while streaming" bug: after the user
-  // scrolls up, a later MEASUREMENT-driven scroll event (no user gesture, fired
-  // by the virtualizer as it measures rows) must NOT re-engage stick-to-bottom,
-  // even if it momentarily reports the viewport at the bottom.
-  it('ignores measurement-driven scroll events when deciding stick-to-bottom', () => {
-    const nowSpy = vi.spyOn(performance, 'now');
-    const items = [msg('a', 'first'), msg('b', 'second')];
-    const { container, rerender } = render(
-      <ConversationStream items={items} selectedEventId={null} findingEventIds={new Set()} onSelect={() => {}} />,
+  // Direction guard: the native anchorTo:'end' re-anchor scrolls DOWN after a
+  // prepend; a downward scroll through the top zone must NOT re-trigger a load
+  // (that is what stops one load from cascading into many).
+  it('does NOT page older history when scrolling DOWN through the top zone', () => {
+    const onLoadOlder = vi.fn();
+    const { container } = render(
+      <ConversationStream
+        items={[msg('a', 'first'), msg('b', 'second')]}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+        onLoadOlder={onLoadOlder}
+        canLoadOlder
+      />,
     );
     const scroller = container.querySelector('[data-testid="conversation-stream"]') as HTMLElement;
-    Object.defineProperty(scroller, 'scrollHeight', { value: 1000, configurable: true });
-    Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true });
-
-    // t=1000ms: user scrolls up via wheel → stick disengages.
-    nowSpy.mockReturnValue(1000);
-    fireEvent.wheel(scroller, { deltaY: -120 });
-    scroller.scrollTop = 100;
+    fireEvent.wheel(scroller, { deltaY: 120 }); // interacted
+    scroller.scrollTop = 5; // start at the very top
     fireEvent.scroll(scroller);
-
-    // t=2000ms (>200ms later): a measurement scroll reports the viewport at the
-    // bottom. With no recent user gesture it must be ignored, so stick stays off.
-    nowSpy.mockReturnValue(2000);
-    scroller.scrollTop = 700; // dist = 1000-700-300 = 0 (looks "at bottom")
+    scroller.scrollTop = 60; // scroll DOWN, still within the near-top zone
     fireEvent.scroll(scroller);
+    expect(onLoadOlder).not.toHaveBeenCalled();
+  });
 
-    rerender(
-      <ConversationStream items={[...items, msg('z', 'third')]} selectedEventId={null} findingEventIds={new Set()} onSelect={() => {}} />,
+  it('does NOT page older history once the session start is reached (canLoadOlder=false)', () => {
+    const onLoadOlder = vi.fn();
+    const { container } = render(
+      <ConversationStream
+        items={[msg('a', 'first'), msg('b', 'second')]}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+        onLoadOlder={onLoadOlder}
+        canLoadOlder={false}
+      />,
     );
-    // If the measurement scroll had wrongly re-stuck, append would pin to 1000.
-    expect(scroller.scrollTop).toBe(700);
-    nowSpy.mockRestore();
+    const scroller = container.querySelector('[data-testid="conversation-stream"]') as HTMLElement;
+    fireEvent.wheel(scroller, { deltaY: -120 });
+    scroller.scrollTop = 400;
+    fireEvent.scroll(scroller);
+    scroller.scrollTop = 0;
+    fireEvent.scroll(scroller);
+    expect(onLoadOlder).not.toHaveBeenCalled();
   });
 });
