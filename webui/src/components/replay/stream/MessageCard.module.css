@@ -109,6 +109,15 @@
   border-bottom-left-radius: 3px;
 }
 
+/* system_summary: left, muted surface with an accent rail — a CC work recap */
+.systemBubble {
+  background: var(--witmcc-surface-1, #11141b);
+  color: var(--witmcc-fg-muted, #aab0bd);
+  border-left: 2px solid var(--witmcc-fg-subtle, #6a7180);
+  border-radius: 4px;
+  border-bottom-left-radius: 3px;
+}
+
 /* thinking: left, visually distinct */
 .thinkingBubble {
   background: var(--witmcc-surface-1, #11141b);

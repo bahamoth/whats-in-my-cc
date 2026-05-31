@@ -99,6 +99,42 @@ describe('buildStreamModel — classify refinement (#7)', () => {
   });
 });
 
+describe('buildStreamModel — signal-less meta dropped, system_summary surfaced', () => {
+  it('drops attachment_meta and session_state — they carry no display signal', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'att', kind: 'attachment_meta', actor: 'system', payload: { file: '/x', deferred_tools_delta: 2 } }),
+      ev({ event_id: 'ses', kind: 'session_state', actor: 'system', subkind: 'permission_mode', payload: { leafUuid: 'u', permissionMode: 'default' } }),
+    ]);
+    expect(items).toHaveLength(0);
+  });
+
+  it('surfaces a system_summary away_summary as a visible item carrying its content text', () => {
+    const recap = '목표는 X. 현재 수정 완료. 다음 액션은 Y.';
+    const items = buildStreamModel([
+      ev({ event_id: 'ss', kind: 'system_summary', actor: 'system', subkind: 'away_summary', payload: { content: recap } }),
+    ]);
+    // Not dropped — the CC work recap must be visible in the message view.
+    expect(items).toHaveLength(1);
+    // The recap text is carried on the produced StreamItem so it can render.
+    const item: any = items[0];
+    expect(item.type).toBe('message');
+    expect(item.role).toBe('system');
+    expect(item.text).toBe(recap);
+  });
+
+  it('keeps a content-less system_summary subkind visible, labelled by its subkind', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'td', kind: 'system_summary', actor: 'system', subkind: 'turn_duration', payload: { durationMs: 1200 } }),
+    ]);
+    expect(items).toHaveLength(1);
+    const item: any = items[0];
+    expect(item.type).toBe('message');
+    expect(item.role).toBe('system');
+    // No content → falls back to a compact, non-empty label derived from subkind.
+    expect(item.text).toContain('turn_duration');
+  });
+});
+
 describe('buildStreamModel — sidechain grouping (#3)', () => {
   it('tags message items with their sidechain origin', () => {
     const items = buildStreamModel([

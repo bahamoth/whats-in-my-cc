@@ -10,7 +10,7 @@ function asObj(v: unknown): Record<string, unknown> {
 // buildStreamModel — Slice S2: stream classifier (message / activity / drop)
 // ---------------------------------------------------------------------------
 
-export type StreamRole = 'user' | 'assistant' | 'thinking';
+export type StreamRole = 'user' | 'assistant' | 'thinking' | 'system';
 
 export interface MessageItem {
   type: 'message';
@@ -125,7 +125,20 @@ function classify(
     const sig = typeof p.signature === 'string' ? p.signature : '';
     return { cat: 'thinking', sigLen: sig.length };
   }
-  if (e.kind === 'system_summary') return { cat: 'drop' };
+  if (e.kind === 'system_summary') {
+    // Heterogeneous CC work-recaps. Always VISIBLE — the user wants these in
+    // the message view. away_summary / compact_boundary carry a `content`
+    // string (the readable recap); thinner subkinds (turn_duration,
+    // stop_hook_summary, …) have none, so we fall back to a compact label
+    // derived from the top-level `subkind` so the beat still renders.
+    const content = typeof p.content === 'string' ? p.content.trim() : '';
+    const text = content || `system_summary: ${e.subkind ?? 'summary'}`;
+    return { cat: 'message', role: 'system', text, model: null };
+  }
+  // attachment_meta (file / deferred_tools_delta metadata) and session_state
+  // (leafUuid / permissionMode) carry no display signal → not shown in the
+  // message view.
+  if (e.kind === 'attachment_meta' || e.kind === 'session_state') return { cat: 'drop' };
   if (e.kind === 'metric_sample' || e.kind === 'otel_span') return { cat: 'drop' };
   if (e.kind === 'log_record') {
     const name = (asObj(e.payload).event_name as string) ?? '';
