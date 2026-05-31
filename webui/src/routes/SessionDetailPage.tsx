@@ -79,15 +79,19 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
         void window_.loadNewer();
       }, BACKFILL_DEBOUNCE_MS) as unknown as number;
     },
-    // A `gap` (SSE broadcast lagged) means some live-tip envelopes were
-    // dropped — NOT that the loaded window is invalid. Catch the tip up with
-    // loadNewer; do NOT reload. The SSE broadcast channel is shared across all
-    // sessions, so it lags whenever another session is busy; reloading on gap
-    // discarded every older page the reader had scrolled back to load and
-    // snapped the view to the newest event (the "loaded history disappears /
-    // focus jumps" bug). Only a genuine `resync` (cursor invalidated) reloads.
+    // Neither `gap` nor `resync` should wipe the loaded window. The window's
+    // older pages come from REST (`?before=`) and are always authoritative;
+    // the SSE stream only feeds the live tip. So on either signal we catch the
+    // tip up with loadNewer and never reload — reloading discarded every older
+    // page the reader had scrolled back to load and snapped the view to the
+    // newest event ("loaded history disappears / focus jumps to bottom").
+    //
+    // Why both fire often here: the SSE broadcast channel is shared across ALL
+    // sessions (src/api/sse.rs), so it lags (→ `gap`) whenever another session
+    // is busy, and the connection drops/reconnects with a stale cursor the
+    // backend can't backfill (→ `resync`) under the same load.
     onGap: () => void window_.loadNewer(),
-    onResync: () => void window_.reload(),
+    onResync: () => void window_.loadNewer(),
   });
 
   // Older history is paged by ConversationStream's own near-top scroll (see its
