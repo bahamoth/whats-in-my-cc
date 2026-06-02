@@ -160,7 +160,7 @@ describe('SessionDetailPage', () => {
     setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
     rendered('s1');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
-    expect(screen.getByText(/select a node to inspect it/i)).toBeInTheDocument();
+    expect(screen.getByText(/select an event to inspect it/i)).toBeInTheDocument();
   });
 
   it('clicking a stream card shows the DetailPanel tablist', async () => {
@@ -266,13 +266,13 @@ describe('SessionDetailPage', () => {
     expect(screen.queryByTestId('timeline-canvas')).toBeNull();
   });
 
-  // Envelope-driven backfill + debounced graph refetch. An envelope burst
-  // inside the debounce window collapses to ONE graph fetch AND ONE forward
-  // events backfill (`?after=`) — not one per envelope. SSE envelopes carry
-  // no payload, so we fetch the real events instead of appending the empty
-  // envelope (the "live messages don't appear until refresh" fix). The
-  // summary endpoint is never re-hit.
-  it('envelope burst triggers a single debounced graph refetch + one events backfill', async () => {
+  // Envelope-driven backfill. An envelope burst inside the debounce window
+  // collapses to ONE forward events backfill (`?after=`) — not one per
+  // envelope. SSE envelopes carry no payload, so we fetch the real events
+  // instead of appending the empty envelope (the "live messages don't appear
+  // until refresh" fix). The views are event-first now: the graph endpoint is
+  // NEVER fetched (no node/graph dependency) and the summary is never re-hit.
+  it('envelope burst triggers one events backfill and never fetches the graph', async () => {
     MockEventSource.install();
     const f = setupFetch({
       detail: env(sessionDetail),
@@ -287,15 +287,13 @@ describe('SessionDetailPage', () => {
     const callsOf = (matcher: (u: string) => boolean) =>
       f.mock.calls.filter((c) => matcher(String(c[0]))).length;
     const summaryAtMount = callsOf((u) => /\/v1\/sessions\/[^/]+$/.test(u));
-    const graphAtMount = callsOf((u) => u.includes('/graph'));
     const eventsAtMount = callsOf((u) => u.includes('/events'));
     expect(summaryAtMount).toBe(1);
-    expect(graphAtMount).toBe(1);
+    expect(callsOf((u) => u.includes('/graph'))).toBe(0); // event-first: no graph
     expect(eventsAtMount).toBe(1);
 
     // Fire 5 envelopes in tight succession. They should collapse to exactly
-    // one debounced graph invalidation AND one debounced forward backfill
-    // (`?after=`) — not one fetch per envelope.
+    // one debounced forward backfill (`?after=`) — not one fetch per envelope.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const es = MockEventSource.latest();
     expect(es).toBeDefined();
@@ -322,16 +320,12 @@ describe('SessionDetailPage', () => {
     });
     vi.useRealTimers();
 
-    // Wait for the queued fetch to resolve. The graph endpoint should now
-    // have been hit exactly once more than at mount; summary and events
-    // unchanged.
-    await waitFor(() => {
-      expect(callsOf((u) => u.includes('/graph'))).toBe(graphAtMount + 1);
-    });
     // Exactly one forward backfill fetch (?after=), regardless of burst size.
     await waitFor(() => {
       expect(callsOf((u) => u.includes('/events') && u.includes('after='))).toBe(1);
     });
+    // The graph endpoint is still never fetched, and summary is never re-hit.
+    expect(callsOf((u) => u.includes('/graph'))).toBe(0);
     expect(callsOf((u) => /\/v1\/sessions\/[^/]+$/.test(u))).toBe(summaryAtMount);
     expect(callsOf((u) => u.includes('/events'))).toBe(eventsAtMount + 1);
   });

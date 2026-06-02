@@ -121,6 +121,44 @@ describe('buildStreamModel — classify refinement (#7)', () => {
     expect(evIds).not.toContain('2'); // span dropped
     expect(evIds).not.toContain('3'); // facet log dropped
   });
+
+  it('computes a tool_call activity event duration from its matched tool_result timestamp', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'c1', kind: 'tool_call', tool_use_id: 'u1', observed_at: '2026-05-28T00:00:00.000Z',
+        payload: { tool_name: 'Bash', input: { command: 'ls' } } }),
+      ev({ event_id: 'r1', kind: 'tool_result', tool_use_id: 'u1', observed_at: '2026-05-28T00:00:00.500Z',
+        payload: { tool_result: { is_error: false } } }),
+    ]);
+    const run = items.find((i: any) => i.type === 'activity-run') as any;
+    expect(run.events[0].durationMs).toBe(500);
+  });
+
+  it('leaves durationMs null for a tool_call with no matched result', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'c1', kind: 'tool_call', tool_use_id: 'u1', observed_at: '2026-05-28T00:00:00.000Z',
+        payload: { tool_name: 'Bash', input: { command: 'ls' } } }),
+    ]);
+    const run = items.find((i: any) => i.type === 'activity-run') as any;
+    expect(run.events[0].durationMs).toBeNull();
+  });
+
+  it('drops hook_additional_context (a byte-identical duplicate of its hook_success sibling) but keeps hook_success', () => {
+    // Verified against real data: a SessionStart hook emits both hook_success
+    // (exitCode/durationMs/command + stdout) and hook_additional_context, whose
+    // `content` is identical to hook_success.stdout.hookSpecificOutput
+    // .additionalContext (5632 == 5632 chars). The additional_context event adds
+    // no information → drop it from the message view.
+    const items = buildStreamModel([
+      ev({ event_id: 'hs', kind: 'hook_event', actor: 'hook', subkind: 'hook_success',
+        payload: { type: 'hook_success', hookName: 'SessionStart:startup', exitCode: 0, durationMs: 314 } }),
+      ev({ event_id: 'hac', kind: 'hook_event', actor: 'hook', subkind: 'hook_additional_context',
+        payload: { type: 'hook_additional_context', hookEvent: 'SessionStart', content: ['…'] } }),
+    ]);
+    const acts = items.filter((i) => i.type === 'activity-run');
+    const evIds = acts.flatMap((a: any) => a.events.map((e: any) => e.event.event_id));
+    expect(evIds).toContain('hs');      // execution record kept
+    expect(evIds).not.toContain('hac'); // duplicate injected-context dropped
+  });
 });
 
 describe('buildStreamModel — signal-less meta dropped, system_summary surfaced', () => {

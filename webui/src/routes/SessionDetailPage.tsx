@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
-import type { GraphPayload } from '../api/types';
 import { MetaStrip } from '../components/MetaStrip';
 import { DetailPanel } from '../components/replay/detail/DetailPanel';
 import { TopBar } from '../components/layout/TopBar';
@@ -13,7 +12,6 @@ import {
 import { useLiveStreamBridge } from '../lib/sse';
 import {
   useSessionDetailQuery,
-  useSessionGraphQuery,
   useFindingsQuery,
   useVerificationRunsQuery,
   useToolFailureSummaryQuery,
@@ -25,18 +23,14 @@ import { useSessionWindow } from '../hooks/useSessionWindow';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
 import { UntaggedBashPanel } from '../components/replay/stream/UntaggedBashPanel';
 import { buildStreamModel } from '../components/replay/stream/streamModel';
-import {
-  buildLlmRequestMetrics,
-  parseApiRequestLog,
-  parseLlmRequestSpan,
-} from '../components/replay/stream/llmRequestMetrics';
-import { buildEntityFacets } from '../components/replay/facets/entityFacets';
-import { buildToolMetrics } from '../components/replay/detail/toolMetrics';
+import { buildLlmRequestMetrics } from '../components/replay/stream/llmRequestMetrics';
 import type { RawBlock } from '../components/replay/detail/RawTab';
-import { buildRawBlocks } from '../components/replay/detail/rawBlocks';
+import { buildRawBlocksFromEvents } from '../components/replay/detail/rawBlocks';
+import {
+  buildToolMetricsFromEvents,
+  buildLlmMetricsFromEvents,
+} from '../components/replay/detail/eventMetrics';
 import styles from './SessionDetailPage.module.css';
-
-const EMPTY_GRAPH: GraphPayload = { nodes: [], edges: [] };
 
 // Debounce window for SSE-driven backfill: an envelope burst collapses to one
 // forward `?after=` page fetch (mirrors the bridge's graph-invalidate debounce).
@@ -46,7 +40,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const sel = useReplaySelection();
 
   const detail = useSessionDetailQuery(sessionId);
-  const graph = useSessionGraphQuery(sessionId);
   const findings = useFindingsQuery(sessionId);
   const verificationRuns = useVerificationRunsQuery(sessionId);
   const toolFailures = useToolFailureSummaryQuery(sessionId);
@@ -98,16 +91,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   // (non-scrolling) container and re-fired on every render, auto-loading the
   // whole session — so it has been removed.
 
-  const effectiveGraph = graph.data ?? EMPTY_GRAPH;
-
-  // entity → its folded facet group (node.payload.facets). Used to gather a
-  // tool_call's tool-execution facets + an assistant_message's llm_request_span
-  // for metrics in the Insight tab.
-  const entityFacets = useMemo(
-    () => buildEntityFacets(effectiveGraph.nodes),
-    [effectiveGraph],
-  );
-
   // Findings drive the stream highlight + DetailPanel cross-reference (below).
   const findingsData = findings.data ?? [];
 
@@ -123,136 +106,74 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     [window_.events, metricsByReq],
   );
 
-  // event_id -> node_id (graph nodes carry source_event_ids)
-  const nodeIdByEventId = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const n of effectiveGraph.nodes) for (const eid of n.source_event_ids) m.set(eid, n.node_id);
-    return m;
-  }, [effectiveGraph]);
-
-  // event ids that have a finding. Evidence refs (slice-14/15+) live in two
-  // namespaces; resolve each through its own path:
-  //   - candidateNodeIds: refs that may be node ids (bare-string ULID refs and
-  //     { node_id } refs) → mapped via the graph to their source event ids;
-  //   - directEventIds: ids that are already event ids (bare-string refs and
-  //     { event_id } refs) → used as-is.
-  // A bare string ref is ambiguous, so it is treated as both.
+  // event ids that have a finding. evidence_refs are event ids (bare-string
+  // ULID or { event_id }) — resolved directly, no graph node mapping.
   const findingEventIds = useMemo(() => {
-    const candidateNodeIds = new Set<string>();
-    const directEventIds = new Set<string>();
+    const eids = new Set<string>();
     for (const f of findingsData) {
       for (const ref of f.evidence_refs) {
-        if (typeof ref === 'string') {
-          candidateNodeIds.add(ref);
-          directEventIds.add(ref);
-        } else {
-          if (typeof ref.node_id === 'string') candidateNodeIds.add(ref.node_id);
-          if (typeof ref.event_id === 'string') {
-            directEventIds.add(ref.event_id);
-            // object refs with only an event_id were historically matched
-            // against node ids too; preserve that.
-            if (typeof ref.node_id !== 'string') candidateNodeIds.add(ref.event_id);
-          }
-        }
+        if (typeof ref === 'string') eids.add(ref);
+        else if (typeof ref.event_id === 'string') eids.add(ref.event_id);
       }
     }
-    const eids = new Set<string>(directEventIds);
-    for (const n of effectiveGraph.nodes) {
-      if (candidateNodeIds.has(n.node_id)) for (const eid of n.source_event_ids) eids.add(eid);
-    }
     return eids;
-  }, [findingsData, effectiveGraph]);
+  }, [findingsData]);
 
-  const selectedStreamEventId = useMemo(() => {
-    if (!sel.selectedNodeId) return null;
-    const n = effectiveGraph.nodes.find((x) => x.node_id === sel.selectedNodeId);
-    // Graph nodes resolve to their first source event; nodeless selections
-    // (e.g. a thinking marker) store the event id directly in `selected`.
-    return n?.source_event_ids[0] ?? sel.selectedNodeId;
-  }, [sel.selectedNodeId, effectiveGraph]);
+  // The views are event-first: selection IS the event id (no graph node).
+  const selectedEventId = sel.selectedNodeId;
+  const selectedStreamEventId = selectedEventId;
+  const selectStreamCard = (eventId: string) => sel.setSelectedNodeId(eventId);
 
-  const selectStreamCard = (eventId: string) => {
-    const nid = nodeIdByEventId.get(eventId);
-    // Thinking events are not graph nodes; select them by event id so the
-    // side panel can still resolve and show their per-response metrics.
-    sel.setSelectedNodeId(nid ?? eventId);
-  };
-
-  // A selected thinking event (no graph node) → its per-response metrics for
-  // the side panel.
-  const selectedThinkingEvent = useMemo(() => {
-    if (!sel.selectedNodeId) return null;
-    return (
-      window_.events.find(
-        (e) => e.event_id === sel.selectedNodeId && e.kind === 'thinking',
-      ) ?? null
-    );
-  }, [sel.selectedNodeId, window_.events]);
-  const selectedThinkingMetrics = useMemo(() => {
-    const rid = selectedThinkingEvent?.request_id ?? null;
-    return rid ? metricsByReq.get(rid) ?? null : null;
-  }, [selectedThinkingEvent, metricsByReq]);
-
-  // --- DetailPanel inputs ---
-  const selectedNode =
-    sel.selectedNodeId && effectiveGraph
-      ? effectiveGraph.nodes.find((n) => n.node_id === sel.selectedNodeId) ?? null
-      : null;
-  const selectedEventId = selectedNode?.source_event_ids[0] ?? null;
+  // --- DetailPanel inputs (all event-derived; no graph) ---
+  const selectedEvent = useMemo(
+    () =>
+      selectedEventId
+        ? window_.events.find((e) => e.event_id === selectedEventId) ?? null
+        : null,
+    [selectedEventId, window_.events],
+  );
 
   const rawQuery = useEventRawQuery(selectedEventId);
 
+  // Findings for the selected event. evidence_refs are event ids (L1/L2
+  // extractors emit event_id refs); bare-string and {event_id} refs both match.
   const selectedNodeFindings = useMemo(() => {
-    if (!sel.selectedNodeId) return [];
-    const nid = sel.selectedNodeId;
-    const node = effectiveGraph.nodes.find((n) => n.node_id === nid);
-    const sourceEventIds = new Set(node?.source_event_ids ?? []);
+    if (!selectedEventId) return [];
     return findingsData.filter((f) =>
-      f.evidence_refs.some((ref) => {
-        if (typeof ref === 'string') return ref === nid || sourceEventIds.has(ref);
-        return ref.node_id === nid || (typeof ref.event_id === 'string' && sourceEventIds.has(ref.event_id));
-      }),
+      f.evidence_refs.some((ref) =>
+        typeof ref === 'string' ? ref === selectedEventId : ref.event_id === selectedEventId,
+      ),
     );
-  }, [sel.selectedNodeId, effectiveGraph, findingsData]);
+  }, [selectedEventId, findingsData]);
 
-  // Tool-execution metrics for a selected tool_call node: fold its tool facets
-  // (node.payload.facets) into one ToolMetrics.
-  const selectedToolMetrics = useMemo(() => {
-    if (selectedNode?.node_kind !== 'tool_call') return null;
-    const group = entityFacets.get(selectedNode.node_id);
-    if (!group) return null;
-    return buildToolMetrics(group.facets);
-  }, [selectedNode, entityFacets]);
+  // Tool-execution metrics for a selected tool_call, found among the loaded
+  // events by tool_use_id (no facet fold).
+  const selectedToolMetrics = useMemo(
+    () =>
+      selectedEvent?.kind === 'tool_call'
+        ? buildToolMetricsFromEvents(window_.events, selectedEvent.tool_use_id)
+        : null,
+    [selectedEvent, window_.events],
+  );
 
-  // Per-response metrics for a selected assistant_message node: parse the
-  // node's folded llm_request_span facet (data carries the same
-  // raw_span.attributes[] shape as the windowed otel_span event). thinking is
-  // not a graph node (graph/build.rs `_ => continue`); thinking markers use the
-  // nodeless thinkingMetrics path → ResponseMetricsPanel.
-  const selectedNodeLlmMetrics = useMemo(() => {
-    if (selectedNode?.node_kind !== 'assistant_message') return null;
-    const group = entityFacets.get(selectedNode.node_id);
-    const span = group?.facets.find((f) => f.facet_kind === 'llm_request_span');
-    const metrics = span ? parseLlmRequestSpan(span.data) : null;
-    if (!metrics) return null;
-    // Measured per-request cost lives in the api_request_log facet (not the
-    // span); merge it in so the Insight panel shows the real cost, not the
-    // token×rate estimate.
-    const log = group?.facets.find((f) => f.facet_kind === 'api_request_log');
-    const extra = log ? parseApiRequestLog(log.data) : null;
-    return { ...metrics, costUsd: extra?.costUsd ?? null, querySource: extra?.querySource ?? null };
-  }, [selectedNode, entityFacets]);
+  // Per-response metrics for a selected assistant_message / thinking, found by
+  // request_id (llm_request span merged with api_request log cost).
+  const selectedLlmMetrics = useMemo(
+    () =>
+      selectedEvent &&
+      (selectedEvent.kind === 'assistant_message' || selectedEvent.kind === 'thinking')
+        ? buildLlmMetricsFromEvents(window_.events, selectedEvent.request_id ?? null)
+        : null,
+    [selectedEvent, window_.events],
+  );
 
-  // Source-split raw blocks for the Raw tab. When a node is selected, build:
-  //   - entity block: the selected node's own payload, labelled by source
-  //   - facet blocks: each folded facet's verbatim `data`, labelled by kind
-  // Node payloads are used directly (no extra fetch). The existing `record`
-  // (rawQuery) remains as a back-compat fallback for the no-blocks path.
-  const rawBlocks = useMemo<RawBlock[] | undefined>(() => {
-    if (!selectedNode) return undefined;
-    const facets = entityFacets.get(selectedNode.node_id)?.facets ?? [];
-    return buildRawBlocks(selectedNode, facets);
-  }, [selectedNode, entityFacets]);
+  // Source-split raw blocks for the Raw tab, built from the selected event +
+  // correlated events (matched tool_result, telemetry by tool_use_id/request_id).
+  // Falls back to the single `record` (rawQuery) when there is nothing to split.
+  const rawBlocks = useMemo<RawBlock[] | undefined>(
+    () => (selectedEvent ? buildRawBlocksFromEvents(selectedEvent, window_.events) : undefined),
+    [selectedEvent, window_.events],
+  );
 
   // --- render branches ---
   const detailError = detail.error as ApiError | null;
@@ -307,13 +228,11 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
 
           <div className={styles.detail} data-slot="detail">
             <DetailPanel
-              node={selectedNode}
+              event={selectedEvent}
               record={rawQuery.data?.record ?? null}
               findings={selectedNodeFindings}
-              thinkingSelected={!!selectedThinkingEvent}
-              thinkingMetrics={selectedThinkingMetrics}
               toolMetrics={selectedToolMetrics}
-              llmMetrics={selectedNodeLlmMetrics}
+              llmMetrics={selectedLlmMetrics}
               rawBlocks={rawBlocks}
             />
           </div>

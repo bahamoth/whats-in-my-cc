@@ -1,74 +1,70 @@
-// Source-split Raw blocks for a selected graph node, extracted as a pure
-// function so the "a failed tool's error output must be visible in Raw"
-// contract is unit-testable.
-//
-// A tool_call node carries BOTH the call (input) and the tool_result (output,
-// incl. is_error + the error content) — the latter merged in by the graph
-// builder under payload.result.tool_result. The card / Insight derive the error
-// badge from that, but the Raw tab previously fell back to the bare transcript
-// line of the call event, which has no result — so the error output was
-// invisible in Raw. We now split it into its own labelled block.
+// Source-split Raw blocks, built DIRECTLY from ObservedEvents by correlation
+// key — no graph node, no facet fold. The "a failed tool's error output must be
+// visible in Raw" contract lives in buildRawBlocksFromEvents below.
 
 import { asRecord } from '../facets/entityFacets';
 import type { RawBlock } from './RawTab';
+import type { ObservedEventDto } from '../../../api/types';
+import { parseLlmRequestSpan } from '../stream/llmRequestMetrics';
 
 const TRANSCRIPT_NODE_KINDS = new Set(['tool_call', 'assistant_message', 'user_message']);
+const TELEMETRY_LOG_NAMES = new Set(['tool_result', 'tool_decision', 'api_request']);
 
-interface NodeLike {
-  node_id: string;
-  node_kind: string;
-  payload: unknown;
-}
-interface FacetLike {
-  facet_kind: string;
-  data: unknown;
-}
-
-export function buildRawBlocks(node: NodeLike, facets: FacetLike[]): RawBlock[] | undefined {
-  const entitySource = TRANSCRIPT_NODE_KINDS.has(node.node_kind) ? 'transcript' : node.node_kind;
-  const p = asRecord(node.payload);
+// Event-first Raw blocks: split a selected ObservedEvent into its own source +
+// the correlated sources found among the loaded events (matched tool_result,
+// folded-equivalent telemetry), WITHOUT a graph node or facet fold. Returns
+// undefined when there is nothing extra to split → single-record fallback.
+export function buildRawBlocksFromEvents(
+  event: ObservedEventDto,
+  events: ObservedEventDto[],
+): RawBlock[] | undefined {
+  const p = asRecord(event.payload);
+  const entitySource = TRANSCRIPT_NODE_KINDS.has(event.kind) ? 'transcript' : event.kind;
   const entityLabel =
-    node.node_kind === 'tool_call' && typeof p.tool_name === 'string' ? p.tool_name : node.node_kind;
+    event.kind === 'tool_call' && typeof p.tool_name === 'string' ? p.tool_name : event.kind;
+  const entityBlock: RawBlock = { source: entitySource, label: entityLabel, record: event.payload };
 
-  // tool_result lives at payload.result.tool_result (merged by the graph
-  // builder). Split it out so a failed tool's error output is visible.
-  const toolResult = asRecord(p.result).tool_result;
-  const hasToolResult =
-    toolResult != null && typeof toolResult === 'object' && Object.keys(asRecord(toolResult)).length > 0;
+  const extra: RawBlock[] = [];
 
-  // entity (call) block: the whole payload, minus the result when it is split
-  // out below so it is not shown twice.
-  const entityRecord = hasToolResult
-    ? Object.fromEntries(Object.entries(p).filter(([k]) => k !== 'result'))
-    : node.payload;
-  const entityBlock: RawBlock = { source: entitySource, label: entityLabel, record: entityRecord };
-
-  const toolResultBlock: RawBlock | null = hasToolResult
-    ? {
+  // tool_call output → its matched tool_result event (by tool_use_id), split so
+  // a failed tool's error content is visible.
+  if (event.kind === 'tool_call' && event.tool_use_id) {
+    const resultEv = events.find(
+      (e) => e.kind === 'tool_result' && e.tool_use_id === event.tool_use_id,
+    );
+    if (resultEv) {
+      const tr = asRecord(resultEv.payload).tool_result;
+      const hasTr =
+        tr != null && typeof tr === 'object' && Object.keys(asRecord(tr)).length > 0;
+      extra.push({
         source: 'tool_result',
-        label: asRecord(toolResult).is_error === true ? 'error' : 'ok',
-        record: toolResult,
-      }
-    : null;
+        label: asRecord(tr).is_error === true ? 'error' : 'ok',
+        record: hasTr ? tr : resultEv.payload,
+      });
+    }
+  }
 
-  // Folded telemetry facet blocks; label by event_name (logs) or raw_span.name
-  // (span), falling back to the facet_kind.
-  const facetBlocks: RawBlock[] = facets.map((f) => {
-    const fd = asRecord(f.data);
-    const rawSpan = asRecord(fd.raw_span);
-    const label =
-      typeof fd.event_name === 'string'
-        ? fd.event_name
-        : typeof rawSpan.name === 'string'
-          ? rawSpan.name
-          : f.facet_kind;
-    return { source: f.facet_kind, label, record: f.data };
-  });
+  // Correlated telemetry (the data the graph used to fold as facets), found here
+  // by correlation key: log_records by tool_use_id / request_id, llm spans by
+  // request_id. Labelled by event_name / span name.
+  for (const e of events) {
+    if (e.kind === 'log_record') {
+      const lp = asRecord(e.payload);
+      const name = lp.event_name;
+      if (typeof name !== 'string' || !TELEMETRY_LOG_NAMES.has(name)) continue;
+      const a = asRecord(lp.attributes);
+      const match =
+        (event.tool_use_id != null && a.tool_use_id === event.tool_use_id) ||
+        (event.request_id != null && a.request_id === event.request_id);
+      if (!match) continue;
+      extra.push({ source: `${name}_log`, label: name, record: e.payload });
+    } else if (e.kind === 'otel_span' && event.request_id != null) {
+      const m = parseLlmRequestSpan(e.payload);
+      if (!m || m.requestId !== event.request_id) continue;
+      extra.push({ source: 'llm_request_span', label: 'claude_code.llm_request', record: e.payload });
+    }
+  }
 
-  // Nothing extra to split (plain message, no facets, no tool_result) → let the
-  // caller fall back to the bare single-record JsonTree (verbatim transcript),
-  // keeping DetailPanel's "raw loaded" accent dot meaningful.
-  const extra = [...(toolResultBlock ? [toolResultBlock] : []), ...facetBlocks];
   if (extra.length === 0) return undefined;
   return [entityBlock, ...extra];
 }

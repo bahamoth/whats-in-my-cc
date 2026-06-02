@@ -15,6 +15,7 @@
 import { AlertTriangle } from 'lucide-react';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import { formatDuration } from '../stream/llmRequestMetrics';
+import { hookFacet } from '../stream/hookFacet';
 import type { ToolMetrics } from './toolMetrics';
 import { Row, ResponseMetricsRows, responseWarns, formatBytes } from './metricsRows';
 import rows from './metricsRows.module.css';
@@ -24,6 +25,9 @@ interface EntityMetricsPanelProps {
   kind: string;
   toolMetrics: ToolMetrics | null;
   llmMetrics: LlmRequestMetrics | null;
+  /** The selected node's raw payload — used for kinds whose metrics live in the
+   *  payload itself (hook_event: exitCode / durationMs / command). */
+  payload?: unknown;
 }
 
 function Uncollected() {
@@ -66,7 +70,35 @@ function ToolMetricsRows({ m }: { m: ToolMetrics }) {
   );
 }
 
-export function EntityMetricsPanel({ kind, toolMetrics, llmMetrics }: EntityMetricsPanelProps) {
+function HookMetricsRows({ payload }: { payload: unknown }) {
+  const h = hookFacet(payload);
+  const allNull =
+    h.durationMs == null && h.success == null && h.command == null && h.hookEvent == null;
+  if (allNull) return <Uncollected />;
+
+  return (
+    <div className={rows.grid}>
+      <Row label="hook 이벤트" value={h.hookEvent ?? '—'} />
+      <Row label="소요 시간" value={formatDuration(h.durationMs) ?? '—'} />
+      <Row
+        label="결과"
+        value={h.success == null ? '—' : h.success ? 'ok' : `error (exit ${h.exitCode})`}
+        warn={h.success === false}
+      />
+      <Row label="명령" value={h.command ?? '—'} />
+    </div>
+  );
+}
+
+export function EntityMetricsPanel({ kind, toolMetrics, llmMetrics, payload }: EntityMetricsPanelProps) {
+  if (kind === 'hook_event') {
+    return (
+      <div className={styles.wrap} data-testid="entity-metrics" data-kind={kind}>
+        <HookMetricsRows payload={payload} />
+      </div>
+    );
+  }
+
   if (kind === 'tool_call') {
     return (
       <div className={styles.wrap} data-testid="entity-metrics" data-kind={kind}>

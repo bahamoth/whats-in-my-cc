@@ -1,13 +1,13 @@
 // webui/src/components/replay/detail/__tests__/InsightTab.test.tsx
 /**
- * Task 6 — metrics-led Insight tab: a compact node header + EntityMetricsPanel
- * (kind-dependent collected metrics) + that node's Findings. The old
- * FocusedInsightGraph subgraph and shallow per-kind sections were removed.
+ * Metrics-led Insight tab — now EVENT-first (no graph node): a compact header
+ * (from the event's kind + payload) + EntityMetricsPanel + that event's
+ * Findings. Drives entirely off an ObservedEvent.
  */
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { InsightTab } from '../InsightTab';
-import type { FindingDto, GraphNodeDto } from '../../../../api/types';
+import type { FindingDto, ObservedEventDto } from '../../../../api/types';
 
 function finding(p: Partial<FindingDto>): FindingDto {
   return {
@@ -17,11 +17,15 @@ function finding(p: Partial<FindingDto>): FindingDto {
   };
 }
 
-function n(id: string, kind = 'tool_call', payload: unknown = {}): GraphNodeDto {
-  return { node_id: id, schema_version: '1', session_id: 's', node_kind: kind, started_at: '', ended_at: null, merge_keys: {}, source_event_ids: [], source_uris: [], payload };
+function ev(id: string, kind = 'tool_call', payload: unknown = {}): ObservedEventDto {
+  return {
+    event_id: id, raw_event_id: '', session_id: 's', event_uuid: null, parent_uuid: null,
+    observed_at: '', actor: 'assistant', kind, subkind: null, tool_use_id: null, tool_name: null,
+    turn_id: null, is_sidechain: false, is_meta: false, payload,
+  } as ObservedEventDto;
 }
 
-const toolNode = n('b', 'tool_call', { tool_name: 'Bash', input: { command: 'ls' } });
+const toolEvent = ev('b', 'tool_call', { tool_name: 'Bash', input: { command: 'ls' } });
 
 const toolMetrics = {
   durationMs: 57, success: true, decisionSource: 'config', decisionType: 'accept',
@@ -31,7 +35,7 @@ const toolMetrics = {
 describe('InsightTab', () => {
   it('renders findings (summary, category, severity visible)', () => {
     render(
-      <InsightTab findings={[finding({})]} node={toolNode} toolMetrics={toolMetrics} llmMetrics={null} />,
+      <InsightTab findings={[finding({})]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />,
     );
     expect(screen.getByText('risky rm -rf')).toBeInTheDocument();
     expect(screen.getByText(/risky_action/)).toBeInTheDocument();
@@ -40,39 +44,33 @@ describe('InsightTab', () => {
 
   it('renders confidence as a percentage', () => {
     render(
-      <InsightTab findings={[finding({ confidence: 0.8 })]} node={toolNode} toolMetrics={toolMetrics} llmMetrics={null} />,
+      <InsightTab findings={[finding({ confidence: 0.8 })]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />,
     );
     expect(screen.getByText('80%')).toBeInTheDocument();
   });
 
-  it('shows an empty hint when no node and no findings', () => {
-    render(<InsightTab findings={[]} node={null} toolMetrics={null} llmMetrics={null} />);
+  it('shows an empty hint when no event and no findings', () => {
+    render(<InsightTab findings={[]} event={null} toolMetrics={null} llmMetrics={null} />);
     expect(screen.getByText(/no insights|no findings/i)).toBeInTheDocument();
   });
 
-  it('renders the node header (tool name) when a node is provided', () => {
-    render(<InsightTab findings={[]} node={toolNode} toolMetrics={toolMetrics} llmMetrics={null} />);
+  it('renders the header (tool name) when an event is provided', () => {
+    render(<InsightTab findings={[]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />);
     expect(screen.getByText('Bash')).toBeInTheDocument();
   });
 
   it('shows what a tool call did (operation summary) in the header', () => {
-    const computer = n('c', 'tool_call', {
+    const computer = ev('c', 'tool_call', {
       tool_name: 'mcp__claude-in-chrome__computer',
       input: { action: 'left_click', coordinate: [638, 220] },
     });
-    render(<InsightTab findings={[]} node={computer} toolMetrics={toolMetrics} llmMetrics={null} />);
+    render(<InsightTab findings={[]} event={computer} toolMetrics={toolMetrics} llmMetrics={null} />);
     expect(screen.getByText('left_click (638, 220)')).toBeInTheDocument();
   });
 
-  it('renders the entity metrics panel for the selected node', () => {
-    render(<InsightTab findings={[]} node={toolNode} toolMetrics={toolMetrics} llmMetrics={null} />);
+  it('renders the entity metrics panel for the selected event', () => {
+    render(<InsightTab findings={[]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />);
     expect(screen.getByTestId('entity-metrics')).toBeInTheDocument();
-    // tool-execution metric meaning is surfaced
     expect(screen.getByText(/결정 출처/)).toBeInTheDocument();
-  });
-
-  it('does not render the focused subgraph (removed)', () => {
-    render(<InsightTab findings={[]} node={toolNode} toolMetrics={toolMetrics} llmMetrics={null} />);
-    expect(screen.queryByTestId('focused-graph')).toBeNull();
   });
 });

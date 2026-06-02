@@ -5,6 +5,7 @@ import { summarizeStack } from './activityGroup';
 import type { ActivityStackData } from './activityGroup';
 import { nodeLabel } from './nodeLabel';
 import { tagForEvent } from './eventTags';
+import { hookFacet } from './hookFacet';
 import styles from './ActivityStack.module.css';
 
 interface ActivityStackProps {
@@ -52,15 +53,17 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
           <span className={styles.topTools}>{summary.topTools.join(' · ')}</span>
         )}
         <span className={styles.count}>{summary.count} events</span>
-        {summary.durationMs > 0 && (
-          <span className={styles.duration}>{formatDuration(summary.durationMs)}</span>
-        )}
-        {summary.errorCount > 0 && (
-          <span className={styles.badgeError}>
-            <AlertTriangle size={10} aria-hidden />
-            {summary.errorCount}
-          </span>
-        )}
+        <span data-testid="fold-meta" className={styles.meta}>
+          {summary.errorCount > 0 && (
+            <span className={styles.badgeError}>
+              <AlertTriangle size={10} aria-hidden />
+              {summary.errorCount}
+            </span>
+          )}
+          {summary.durationMs > 0 && (
+            <span className={styles.duration}>{formatDuration(summary.durationMs)}</span>
+          )}
+        </span>
       </button>
 
       {expanded && (
@@ -68,6 +71,9 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
           {stack.events.map((ae) => {
             const label = nodeLabel({ node_kind: ae.event.kind, payload: ae.event.payload });
             const isSelected = selectedEventId === ae.event.event_id;
+            // hook_event carries its own success/duration in its payload (not a
+            // matched tool_result), so derive the badge + duration from there.
+            const hook = ae.event.kind === 'hook_event' ? hookFacet(ae.event.payload) : null;
             return (
               <div
                 key={ae.event.event_id}
@@ -90,11 +96,30 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
                 {label.secondary && (
                   <span className={styles.itemSecondary}>{label.secondary}</span>
                 )}
-                {ae.result != null && (
-                  ae.result.isError
-                    ? <span className={styles.itemBadgeError}>error</span>
-                    : <span className={styles.itemBadgeOk}>ok</span>
-                )}
+                {(() => {
+                  // One right-aligned meta cluster for every item — order: time,
+                  // then status — so tool and hook rows line up consistently.
+                  // hook time/status come from the event's own payload; tool's
+                  // from the upstream-computed durationMs + matched result.
+                  const status: 'ok' | 'error' | null = hook
+                    ? (hook.success == null ? null : hook.success ? 'ok' : 'error')
+                    : ae.result == null
+                    ? null
+                    : ae.result.isError
+                    ? 'error'
+                    : 'ok';
+                  const durationMs = hook ? hook.durationMs : ae.durationMs ?? null;
+                  if (durationMs == null && status == null) return null;
+                  return (
+                    <span data-testid="activity-meta" className={styles.meta}>
+                      {status === 'ok' && <span className={styles.itemBadgeOk}>ok</span>}
+                      {status === 'error' && <span className={styles.itemBadgeError}>error</span>}
+                      {durationMs != null && (
+                        <span className={styles.duration}>{formatDuration(durationMs)}</span>
+                      )}
+                    </span>
+                  );
+                })()}
               </div>
             );
           })}

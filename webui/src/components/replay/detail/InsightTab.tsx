@@ -5,7 +5,7 @@
 // plain-language ⓘ tooltips) + that node's Findings. The old FocusedInsightGraph
 // subgraph and the shallow per-kind NodeDetail sections were removed — the full
 // raw payload still lives in the Raw tab.
-import type { FindingDto, GraphNodeDto } from '../../../api/types';
+import type { FindingDto, ObservedEventDto } from '../../../api/types';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import { nodeLabel } from '../stream/nodeLabel';
 import type { ToolMetrics } from './toolMetrics';
@@ -14,7 +14,7 @@ import styles from './InsightTab.module.css';
 
 interface InsightTabProps {
   findings: FindingDto[];
-  node: GraphNodeDto | null;
+  event: ObservedEventDto | null;
   toolMetrics: ToolMetrics | null;
   llmMetrics: LlmRequestMetrics | null;
 }
@@ -52,21 +52,21 @@ function FindingsList({ findings }: { findings: FindingDto[] }) {
   );
 }
 
-export function InsightTab({ findings, node, toolMetrics, llmMetrics }: InsightTabProps) {
-  if (!node && findings.length === 0) {
+export function InsightTab({ findings, event, toolMetrics, llmMetrics }: InsightTabProps) {
+  if (!event && findings.length === 0) {
     return (
       <div className={styles.root}>
-        <p className={styles.empty}>No insights for this node.</p>
+        <p className={styles.empty}>No insights for this event.</p>
       </div>
     );
   }
 
-  const label = node ? nodeLabel(node) : null;
+  const label = event ? nodeLabel({ node_kind: event.kind, payload: event.payload }) : null;
   const icon = label ? KIND_ICON[label.kind] ?? KIND_ICON.other : null;
 
   return (
     <div className={styles.root}>
-      {node && (
+      {event && (
         <>
           <div className={styles.nodeHeader}>
             <span className={styles.nodeIcon} aria-hidden="true">{icon}</span>
@@ -77,12 +77,13 @@ export function InsightTab({ findings, node, toolMetrics, llmMetrics }: InsightT
             {label?.kind === 'tool' && label.secondary && (
               <span className={styles.nodeSecondary}>{label.secondary}</span>
             )}
-            <span className={styles.nodeId}>{node.node_id}</span>
+            <span className={styles.nodeId}>{event.event_id}</span>
           </div>
           <EntityMetricsPanel
-            kind={node.node_kind}
+            kind={event.kind}
             toolMetrics={toolMetrics}
             llmMetrics={llmMetrics}
+            payload={event.payload}
           />
         </>
       )}

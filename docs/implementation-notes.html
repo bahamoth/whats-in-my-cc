@@ -3402,6 +3402,51 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="views-without-graph">
+    <h2>뷰를 그래프에서 분리 — event-first 메세지/디테일/raw 뷰 (2026-06-02)</h2>
+    <p>브랜치: <code>refactor/views-without-graph</code> · 날짜: 2026-06-02.
+      목표: 메세지 뷰·디테일 뷰·raw 뷰를 <strong>graph node / facet-fold 의존 없이</strong>
+      <code>ObservedEvent</code> + <code>raw_event</code> + correlation 키(<code>tool_use_id</code>/<code>request_id</code>)만으로 그린다.</p>
+
+    <h3>배경 — 왜</h3>
+    <p>
+      소비처 전수 추적 결과, 세 뷰는 graph가 본질적으로 불필요했다. 메세지 뷰는 이미 <code>ObservedEvent</code> 기반이었고,
+      디테일 메트릭은 <code>tool_use_id</code>/<code>request_id</code>로 events에서 직접 묶을 수 있으며(tool_result/tool_decision log 100%가 tool_use_id 보유),
+      findings의 <code>evidence_refs</code>는 이미 event_id다(L1/L2 추출기가 <code>ev.event_id</code> emit). graph node + facet-fold는
+      그 자체로 <em>이전 redesign(telemetry-fold)</em>의 산출물인데, 그 주 명분(episode 분류·시각 subgraph)은 이후 모두 제거되어 뷰에 대해선 관성으로만 남아 있었다.
+      graph/edge/facet-fold는 <strong>causal-edge inference + 공개 <code>/graph</code> API/MCP</strong> 전용 산출물로 격리하고, 뷰에선 걷어냈다.
+    </p>
+
+    <h3>변경</h3>
+    <ul>
+      <li><strong>신규 <code>detail/eventMetrics.ts</code></strong>: <code>buildToolMetricsFromEvents(events, tool_use_id)</code>(window의
+        tool_result/tool_decision log_record를 키로 찾아 기존 <code>buildToolMetrics</code> 파서 재사용),
+        <code>buildLlmMetricsFromEvents(events, request_id)</code>(llm_request span + api_request log cost 병합).</li>
+      <li><strong><code>rawBlocks.buildRawBlocksFromEvents(event, events)</code></strong>: 선택 event + correlation으로 찾은
+        matched tool_result·텔레메트리를 소스별 블록으로 분할(graph node/facet 없이). 기존 node 기반 <code>buildRawBlocks</code>는 제거.</li>
+      <li><strong><code>DetailPanel</code>/<code>InsightTab</code></strong>: prop을 <code>node: GraphNodeDto</code> → <code>event: ObservedEventDto</code>로 변경.
+        <code>thinking</code> 특수 경로(<code>thinkingSelected</code> → <code>ResponseMetricsPanel</code>)를 제거 — thinking도 그냥 event로 통일(Insight 탭의 EntityMetricsPanel이 처리).</li>
+      <li><strong><code>SessionDetailPage</code></strong>: <code>useSessionGraphQuery</code>·<code>buildEntityFacets</code>·<code>nodeIdByEventId</code>·
+        node 기반 metric/rawBlocks/finding 매핑 제거. 선택은 event_id 직접. findings는 event_id로만 매칭.</li>
+      <li><strong>죽은 graph-결합 코드 제거</strong>: <code>eventDetail.ts</code>(전환기 <code>eventAsDetailNode</code>), node 기반 <code>buildRawBlocks</code> + 그 테스트.</li>
+    </ul>
+
+    <h3>검증</h3>
+    <ul>
+      <li>회귀 가드: <code>SessionDetailPage.test</code>가 페이지가 <strong><code>/graph</code>를 절대 fetch하지 않음</strong>(<code>toBe(0)</code>)을 단언.</li>
+      <li>브라우저 smoke: <code>/graph</code> 미요청(네트워크 실측), tool_call 디테일에 실 메트릭(소요시간/결과/결정/크기/순서)이 event의 tool_result log에서 렌더,
+        Raw 탭이 <code>transcript</code>+<code>tool_result</code>+<code>tool_result_log</code> 블록을 events에서 분할. 콘솔 에러 없음.</li>
+      <li>단위 테스트 345 green, <code>tsc --noEmit</code> clean.</li>
+    </ul>
+
+    <h3>용어 / 트레이드오프</h3>
+    <p>
+      "facet"은 코드베이스에서 ① ingest 수준 텔레메트리 facet(<code>observed.rs</code>의 <code>TelemetryFacet</code>/<code>LogFacet</code>/<code>MetricFacet</code> — 한 관측의 구조화 단면)과
+      ③ graph fold 결과(<code>build.rs</code> + webui <code>FacetEntry</code> — owner entity에 fold된 것) 두 의미로 겹쳐 있다. 이번 변경으로 뷰는 ③을 더 이상 쓰지 않는다(③은 graph/insight 경로에만 잔존).
+      트레이드오프: 디테일 메트릭이 로드된 window에서 파생되므로, 상관 텔레메트리가 window 밖이거나 세션에 OTel이 없으면 "지표 미수집"으로 표시된다(옛 빈-facet 동작과 parity). window 밖 상관 텔레메트리 타깃 조회는 후속 과제.
+    </p>
+  </section>
+
   <footer class="footer">
     <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · facet correlation + 지표 중심 insight · telemetry fold Slice 1–2 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>

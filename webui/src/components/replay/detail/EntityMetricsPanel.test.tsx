@@ -47,6 +47,33 @@ describe('EntityMetricsPanel', () => {
     expect(screen.getByText(/출력 토큰/)).toBeInTheDocument();
   });
 
+  it('renders hook metrics (result, duration, command) when kind=hook_event', () => {
+    // hook_event metrics come from the node's own payload (real hook_success
+    // shape; see stream/hookFacet.test.ts), not from toolMetrics/llmMetrics.
+    render(
+      <EntityMetricsPanel
+        kind="hook_event"
+        toolMetrics={null}
+        llmMetrics={null}
+        payload={{
+          type: 'hook_success',
+          hookName: 'PreToolUse:Bash',
+          hookEvent: 'PreToolUse',
+          exitCode: 0,
+          durationMs: 330,
+          command: 'python remove_ai_footer.py',
+          stdout: '{"continue": true}\n',
+          stderr: '',
+        }}
+      />,
+    );
+    expect(screen.getByText(/소요 시간/)).toBeInTheDocument();
+    expect(screen.getByText('330ms')).toBeInTheDocument();
+    expect(screen.getByText(/결과/)).toBeInTheDocument();
+    expect(screen.getByText('ok')).toBeInTheDocument();
+    expect(screen.getByText(/python remove_ai_footer\.py/)).toBeInTheDocument();
+  });
+
   it('shows uncollected when tool metrics all null', () => {
     render(
       <EntityMetricsPanel
