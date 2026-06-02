@@ -31,6 +31,22 @@ describe('buildRawBlocksFromEvents', () => {
     expect(tr!.label).toBe('ok');
   });
 
+  // REGRESSION GUARD: the stated contract is "a failed tool's error output must
+  // be visible in Raw". A tool_result whose tool_result.is_error === true must
+  // be split out AND labelled 'error' (the 'ok' case above cannot catch a
+  // regression that hard-codes 'ok' or inverts the is_error check).
+  it("labels a failed tool_result block 'error' and carries its error record", () => {
+    const call = ev({ event_id: 'c1', kind: 'tool_call', tool_use_id: 'u1',
+      payload: { tool_name: 'Bash', input: { command: 'false' } } });
+    const result = ev({ event_id: 'r1', kind: 'tool_result', tool_use_id: 'u1',
+      payload: { tool_result: { is_error: true, content: 'boom' } } });
+    const blocks = buildRawBlocksFromEvents(call, [call, result]);
+    const tr = blocks!.find((b) => b.source === 'tool_result');
+    expect(tr).toBeDefined();
+    expect(tr!.label).toBe('error');
+    expect((tr!.record as Record<string, unknown>).content).toBe('boom');
+  });
+
   it('returns undefined for a plain event with nothing to split (single-record fallback)', () => {
     const msg = ev({ event_id: 'm1', kind: 'user_message', actor: 'user', payload: { text: 'hi' } });
     expect(buildRawBlocksFromEvents(msg, [msg])).toBeUndefined();

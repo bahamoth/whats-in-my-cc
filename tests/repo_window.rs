@@ -432,3 +432,49 @@ async fn events_correlated_by_request_id_matches_api_log_and_span() {
     assert!(ids.contains(&"span"), "llm_request span matched by raw_span.attributes request_id");
     assert!(!ids.contains(&"otherspan"), "non-matching span excluded");
 }
+
+// REGRESSION GUARD: the no-cursor window's `limit` bounds RENDERED events (not
+// raw rows), AND telemetry INTERLEAVED between rendered events inside the window
+// range must stay loaded — detail-panel metrics (buildToolMetricsFromEvents /
+// buildLlmMetricsFromEvents) correlate that telemetry by tool_use_id /
+// request_id out of exactly this window. Two failure modes this locks:
+//   (a) an OFFSET off-by-one would over/under-count rendered events;
+//   (b) a regression that narrowed the window to only rendered rows would
+//       silently drop the interleaved telemetry → empty detail metrics.
+#[tokio::test]
+async fn no_cursor_window_bounds_rendered_count_and_keeps_interleaved_telemetry() {
+    let pool = mem_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    let sess = "sess-interleaved";
+    // 3 rendered conversation events with telemetry interleaved between them:
+    //   c0 , m1 , c1 , m2 , c2     (ASC by observed_at)
+    seed_one(&pool, &run_id, sess, 0, EventKind::UserMessage, "c0").await;
+    seed_one(&pool, &run_id, sess, 1, EventKind::MetricSample, "m1").await;
+    seed_one(&pool, &run_id, sess, 2, EventKind::UserMessage, "c1").await;
+    seed_one(&pool, &run_id, sess, 3, EventKind::MetricSample, "m2").await;
+    seed_one(&pool, &run_id, sess, 4, EventKind::UserMessage, "c2").await;
+
+    // limit = 2 rendered events → window = [ c1 .. c2 ], excluding the oldest
+    // rendered (c0) and the telemetry (m1) that precedes the lower bound.
+    let rows = repo_observed::list_session_window(&pool, sess, None, None, 2)
+        .await
+        .unwrap();
+    let ids: Vec<&str> = rows.iter().map(|e| e.event_id.as_str()).collect();
+
+    // exactly `limit` RENDERED events, not raw rows.
+    let rendered = rows
+        .iter()
+        .filter(|e| e.kind == EventKind::UserMessage)
+        .count();
+    assert_eq!(rendered, 2, "limit must bound RENDERED events, got {ids:?}");
+    assert!(ids.contains(&"c1") && ids.contains(&"c2"), "newest 2 rendered, got {ids:?}");
+    assert!(!ids.contains(&"c0"), "the limit+1-th oldest rendered must be excluded (off-by-one)");
+
+    // telemetry interleaved INSIDE the range stays loaded; telemetry before the
+    // lower bound does not.
+    assert!(ids.contains(&"m2"), "interleaved telemetry inside the window must be retained");
+    assert!(!ids.contains(&"m1"), "telemetry before the window's lower bound must be excluded");
+
+    // returned ASC → newest rendered event is last.
+    assert_eq!(rows.last().unwrap().event_id, "c2");
+}
