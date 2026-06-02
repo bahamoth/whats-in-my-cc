@@ -3472,6 +3472,43 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="pr33-regression-review">
+    <h2>PR #33 리뷰 + 회귀방어 테스트 (2026-06-02)</h2>
+    <p>
+      브랜치: <code>claude/pr-review-regression-tests-CpSWW</code>. <code>refactor/views-without-graph</code>(PR #33,
+      event-first 뷰 + conversation-anchored window)를 리뷰하고, 산문(PR 설명/주석)이 주장하지만 테스트로 잠그지
+      않은 불변식을 회귀 테스트로 동결했다.
+    </p>
+    <h3>리뷰 발견 — <code>RENDERED</code> 집합의 백엔드/프론트 divergence (알려진 한계)</h3>
+    <p>
+      백엔드 <code>list_session_window</code>의 <code>RENDERED</code> SQL 집합은 <code>log_record</code>를
+      <strong>전부</strong> 제외한다. 그러나 프론트 <code>streamModel.classify</code>는 일부 state-change
+      <code>log_record</code>(<code>STREAM_STATE_LOG</code> = <code>compaction·skill_activated·permission_mode_changed·mcp_server_connection</code>)를
+      activity beat로 <strong>렌더</strong>한다. 따라서 세션이 trailing state-change log로 끝나면 그 beat는 초기 window 앵커에
+      잡히지 않고 SSE tip catch-up/loadNewer로만 나타난다. 이는 데이터 손실이 아니라 <em>초기 로드 누락</em>이며,
+      "trailing 텔레메트리 burst가 window를 다시 채우는 것"을 막기 위해 모든 <code>log_record</code>를 앵커에서 배제한
+      <strong>의도적 트레이드오프</strong>로 보인다(주석의 "most log_record"가 이를 암시). 수정 대상이 아니라 명시적 한계로 기록.
+    </p>
+    <h3>추가한 회귀 테스트</h3>
+    <ul>
+      <li><strong><code>tests/repo_window.rs</code></strong> —
+        <code>no_cursor_window_bounds_rendered_count_and_keeps_interleaved_telemetry</code>:
+        대화 사이에 telemetry를 interleave하고 <code>limit=2</code>로 호출 → (a) window가 <strong>raw row가 아니라 RENDERED event 수</strong>를
+        bound함(OFFSET off-by-one 가드: <code>limit+1</code>번째 오래된 렌더 event 제외), (b) 범위 <em>안</em>의 interleaved telemetry는 유지(detail
+        메트릭이 이 window에서 상관됨)·하한 <em>밖</em> telemetry는 제외.</li>
+      <li><strong><code>detail/__tests__/eventMetrics.test.ts</code></strong> —
+        ① <code>tool_decision</code> log_record가 <code>tool_decision_log</code> facet로 라우팅되어 <code>decisionSource/decisionType</code>를 채움;
+        ② <code>buildLlmMetricsFromEvents</code>는 cost가 optional — span만 있고 api_request log 없으면 base 메트릭+<code>costUsd:null</code> 반환(전체 null로 붕괴 금지).</li>
+      <li><strong><code>detail/__tests__/rawBlocksFromEvents.test.ts</code></strong> —
+        실패한 tool_result(<code>is_error:true</code>)가 <code>'error'</code>로 라벨링되고 에러 record를 보존("실패 도구의 에러 출력은 Raw에서 보여야 한다" 계약).</li>
+    </ul>
+    <h3>검증</h3>
+    <p>
+      <code>cargo test --test repo_window</code> 12 green · vitest 348 green(345+3) · <code>npm run build</code>(tsc -b 포함) clean.
+      <code>tests/cli_ingest.rs</code> 1건 실패는 <code>sqlite3</code> CLI 바이너리 미설치로 인한 <strong>환경 문제</strong>이며 PR/테스트 변경과 무관(이 컨테이너에 <code>sqlite3</code> 없음).
+    </p>
+  </section>
+
   <footer class="footer">
     <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · facet correlation + 지표 중심 insight · telemetry fold Slice 1–2 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
