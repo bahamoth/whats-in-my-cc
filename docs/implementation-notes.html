@@ -3447,6 +3447,31 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="conversation-anchored-window">
+    <h2>conversation-anchored 초기 window (2026-06-02)</h2>
+    <p>
+      증상: 텔레메트리 burst로 끝나는 세션(예: OTel을 실시간 폭증시키는 라이브 세션, 또는 끝에 metric/span/log가 몰린 세션)을 열면
+      "No conversation events yet"로 비었다 — KPI는 정상인데 대화 스트림만 빔. <strong>내 graph 리팩토링 탓이 아니다</strong>
+      (<code>git diff main</code>: windowing/events 경로 무변경). 기존 windowing 설계 결함이었다.
+    </p>
+    <h3>근본 원인</h3>
+    <p>
+      메세지 뷰는 렌더 가능한 event(메세지/활동)만 그리고 metric_sample·otel_span·대부분의 log_record·attachment_meta·session_state는 drop한다.
+      그런데 <code>list_session_window</code>의 초기(커서 없음) window가 <strong>"렌더 가능 event"가 아니라 "raw event 전부"</strong>를 최신 N개 페이징했다.
+      그래서 세션 끝이 텔레메트리면 N개가 전부 drop 대상 → 렌더 0 → 빈 화면(대화는 더 과거에 멀쩡히 존재).
+    </p>
+    <h3>고침 — 렌더 기준 window (<code>src/db/repo_observed.rs</code>)</h3>
+    <p>
+      초기 window를 raw가 아니라 <strong>렌더되는 event 기준</strong>으로 잡는다. 범위 =
+      <code>[ limit번째로 최신인 렌더 event , 가장 최신 렌더 event ]</code> 사이의 모든 row(중간 텔레메트리 포함, 디테일 메트릭용으로 유지).
+      <code>RENDERED</code> = <code>user_message·assistant_message·tool_call·tool_result·thinking·hook_event·system_summary·diff_hunk</code>.
+      상한(=가장 최신 렌더 event) 위의 trailing 텔레메트리 burst는 제외, 하한(=limit번째 렌더 event)으로 대화 깊이 보장(세션에 렌더 event가 limit보다 적으면 세션 시작까지). 렌더 event가 0인(텔레메트리 전용) 세션은 옛 newest-N로 fallback. raw 안전 상한 5000.
+    </p>
+    <p>
+      결정적(프론트 auto-paging/SSE/trim race 없음). 검증: <code>tests/repo_window.rs</code> 3개 신규(앵커가 trailing 텔레메트리·비렌더 kind를 건너뜀, 텔레메트리 전용 fallback) + 브라우저 smoke로 8020·12126 event의 빈 세션이 대화를 렌더함 확인. <strong>SSOT 무손실</strong>(window 선택 기준만 바뀜, 데이터 변경 없음 — migration 불필요).
+    </p>
+  </section>
+
   <footer class="footer">
     <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · facet correlation + 지표 중심 insight · telemetry fold Slice 1–2 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
