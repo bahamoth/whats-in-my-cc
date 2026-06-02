@@ -219,14 +219,97 @@ pub async fn list_session_window(
     let limit = limit.clamp(1, 1000);
     let rows = match (before, after) {
         (None, None) => {
-            sqlx::query(
-                "SELECT * FROM observed_event WHERE session_id = ? \
-                 ORDER BY observed_at DESC, event_id DESC LIMIT ?",
-            )
+            // Conversation-anchored initial window. The message view renders
+            // only conversation/activity kinds and DROPS bulk telemetry
+            // (metric_sample / otel_span / most log_record) and non-rendered
+            // envelopes (attachment_meta / session_state). A session that ends
+            // in a telemetry burst would otherwise load a newest-N raw window
+            // full of dropped rows → empty stream though conversation exists.
+            //
+            // So window by RENDERED events, not raw: bound the window to
+            //   [ limit-th newest rendered event ,  newest rendered event ]
+            // and return every row in that range (interleaved telemetry stays
+            // loaded for detail metrics; the trailing burst above the newest
+            // rendered event is excluded). Guarantees up to `limit` rendered
+            // events, or the whole session when it has fewer. Falls back to
+            // plain newest-N when the session has no rendered events at all.
+            const RENDERED: &str = "kind IN ('user_message','assistant_message',\
+                'tool_call','tool_result','thinking','hook_event','system_summary','diff_hunk')";
+            // newest rendered event = the upper bound (anchor).
+            let upper = sqlx::query(&format!(
+                "SELECT observed_at, event_id FROM observed_event \
+                 WHERE session_id = ? AND {RENDERED} \
+                 ORDER BY observed_at DESC, event_id DESC LIMIT 1"
+            ))
             .bind(session_id)
-            .bind(limit)
-            .fetch_all(pool)
-            .await?
+            .fetch_optional(pool)
+            .await?;
+            match upper {
+                None => {
+                    // No rendered events (telemetry-only session) → newest-N.
+                    sqlx::query(
+                        "SELECT * FROM observed_event WHERE session_id = ? \
+                         ORDER BY observed_at DESC, event_id DESC LIMIT ?",
+                    )
+                    .bind(session_id)
+                    .bind(limit)
+                    .fetch_all(pool)
+                    .await?
+                }
+                Some(u) => {
+                    let uts: String = u.get("observed_at");
+                    let ueid: String = u.get("event_id");
+                    // `limit`-th newest rendered event = the lower bound (None
+                    // when the session has fewer than `limit` rendered events,
+                    // in which case the window runs back to the session start).
+                    let lower = sqlx::query(&format!(
+                        "SELECT observed_at, event_id FROM observed_event \
+                         WHERE session_id = ? AND {RENDERED} \
+                         ORDER BY observed_at DESC, event_id DESC LIMIT 1 OFFSET ?"
+                    ))
+                    .bind(session_id)
+                    .bind(limit - 1)
+                    .fetch_optional(pool)
+                    .await?;
+                    // Raw cap so a pathologically telemetry-dense range can't
+                    // return an unbounded page (mirrors the client's max window).
+                    const RAW_CAP: i64 = 5000;
+                    match lower {
+                        Some(l) => {
+                            let lts: String = l.get("observed_at");
+                            let leid: String = l.get("event_id");
+                            sqlx::query(
+                                "SELECT * FROM observed_event WHERE session_id = ? \
+                                 AND (observed_at < ? OR (observed_at = ? AND event_id <= ?)) \
+                                 AND (observed_at > ? OR (observed_at = ? AND event_id >= ?)) \
+                                 ORDER BY observed_at DESC, event_id DESC LIMIT ?",
+                            )
+                            .bind(session_id)
+                            .bind(&uts)
+                            .bind(&uts)
+                            .bind(&ueid)
+                            .bind(&lts)
+                            .bind(&lts)
+                            .bind(&leid)
+                            .bind(RAW_CAP)
+                            .fetch_all(pool)
+                            .await?
+                        }
+                        None => sqlx::query(
+                            "SELECT * FROM observed_event WHERE session_id = ? \
+                             AND (observed_at < ? OR (observed_at = ? AND event_id <= ?)) \
+                             ORDER BY observed_at DESC, event_id DESC LIMIT ?",
+                        )
+                        .bind(session_id)
+                        .bind(&uts)
+                        .bind(&uts)
+                        .bind(&ueid)
+                        .bind(RAW_CAP)
+                        .fetch_all(pool)
+                        .await?,
+                    }
+                }
+            }
         }
         (Some(b), None) => {
             let ts = b.observed_at.to_rfc3339();

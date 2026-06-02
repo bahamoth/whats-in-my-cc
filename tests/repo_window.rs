@@ -222,3 +222,126 @@ async fn cross_source_event_ids_order_by_observed_at() {
     assert_eq!(rows[1].event_id, "01J0000000000000000000000A");
     assert_eq!(rows[2].event_id, "zzzz_just_for_chaos");
 }
+
+// --- conversation-anchored initial window (no cursor) -------------------
+// A session ending in a telemetry burst must not load a window full of rows
+// the message view drops. The no-cursor window anchors at the last
+// non-telemetry (conversation) event, excluding the trailing telemetry tail.
+
+async fn seed_one(
+    pool: &SqlitePool,
+    run_id: &str,
+    sess: &str,
+    i: usize,
+    kind: EventKind,
+    eid: &str,
+) {
+    let raw_id = format!("raw_{sess}_{i}");
+    repo_raw::insert_dedup(
+        pool,
+        &repo_raw::NewRaw {
+            raw_event_id: raw_id.clone(),
+            ingest_run_id: run_id.to_string(),
+            source_type: "test".into(),
+            source_uri: format!("test://{sess}/{i}"),
+            source_line_no: i as i64,
+            source_byte_offset: 0,
+            payload_sha256: format!("sha_{sess}_{i}"),
+            payload: b"{}".to_vec(),
+            parse_error: None,
+            captured_at: chrono::Utc::now(),
+            redaction_state: "not_applicable".into(),
+            redaction_manifest: None,
+        },
+    )
+    .await
+    .unwrap();
+    let base: DateTime<Utc> = Utc.with_ymd_and_hms(2026, 5, 21, 0, 0, 0).unwrap();
+    let ev = ObservedEvent {
+        event_id: eid.to_string(),
+        raw_event_id: raw_id,
+        schema_version: "0.5.0".into(),
+        session_id: sess.into(),
+        observed_at: base + chrono::Duration::seconds(i as i64),
+        actor: Actor::System,
+        kind,
+        parser_version: "test".into(),
+        ..Default::default()
+    };
+    repo_observed::insert(pool, &ev).await.unwrap();
+}
+
+async fn mem_pool() -> SqlitePool {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(2)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    migrate(&pool).await.unwrap();
+    pool
+}
+
+#[tokio::test]
+async fn no_cursor_window_anchors_at_last_conversation_skipping_telemetry_tail() {
+    let pool = mem_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    let sess = "sess-anchor";
+    // 3 conversation events, then a 5-event telemetry burst AFTER them.
+    for i in 0..3 {
+        seed_one(&pool, &run_id, sess, i, EventKind::UserMessage, &format!("c{i}")).await;
+    }
+    for i in 3..8 {
+        seed_one(&pool, &run_id, sess, i, EventKind::MetricSample, &format!("m{i}")).await;
+    }
+    let rows = repo_observed::list_session_window(&pool, sess, None, None, 100)
+        .await
+        .unwrap();
+    // window anchored at the last conversation event (ASC → newest is last)
+    assert_eq!(rows.last().unwrap().kind, EventKind::UserMessage);
+    assert_eq!(rows.last().unwrap().event_id, "c2");
+    // the telemetry tail must NOT fill the window
+    assert!(
+        rows.iter().all(|e| e.kind != EventKind::MetricSample),
+        "trailing telemetry burst must be excluded from the no-cursor window",
+    );
+    assert_eq!(rows.len(), 3);
+}
+
+#[tokio::test]
+async fn no_cursor_window_falls_back_to_newest_when_telemetry_only() {
+    let pool = mem_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    let sess = "sess-telem-only";
+    for i in 0..4 {
+        seed_one(&pool, &run_id, sess, i, EventKind::MetricSample, &format!("m{i}")).await;
+    }
+    let rows = repo_observed::list_session_window(&pool, sess, None, None, 100)
+        .await
+        .unwrap();
+    // no conversation event to anchor on → return the newest telemetry (no empty)
+    assert_eq!(rows.len(), 4);
+}
+
+#[tokio::test]
+async fn no_cursor_anchor_ignores_trailing_non_rendered_kinds() {
+    // The trailing tail can include non-telemetry-but-non-rendered kinds
+    // (attachment_meta, session_state). The anchor must be the last RENDERED
+    // event (here a UserMessage), not a trailing attachment_meta/session_state.
+    let pool = mem_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    let sess = "sess-nonrendered-tail";
+    seed_one(&pool, &run_id, sess, 0, EventKind::UserMessage, "c0").await;
+    seed_one(&pool, &run_id, sess, 1, EventKind::UserMessage, "c1").await;
+    seed_one(&pool, &run_id, sess, 2, EventKind::AttachmentMeta, "a2").await;
+    seed_one(&pool, &run_id, sess, 3, EventKind::SessionState, "s3").await;
+    let rows = repo_observed::list_session_window(&pool, sess, None, None, 100)
+        .await
+        .unwrap();
+    assert_eq!(rows.last().unwrap().kind, EventKind::UserMessage);
+    assert_eq!(rows.last().unwrap().event_id, "c1");
+    assert!(
+        rows.iter()
+            .all(|e| e.kind != EventKind::AttachmentMeta && e.kind != EventKind::SessionState),
+        "trailing non-rendered kinds must not anchor/fill the window",
+    );
+}
