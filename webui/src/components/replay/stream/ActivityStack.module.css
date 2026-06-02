@@ -43,7 +43,22 @@
 
 .duration {
   color: var(--witmcc-fg-subtle, #6a7180);
+  /* Fixed-width, right-aligned time cell: the time stays pinned to the right
+     edge AND occupies a constant width regardless of "507ms" vs "12.2s", so the
+     ok/error badge to its left lines up in its own column across rows. */
+  display: inline-block;
+  min-width: 3.25rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The right-aligned [time, status] cluster, shared by the fold header and every
+   activity item so time + ok/error line up consistently on the right edge. */
+.meta {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .badgeError {

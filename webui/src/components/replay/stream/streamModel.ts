@@ -29,6 +29,11 @@ export interface MessageItem {
 export interface ActivityEvent {
   event: ObservedEventDto;
   result: { isError: boolean } | null;
+  /** Tool execution time (ms) = matched tool_result.observed_at − tool_call
+   *  .observed_at. null when there is no matched result (or not a tool_call).
+   *  Optional so hand-built fixtures may omit it; buildStreamModel always sets
+   *  it. hook_event duration lives in its own payload (see hookFacet), not here. */
+  durationMs?: number | null;
 }
 
 export interface ActivityRun {
@@ -155,6 +160,14 @@ function classify(
     const name = (asObj(e.payload).event_name as string) ?? '';
     return STREAM_STATE_LOG.has(name) ? { cat: 'activity' } : { cat: 'drop' };
   }
+  // hook_additional_context is a byte-identical duplicate of its hook_success
+  // sibling (its `content` === hook_success.stdout.hookSpecificOutput
+  // .additionalContext, verified against real data). It carries no execution
+  // metadata and adds no information → drop it from the message view; the
+  // injected context is still visible in hook_success's raw stdout.
+  if (e.kind === 'hook_event' && e.subkind === 'hook_additional_context') {
+    return { cat: 'drop' };
+  }
   return { cat: 'activity' };
 }
 
@@ -246,11 +259,16 @@ export function buildStreamModel(
       if (run.length && runSc !== sc) flush();
       runSc = sc;
       let result: { isError: boolean } | null = null;
+      let durationMs: number | null = null;
       if (e.kind === 'tool_call' && e.tool_use_id) {
         const r = resultByUse.get(e.tool_use_id);
-        if (r) result = { isError: asObj(asObj(r.payload).tool_result).is_error === true };
+        if (r) {
+          result = { isError: asObj(asObj(r.payload).tool_result).is_error === true };
+          const ms = new Date(r.observed_at).getTime() - new Date(e.observed_at).getTime();
+          durationMs = Number.isFinite(ms) ? ms : null;
+        }
       }
-      run.push({ event: e, result });
+      run.push({ event: e, result, durationMs });
     }
     // cat === 'drop': skip silently
   }

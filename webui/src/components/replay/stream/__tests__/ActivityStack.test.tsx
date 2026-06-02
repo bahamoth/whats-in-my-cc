@@ -18,6 +18,17 @@ describe('ActivityStack', () => {
     expect(screen.queryByTestId('activity-item')).toBeNull();
   });
 
+  it('right-aligns the fold header time in the same meta cluster as the items', () => {
+    const withDur: ActivityStackData = { events: [
+      { event: { event_id: 'c1', kind: 'tool_call', observed_at: '2026-05-31T00:00:00.000Z', tool_name: 'Bash', payload: { tool_name: 'Bash', input: { command: 'ls' } } } as any, result: { isError: false }, durationMs: 1200 },
+      { event: { event_id: 'c2', kind: 'tool_call', observed_at: '2026-05-31T00:00:01.200Z', tool_name: 'Read', payload: { tool_name: 'Read', input: { file_path: '/a' } } } as any, result: { isError: false }, durationMs: 0 },
+    ] };
+    render(<ActivityStack stack={withDur} selectedEventId={null} onSelect={() => {}} />);
+    const toggle = screen.getByTestId('activity-stack-toggle');
+    const meta = within(toggle).getByTestId('fold-meta');
+    expect(meta.textContent ?? '').toMatch(/\d/); // the summary duration lives in the right-aligned meta
+  });
+
   it('expands on click to show items, each selectable', () => {
     const onSelect = vi.fn();
     render(<ActivityStack stack={stack} selectedEventId={null} onSelect={onSelect} />);
@@ -54,6 +65,47 @@ describe('ActivityStack', () => {
   it('stays collapsed when selectedEventId is for a different stack', () => {
     render(<ActivityStack stack={stack} selectedEventId="other" onSelect={() => {}} />);
     expect(screen.queryByTestId('activity-item')).toBeNull();
+  });
+
+  it('shows tool + hook items with a consistent right-aligned [time, ok] meta cluster (time before status)', () => {
+    const mixed: ActivityStackData = { events: [
+      // a tool_call with a matched result → durationMs computed upstream
+      { event: { event_id: 't1', kind: 'tool_call', observed_at: 'z', tool_name: 'Bash',
+        payload: { tool_name: 'Bash', input: { command: 'ls' } } } as any,
+        result: { isError: false }, durationMs: 796 },
+      // a hook_event → time + ok from its own payload
+      { event: { event_id: 'h1', kind: 'hook_event', observed_at: 'z',
+        payload: { type: 'hook_success', hookName: 'PreToolUse:Bash', exitCode: 0, durationMs: 330 } } as any,
+        result: null },
+    ] };
+    render(<ActivityStack stack={mixed} selectedEventId="t1" onSelect={() => {}} />);
+    const items = screen.getAllByTestId('activity-item');
+    // every item carries a single right-aligned meta cluster
+    for (const item of items) {
+      const meta = within(item).getByTestId('activity-meta');
+      const t = meta.textContent ?? '';
+      // order: ok first, then time — so time always sits at the far-right edge
+      // and lines up across cards whether or not they have an ok/error badge.
+      expect(t.indexOf('ok')).toBeLessThan(t.indexOf('ms'));
+    }
+    expect(within(items[0]).getByTestId('activity-meta').textContent).toContain('796ms');
+    expect(within(items[1]).getByTestId('activity-meta').textContent).toContain('330ms');
+  });
+
+  it('shows a hook_event item with its ok badge and duration (from its own payload)', () => {
+    // hook_event success/duration live in the event's OWN payload (exitCode /
+    // durationMs), not in a matched tool_result. Anchored to real hook_success
+    // shape (see hookFacet.test.ts).
+    const hookStack: ActivityStackData = { events: [
+      { event: { event_id: 'h1', kind: 'hook_event', observed_at: 'z',
+        payload: { type: 'hook_success', hookName: 'PreToolUse:Bash', exitCode: 0, durationMs: 330 } } as any,
+        result: null },
+    ] };
+    render(<ActivityStack stack={hookStack} selectedEventId="h1" onSelect={() => {}} />);
+    const item = screen.getByTestId('activity-item');
+    expect(within(item).getByText('PreToolUse:Bash')).toBeInTheDocument();
+    expect(within(item).getByText('ok')).toBeInTheDocument();
+    expect(within(item).getByText('330ms')).toBeInTheDocument();
   });
 
   it('renders a tag chip for a tagged Bash event (search·read) and none for control', () => {

@@ -1,47 +1,38 @@
 // webui/src/components/replay/detail/DetailPanel.tsx
 import { useState } from 'react';
 import { Braces } from 'lucide-react';
-import type { FindingDto, GraphNodeDto } from '../../../api/types';
+import type { FindingDto, ObservedEventDto } from '../../../api/types';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import type { ToolMetrics } from './toolMetrics';
 import { InsightTab } from './InsightTab';
 import { RawTab, type RawBlock } from './RawTab';
-import { ResponseMetricsPanel } from './ResponseMetricsPanel';
 import styles from './DetailPanel.module.css';
 
 type TabId = 'insight' | 'raw';
 
 interface DetailPanelProps {
-  node: GraphNodeDto | null;
+  /** The selected ObservedEvent. The panel is fully event-driven — no graph
+   *  node. thinking, hook, tool_call, etc. are all just events here. */
+  event: ObservedEventDto | null;
   record: unknown;
   findings: FindingDto[];
-  /** True when a thinking marker is selected (which has no graph node): the
-   *  panel shows the per-response metrics instead of node detail. */
-  thinkingSelected?: boolean;
-  /** Per-response metrics for the selected thinking marker (may be null when
-   *  the LLM-request span is outside the loaded window). */
-  thinkingMetrics?: LlmRequestMetrics | null;
-  /** Tool-execution metrics for the selected `tool_call` node (Insight tab). */
+  /** Tool-execution metrics for a selected `tool_call` (Insight tab), derived
+   *  from events by tool_use_id. */
   toolMetrics?: ToolMetrics | null;
-  /** Per-response metrics for the selected `assistant_message` node (Insight tab). */
+  /** Per-response metrics for a selected `assistant_message` / `thinking`
+   *  (Insight tab), derived from events by request_id. */
   llmMetrics?: LlmRequestMetrics | null;
-  /** Source-split blocks for the Raw tab (entity node + facet nodes).
-   *  When provided, the Raw tab renders each block as a separate labelled
-   *  section; falls back to the single `record` when absent. */
+  /** Source-split blocks for the Raw tab (entity + correlated sources).
+   *  Falls back to the single `record` when absent. */
   rawBlocks?: RawBlock[];
 }
 
-export function DetailPanel({ node, record, findings, thinkingSelected, thinkingMetrics, toolMetrics, llmMetrics, rawBlocks }: DetailPanelProps) {
+export function DetailPanel({ event, record, findings, toolMetrics, llmMetrics, rawBlocks }: DetailPanelProps) {
   const [chosen, setChosen] = useState<TabId | null>(null);
   const active = chosen ?? 'insight';
 
-  if (!node) {
-    // A thinking marker is selected (no graph node) → show response metrics
-    // (the panel handles a null metrics gracefully).
-    if (thinkingSelected) {
-      return <ResponseMetricsPanel metrics={thinkingMetrics ?? null} />;
-    }
-    return <aside className={styles.panel}><p className={styles.empty}>Select a node to inspect it.</p></aside>;
+  if (!event) {
+    return <aside className={styles.panel}><p className={styles.empty}>Select an event to inspect it.</p></aside>;
   }
 
   const tab = (id: TabId, label: string) => (
@@ -85,12 +76,12 @@ export function DetailPanel({ node, record, findings, thinkingSelected, thinking
         {active === 'insight' && (
           <InsightTab
             findings={findings}
-            node={node}
+            event={event}
             toolMetrics={toolMetrics ?? null}
             llmMetrics={llmMetrics ?? null}
           />
         )}
-        {active === 'raw' && <RawTab nodeId={node.node_id} record={record} blocks={rawBlocks} />}
+        {active === 'raw' && <RawTab nodeId={event.event_id} record={record} blocks={rawBlocks} />}
       </div>
     </aside>
   );

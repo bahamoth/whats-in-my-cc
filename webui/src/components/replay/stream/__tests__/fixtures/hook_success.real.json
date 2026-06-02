@@ -1,0 +1,12 @@
+{
+  "type": "hook_success",
+  "hookName": "PreToolUse:Bash",
+  "toolUseID": "toolu_01Aa5FTew4AjsZVnsGjKMH3x",
+  "hookEvent": "PreToolUse",
+  "content": "",
+  "stdout": "{\"continue\": true}\n",
+  "stderr": "",
+  "exitCode": 0,
+  "command": "python ${HOME}/.claude/hooks/remove_ai_footer.py",
+  "durationMs": 330
+}
