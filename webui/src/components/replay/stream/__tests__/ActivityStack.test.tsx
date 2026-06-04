@@ -108,11 +108,11 @@ describe('ActivityStack', () => {
     expect(within(item).getByText('330ms')).toBeInTheDocument();
   });
 
-  it('renders a tag chip for a tagged Bash event (search·read) and none for control', () => {
+  it('renders a tag chip for a tagged Bash event (read.file) and none for control', () => {
     const ev = (command: string, id: string) => ({ event_id: id, kind: 'tool_call', tool_name: 'Bash', observed_at: '2026-05-31T00:00:00Z', payload: { input: { command } } });
     const stack = { events: [ { event: ev('grep -n x', 'a'), result: null }, { event: ev('cd /tmp', 'b'), result: null } ] };
     render(<ActivityStack stack={stack as any} selectedEventId={'a'} onSelect={() => {}} />); // selected → expanded
-    expect(screen.getByText('search·read')).toBeInTheDocument();
+    expect(screen.getByText('read.file')).toBeInTheDocument();
     // control event 'cd' produces no chip text
     expect(screen.queryByText('control')).toBeNull();
   });

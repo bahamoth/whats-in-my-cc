@@ -117,7 +117,24 @@
   max-width: 160px;
 }
 
-.tagChip { font-size: 10px; padding: 0 5px; border-radius: 6px; background: var(--witmcc-surface-2, #2a2f3a); color: var(--witmcc-text-dim, #9aa4b2); white-space: nowrap; }
+/* verb.object tag chip — coloured by the VERB (data-verb) so read/write/run/etc.
+   are scannable at a glance. Subtle tinted text + matching border. */
+.tagChip {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: var(--witmcc-surface-2, #2a2f3a);
+  color: var(--witmcc-fg-subtle, #9aa4b2);
+  white-space: nowrap;
+}
+.tagChip[data-verb='read']   { color: #6fb3c9; border-color: #2e4a55; }
+.tagChip[data-verb='write']  { color: var(--witmcc-warning, #f0b429); border-color: #5a4a1a; }
+.tagChip[data-verb='delete'] { color: var(--witmcc-danger, #ef4747); border-color: #5a2424; }
+.tagChip[data-verb='build']  { color: var(--witmcc-success, #41c285); border-color: #1f4d3a; }
+.tagChip[data-verb='test']   { color: var(--witmcc-accent, #4f8cff); border-color: #243a66; }
+.tagChip[data-verb='run']    { color: #b08cff; border-color: #3a2e5a; }
+.tagChip[data-verb='lint']   { color: #56c5c5; border-color: #1f4d4d; }
 
 .itemBadgeOk {
   font-size: 10px;
