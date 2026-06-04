@@ -71,6 +71,28 @@ describe('tagForEvent — verb.object taxonomy', () => {
     expect(tagForEvent(bash('grep a | grep b | wc -l')).tag).toBe('read.file');
     expect(tagForEvent(bash('cd x && rm -rf y')).tag).toBe('delete.file');
   });
+  it('resolves the multiplexer subcommand past global flags (git -C/-c, cargo +toolchain)', () => {
+    // git global options precede the subcommand: `git -C <dir> diff`, `git -c k=v commit`.
+    expect(tagForEvent(bash('git -C .. diff --stat')).tag).toBe('read.vcs');
+    expect(tagForEvent(bash('git -C /repo status --short')).tag).toBe('read.vcs');
+    expect(tagForEvent(bash('git -c user.name=x commit -m y')).tag).toBe('write.vcs');
+    expect(tagForEvent(bash('git --no-pager log')).tag).toBe('read.vcs');
+    // cargo toolchain selector `+toolchain` precedes the subcommand.
+    expect(tagForEvent(bash('cargo +1.86.0 build 2>&1')).tag).toBe('build.code');
+  });
+  it('unwraps a timeout wrapper to classify the inner command', () => {
+    expect(tagForEvent(bash('timeout 180 npm run dev')).tag).toBe('run.code');
+    expect(tagForEvent(bash('timeout 60 cargo test')).tag).toBe('test.code');
+    expect(tagForEvent(bash('timeout 5s git status')).tag).toBe('read.vcs');
+  });
+  it('tags bare relative-path execution (no ./ prefix) as run.code', () => {
+    expect(tagForEvent(bash('target/debug/witmcc --help')).tag).toBe('run.code');
+    expect(tagForEvent(bash('.claude/skills/ch/scripts/ch ch-prod')).tag).toBe('run.code');
+  });
+  it('just / shasum single-purpose tools', () => {
+    expect(tagForEvent(bash('just webui-build')).tag).toBe('run.code');
+    expect(tagForEvent(bash('shasum -a 256 file.pdf')).tag).toBe('read.file');
+  });
   it('control vs unmatched', () => {
     expect(tagForEvent(bash('cd /tmp && echo done')).disposition).toBe('control');
     expect(tagForEvent(bash('cd /tmp')).disposition).toBe('control');
@@ -161,6 +183,13 @@ describe('collectUntagged', () => {
     expect(rows[0].token).toBe('git frobnicate');
     expect(rows[0].count).toBe(2);
     expect(rows[0].hint).toContain("TOOL_SUBCOMMAND_TAGS['git']");
+  });
+
+  it('aggregates an unknown subcommand past global flags under the same `tool sub`', () => {
+    // `git -C .. frobnicate` and `git frobnicate` are the SAME unknown sub.
+    const rows = collectUntagged([bash('git -C .. frobnicate'), bash('git frobnicate')]);
+    expect(rows[0].token).toBe('git frobnicate');
+    expect(rows[0].count).toBe(2);
   });
 
   it('does not surface comment / assignment / redirect noise as untagged tokens', () => {

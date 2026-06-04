@@ -56,6 +56,10 @@ export const BASH_FIRST_TOKEN_TAGS: Record<string, Tag> = {
   // run.code — execute interpreters / scripts / package binaries
   python3: 'run.code', python: 'run.code', node: 'run.code', ruby: 'run.code', osascript: 'run.code',
   bash: 'run.code', sh: 'run.code', zsh: 'run.code', npx: 'run.code', markitdown: 'run.code',
+  // read.file — hash / inspect a file's content
+  shasum: 'read.file', sha256sum: 'read.file', md5: 'read.file', md5sum: 'read.file',
+  // run.code — task runners (just/make-like) executing project scripts
+  just: 'run.code',
   // build / test / lint — single-purpose dev tools
   make: 'build.code',
   vitest: 'test.code', jest: 'test.code', pytest: 'test.code',
@@ -87,6 +91,30 @@ export const TOOL_SUBCOMMAND_TAGS: Record<string, Record<string, Tag>> = {
   yarn: { install: 'write.deps', add: 'write.deps', test: 'test.code', start: 'run.code', run: 'run.code' },
   go: { build: 'build.code', test: 'test.code', run: 'run.code', vet: 'lint.code', get: 'write.deps', install: 'write.deps' },
 };
+
+// Global options that PRECEDE a multiplexer's subcommand and would otherwise be
+// mis-read AS the subcommand: `git -C <dir> diff`, `git -c k=v commit`,
+// `git --no-pager log`, `cargo +1.86.0 build`. Per tool, the flags that consume
+// a following argument (so we skip the arg too). Anchored to real corpus:
+// `git -C`/`-c` dominated the untagged set (240 occurrences).
+const SUBCOMMAND_ARG_FLAGS: Record<string, Set<string>> = {
+  git: new Set(['-C', '-c']),
+};
+/** Resolve a multiplexer's real subcommand from the text after the tool token,
+ *  skipping leading global options (`-x`, `--x`, arg-consuming `-C <dir>`) and a
+ *  `+toolchain` selector (cargo). Returns '' when no subcommand remains. */
+function resolveSubcommand(tool: string, rest: string): string {
+  const toks = rest.split(/\s+/).filter(Boolean);
+  const argFlags = SUBCOMMAND_ARG_FLAGS[tool];
+  let i = 0;
+  while (i < toks.length) {
+    const t = toks[i];
+    if (t.startsWith('+')) { i += 1; continue; }                 // cargo +toolchain
+    if (t.startsWith('-')) { i += argFlags?.has(t) ? 2 : 1; continue; } // global flag (+ its arg)
+    break;
+  }
+  return (toks[i] ?? '').toLowerCase();
+}
 
 export const CONTROL_TOKENS = new Set([
   'cd', 'echo', 'sleep', 'for', 'export', 'source', 'set', 'pgrep', 'kill', 'pkill', 'wait', 'true', ':',
@@ -147,6 +175,24 @@ function commandOf(segment: string): string {
       s = s.slice(sp + 1).trim();
       continue;
     }
+    // `timeout [flags] DURATION cmd…` — a wrapper that runs an inner command.
+    // Strip `timeout`, any leading `-flags`, and one duration token (180 / 5s)
+    // so the INNER command (npm/cargo/…) is what classifies.
+    if (firstToken(s) === 'timeout') {
+      let rest = s.slice('timeout'.length).trim();
+      while (rest.startsWith('-')) {
+        const sp = rest.indexOf(' ');
+        if (sp < 0) { rest = ''; break; }
+        rest = rest.slice(sp + 1).trim();
+      }
+      if (/^\d+(\.\d+)?[smhd]?$/.test(firstToken(rest))) {
+        const sp = rest.indexOf(' ');
+        rest = sp < 0 ? '' : rest.slice(sp + 1).trim();
+      }
+      if (rest === '') return '';
+      s = rest;
+      continue;
+    }
     return s;
   }
   return s;
@@ -185,10 +231,15 @@ export function meaningfulCommand(cmd: string): string {
   return s || cmd.trim();
 }
 
-/** A command run directly by path — `./x`, `../x`, `/abs/x`, or `*.sh`. Such
- *  invocations execute code → run.code. */
+/** A command run directly by path → run.code: `./x`, `../x`, `/abs/x`, `*.sh`,
+ *  or a bare relative path with a slash (`target/debug/witmcc`,
+ *  `.claude/skills/ch/scripts/ch`). A token CONTAINING a slash in command
+ *  position names a file to execute. Quoted tokens are excluded — those are
+ *  heredoc/string-body fragments, not commands. */
 function isPathExec(tok: string): boolean {
-  return tok.startsWith('/') || tok.startsWith('./') || tok.startsWith('../') || tok.endsWith('.sh');
+  if (tok.endsWith('.sh')) return true;
+  if (tok.startsWith('"') || tok.startsWith("'")) return false;
+  return tok.includes('/');
 }
 
 /** Classify a single (control-prefix-stripped) command string. */
@@ -203,7 +254,7 @@ function classifyCommand(cmdStr: string): TagResult {
   // multiplexer: subcommand decides the verb (unknown → unmatched).
   const subMap = TOOL_SUBCOMMAND_TAGS[tok];
   if (subMap) {
-    const sub = firstToken(cmdStr.slice(tok.length).trim());
+    const sub = resolveSubcommand(tok, cmdStr.slice(tok.length).trim());
     const t = subMap[sub];
     return t ? { tag: t, disposition: 'tagged' } : { tag: null, disposition: 'unmatched' };
   }
@@ -254,7 +305,7 @@ export interface UntaggedRow {
 function untaggedToken(cmdStr: string): string {
   const tok = firstToken(cmdStr);
   if (TOOL_SUBCOMMAND_TAGS[tok]) {
-    const sub = firstToken(cmdStr.slice(tok.length).trim());
+    const sub = resolveSubcommand(tok, cmdStr.slice(tok.length).trim());
     return sub ? `${tok} ${sub}` : tok;
   }
   return tok;
