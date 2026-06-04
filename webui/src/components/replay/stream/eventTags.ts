@@ -32,11 +32,23 @@ export const GIT_SUBCOMMAND_TAGS: Record<string, BashTag> = {
   merge: 'vcs-write', rebase: 'vcs-write', fetch: 'vcs-write', pull: 'vcs-write', tag: 'vcs-write', clone: 'vcs-write',
 };
 export const DESTRUCTIVE_FIRST_TOKENS = new Set(['rm', 'mv', 'rmdir']);
-export const CONTROL_TOKENS = new Set(['cd', 'echo', 'sleep', 'for', 'export', 'source', 'set', 'pgrep', 'kill', 'wait', 'true', ':']);
+export const CONTROL_TOKENS = new Set([
+  'cd', 'echo', 'sleep', 'for', 'export', 'source', 'set', 'pgrep', 'kill', 'pkill', 'wait', 'true', ':',
+  // shell loop/conditional keywords + the test builtin: a segment that IS one of
+  // these is control (no work to classify here).
+  'while', 'until', 'if', 'case', 'esac', 'done', 'fi', '[', '[[', 'test',
+]);
+// Control-flow keywords that PRECEDE a command on the same segment (`do grep …`,
+// `then cat …`). Unlike CONTROL_TOKENS they are stripped as a prefix so the real
+// command after them is classified.
+const PREFIX_KEYWORDS = new Set(['do', 'then', 'else', 'elif']);
+// A leading `NAME=value` shell variable assignment (env prefix). Stripped like a
+// prefix so `VAR=x grep …` classifies as the grep, not as an unknown `var=x`.
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 // Command SEQUENCERS — split a compound into independent commands. We split on
-// these only (NOT redirects `>`/`<` or subshells `$(`/backtick, which live
-// inside a single command), then classify by the first meaningful command.
-const COMMAND_SEPARATORS = /(?:&&|\|\||;|&|\|)/;
+// these + NEWLINES (multi-line scripts), but NOT on a bare `&` (it would shred
+// `2>&1` / `&>` redirects into bogus tokens) nor redirects `>`/`<` / subshells.
+const COMMAND_SEPARATORS = /(?:&&|\|\||;|\||\n)/;
 
 function ext(path: string): string {
   const base = path.split('/').pop() ?? '';
@@ -49,15 +61,56 @@ function firstToken(cmd: string): string {
   return (sp > 0 ? t.slice(0, sp) : t).toLowerCase();
 }
 
+/** Drop whole-line `#` comments before any analysis, so a command that leads
+ *  with a comment line (`# note\ngrep …`) classifies by the real command, not
+ *  by the `#` token. Only lines that START with `#` are removed (a `#` mid-line
+ *  may be inside a quoted string). */
+function stripCommentLines(cmd: string): string {
+  return cmd
+    .split('\n')
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n')
+    .trim();
+}
+
+/** The actual command of a segment, with leading `NAME=value` assignments and
+ *  control-flow prefix keywords (`do`/`then`/…) stripped. '' when the segment is
+ *  only assignments/prefixes (e.g. a bare `do` or `FOO=bar`). */
+function commandOf(segment: string): string {
+  let s = segment.trim();
+  for (let guard = 0; guard < 12; guard++) {
+    if (ASSIGNMENT.test(s)) {
+      const sp = s.indexOf(' ');
+      if (sp < 0) return ''; // pure assignment, no command follows
+      s = s.slice(sp + 1).trim();
+      continue;
+    }
+    if (PREFIX_KEYWORDS.has(firstToken(s))) {
+      const sp = s.indexOf(' ');
+      if (sp < 0) return ''; // bare `do` / `then`
+      s = s.slice(sp + 1).trim();
+      continue;
+    }
+    return s;
+  }
+  return s;
+}
+
 /** Split a compound shell command into its sequenced sub-commands. */
 export function segmentCommand(cmd: string): string[] {
   return cmd.split(COMMAND_SEPARATORS).map((s) => s.trim()).filter(Boolean);
 }
 
-/** The first segment whose first token is NOT a control token (the "work"), or
- *  null when every segment is control (e.g. `cd x && echo y`). */
+/** The first segment that carries real work — its command (assignments/prefix
+ *  keywords stripped) is non-empty and not a control token. null when every
+ *  segment is control/assignment (e.g. `cd x && echo y`, `FOO=bar`). */
 function firstMeaningfulSegment(segments: string[]): string | null {
-  return segments.find((s) => !CONTROL_TOKENS.has(firstToken(s))) ?? null;
+  return (
+    segments.find((s) => {
+      const c = commandOf(s);
+      return c !== '' && !CONTROL_TOKENS.has(firstToken(c));
+    }) ?? null
+  );
 }
 
 /** The command from its first meaningful sub-command onward, for DISPLAY —
@@ -67,10 +120,10 @@ function firstMeaningfulSegment(segments: string[]): string | null {
 export function meaningfulCommand(cmd: string): string {
   let s = cmd.trim();
   for (let guard = 0; guard < 6; guard++) {
-    const m = s.match(/^(.*?)(?:&&|\|\||;|&|\|)(.*)$/s); // split at the FIRST separator
+    const m = s.match(/^(.*?)(?:&&|\|\||;|\|)(.*)$/s); // split at the FIRST separator (no bare &)
     if (!m) break;
-    const head = m[1].trim();
-    if (!head || !CONTROL_TOKENS.has(firstToken(head))) break;
+    const head = commandOf(m[1].trim());
+    if (head !== '' && !CONTROL_TOKENS.has(firstToken(head))) break;
     s = m[2].trim();
   }
   return s || cmd.trim();
@@ -86,25 +139,25 @@ export function tagForEvent(e: ObservedEventDto): TagResult {
     return tag ? { tag, disposition: 'tagged' } : { tag: null, disposition: 'unmatched' };
   }
   if (tool === 'Bash' || tool === 'bash') {
-    const cmd = typeof input.command === 'string' ? input.command.trim() : '';
+    const cmd = stripCommentLines(typeof input.command === 'string' ? input.command : '');
     if (!cmd) return { tag: null, disposition: 'control' };
     // Classify a compound (`cd … && git add … && git status`) by its first
-    // MEANINGFUL sub-command: split on separators, skip control prefixes (cd),
-    // and tag by the first real command (here: `git add` → vcs-write). A
-    // meaningful-but-unknown first command is `unmatched` (panel candidate);
-    // all-control is `control`.
+    // MEANINGFUL sub-command: split on separators + newlines, skip control
+    // segments (cd) and assignment/keyword prefixes (`VAR=x`, `do`), tag by the
+    // first real command. Meaningful-but-unknown → `unmatched`; all-control →
+    // `control`.
     for (const seg of segmentCommand(cmd)) {
-      const tok = firstToken(seg);
-      if (!tok) continue;
+      const cmdStr = commandOf(seg);
+      const tok = firstToken(cmdStr);
+      if (!tok || CONTROL_TOKENS.has(tok)) continue; // empty/assignment-only or control → next segment
       if (DESTRUCTIVE_FIRST_TOKENS.has(tok)) return { tag: 'destructive', disposition: 'tagged' };
       if (tok === 'git') {
-        const sub = firstToken(seg.slice(3).trim());
+        const sub = firstToken(cmdStr.slice(3).trim());
         const t = GIT_SUBCOMMAND_TAGS[sub];
         return t ? { tag: t, disposition: 'tagged' } : { tag: null, disposition: 'unmatched' };
       }
       const t = BASH_FIRST_TOKEN_TAGS[tok];
       if (t) return { tag: t, disposition: 'tagged' };
-      if (CONTROL_TOKENS.has(tok)) continue; // skip control, look at the next segment
       return { tag: null, disposition: 'unmatched' }; // first meaningful but unknown
     }
     return { tag: null, disposition: 'control' }; // every segment was control
@@ -128,13 +181,17 @@ export function collectUntagged(events: ObservedEventDto[]): UntaggedRow[] {
     if (tagForEvent(e).disposition !== 'unmatched') continue;
     const input = ((e.payload as Record<string, unknown>)?.input ?? {}) as Record<string, unknown>;
     const isCmd = typeof input.command === 'string';
-    const cmd = isCmd ? (input.command as string).trim() : (typeof input.file_path === 'string' ? input.file_path : '');
-    // Aggregate a compound under its first MEANINGFUL token (e.g. `gh`), not a
-    // `cd` prefix — so the panel hint points at the command worth tagging.
-    const tok = firstToken(isCmd ? (firstMeaningfulSegment(segmentCommand(cmd)) ?? cmd) : cmd);
+    const cmd = isCmd
+      ? stripCommentLines(input.command as string)
+      : typeof input.file_path === 'string' ? input.file_path : '';
+    // Aggregate a compound under its first MEANINGFUL command token (e.g. `gh`),
+    // with comment lines / control prefixes / `VAR=` assignments stripped — so
+    // the panel hint points at the real command worth tagging, not noise.
+    const meaningful = isCmd ? commandOf(firstMeaningfulSegment(segmentCommand(cmd)) ?? cmd) : cmd;
+    const tok = firstToken(meaningful);
     const cur = byToken.get(tok);
     if (cur) cur.count++;
-    else byToken.set(tok, { count: 1, sample: cmd.slice(0, 80), eventId: e.event_id });
+    else byToken.set(tok, { count: 1, sample: (meaningful || cmd).slice(0, 80), eventId: e.event_id });
   }
   return [...byToken.entries()]
     .map(([token, v]) => ({
