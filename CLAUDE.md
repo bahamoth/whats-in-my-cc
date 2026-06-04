@@ -77,6 +77,25 @@ graph-backed 모델을 서술하므로 그대로 따르지 말 것.
 4. 단일 사례 관찰을 일반화한 statement는 없는가? ("대부분", "항상", "모두" 류는 표본 수 명시.)
 5. 이전 commit log / 주석 / spec 중 위 검증으로 잘못 판명된 부분이 있다면 같은 commit에서 정정했는가?
 
+## Tagging loop — 구현 완료 시 (Bash/Read 분류 강화 제안)
+
+작업(기능/슬라이스/요청)이 **완료된 시점**에, 그 실행에서 아직 분류되지 않은 Bash 명령을
+확인하고 태깅 규칙을 어떻게 강화할지 **제안**한다(자율 태깅 개선 루프를 닫는다). 규칙 추가는
+소스 편집이라 read-only API 원칙과 충돌하지 않는다.
+
+1. `cd webui && npm run untagged -- --all` 실행(특정 세션만 보려면 `-- <sessionId>`).
+   `/v1/sessions`는 최신순이라 방금 작업한 세션이 맨 위. read-only Pull API +
+   프론트 `collectUntagged`(SSOT) 재사용 — backend 불필요.
+   출력: `[{token,count,sample,eventId,sessionId,hint}]` (count 내림차순 JSON).
+2. count 높은 untagged 토큰부터, 각 row의 `sample`을 근거로 분류가 타당한지 검토한 뒤,
+   `hint`가 가리키는 대로 `webui/src/components/replay/stream/eventTags.ts`에 어떤 태그를
+   추가할지 **제안**한다: 일반 첫 토큰은 `BASH_FIRST_TOKEN_TAGS`, `git` 서브커맨드는
+   `GIT_SUBCOMMAND_TAGS`, Read 확장자는 `READ_EXT_TAGS`. (파괴적 명령은 이미 `DESTRUCTIVE_FIRST_TOKENS`.)
+3. 사용자 승인 후 규칙을 추가하고 CLI를 다시 실행해 untagged가 줄었는지 확인 — 루프가 닫힌다.
+   (분류 변경이므로 `eventTags.test.ts`에 잠그는 테스트를 함께 둘 것 — TDD 원칙.)
+
+상세·설계 근거: `docs/implementation-notes.html#untagged-bash-loop`.
+
 ## Non-goals (절대 만들지 말 것)
 
 - Claude Code 설정 / hook / command / skill / memory 변경
