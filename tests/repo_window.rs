@@ -410,6 +410,34 @@ async fn events_correlated_by_tool_use_id_matches_payload_attributes() {
     assert_eq!(rows[0].event_id, "tr");
 }
 
+// A tool call rejected at input validation (e.g. Edit "File has not been read
+// yet") emits NO OTel tool_result/tool_decision log_record, so its only result
+// is the transcript tool_result event, whose tool_use_id lives at
+// `payload.tool_result.tool_use_id` — a DIFFERENT path than the OTel log's
+// `payload.attributes.tool_use_id`. The on-demand correlated fetch exists to
+// populate detail metrics when telemetry falls outside the loaded window, so it
+// must reach this transcript result too; otherwise a tool_call selected far from
+// its result still shows "지표 미수집". DB-verified shape: payload =
+// { content_ordinal, tool_result:{ type, content, is_error?, tool_use_id } }.
+#[tokio::test]
+async fn events_correlated_by_tool_use_id_matches_transcript_tool_result() {
+    use serde_json::json;
+    let pool = mem_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    let sess = "sess-corr-transcript";
+    seed_payload(&pool, &run_id, sess, 0, EventKind::ToolResult, "tres",
+        json!({"content_ordinal":0,"tool_result":{"type":"tool_result","is_error":true,
+            "tool_use_id":"u1","content":"<tool_use_error>File has not been read yet.</tool_use_error>"}})).await;
+    seed_payload(&pool, &run_id, sess, 1, EventKind::ToolResult, "other",
+        json!({"content_ordinal":0,"tool_result":{"type":"tool_result","tool_use_id":"OTHER","content":"ok"}})).await;
+    let rows = repo_observed::events_correlated(&pool, sess, Some("u1"), None)
+        .await
+        .unwrap();
+    let ids: Vec<&str> = rows.iter().map(|r| r.event_id.as_str()).collect();
+    assert!(ids.contains(&"tres"), "transcript tool_result matched by payload.tool_result.tool_use_id");
+    assert!(!ids.contains(&"other"), "non-matching transcript tool_result excluded");
+}
+
 #[tokio::test]
 async fn events_correlated_by_request_id_matches_api_log_and_span() {
     use serde_json::json;

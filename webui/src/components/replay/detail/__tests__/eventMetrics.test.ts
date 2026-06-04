@@ -55,6 +55,63 @@ describe('buildToolMetricsFromEvents', () => {
     expect(m.decisionSource).toBe('config');
     expect(m.decisionType).toBe('allow');
   });
+
+  // Transcript fallback: a tool call that errors at the input-validation stage
+  // (e.g. Edit "File has not been read yet") leaves NO OTel tool_result /
+  // tool_decision log_record, yet the transcript tool_result event (kind
+  // 'tool_result') records is_error. Without a fallback the detail panel falsely
+  // shows "지표 미수집" even though the result — the error — is right there.
+  // DB-verified transcript shape: payload = { content_ordinal, tool_result:
+  //   { type:'tool_result', content, is_error?:true, tool_use_id } }.
+  it('derives success=false from a transcript tool_result (is_error) when no OTel log exists', () => {
+    const events = [
+      ev({ event_id: 'call', kind: 'tool_call', tool_use_id: 'u1' }),
+      ev({ event_id: 'res', kind: 'tool_result', tool_use_id: 'u1', payload: { content_ordinal: 0,
+        tool_result: { type: 'tool_result', is_error: true, tool_use_id: 'u1',
+          content: '<tool_use_error>File has not been read yet.</tool_use_error>' } } }),
+    ];
+    const m = buildToolMetricsFromEvents(events, 'u1');
+    expect(m.success).toBe(false);
+    // OTel-only telemetry stays honestly null — it genuinely was not collected.
+    expect(m.durationMs).toBeNull();
+    expect(m.decisionSource).toBeNull();
+  });
+
+  it('derives success=true from a transcript tool_result with no is_error flag', () => {
+    const events = [
+      ev({ event_id: 'call', kind: 'tool_call', tool_use_id: 'u1' }),
+      ev({ event_id: 'res', kind: 'tool_result', tool_use_id: 'u1', payload: { content_ordinal: 0,
+        tool_result: { type: 'tool_result', tool_use_id: 'u1', content: 'updated successfully' } } }),
+    ];
+    const m = buildToolMetricsFromEvents(events, 'u1');
+    expect(m.success).toBe(true);
+  });
+
+  // OTel telemetry is authoritative; the transcript fallback only fills success
+  // when OTel did not supply it (first-non-null-wins, transcript folded last).
+  it('prefers the OTel log_record success over the transcript tool_result', () => {
+    const events = [
+      ev({ event_id: 'call', kind: 'tool_call', tool_use_id: 'u1' }),
+      ev({ event_id: 'log', kind: 'log_record', payload: { event_name: 'tool_result',
+        attributes: { tool_use_id: 'u1', success: 'true', duration_ms: '57' } } }),
+      ev({ event_id: 'res', kind: 'tool_result', tool_use_id: 'u1', payload: { content_ordinal: 0,
+        tool_result: { type: 'tool_result', is_error: true, tool_use_id: 'u1', content: 'x' } } }),
+    ];
+    const m = buildToolMetricsFromEvents(events, 'u1');
+    expect(m.success).toBe(true); // OTel wins; transcript is_error does not override
+    expect(m.durationMs).toBe(57);
+  });
+
+  // A transcript tool_result for a DIFFERENT tool_use_id must not leak in.
+  it('ignores a transcript tool_result whose tool_use_id differs', () => {
+    const events = [
+      ev({ event_id: 'call', kind: 'tool_call', tool_use_id: 'u1' }),
+      ev({ event_id: 'res', kind: 'tool_result', tool_use_id: 'OTHER', payload: { content_ordinal: 0,
+        tool_result: { type: 'tool_result', is_error: true, tool_use_id: 'OTHER', content: 'x' } } }),
+    ];
+    const m = buildToolMetricsFromEvents(events, 'u1');
+    expect(m.success).toBeNull();
+  });
 });
 
 describe('buildLlmMetricsFromEvents', () => {

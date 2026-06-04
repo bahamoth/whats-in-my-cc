@@ -39,6 +39,23 @@ export function buildToolMetricsFromEvents(
     if (attrs.tool_use_id !== toolUseId) continue;
     attrsList.push(attrs);
   }
+  // Transcript fallback for `success`. A tool call rejected at the input-
+  // validation stage (e.g. Edit "File has not been read yet") emits NO OTel
+  // tool_result / tool_decision log_record, but the transcript tool_result event
+  // (kind 'tool_result') still records is_error — exactly the failures most worth
+  // surfacing. Without this the detail panel falsely reads "지표 미수집". Folded
+  // LAST so OTel telemetry (authoritative, string "true"/"false") wins on
+  // first-non-null. DB-verified shape: payload.tool_result.is_error (true only on
+  // error; absent on success). Other ToolMetrics fields are OTel-only and stay
+  // honestly null. tool_result is the only kind here, so any leaked log_record
+  // tool_result (already folded above) can't double-count.
+  const transcript = events.find(
+    (e) => e.kind === 'tool_result' && e.tool_use_id === toolUseId,
+  );
+  if (transcript) {
+    const tr = asObj(asObj(transcript.payload).tool_result);
+    attrsList.push({ success: tr.is_error === true ? 'false' : 'true' });
+  }
   return buildToolMetrics(attrsList);
 }
 
