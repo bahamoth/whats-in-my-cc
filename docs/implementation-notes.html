@@ -3597,6 +3597,40 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="autoscroll-model">
+    <h2>명시적 autoscroll(follow-tail) 모델 + seamless prepend + 시작 마커 (2026-06-04)</h2>
+    <p>
+      사용자 관측 2건: (a) 최상단 도달 시 이전 메시지 로드가 "1회 로드→이미 최상단→아래로 내렸다 다시 위로" 재트리거 dance가 필요,
+      (b) 오토스크롤 여부·최하단 도달을 알 수단 부재. 선행 조사된 이슈 2·3(라이브 append 중 tip 자동점프·jitter)도 같은 뿌리.
+      설계·승인 기록: <code>docs/superpowers/specs/2026-06-04-scroll-autoscroll-ux-design.md</code>.
+    </p>
+    <h3>결정 — 통합 명시적 모델 (암묵적 메커니즘 대체)</h3>
+    <ul>
+      <li>react-virtual의 <code>followOnAppend</code>(자동추적) + hand-rolled 2초 <code>followInitRef</code> bottom-pin을 <strong>제거</strong>.
+        <code>anchorTo:'end'</code>는 <strong>prepend 안정화 전용</strong>으로 유지(<code>followOnAppend:false</code>).</li>
+      <li>자동추적은 신규 <code>useAutoscroll</code> 훅이 단일 소유. 순수 결정 로직은 <code>autoscrollPolicy.ts</code>(<code>isAtBottom</code>·<code>classifyChange</code>)로 분리해 단위테스트.</li>
+    </ul>
+    <h3>useAutoscroll 동작</h3>
+    <ul>
+      <li>초기: 바닥 착지 + ON. items append(tip): ON이면 바닥 유지, OFF면 <code>newCount</code>++. prepend는 무시(anchor가 처리).</li>
+      <li><strong>detach 판정은 위치 기반</strong>(시간 가드 아님): <code>scrollTop</code>이 마지막 핀 위치보다 <code>DETACH_PX</code>(40)만큼 <em>아래로</em> 내려가면 사용자 스크롤업 → OFF.
+        단순 measurement 성장(scrollHeight↑, scrollTop 동일)은 무시 → 라이브 측정 중 잘못된 OFF flip 방지(회귀 테스트 lock). 바닥 복귀 시 ON+reset.</li>
+      <li><code>pinToBottom()</code>(가드된 바닥 고정)을 ConversationStream이 <code>getTotalSize()</code> 변화마다 ON일 때 호출 → lazy 측정으로 자라도 바닥 유지(옛 2초 타이머 대체, 명시적 상태로 게이팅이라 스크롤업 시엔 안 당김).</li>
+    </ul>
+    <h3>UI — 하단 푸터 토글 + 시작 마커</h3>
+    <ul>
+      <li><code>AutoscrollToggle</code>: 스트림 컬럼 <strong>하단 푸터 바</strong>(스크롤 밖, 콘텐츠 비가림). "자동 스크롤" 라벨 + ON/OFF 스위치, OFF+신규 시 "N ↓". <code>.stream</code>은 flex column, <code>.scroll</code>은 flex:1.</li>
+      <li>Seamless prefetch: <code>LOAD_OLDER_TOP_PX</code> 240 → 800(+ ConversationStream이 <code>max(800, clientHeight)</code> 전달) → 최상단 도달 <em>전</em> prepend → dance 제거.</li>
+      <li>"대화 시작" 마커: <code>!canLoadOlder</code>일 때 스트림 최상단. react-virtual <code>scrollMargin</code>(고정 40px)으로 가상 리스트 위에 배치, 행 transform은 <code>vi.start - scrollMargin</code>. 브라우저 검증: 마커 0–40px·첫 행 40px·overlap 없음·gap 0.</li>
+    </ul>
+    <h3>검증</h3>
+    <p>
+      TDD: <code>autoscrollPolicy.test.ts</code>(11) · <code>useAutoscroll.test.tsx</code>(10, measurement-성장-무시 회귀 포함) · <code>AutoscrollToggle.test.tsx</code>(6) ·
+      <code>scrollAnchor.test.ts</code>(prefetch 800) · <code>ConversationStream.test.tsx</code>(followOnAppend:false·pill·마커). vitest 383 green · <code>npm run build</code>(tsc -b) clean.
+      브라우저 smoke: 초기 ON+바닥 / 스크롤업→OFF(위치 유지) / 바닥복귀→ON / 푸터 비가림 / 마커 정렬. <code>@types/node</code> devDep 추가(테스트의 node:fs 타입).
+    </p>
+  </section>
+
   <footer class="footer">
     <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · facet correlation + 지표 중심 insight · telemetry fold Slice 1–2 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>

@@ -22,8 +22,13 @@
 // @tanstack/react-virtual's `anchorTo: 'end'` + `followOnAppend`, so those
 // concerns no longer live here.
 
-/** Distance (px) from the top within which scrolling pages in older history. */
-export const LOAD_OLDER_TOP_PX = 240;
+/** Distance (px) from the top within which scrolling pages in older history.
+ *  Sized to ~a viewport (not a thin strip) so the next older page is PREFETCHED
+ *  before the reader reaches the absolute top — there is still content above to
+ *  scroll into when it prepends, so upward reading stays seamless instead of
+ *  "load → stuck at top → scroll down then up to re-trigger". ConversationStream
+ *  may pass a larger, viewport-relative threshold on tall screens. */
+export const LOAD_OLDER_TOP_PX = 800;
 
 export interface ScrollMetrics {
   scrollHeight: number;

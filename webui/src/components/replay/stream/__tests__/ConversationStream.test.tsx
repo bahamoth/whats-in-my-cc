@@ -94,11 +94,12 @@ describe('ConversationStream', () => {
     expect(opts.getItemKey(2)).toBe('e2');
   });
 
-  // Contract lock for the windowing fix: the stream delegates live-append
-  // follow + prepend-anchor to react-virtual's end-anchored mode. These need
-  // real layout (jsdom can't exercise them), so we assert the wiring here and
-  // verify the behaviour itself by browser smoke.
-  it('configures end-anchored chat scrolling (anchorTo:end + followOnAppend)', () => {
+  // Contract lock: react-virtual keeps `anchorTo:'end'` for PREPEND stability
+  // only — its implicit auto-follow (`followOnAppend`) is OFF, because the
+  // explicit useAutoscroll controller now owns following the live tip (it
+  // replaced followOnAppend + the 2s bottom-pin that competed and caused the
+  // live-append jitter / jump-to-tip). Real scroll behaviour: browser smoke.
+  it('keeps anchorTo:end for prepend stability but disables implicit followOnAppend', () => {
     hoisted.captured.opts = null;
     render(
       <ConversationStream
@@ -111,7 +112,36 @@ describe('ConversationStream', () => {
     const opts = hoisted.captured.opts;
     expect(opts).not.toBeNull();
     expect(opts.anchorTo).toBe('end');
-    expect(opts.followOnAppend).toBe(true);
+    expect(opts.followOnAppend).toBe(false);
+  });
+
+  // The autoscroll state pill is always present (its label reflects ON/OFF).
+  it('renders the autoscroll pill', () => {
+    render(
+      <ConversationStream
+        items={[msg('e1', 'a'), msg('e2', 'b', { role: 'assistant' })]}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    // ON by default → "실시간"
+    expect(screen.getByRole('button', { name: /자동 스크롤|최신/ })).toBeInTheDocument();
+  });
+
+  // "대화 시작" marker appears only once the session start is loaded
+  // (canLoadOlder=false), telling the reader there is no more older history.
+  it('shows the "대화 시작" start marker only when no older pages remain', () => {
+    const props = {
+      items: [msg('e1', 'a'), msg('e2', 'b', { role: 'assistant' })],
+      selectedEventId: null,
+      findingEventIds: new Set<string>(),
+      onSelect: () => {},
+    };
+    const { rerender, queryByText } = render(<ConversationStream {...props} canLoadOlder />);
+    expect(queryByText('대화 시작')).toBeNull();
+    rerender(<ConversationStream {...props} canLoadOlder={false} />);
+    expect(queryByText('대화 시작')).toBeInTheDocument();
   });
 
   it('renders messages and activity stacks in source order', () => {

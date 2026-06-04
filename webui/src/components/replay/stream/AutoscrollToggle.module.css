@@ -1,0 +1,82 @@
+/* Footer bar under the conversation stream (outside the scroll area). Holds the
+   autoscroll (follow-tail) toggle, so it never overlaps message content. */
+.footer {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 6px 8px 2px;
+  border-top: 1px solid var(--witmcc-border, #1d212c);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--witmcc-fg-muted, #aab0bd);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.toggle:hover {
+  color: var(--witmcc-fg, #e6e8ee);
+  background: var(--witmcc-surface-2, #161a23);
+}
+.toggle:focus-visible {
+  outline: 2px solid var(--witmcc-accent, #4f8cff);
+  outline-offset: 2px;
+}
+
+.label {
+  white-space: nowrap;
+}
+
+/* iOS-style switch — the clearest ON/OFF affordance. */
+.switch {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--witmcc-border-strong, #2a3040);
+  transition: background 0.15s;
+  flex: 0 0 auto;
+}
+.switch[data-on='true'] {
+  background: var(--witmcc-success, #41c285);
+}
+.knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+.switch[data-on='true'] .knob {
+  transform: translateX(12px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .switch,
+  .knob {
+    transition: none;
+  }
+}
+
+/* "N ↓" — count of messages that arrived while detached. */
+.count {
+  margin-left: 2px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--witmcc-accent, #4f8cff);
+  color: var(--witmcc-fg-on-accent, #0b0d12);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
