@@ -12,10 +12,28 @@
    the page) looks the same. Here we only reserve a stable gutter so the thumb
    appearing as the live stream grows never reflows the messages. */
 .scroll {
-  height: 100%;
+  /* Fill the stream column above the autoscroll footer (the .stream slot is a
+     flex column); a zero floor lets it shrink so IT owns the overflow. */
+  flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
 
 .empty { color: var(--witmcc-fg-subtle, #6a7180); padding: 12px; }
+
+/* "대화 시작" marker — shown at the very top once the session start is loaded,
+   so the reader knows there is no more older history (not that loading broke).
+   Fixed height: it must match START_MARKER_PX (the virtualizer's scrollMargin)
+   exactly, so a single non-wrapping line. */
+.startMarker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--witmcc-fg-subtle, #6a7180);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--witmcc-border, #1d212c);
+  white-space: nowrap;
+  overflow: hidden;
+}

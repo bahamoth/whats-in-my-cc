@@ -34,7 +34,15 @@
    was forced past the slot height (two stacked scrollbars). `hidden` keeps the
    single scroller inside `.scroll`. position:relative anchors the loadOlder
    status pill (below). */
-.stream { grid-area: stream; min-height: 0; overflow: hidden; position: relative; }
+.stream {
+  grid-area: stream;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  /* flex column: the scroll area (flex:1) fills above the autoscroll footer. */
+  display: flex;
+  flex-direction: column;
+}
 .detail { grid-area: detail; min-height: 0; overflow: auto; }
 .placeholder { color: var(--witmcc-fg-subtle, #6a7180); }
 

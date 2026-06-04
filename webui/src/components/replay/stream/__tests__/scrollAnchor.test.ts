@@ -40,4 +40,16 @@ describe('shouldLoadOlder — page older history only on an upward near-top user
   it('false: no older pages remain (canLoadOlder=false)', () => {
     expect(shouldLoadOlder({ ...base, canLoadOlder: false, scrollTop: 20, prevScrollTop: 400 })).toBe(false);
   });
+
+  // Prefetch-ahead: trigger BEFORE the reader hits the absolute top, so the
+  // next older page is prepended while there is still content above to scroll
+  // into — removing the "load, stuck at top, scroll down then up to re-trigger"
+  // dance. The default zone must be ~a viewport, not a thin 240px strip.
+  it('true: prefetches well above the absolute top (upward, ~600px from top)', () => {
+    expect(shouldLoadOlder({ ...base, scrollTop: 600, prevScrollTop: 900 })).toBe(true);
+  });
+
+  it('default prefetch zone is roughly a viewport (>= 800px)', () => {
+    expect(LOAD_OLDER_TOP_PX).toBeGreaterThanOrEqual(800);
+  });
 });

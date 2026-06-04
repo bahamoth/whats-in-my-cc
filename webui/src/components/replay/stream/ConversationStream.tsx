@@ -1,15 +1,21 @@
 // webui/src/components/replay/stream/ConversationStream.tsx
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { MessageCard } from './MessageCard';
 import { ActivityStack } from './ActivityStack';
 import { SubagentGroup } from './SubagentGroup';
 import { ThinkingMarker } from './ThinkingMarker';
+import { AutoscrollToggle } from './AutoscrollToggle';
 import type { StreamItem } from './streamModel';
-import { shouldLoadOlder } from './scrollAnchor';
+import { shouldLoadOlder, LOAD_OLDER_TOP_PX } from './scrollAnchor';
+import { useAutoscroll } from '../../../hooks/useAutoscroll';
 import styles from './ConversationStream.module.css';
 
 const FALLBACK_CAP = 200;
+// Fixed height of the "대화 시작" marker. Rendered in normal flow above the
+// virtualized list; the virtualizer is told about it via `scrollMargin` so row
+// offsets stay correct. Must match the marker's CSS height exactly.
+const START_MARKER_PX = 40;
 
 interface ConversationStreamProps {
   items: StreamItem[];
@@ -43,6 +49,12 @@ export function ConversationStream({
 }: ConversationStreamProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
 
+  // "대화 시작" marker sits in normal flow above the virtualized list once the
+  // session start is loaded. The virtualizer is told about that offset via
+  // `scrollMargin` so row positions stay correct (rows subtract it below).
+  const showStartMarker = canLoadOlder === false && items.length > 0;
+  const scrollMargin = showStartMarker ? START_MARKER_PX : 0;
+
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => parentRef.current,
@@ -52,24 +64,15 @@ export function ConversationStream({
     // heights map to the wrong items → rows overlap. Stable ids remap correctly.
     getItemKey: (index) => items[index]?.id ?? index,
     overscan: 8,
-    // End-anchored chat/log scrolling (react-virtual native):
-    //  - anchorTo 'end': when older pages are PREPENDED, the virtualizer
-    //    captures the visible keyed item and re-anchors scroll so it stays in
-    //    place — including as those above-viewport rows re-measure (which the
-    //    hand-rolled distance-from-bottom anchoring could not survive).
-    //  - followOnAppend: when the reader is parked at the tip, new appended
-    //    events (SSE backfill) keep the viewport pinned to the newest row;
-    //    when scrolled up, the position is left alone.
-    // NOTE: this behaviour needs real layout, so it is verified by browser
-    // smoke + the options-contract test, not by jsdom unit assertions.
+    // Keep `anchorTo:'end'` for PREPEND stability only: when older pages are
+    // prepended, the virtualizer captures the visible keyed item and re-anchors
+    // scroll so it stays in place as above-viewport rows re-measure.
+    // Implicit auto-follow (`followOnAppend`) is OFF — the explicit
+    // useAutoscroll controller owns following the live tip, so the two no longer
+    // compete (that competition caused the live-append jitter / jump-to-tip).
     anchorTo: 'end',
-    followOnAppend: true,
-    // "At the tip" tolerance. Rows measure lazily (estimate 64 → real height),
-    // so the viewport lands a couple of rows short of the true bottom right
-    // after the initial scroll-to-end; a tolerance lets the end-anchor re-pin
-    // converge to the exact bottom AND keeps live-append following when the
-    // reader is parked near (not pixel-exact at) the tip.
-    scrollEndThreshold: 160,
+    followOnAppend: false,
+    scrollMargin,
   });
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -77,30 +80,28 @@ export function ConversationStream({
   // items so behavior is observable in tests and on first paint before measure.
   const useVirtual = virtualItems.length > 0;
 
-  // Start at the newest event (the bottom): the window loads the NEWEST page,
-  // so the reader should land at the live tip, not the top of the window. Rows
-  // measure lazily (estimate 64 → real height), so a single scroll-to-end lands
-  // a little short; we re-pin to the bottom on each measurement tick
-  // (getTotalSize change) UNTIL the reader makes a genuine scroll gesture. From
-  // then on native anchorTo:'end' + followOnAppend own the scroll (prepend
-  // stability + live-tip follow). followInitRef is cleared in markUserScroll.
-  const followInitRef = useRef(true);
+  // Explicit autoscroll (stick-to-bottom) controller — single owner of the
+  // scroll-position policy. A lightweight signature lets it tell tip-appends
+  // (follow / count) from prepends (ignore — anchorTo:'end' handles those).
+  const signature = useMemo(
+    () => ({
+      first: items[0]?.id ?? null,
+      last: items[items.length - 1]?.id ?? null,
+      count: items.length,
+    }),
+    [items],
+  );
+  const auto = useAutoscroll(parentRef, signature);
+
+  // Measurement-settle pin: while following (autoscroll ON), keep the viewport
+  // glued to the measured bottom as rows lazily measure (estimate 64 → real
+  // height) and grow `getTotalSize()`. This replaces the old 2s `followInitRef`
+  // bottom-pin — but gated on the EXPLICIT autoscroll state, so it never yanks
+  // the viewport while the reader is scrolled up (autoscroll OFF → no pin).
   const totalSize = virtualizer.getTotalSize();
   useLayoutEffect(() => {
-    if (!followInitRef.current || items.length === 0) return;
-    const el = parentRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [totalSize, items.length]);
-  // Safety net: the initial bottom-pin normally disengages on the reader's
-  // first scroll gesture (markUserScroll). If a gesture is somehow missed, stop
-  // auto-pinning once the measurement settle window has passed, so it can never
-  // keep yanking the viewport back to the bottom while the reader scrolls up.
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      followInitRef.current = false;
-    }, 2000);
-    return () => window.clearTimeout(t);
-  }, []);
+    if (auto.autoscroll) auto.pinToBottom();
+  }, [totalSize, auto.autoscroll, auto.pinToBottom]);
 
   // Paging OLDER history is driven by the stream's own scroll (the previous
   // IntersectionObserver sentinel lived in a non-scrolling container and
@@ -114,20 +115,27 @@ export function ConversationStream({
   const prevScrollTopRef = useRef(0);
   const markUserScroll = () => {
     hasInteractedRef.current = true;
-    followInitRef.current = false; // a genuine gesture ends the initial bottom-pin
   };
   const onScroll = () => {
+    // 1) update autoscroll (follow / detach) from the new position.
+    auto.onScroll();
+    // 2) prefetch older history near the top.
     const el = parentRef.current;
     if (!el) return;
     const prevScrollTop = prevScrollTopRef.current;
     prevScrollTopRef.current = el.scrollTop;
     if (!onLoadOlder) return;
+    // Prefetch a full viewport ahead (floor LOAD_OLDER_TOP_PX) so the next page
+    // is prepended before the reader hits the absolute top — seamless upward
+    // reading, no "scroll down then up to re-trigger" dance.
+    const topThreshold = Math.max(LOAD_OLDER_TOP_PX, el.clientHeight);
     if (
       shouldLoadOlder({
         scrollTop: el.scrollTop,
         prevScrollTop,
         hasInteracted: hasInteractedRef.current,
         canLoadOlder,
+        topThreshold,
       })
     ) {
       onLoadOlder();
@@ -226,40 +234,56 @@ export function ConversationStream({
   const fallbackCapped = items.length > FALLBACK_CAP;
 
   return (
-    <div
-      ref={parentRef}
-      className={styles.scroll}
-      onScroll={onScroll}
-      onWheel={markUserScroll}
-      onPointerDown={markUserScroll}
-      onKeyDown={markUserScroll}
-      data-testid="conversation-stream"
-      {...(!useVirtual && fallbackCapped ? { 'data-fallback-capped': 'true' } : {})}
-    >
-      {useVirtual ? (
-        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-          {virtualItems.map((vi) => {
-            const item = items[vi.index];
-            return (
-              <div
-                key={item.id}
-                ref={virtualizer.measureElement}
-                data-index={vi.index}
-                {...(rowEventId(item) ? { 'data-event-id': rowEventId(item) } : {})}
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start}px)` }}
-              >
-                {renderItem(item)}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        fallbackItems.map((item) => (
-          <div key={item.id} {...(rowEventId(item) ? { 'data-event-id': rowEventId(item) } : {})}>
-            {renderItem(item)}
+    <>
+      <div
+        ref={parentRef}
+        className={styles.scroll}
+        onScroll={onScroll}
+        onWheel={markUserScroll}
+        onPointerDown={markUserScroll}
+        onKeyDown={markUserScroll}
+        data-testid="conversation-stream"
+        {...(!useVirtual && fallbackCapped ? { 'data-fallback-capped': 'true' } : {})}
+      >
+        {showStartMarker && (
+          <div className={styles.startMarker} style={{ height: START_MARKER_PX }}>
+            대화 시작
           </div>
-        ))
-      )}
-    </div>
+        )}
+        {useVirtual ? (
+          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+            {virtualItems.map((vi) => {
+              const item = items[vi.index];
+              return (
+                <div
+                  key={item.id}
+                  ref={virtualizer.measureElement}
+                  data-index={vi.index}
+                  {...(rowEventId(item) ? { 'data-event-id': rowEventId(item) } : {})}
+                  // subtract scrollMargin: vi.start includes it, but rows are
+                  // positioned WITHIN the height container that already sits
+                  // below the start marker.
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start - scrollMargin}px)` }}
+                >
+                  {renderItem(item)}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          fallbackItems.map((item) => (
+            <div key={item.id} {...(rowEventId(item) ? { 'data-event-id': rowEventId(item) } : {})}>
+              {renderItem(item)}
+            </div>
+          ))
+        )}
+      </div>
+      <AutoscrollToggle
+        autoscroll={auto.autoscroll}
+        newCount={auto.newCount}
+        onEnable={auto.enable}
+        onDisable={auto.disable}
+      />
+    </>
   );
 }
