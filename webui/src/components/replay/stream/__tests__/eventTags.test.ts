@@ -56,6 +56,28 @@ describe('tagForEvent — Bash (real-data anchored tokens)', () => {
     expect(tagForEvent(bash('gh pr view')).disposition).toBe('unmatched');
     expect(tagForEvent(bash('frobnicate x')).disposition).toBe('unmatched');
   });
+
+  // ── classifier hardening: real commands were buried under tokenizer noise ──
+  it('strips leading whole-line comments before classifying', () => {
+    expect(tagForEvent(bash('# explore CoefModel\ngrep -r x src')).tag).toBe('search·read');
+  });
+  it('splits compounds on NEWLINES, not just && ; |', () => {
+    expect(tagForEvent(bash('cd /x\ngrep y')).tag).toBe('search·read');
+    expect(tagForEvent(bash('cargo build\ncargo test')).tag).toBe('build·test');
+  });
+  it('does NOT mis-split a 2>&1 redirect into a bogus token', () => {
+    expect(tagForEvent(bash('grep x src 2>&1 | head')).tag).toBe('search·read');
+    expect(tagForEvent(bash('cargo test 2>&1')).tag).toBe('build·test');
+  });
+  it('skips leading VAR=value assignment prefixes', () => {
+    expect(tagForEvent(bash('VAULT=/x grep y')).tag).toBe('search·read');
+    expect(tagForEvent(bash('FOO=/x\ncat f')).tag).toBe('search·read');
+    expect(tagForEvent(bash('FOO=bar')).disposition).toBe('control'); // assignment-only
+  });
+  it('treats shell loop/conditional keywords (do/done/[/while) as control', () => {
+    expect(tagForEvent(bash('for f in *; do grep x "$f"; done')).tag).toBe('search·read');
+    expect(tagForEvent(bash('[ -f x ] && cat y')).tag).toBe('search·read');
+  });
 });
 
 describe('tagForEvent — Read by extension', () => {
@@ -101,6 +123,17 @@ describe('collectUntagged', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ token: 'gh', count: 3 });
     expect(rows[0].hint).toContain('BASH_FIRST_TOKEN_TAGS');
+  });
+
+  it('does not surface comment / assignment / redirect noise as untagged tokens', () => {
+    const events = [
+      bash('# explore\ngh pr view'),    // → gh (comment stripped)
+      bash('VAULT=/x\ngh pr list'),      // → gh (assignment skipped, newline split)
+      bash('grep x 2>&1 | head'),        // tagged search·read → excluded
+    ];
+    const rows = collectUntagged(events);
+    expect(rows.map((r) => r.token)).toEqual(['gh']);
+    expect(rows[0].count).toBe(2);
   });
 
   it('carries the FIRST occurrence event_id so the panel can link to its card', () => {
