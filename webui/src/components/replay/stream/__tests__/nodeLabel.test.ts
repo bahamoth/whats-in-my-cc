@@ -72,4 +72,13 @@ describe('nodeLabel', () => {
   it('otel_span: span name', () => {
     expect(L('otel_span', { raw_span: { name: 'claude_code.interaction' } }).secondary).toBe('claude_code.interaction');
   });
+  it('log_record: friendly label by event_name + salient detail (state-change beats)', () => {
+    expect(L('log_record', { event_name: 'subagent_completed', attributes: { agent_type: 'Explore' } }))
+      .toEqual({ kind: 'other', primary: 'subagent', secondary: 'Explore' });
+    expect(L('log_record', { event_name: 'mcp_server_connection', attributes: { status: 'connected' } }))
+      .toMatchObject({ primary: 'mcp', secondary: 'connected' });
+    expect(L('log_record', { event_name: 'compaction' }).primary).toBe('compaction');
+    // unknown event_name falls back to the raw name (not a bare "log_record")
+    expect(L('log_record', { event_name: 'something_new' }).primary).toBe('something_new');
+  });
 });

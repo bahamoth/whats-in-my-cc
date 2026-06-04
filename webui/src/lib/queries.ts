@@ -19,6 +19,7 @@ import {
   getVerificationRuns,
   getDiffHunks,
   getEventRaw,
+  getCorrelatedEvents,
 } from '../api/client';
 import type {
   SessionDetail,
@@ -31,6 +32,7 @@ import type {
   DiffHunkDto,
   FindingEvidenceResponse,
   RawEventResponse,
+  SessionEventsResponse,
 } from '../api/types';
 
 export const sessionKeys = {
@@ -151,6 +153,23 @@ export function useEventRawQuery(eventId: string | null) {
     queryKey: ['eventRaw', eventId],
     queryFn: () => getEventRaw(eventId as string),
     enabled: !!eventId,
+    staleTime: 60_000,
+  });
+}
+
+/** On-demand correlated telemetry for the selected entity's detail metrics,
+ *  fetched by tool_use_id / request_id so metrics populate even when the
+ *  telemetry falls outside the loaded message window. Disabled when neither
+ *  key is present. */
+export function useCorrelatedEventsQuery(
+  sessionId: string,
+  toolUseId: string | null,
+  requestId: string | null,
+) {
+  return useQuery<SessionEventsResponse>({
+    queryKey: ['correlated', sessionId, toolUseId, requestId],
+    queryFn: () => getCorrelatedEvents(sessionId, { toolUseId, requestId }),
+    enabled: !!toolUseId || !!requestId,
     staleTime: 60_000,
   });
 }

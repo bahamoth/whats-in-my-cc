@@ -61,6 +61,21 @@ export function getSessionEvents(
   return jsonGet<SessionEventsResponse>(path);
 }
 
+/** On-demand correlated telemetry for the detail view: the events whose payload
+ *  carries the given tool_use_id / request_id. Used when an entity's correlated
+ *  telemetry falls outside the loaded message window. */
+export function getCorrelatedEvents(
+  id: string,
+  opts: { toolUseId?: string | null; requestId?: string | null },
+): Promise<SessionEventsResponse> {
+  const params = new URLSearchParams();
+  if (opts.toolUseId) params.set('tool_use_id', opts.toolUseId);
+  if (opts.requestId) params.set('request_id', opts.requestId);
+  return jsonGet<SessionEventsResponse>(
+    `/v1/sessions/${encodeURIComponent(id)}/events?${params.toString()}`,
+  );
+}
+
 // ---- PR-2/PR-6: read-only Pull API helpers ---------------------------
 // Backend response shapes are NOT consistent today:
 //   /findings   -> { data: [...] }                  (no meta envelope)

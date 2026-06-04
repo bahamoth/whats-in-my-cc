@@ -345,3 +345,90 @@ async fn no_cursor_anchor_ignores_trailing_non_rendered_kinds() {
         "trailing non-rendered kinds must not anchor/fill the window",
     );
 }
+
+// --- on-demand correlated telemetry (detail view, window-外) ------------
+
+async fn seed_payload(
+    pool: &SqlitePool,
+    run_id: &str,
+    sess: &str,
+    i: usize,
+    kind: EventKind,
+    eid: &str,
+    payload: serde_json::Value,
+) {
+    let raw_id = format!("rawp_{sess}_{i}");
+    repo_raw::insert_dedup(
+        pool,
+        &repo_raw::NewRaw {
+            raw_event_id: raw_id.clone(),
+            ingest_run_id: run_id.to_string(),
+            source_type: "test".into(),
+            source_uri: format!("test://{sess}/{i}"),
+            source_line_no: i as i64,
+            source_byte_offset: 0,
+            payload_sha256: format!("shap_{sess}_{i}"),
+            payload: b"{}".to_vec(),
+            parse_error: None,
+            captured_at: chrono::Utc::now(),
+            redaction_state: "not_applicable".into(),
+            redaction_manifest: None,
+        },
+    )
+    .await
+    .unwrap();
+    let base: DateTime<Utc> = Utc.with_ymd_and_hms(2026, 5, 21, 0, 0, 0).unwrap();
+    let ev = ObservedEvent {
+        event_id: eid.to_string(),
+        raw_event_id: raw_id,
+        schema_version: "0.5.0".into(),
+        session_id: sess.into(),
+        observed_at: base + chrono::Duration::seconds(i as i64),
+        actor: Actor::System,
+        kind,
+        payload,
+        parser_version: "test".into(),
+        ..Default::default()
+    };
+    repo_observed::insert(pool, &ev).await.unwrap();
+}
+
+#[tokio::test]
+async fn events_correlated_by_tool_use_id_matches_payload_attributes() {
+    use serde_json::json;
+    let pool = mem_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    let sess = "sess-corr-tool";
+    seed_payload(&pool, &run_id, sess, 0, EventKind::LogRecord, "tr",
+        json!({"event_name":"tool_result","attributes":{"tool_use_id":"u1","duration_ms":"57"}})).await;
+    seed_payload(&pool, &run_id, sess, 1, EventKind::LogRecord, "other",
+        json!({"event_name":"tool_result","attributes":{"tool_use_id":"OTHER"}})).await;
+    let rows = repo_observed::events_correlated(&pool, sess, Some("u1"), None)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].event_id, "tr");
+}
+
+#[tokio::test]
+async fn events_correlated_by_request_id_matches_api_log_and_span() {
+    use serde_json::json;
+    let pool = mem_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    let sess = "sess-corr-req";
+    seed_payload(&pool, &run_id, sess, 0, EventKind::LogRecord, "apilog",
+        json!({"event_name":"api_request","attributes":{"request_id":"r1","output_tokens":"2300"}})).await;
+    seed_payload(&pool, &run_id, sess, 1, EventKind::OtelSpan, "span",
+        json!({"raw_span":{"name":"claude_code.llm_request","attributes":[
+            {"key":"request_id","value":{"stringValue":"r1"}}]}})).await;
+    seed_payload(&pool, &run_id, sess, 2, EventKind::OtelSpan, "otherspan",
+        json!({"raw_span":{"name":"claude_code.llm_request","attributes":[
+            {"key":"request_id","value":{"stringValue":"r2"}}]}})).await;
+    let rows = repo_observed::events_correlated(&pool, sess, None, Some("r1"))
+        .await
+        .unwrap();
+    let ids: Vec<&str> = rows.iter().map(|r| r.event_id.as_str()).collect();
+    assert!(ids.contains(&"apilog"), "api_request log matched by attributes.request_id");
+    assert!(ids.contains(&"span"), "llm_request span matched by raw_span.attributes request_id");
+    assert!(!ids.contains(&"otherspan"), "non-matching span excluded");
+}

@@ -10,17 +10,13 @@
 //   llm_request span:  payload = { raw_span: { name, attributes: [{key,value}] } }
 //   api_request log:   payload = { event_name:'api_request', attributes: { request_id, cost_usd, … } }
 import type { ObservedEventDto } from '../../../api/types';
-import type { FacetEntry } from '../facets/entityFacets';
+import { asRecord as asObj } from '../../../lib/asRecord';
 import { buildToolMetrics, type ToolMetrics } from './toolMetrics';
 import {
   parseLlmRequestSpan,
   parseApiRequestLog,
   type LlmRequestMetrics,
 } from '../stream/llmRequestMetrics';
-
-function asObj(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
-}
 
 /** Tool-execution metrics for a tool_call, found by tool_use_id among the loaded
  *  events. A tool_result / tool_decision log_record's payload IS the same shape
@@ -31,21 +27,19 @@ export function buildToolMetricsFromEvents(
   toolUseId: string | null,
 ): ToolMetrics {
   if (!toolUseId) return buildToolMetrics([]);
-  const facets: FacetEntry[] = [];
+  // collect the `attributes` maps of the tool_result / tool_decision
+  // log_records that share this tool_use_id, then parse them into ToolMetrics.
+  const attrsList: Record<string, unknown>[] = [];
   for (const e of events) {
     if (e.kind !== 'log_record') continue;
     const p = asObj(e.payload);
     const name = p.event_name;
     if (name !== 'tool_result' && name !== 'tool_decision') continue;
-    if (asObj(p.attributes).tool_use_id !== toolUseId) continue;
-    facets.push({
-      facet_kind: name === 'tool_result' ? 'tool_result_log' : 'tool_decision_log',
-      basis: 'tool_use_id',
-      source_event_id: e.event_id,
-      data: p,
-    });
+    const attrs = asObj(p.attributes);
+    if (attrs.tool_use_id !== toolUseId) continue;
+    attrsList.push(attrs);
   }
-  return buildToolMetrics(facets);
+  return buildToolMetrics(attrsList);
 }
 
 /** Per-response LLM metrics for an assistant turn, found by request_id: the

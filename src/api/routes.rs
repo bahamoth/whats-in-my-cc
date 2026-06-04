@@ -185,6 +185,11 @@ pub struct EventsQuery {
     pub before: Option<String>,
     pub after: Option<String>,
     pub limit: Option<i64>,
+    /// On-demand correlated telemetry for the detail view: when either is set,
+    /// the endpoint returns the events whose payload carries that
+    /// tool_use_id / request_id (instead of the cursor-paged window).
+    pub tool_use_id: Option<String>,
+    pub request_id: Option<String>,
 }
 
 /// Slice-9 — cursor-paged event window. See
@@ -213,6 +218,28 @@ pub async fn session_events(
             }),
         }
     }
+    // Correlated-telemetry fetch (detail view): targeted, not a window — return
+    // the matching events with null cursors (no pagination).
+    if q.tool_use_id.is_some() || q.request_id.is_some() {
+        let evs = repo_observed::events_correlated(
+            &pool,
+            &id,
+            q.tool_use_id.as_deref(),
+            q.request_id.as_deref(),
+        )
+        .await
+        .expect("db");
+        let events: Vec<serde_json::Value> = evs.iter().map(|e| observed_to_dto(e)).collect();
+        return Ok(Json(Envelope {
+            meta: ResponseMeta::now(),
+            data: SessionEventsResponse {
+                events,
+                prev_cursor: None,
+                next_cursor: None,
+            },
+        }));
+    }
+
     let before = parse_cursor(q.before.as_deref())?;
     let after = parse_cursor(q.after.as_deref())?;
     let limit = q.limit.unwrap_or(500);

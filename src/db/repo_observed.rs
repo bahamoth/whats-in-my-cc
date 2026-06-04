@@ -371,6 +371,40 @@ pub async fn list_session_window(
     Ok(events)
 }
 
+/// On-demand correlated telemetry for the detail view: the events whose payload
+/// carries the given `tool_use_id` / `request_id`, used when an entity's
+/// correlated telemetry falls outside the loaded message window. The
+/// correlation keys live in payload JSON (NOT columns):
+///   - tool_result / tool_decision / api_request log_record → `attributes.{tool_use_id|request_id}`
+///   - llm_request otel_span → `request_id` inside the OTLP `raw_span.attributes[]` array
+pub async fn events_correlated(
+    pool: &SqlitePool,
+    session_id: &str,
+    tool_use_id: Option<&str>,
+    request_id: Option<&str>,
+) -> Result<Vec<ObservedEvent>> {
+    let rows = sqlx::query(
+        "SELECT * FROM observed_event WHERE session_id = ? AND ( \
+           (? IS NOT NULL AND json_extract(payload, '$.attributes.tool_use_id') = ?) \
+           OR (? IS NOT NULL AND json_extract(payload, '$.attributes.request_id') = ?) \
+           OR (? IS NOT NULL AND kind = 'otel_span' AND EXISTS ( \
+                 SELECT 1 FROM json_each(json_extract(payload, '$.raw_span.attributes')) je \
+                 WHERE json_extract(je.value, '$.key') = 'request_id' \
+                   AND json_extract(je.value, '$.value.stringValue') = ?)) \
+         ) ORDER BY observed_at ASC, event_id ASC LIMIT 500",
+    )
+    .bind(session_id)
+    .bind(tool_use_id)
+    .bind(tool_use_id)
+    .bind(request_id)
+    .bind(request_id)
+    .bind(request_id)
+    .bind(request_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(row_to_observed).collect())
+}
+
 /// Slice-9 — per-kind row counts for a single session. Replaces the
 /// summary's `by_kind` that slice-8 derived from the (windowed) events array;
 /// once `session_detail` stopped returning events, by_kind needed its own

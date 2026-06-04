@@ -18,6 +18,7 @@ import {
   useSessionUsageQuery,
   useUsageBaselineQuery,
   useEventRawQuery,
+  useCorrelatedEventsQuery,
 } from '../lib/queries';
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
@@ -135,6 +136,21 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
 
   const rawQuery = useEventRawQuery(selectedEventId);
 
+  // On-demand correlated telemetry: a tool_call's tool_result/decision logs by
+  // tool_use_id, or an assistant turn's llm_request span + api_request log by
+  // request_id — so detail metrics populate even when that telemetry fell
+  // outside the loaded message window. Merged with the window for the builders.
+  const selToolUseId = selectedEvent?.kind === 'tool_call' ? selectedEvent.tool_use_id : null;
+  const selRequestId =
+    selectedEvent && (selectedEvent.kind === 'assistant_message' || selectedEvent.kind === 'thinking')
+      ? selectedEvent.request_id ?? null
+      : null;
+  const correlated = useCorrelatedEventsQuery(sessionId, selToolUseId, selRequestId);
+  const metricEvents = useMemo(
+    () => (correlated.data ? [...window_.events, ...correlated.data.events] : window_.events),
+    [window_.events, correlated.data],
+  );
+
   // Findings for the selected event. evidence_refs are event ids (L1/L2
   // extractors emit event_id refs); bare-string and {event_id} refs both match.
   const selectedNodeFindings = useMemo(() => {
@@ -151,9 +167,9 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const selectedToolMetrics = useMemo(
     () =>
       selectedEvent?.kind === 'tool_call'
-        ? buildToolMetricsFromEvents(window_.events, selectedEvent.tool_use_id)
+        ? buildToolMetricsFromEvents(metricEvents, selectedEvent.tool_use_id)
         : null,
-    [selectedEvent, window_.events],
+    [selectedEvent, metricEvents],
   );
 
   // Per-response metrics for a selected assistant_message / thinking, found by
@@ -162,9 +178,9 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     () =>
       selectedEvent &&
       (selectedEvent.kind === 'assistant_message' || selectedEvent.kind === 'thinking')
-        ? buildLlmMetricsFromEvents(window_.events, selectedEvent.request_id ?? null)
+        ? buildLlmMetricsFromEvents(metricEvents, selectedEvent.request_id ?? null)
         : null,
-    [selectedEvent, window_.events],
+    [selectedEvent, metricEvents],
   );
 
   // Source-split raw blocks for the Raw tab, built from the selected event +
