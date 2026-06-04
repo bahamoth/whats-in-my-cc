@@ -102,4 +102,13 @@ describe('collectUntagged', () => {
     expect(rows[0]).toMatchObject({ token: 'gh', count: 3 });
     expect(rows[0].hint).toContain('BASH_FIRST_TOKEN_TAGS');
   });
+
+  it('carries the FIRST occurrence event_id so the panel can link to its card', () => {
+    const events = [
+      bash('gh pr view 1'), // first 'gh' → its event_id is the jump target
+      bash('gh pr view 2'),
+    ];
+    const rows = collectUntagged(events);
+    expect(rows[0].eventId).toBe('gh pr view 1');
+  });
 });
