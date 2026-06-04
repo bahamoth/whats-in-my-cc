@@ -3627,6 +3627,18 @@ vitest: 69 passed
         → <code>anchorTo:'end'</code> 폐기, <strong>표준 chat-log 기법인 scrollHeight-delta 수동 앵커링</strong>: onScroll에서 loadOlder 트리거 직전 scrollHeight를 캡처(<code>prependAnchorRef</code>), prepend 감지(first id 변경·last 동일) 시 <code>scrollTop += scrollHeight − captured</code>로 추가된 높이만큼 내려 콘텐츠를 제자리 고정. 측정 drift는 react-virtual 내장 scroll-adjustment가 처리(이중 적용 없음). 검증(정적 세션, scrollTop=0): 1차 +3733→top 3733(drift 0), 2차 +6528→top 6528(+측정보정 407) — 연속 페이징이 매번 위치 고정.</li>
       <li>"대화 시작" 마커: <code>!canLoadOlder</code>일 때 스트림 최상단. react-virtual <code>scrollMargin</code>(고정 40px)으로 가상 리스트 위에 배치, 행 transform은 <code>vi.start - scrollMargin</code>. 브라우저 검증: 마커 0–40px·첫 행 40px·overlap 없음·gap 0.</li>
     </ul>
+    <h3>히스토리 읽는 중 라이브 append로 인한 점프 — pause/resume (2026-06-04 추가)</h3>
+    <p>
+      사용자 보고: "대화 시작까지 페이지백 후 수 초 대기하면 뷰가 임의 카드로 점프 + 최상단 카드도 바뀜." root cause(코드 확정):
+      <code>useSessionWindow</code>는 window를 <code>maxEvents=5000</code>으로 제한하고 초과 시 <strong>가장 오래된 ~500행을 trim</strong>한다(<code>appendOne</code>/<code>loadNewer</code>: <code>slice(trim)</code>).
+      <code>loadOlder</code>는 trim 없이 prepend하므로 페이지백하면 window가 5000을 넘고(초기 2252), 그 상태로 라이브 append 1건이 오면 trim 발동 → 읽고 있던 오래된 행 삭제 → 점프.
+    </p>
+    <p>
+      고침(표준 채팅 UX, <code>useSessionWindow</code> 변경 없음): ConversationStream이 follow 상태(autoscroll)를 <code>onFollowingChange</code>로 SessionDetailPage에 보고.
+      <strong>follow OFF(히스토리 읽는 중)이면 SSE backfill(loadNewer) 일시정지</strong> — append/trim이 안 일어나 점프 없음. 도착한 라이브 이벤트는 개수만 세어(<code>pendingNew</code>) "N ↓" 배지로 표시.
+      <strong>tip 복귀(OFF→ON 전환) 시 <code>reload()</code>로 라이브 tip catch-up</strong>(밀린 것 전부 반영 + 버퍼 정상 크기 복귀). gap/resync도 OFF일 땐 pending만 증가.
+      브라우저 검증(정적 세션): 스크롤업 시 fetch 0(정지), 바닥 복귀 시 <code>?limit=</code> reload 1회.
+    </p>
     <h3>검증</h3>
     <p>
       TDD: <code>autoscrollPolicy.test.ts</code>(11) · <code>useAutoscroll.test.tsx</code>(10, measurement-성장-무시 회귀 포함) · <code>AutoscrollToggle.test.tsx</code>(6) ·

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { MetaStrip } from '../components/MetaStrip';
@@ -64,27 +64,54 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     },
     [],
   );
+
+  // Live-tail vs reading-history. While the reader is following the live tip we
+  // backfill SSE envelopes into the window as before. While they are scrolled up
+  // reading older history (autoscroll OFF) we PAUSE backfill — appending +
+  // trimming the window would drop the oldest rows they are reading and snap the
+  // viewport (the "wait a few seconds → jumps to a random card" bug). We just
+  // count the pending arrivals for the "N ↓" badge; on resume we reload() to the
+  // live tip to catch up. ConversationStream reports the follow state up here.
+  const reload = window_.reload;
+  const followingRef = useRef(true);
+  const [pendingNew, setPendingNew] = useState(0);
+  const handleFollowingChange = useCallback(
+    (following: boolean) => {
+      const was = followingRef.current;
+      followingRef.current = following;
+      if (following && !was) {
+        // resume → catch up to the live tip, clear the pending indicator.
+        setPendingNew(0);
+        void reload();
+      }
+    },
+    [reload],
+  );
+
   useLiveStreamBridge(sessionId, {
     onEnvelope: () => {
+      if (!followingRef.current) {
+        // paused: don't touch the window, just surface that new events arrived.
+        setPendingNew((c) => c + 1);
+        return;
+      }
       if (backfillTimerRef.current !== null) return;
       backfillTimerRef.current = setTimeout(() => {
         backfillTimerRef.current = null;
         void window_.loadNewer();
       }, BACKFILL_DEBOUNCE_MS) as unknown as number;
     },
-    // Neither `gap` nor `resync` should wipe the loaded window. The window's
-    // older pages come from REST (`?before=`) and are always authoritative;
-    // the SSE stream only feeds the live tip. So on either signal we catch the
-    // tip up with loadNewer and never reload — reloading discarded every older
-    // page the reader had scrolled back to load and snapped the view to the
-    // newest event ("loaded history disappears / focus jumps to bottom").
-    //
-    // Why both fire often here: the SSE broadcast channel is shared across ALL
-    // sessions (src/api/sse.rs), so it lags (→ `gap`) whenever another session
-    // is busy, and the connection drops/reconnects with a stale cursor the
-    // backend can't backfill (→ `resync`) under the same load.
-    onGap: () => void window_.loadNewer(),
-    onResync: () => void window_.loadNewer(),
+    // gap/resync only catch the tip up while following; while reading history
+    // they would do the same window-disturbing append, so they are paused too
+    // (the resume reload() catches everything up).
+    onGap: () => {
+      if (followingRef.current) void window_.loadNewer();
+      else setPendingNew((c) => c + 1);
+    },
+    onResync: () => {
+      if (followingRef.current) void window_.loadNewer();
+      else setPendingNew((c) => c + 1);
+    },
   });
 
   // Older history is paged by ConversationStream's own near-top scroll (see its
@@ -239,6 +266,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               onSelect={selectStreamCard}
               onLoadOlder={window_.loadOlder}
               canLoadOlder={window_.oldest !== null}
+              onFollowingChange={handleFollowingChange}
+              pendingNewCount={pendingNew}
             />
           </div>
 
