@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * untagged-bash — emit the untagged-Bash analysis as JSON for an LLM to consume.
  *
@@ -8,16 +9,23 @@
  * tokens, adds rules to BASH_FIRST_TOKEN_TAGS in eventTags.ts, and re-runs until
  * the list shrinks. No rule logic is duplicated.
  *
- * Usage (from webui/):
- *   npm run untagged -- <sessionId>          # one session
- *   npm run untagged -- --all                # aggregate across all sessions
- *   npm run untagged -- <sessionId> --base http://127.0.0.1:7878
+ * Usage (from webui/) — emits CLEAN JSON on stdout (no npm banner):
+ *   node scripts/untagged-bash.ts <sessionId>    # one session
+ *   node scripts/untagged-bash.ts --all          # aggregate across all sessions
+ *   node scripts/untagged-bash.ts <sessionId> --base http://127.0.0.1:7878
+ * Runs on Node 22+ (native TS type-stripping); no vite-node/npm wrapper needed.
+ * `npm run untagged -- <sessionId>` works too but `npm run` prints a banner to
+ * stdout — use `npm run -s untagged -- ...` (silent) if piping through npm.
  *
  * Output: JSON array sorted by count desc:
  *   [{ token, count, sample, eventId, sessionId, hint }]
  */
-import { collectUntagged, type UntaggedRow } from '../src/components/replay/stream/eventTags';
-import type { ObservedEventDto } from '../src/api/types';
+// Explicit .ts extensions so Node (v22+, native type-stripping) resolves these
+// when run directly — `node scripts/untagged-bash.ts <sessionId>` — with NO npm
+// wrapper, so stdout is clean JSON (no `npm run` banner). tsconfig allows it
+// (allowImportingTsExtensions) and this file is outside the build's `include`.
+import { collectUntagged, type UntaggedRow } from '../src/components/replay/stream/eventTags.ts';
+import type { ObservedEventDto } from '../src/api/types.ts';
 
 interface EventsPage {
   events: ObservedEventDto[];
