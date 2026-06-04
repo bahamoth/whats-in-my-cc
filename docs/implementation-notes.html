@@ -3620,7 +3620,11 @@ vitest: 69 passed
     <h3>UI — 하단 푸터 토글 + 시작 마커</h3>
     <ul>
       <li><code>AutoscrollToggle</code>: 스트림 컬럼 <strong>하단 푸터 바</strong>(스크롤 밖, 콘텐츠 비가림). "자동 스크롤" 라벨 + ON/OFF 스위치, OFF+신규 시 "N ↓". <code>.stream</code>은 flex column, <code>.scroll</code>은 flex:1.</li>
-      <li>Seamless prefetch: <code>LOAD_OLDER_TOP_PX</code> 240 → 800(+ ConversationStream이 <code>max(800, clientHeight)</code> 전달) → 최상단 도달 <em>전</em> prepend → dance 제거.</li>
+      <li>Seamless prefetch: <code>LOAD_OLDER_TOP_PX</code> 240 → 800(+ ConversationStream이 <code>max(800, clientHeight)</code> 전달) → 최상단 도달 <em>전</em> prepend.</li>
+      <li><strong>수동 prepend 앵커링 (anchorTo:'end' 폐기) — 정적 세션 결정적 재현으로 확정한 root cause:</strong>
+        react-virtual의 <code>anchorTo:'end'</code>는 prepend가 <code>scrollTop≈0</code>에 도착할 때(빠른 위로 스크롤 중 흔한 경우) 위치를 못 잡고 scrollTop을 0에 둔다 →
+        뷰가 새 최상단으로 점프하고 스크롤이 0이라 재발화가 안 됨(사용자 보고 "1회만 동작, 이후 down-up dance"). scrollTop&gt;0에선 동작하지만 0에서 실패(정적 세션 8242a97f에서 prepend +3733인데 scrollTop 0 유지로 격리 확인).
+        → <code>anchorTo:'end'</code> 폐기, <strong>표준 chat-log 기법인 scrollHeight-delta 수동 앵커링</strong>: onScroll에서 loadOlder 트리거 직전 scrollHeight를 캡처(<code>prependAnchorRef</code>), prepend 감지(first id 변경·last 동일) 시 <code>scrollTop += scrollHeight − captured</code>로 추가된 높이만큼 내려 콘텐츠를 제자리 고정. 측정 drift는 react-virtual 내장 scroll-adjustment가 처리(이중 적용 없음). 검증(정적 세션, scrollTop=0): 1차 +3733→top 3733(drift 0), 2차 +6528→top 6528(+측정보정 407) — 연속 페이징이 매번 위치 고정.</li>
       <li>"대화 시작" 마커: <code>!canLoadOlder</code>일 때 스트림 최상단. react-virtual <code>scrollMargin</code>(고정 40px)으로 가상 리스트 위에 배치, 행 transform은 <code>vi.start - scrollMargin</code>. 브라우저 검증: 마커 0–40px·첫 행 40px·overlap 없음·gap 0.</li>
     </ul>
     <h3>검증</h3>
