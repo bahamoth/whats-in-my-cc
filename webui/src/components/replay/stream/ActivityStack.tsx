@@ -4,7 +4,7 @@ import { ChevronRight, ChevronDown, Wrench, AlertTriangle } from 'lucide-react';
 import { summarizeStack } from './activityGroup';
 import type { ActivityStackData } from './activityGroup';
 import { nodeLabel } from './nodeLabel';
-import { tagForEvent } from './eventTags';
+import { tagForEvent, tagVerb } from './eventTags';
 import { hookFacet } from './hookFacet';
 import styles from './ActivityStack.module.css';
 
@@ -92,7 +92,7 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
               >
                 <span className={styles.itemPrimary}>{label.primary}</span>
                 {(() => { const tr = tagForEvent(ae.event); return tr.disposition === 'tagged' && tr.tag
-                  ? <span data-testid="event-tag-chip" className={styles.tagChip}>{tr.tag}</span> : null; })()}
+                  ? <span data-testid="event-tag-chip" className={styles.tagChip} data-verb={tagVerb(tr.tag)}>{tr.tag}</span> : null; })()}
                 {label.secondary && (
                   <span className={styles.itemSecondary}>{label.secondary}</span>
                 )}

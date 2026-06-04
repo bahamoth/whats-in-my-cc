@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tagForEvent, collectUntagged, meaningfulCommand } from '../eventTags';
+import { tagForEvent, collectUntagged, meaningfulCommand, tagVerb } from '../eventTags';
 import type { ObservedEventDto } from '../../../../api/types';
 
 const bash = (command: string): ObservedEventDto =>
@@ -7,86 +7,117 @@ const bash = (command: string): ObservedEventDto =>
 const read = (file_path: string): ObservedEventDto =>
   ({ event_id: file_path, kind: 'tool_call', tool_name: 'Read', observed_at: '2026-05-31T00:00:00Z', payload: { input: { file_path } } } as unknown as ObservedEventDto);
 
-describe('tagForEvent — Bash (real-data anchored tokens)', () => {
-  it('tags read/search tools', () => {
-    expect(tagForEvent(bash('grep -n foo src')).tag).toBe('search·read');
-    expect(tagForEvent(bash('find . -name "*.rs"')).tag).toBe('search·read');
-    expect(tagForEvent(bash('ls -la')).tag).toBe('search·read');
-    expect(tagForEvent(bash('cat Cargo.toml')).tag).toBe('search·read');
+describe('tagForEvent — verb.object taxonomy', () => {
+  it('read.file — search/inspect files', () => {
+    expect(tagForEvent(bash('grep -n foo src')).tag).toBe('read.file');
+    expect(tagForEvent(bash('find . -name "*.rs"')).tag).toBe('read.file');
+    expect(tagForEvent(bash('ls -la')).tag).toBe('read.file');
+    expect(tagForEvent(bash('cat Cargo.toml')).tag).toBe('read.file');
+    expect(tagForEvent(bash("sed -n '1,5p' x")).tag).toBe('read.file');
   });
-  it('splits git into read vs write by subcommand', () => {
-    expect(tagForEvent(bash('git status')).tag).toBe('vcs-read');
-    expect(tagForEvent(bash('git diff HEAD')).tag).toBe('vcs-read');
-    expect(tagForEvent(bash('git commit -m x')).tag).toBe('vcs-write');
-    expect(tagForEvent(bash('git push')).tag).toBe('vcs-write');
+  it('read.proc / read.db / read.web', () => {
+    expect(tagForEvent(bash('ps -p 1')).tag).toBe('read.proc');
+    expect(tagForEvent(bash('lsof -ti :5175')).tag).toBe('read.proc');
+    expect(tagForEvent(bash('sqlite3 db .tables')).tag).toBe('read.db');
+    expect(tagForEvent(bash('curl -s http://x')).tag).toBe('read.web');
   });
-  it('tags build/test and query/script', () => {
-    expect(tagForEvent(bash('cargo test --all')).tag).toBe('build·test');
-    expect(tagForEvent(bash('npm run dev')).tag).toBe('build·test');
-    expect(tagForEvent(bash('sqlite3 db .tables')).tag).toBe('query·script');
-    expect(tagForEvent(bash('python3 script.py')).tag).toBe('query·script');
+  it('git: read vs write by subcommand', () => {
+    expect(tagForEvent(bash('git status')).tag).toBe('read.vcs');
+    expect(tagForEvent(bash('git diff HEAD')).tag).toBe('read.vcs');
+    expect(tagForEvent(bash('git fetch')).tag).toBe('read.vcs'); // fetch is read (download only)
+    expect(tagForEvent(bash('git commit -m x')).tag).toBe('write.vcs');
+    expect(tagForEvent(bash('git push')).tag).toBe('write.vcs');
+    expect(tagForEvent(bash('git mv a b')).tag).toBe('write.vcs');
+    expect(tagForEvent(bash('gh pr create')).tag).toBe('write.vcs');
   });
-  it('marks rm/mv as destructive', () => {
-    expect(tagForEvent(bash('rm -rf target')).tag).toBe('destructive');
-    expect(tagForEvent(bash('mv a b')).tag).toBe('destructive');
+  it('cargo/npm/go: subcommand decides build/test/run/lint/deps', () => {
+    expect(tagForEvent(bash('cargo build --release')).tag).toBe('build.code');
+    expect(tagForEvent(bash('cargo test --all')).tag).toBe('test.code');
+    expect(tagForEvent(bash('cargo run -- serve')).tag).toBe('run.code');
+    expect(tagForEvent(bash('cargo clippy')).tag).toBe('lint.code');
+    expect(tagForEvent(bash('cargo add serde')).tag).toBe('write.deps');
+    expect(tagForEvent(bash('npm test')).tag).toBe('test.code');
+    expect(tagForEvent(bash('npm run dev')).tag).toBe('run.code'); // any npm run → run.code
+    expect(tagForEvent(bash('npm install')).tag).toBe('write.deps');
+    expect(tagForEvent(bash('go build ./...')).tag).toBe('build.code');
   });
-  it('classifies compound commands by the first MEANINGFUL command, skipping control prefixes', () => {
-    // `cd … && git add … && git status` is a git-add (vcs-write), not an
-    // untaggable compound — split on separators, skip the `cd`, read `git add`.
-    const r = tagForEvent(bash('cd /repo && git add -A && git status'));
-    expect(r.tag).toBe('vcs-write');
-    expect(r.disposition).toBe('tagged');
-    // cd skipped → grep is the work
-    expect(tagForEvent(bash('cd x && grep y')).tag).toBe('search·read');
-    // redirects / pipes do not block tagging — classify by the first command
-    expect(tagForEvent(bash('grep y > out.txt')).tag).toBe('search·read');
-    expect(tagForEvent(bash('grep a | grep b | wc -l')).tag).toBe('search·read');
-    // destructive after a control prefix is still caught
-    expect(tagForEvent(bash('cd x && rm -rf y')).tag).toBe('destructive');
+  it('single-purpose dev tools + tsc --noEmit flips to lint', () => {
+    expect(tagForEvent(bash('make')).tag).toBe('build.code');
+    expect(tagForEvent(bash('vitest run')).tag).toBe('test.code');
+    expect(tagForEvent(bash('eslint .')).tag).toBe('lint.code');
+    expect(tagForEvent(bash('tsc -p .')).tag).toBe('build.code');
+    expect(tagForEvent(bash('tsc --noEmit')).tag).toBe('lint.code');
   });
-  it('compound of only control tokens → control; first meaningful unknown → unmatched', () => {
+  it('run.code — interpreters, scripts, and bare path execution', () => {
+    expect(tagForEvent(bash('python3 script.py')).tag).toBe('run.code');
+    expect(tagForEvent(bash('node x.js')).tag).toBe('run.code');
+    expect(tagForEvent(bash('bash tests/x.sh')).tag).toBe('run.code');
+    expect(tagForEvent(bash('./target/release/witmcc serve')).tag).toBe('run.code');
+    expect(tagForEvent(bash('/usr/local/bin/foo')).tag).toBe('run.code');
+    expect(tagForEvent(bash('tests/structural/x.sh ch-prod')).tag).toBe('run.code'); // *.sh path
+  });
+  it('write.file / delete.file / write.deps', () => {
+    expect(tagForEvent(bash('mkdir -p a/b')).tag).toBe('write.file');
+    expect(tagForEvent(bash('cp a b')).tag).toBe('write.file');
+    expect(tagForEvent(bash('chmod +x x')).tag).toBe('write.file');
+    expect(tagForEvent(bash('rm -rf target')).tag).toBe('delete.file');
+    expect(tagForEvent(bash('mv a b')).tag).toBe('delete.file');
+    expect(tagForEvent(bash('pip install cairosvg')).tag).toBe('write.deps');
+  });
+  it('classifies compounds by the first MEANINGFUL command', () => {
+    expect(tagForEvent(bash('cd /repo && git add -A && git status')).tag).toBe('write.vcs');
+    expect(tagForEvent(bash('cd x && grep y')).tag).toBe('read.file');
+    expect(tagForEvent(bash('grep y > out.txt')).tag).toBe('read.file');
+    expect(tagForEvent(bash('grep a | grep b | wc -l')).tag).toBe('read.file');
+    expect(tagForEvent(bash('cd x && rm -rf y')).tag).toBe('delete.file');
+  });
+  it('control vs unmatched', () => {
     expect(tagForEvent(bash('cd /tmp && echo done')).disposition).toBe('control');
-    expect(tagForEvent(bash('cd x && gh pr view')).disposition).toBe('unmatched');
-  });
-  it('treats shell-control tokens as control (no chip, not untagged)', () => {
     expect(tagForEvent(bash('cd /tmp')).disposition).toBe('control');
-    expect(tagForEvent(bash('echo hi')).disposition).toBe('control');
-  });
-  it('marks unrecognized SIMPLE first-tokens as unmatched (panel candidates)', () => {
-    expect(tagForEvent(bash('gh pr view')).disposition).toBe('unmatched');
     expect(tagForEvent(bash('frobnicate x')).disposition).toBe('unmatched');
+    expect(tagForEvent(bash('git frobnicate')).disposition).toBe('unmatched'); // unknown git sub
+    expect(tagForEvent(bash('npm frob')).disposition).toBe('unmatched'); // unknown npm sub
   });
 
-  // ── classifier hardening: real commands were buried under tokenizer noise ──
+  // ── classifier hardening (tokenizer noise) ──
   it('strips leading whole-line comments before classifying', () => {
-    expect(tagForEvent(bash('# explore CoefModel\ngrep -r x src')).tag).toBe('search·read');
+    expect(tagForEvent(bash('# explore\ngrep -r x src')).tag).toBe('read.file');
   });
-  it('splits compounds on NEWLINES, not just && ; |', () => {
-    expect(tagForEvent(bash('cd /x\ngrep y')).tag).toBe('search·read');
-    expect(tagForEvent(bash('cargo build\ncargo test')).tag).toBe('build·test');
+  it('splits compounds on NEWLINES', () => {
+    expect(tagForEvent(bash('cd /x\ngrep y')).tag).toBe('read.file');
+    expect(tagForEvent(bash('cargo build\ncargo test')).tag).toBe('build.code');
   });
-  it('does NOT mis-split a 2>&1 redirect into a bogus token', () => {
-    expect(tagForEvent(bash('grep x src 2>&1 | head')).tag).toBe('search·read');
-    expect(tagForEvent(bash('cargo test 2>&1')).tag).toBe('build·test');
+  it('does NOT mis-split a 2>&1 redirect', () => {
+    expect(tagForEvent(bash('grep x src 2>&1 | head')).tag).toBe('read.file');
+    expect(tagForEvent(bash('cargo test 2>&1')).tag).toBe('test.code');
   });
   it('skips leading VAR=value assignment prefixes', () => {
-    expect(tagForEvent(bash('VAULT=/x grep y')).tag).toBe('search·read');
-    expect(tagForEvent(bash('FOO=/x\ncat f')).tag).toBe('search·read');
-    expect(tagForEvent(bash('FOO=bar')).disposition).toBe('control'); // assignment-only
+    expect(tagForEvent(bash('VAULT=/x grep y')).tag).toBe('read.file');
+    expect(tagForEvent(bash('FOO=/x\ncat f')).tag).toBe('read.file');
+    expect(tagForEvent(bash('FOO=bar')).disposition).toBe('control');
   });
-  it('treats shell loop/conditional keywords (do/done/[/while) as control', () => {
-    expect(tagForEvent(bash('for f in *; do grep x "$f"; done')).tag).toBe('search·read');
-    expect(tagForEvent(bash('[ -f x ] && cat y')).tag).toBe('search·read');
+  it('treats loop/conditional keywords as control', () => {
+    expect(tagForEvent(bash('for f in *; do grep x "$f"; done')).tag).toBe('read.file');
+    expect(tagForEvent(bash('[ -f x ] && cat y')).tag).toBe('read.file');
   });
 });
 
 describe('tagForEvent — Read by extension', () => {
   it('classifies code/docs/config/data', () => {
-    expect(tagForEvent(read('src/a.rs')).tag).toBe('code');
-    expect(tagForEvent(read('webui/x.tsx')).tag).toBe('code');
-    expect(tagForEvent(read('README.md')).tag).toBe('docs');
-    expect(tagForEvent(read('Cargo.toml')).tag).toBe('config');
-    expect(tagForEvent(read('data.json')).tag).toBe('data');
+    expect(tagForEvent(read('src/a.rs')).tag).toBe('read.code');
+    expect(tagForEvent(read('webui/x.tsx')).tag).toBe('read.code');
+    expect(tagForEvent(read('README.md')).tag).toBe('read.docs');
+    expect(tagForEvent(read('Cargo.toml')).tag).toBe('read.config');
+    expect(tagForEvent(read('data.json')).tag).toBe('read.data');
+  });
+});
+
+describe('tagVerb', () => {
+  it('extracts the verb component for chip colouring', () => {
+    expect(tagVerb('read.file')).toBe('read');
+    expect(tagVerb('write.vcs')).toBe('write');
+    expect(tagVerb('delete.file')).toBe('delete');
+    expect(tagVerb('build.code')).toBe('build');
   });
 });
 
@@ -106,42 +137,45 @@ describe('meaningfulCommand — strip leading control prefixes for display', () 
   it('leaves a command that already leads with work unchanged', () => {
     expect(meaningfulCommand('grep a | grep b')).toBe('grep a | grep b');
     expect(meaningfulCommand('rm -f x && ls')).toBe('rm -f x && ls');
-    expect(meaningfulCommand('cd /tmp')).toBe('cd /tmp'); // all control → as-is
+    expect(meaningfulCommand('cd /tmp')).toBe('cd /tmp');
   });
 });
 
 describe('collectUntagged', () => {
-  it('aggregates unmatched Bash by the first MEANINGFUL token (skips control prefixes), with count + sample', () => {
+  it('aggregates unmatched commands by the first MEANINGFUL token, with count + sample', () => {
     const events = [
-      bash('gh pr view 1'), bash('gh pr view 2'),
-      bash('cd /tmp'),                 // control → excluded
-      bash('cd x && grep y'),          // now tagged search·read → excluded
-      bash('grep z'),                  // tagged → excluded
-      bash('cd /repo && gh pr merge'), // unmatched; meaningful token is gh, not cd
+      bash('frobnicate a'), bash('frobnicate b'),
+      bash('cd /tmp'),                  // control → excluded
+      bash('cd x && grep y'),           // tagged read.file → excluded
+      bash('grep z'),                   // tagged → excluded
+      bash('cd /repo && frobnicate c'), // unmatched; meaningful token = frobnicate
     ];
     const rows = collectUntagged(events);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ token: 'gh', count: 3 });
+    expect(rows[0]).toMatchObject({ token: 'frobnicate', count: 3 });
     expect(rows[0].hint).toContain('BASH_FIRST_TOKEN_TAGS');
+  });
+
+  it('aggregates an unknown MULTIPLEXER subcommand as `tool sub` (so the loop knows which sub to add)', () => {
+    const rows = collectUntagged([bash('git frobnicate'), bash('git frobnicate --x')]);
+    expect(rows[0].token).toBe('git frobnicate');
+    expect(rows[0].count).toBe(2);
+    expect(rows[0].hint).toContain("TOOL_SUBCOMMAND_TAGS['git']");
   });
 
   it('does not surface comment / assignment / redirect noise as untagged tokens', () => {
     const events = [
-      bash('# explore\ngh pr view'),    // → gh (comment stripped)
-      bash('VAULT=/x\ngh pr list'),      // → gh (assignment skipped, newline split)
-      bash('grep x 2>&1 | head'),        // tagged search·read → excluded
+      bash('# explore\nfrobnicate view'),  // → frobnicate (comment stripped)
+      bash('VAULT=/x\nfrobnicate list'),    // → frobnicate (assignment skipped, newline split)
+      bash('grep x 2>&1 | head'),           // tagged read.file → excluded
     ];
     const rows = collectUntagged(events);
-    expect(rows.map((r) => r.token)).toEqual(['gh']);
+    expect(rows.map((r) => r.token)).toEqual(['frobnicate']);
     expect(rows[0].count).toBe(2);
   });
 
   it('carries the FIRST occurrence event_id so the panel can link to its card', () => {
-    const events = [
-      bash('gh pr view 1'), // first 'gh' → its event_id is the jump target
-      bash('gh pr view 2'),
-    ];
-    const rows = collectUntagged(events);
-    expect(rows[0].eventId).toBe('gh pr view 1');
+    const rows = collectUntagged([bash('frobnicate one'), bash('frobnicate two')]);
+    expect(rows[0].eventId).toBe('frobnicate one');
   });
 });

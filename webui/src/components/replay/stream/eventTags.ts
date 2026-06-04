@@ -1,37 +1,93 @@
 // webui/src/components/replay/stream/eventTags.ts
 import type { ObservedEventDto } from '../../../api/types';
 
-export type ReadTag = 'code' | 'docs' | 'config' | 'data';
-export type BashTag = 'search·read' | 'vcs-read' | 'vcs-write' | 'build·test' | 'query·script' | 'destructive';
-export type Tag = ReadTag | BashTag;
-export type Disposition = 'tagged' | 'control' | 'ambiguous' | 'unmatched';
+// ── Taxonomy: every tag is `verb.object` ──────────────────────────────────
+//   verbs   : read · write · delete · build · test · run · lint
+//   objects : code · docs · config · data · file · proc · vcs · db · web · deps
+// Principle: I/O operations are read/write/delete on an object (file/vcs/db/web/
+// proc); the rest are execution actions on the codebase (build/test/run/lint).
+// The chip is coloured by the VERB (the part before the dot).
+export type Tag =
+  | 'read.code' | 'read.docs' | 'read.config' | 'read.data'
+  | 'read.file' | 'read.proc' | 'read.vcs' | 'read.db' | 'read.web'
+  | 'write.file' | 'write.vcs' | 'write.deps'
+  | 'delete.file'
+  | 'build.code' | 'test.code' | 'run.code' | 'lint.code';
+
+/** The verb (action) component of a tag — used for chip colouring/grouping. */
+export type TagVerb = 'read' | 'write' | 'delete' | 'build' | 'test' | 'run' | 'lint';
+export function tagVerb(tag: Tag): TagVerb {
+  return tag.slice(0, tag.indexOf('.')) as TagVerb;
+}
+
+export type Disposition = 'tagged' | 'control' | 'unmatched';
 export interface TagResult { tag: Tag | null; disposition: Disposition; }
 
 // ── single source of truth — add a key to extend ──────────────────────────
-export const READ_EXT_TAGS: Record<string, ReadTag> = {
-  rs: 'code', ts: 'code', tsx: 'code', js: 'code', jsx: 'code', css: 'code',
-  md: 'docs', html: 'docs', txt: 'docs',
-  toml: 'config', yaml: 'config', yml: 'config', ini: 'config',
-  json: 'data', sql: 'data', jsonl: 'data', log: 'data', csv: 'data',
+// Read tool: file content type by extension.
+export const READ_EXT_TAGS: Record<string, Tag> = {
+  rs: 'read.code', ts: 'read.code', tsx: 'read.code', js: 'read.code', jsx: 'read.code', css: 'read.code',
+  md: 'read.docs', html: 'read.docs', txt: 'read.docs',
+  toml: 'read.config', yaml: 'read.config', yml: 'read.config', ini: 'read.config',
+  json: 'read.data', sql: 'read.data', jsonl: 'read.data', log: 'read.data', csv: 'read.data',
 };
-export const BASH_FIRST_TOKEN_TAGS: Record<string, BashTag> = {
-  grep: 'search·read', rg: 'search·read', egrep: 'search·read', fgrep: 'search·read',
-  find: 'search·read', ls: 'search·read', cat: 'search·read', head: 'search·read',
-  tail: 'search·read', wc: 'search·read', jq: 'search·read', tree: 'search·read',
-  which: 'search·read', file: 'search·read', stat: 'search·read', du: 'search·read', df: 'search·read',
-  cargo: 'build·test', npm: 'build·test', npx: 'build·test', pnpm: 'build·test',
-  yarn: 'build·test', make: 'build·test', tsc: 'build·test', vitest: 'build·test', go: 'build·test',
-  sqlite3: 'query·script', python3: 'query·script', python: 'query·script',
-  node: 'query·script', osascript: 'query·script', psql: 'query·script', ruby: 'query·script',
+
+// Bash SINGLE-PURPOSE first tokens → tag. Multiplexers (git/cargo/npm/…) whose
+// subcommand decides the verb live in TOOL_SUBCOMMAND_TAGS; bare path execution
+// (`./x`, `/abs`, `*.sh`) is detected as run.code.
+export const BASH_FIRST_TOKEN_TAGS: Record<string, Tag> = {
+  // read.file — search / inspect files & dirs
+  grep: 'read.file', rg: 'read.file', egrep: 'read.file', fgrep: 'read.file', find: 'read.file',
+  ls: 'read.file', cat: 'read.file', head: 'read.file', tail: 'read.file', wc: 'read.file',
+  jq: 'read.file', tree: 'read.file', which: 'read.file', file: 'read.file', stat: 'read.file',
+  du: 'read.file', df: 'read.file', sed: 'read.file', awk: 'read.file', pwd: 'read.file', realpath: 'read.file',
+  // read.proc — process / port inspection
+  ps: 'read.proc', lsof: 'read.proc',
+  // read.db
+  sqlite3: 'read.db', psql: 'read.db', mysql: 'read.db',
+  // read.web
+  curl: 'read.web', wget: 'read.web',
+  // write.file — create / modify (non-destructive)
+  mkdir: 'write.file', touch: 'write.file', cp: 'write.file', chmod: 'write.file', chown: 'write.file', ln: 'write.file',
+  // write.deps — dependency management
+  pip: 'write.deps', pip3: 'write.deps',
+  // delete.file — destructive
+  rm: 'delete.file', mv: 'delete.file', rmdir: 'delete.file',
+  // run.code — execute interpreters / scripts / package binaries
+  python3: 'run.code', python: 'run.code', node: 'run.code', ruby: 'run.code', osascript: 'run.code',
+  bash: 'run.code', sh: 'run.code', zsh: 'run.code', npx: 'run.code', markitdown: 'run.code',
+  // build / test / lint — single-purpose dev tools
+  make: 'build.code',
+  vitest: 'test.code', jest: 'test.code', pytest: 'test.code',
+  eslint: 'lint.code', ruff: 'lint.code', prettier: 'lint.code',
+  // vcs (non-git)
+  gh: 'write.vcs',
 };
-export const GIT_SUBCOMMAND_TAGS: Record<string, BashTag> = {
-  status: 'vcs-read', log: 'vcs-read', diff: 'vcs-read', show: 'vcs-read',
-  branch: 'vcs-read', blame: 'vcs-read', 'rev-parse': 'vcs-read', describe: 'vcs-read',
-  add: 'vcs-write', commit: 'vcs-write', push: 'vcs-write', checkout: 'vcs-write',
-  switch: 'vcs-write', stash: 'vcs-write', rm: 'vcs-write', reset: 'vcs-write',
-  merge: 'vcs-write', rebase: 'vcs-write', fetch: 'vcs-write', pull: 'vcs-write', tag: 'vcs-write', clone: 'vcs-write',
+
+// Multiplexer tools: the SUBCOMMAND decides the verb. An unknown subcommand is
+// `unmatched` (no default) so the tagging loop surfaces `tool sub` to be added
+// here — new subcommands are never silently mis-tagged.
+export const TOOL_SUBCOMMAND_TAGS: Record<string, Record<string, Tag>> = {
+  git: {
+    status: 'read.vcs', log: 'read.vcs', diff: 'read.vcs', show: 'read.vcs', branch: 'read.vcs',
+    blame: 'read.vcs', 'rev-parse': 'read.vcs', describe: 'read.vcs', fetch: 'read.vcs',
+    remote: 'read.vcs', config: 'read.vcs', 'ls-files': 'read.vcs', shortlog: 'read.vcs',
+    add: 'write.vcs', commit: 'write.vcs', push: 'write.vcs', checkout: 'write.vcs', switch: 'write.vcs',
+    stash: 'write.vcs', rm: 'write.vcs', mv: 'write.vcs', reset: 'write.vcs', merge: 'write.vcs',
+    rebase: 'write.vcs', pull: 'write.vcs', tag: 'write.vcs', clone: 'write.vcs', init: 'write.vcs',
+    restore: 'write.vcs', 'cherry-pick': 'write.vcs', revert: 'write.vcs', apply: 'write.vcs', worktree: 'write.vcs',
+  },
+  cargo: {
+    build: 'build.code', b: 'build.code', test: 'test.code', t: 'test.code', nextest: 'test.code',
+    run: 'run.code', r: 'run.code', check: 'lint.code', clippy: 'lint.code', fmt: 'lint.code',
+    add: 'write.deps', update: 'write.deps', remove: 'write.deps',
+  },
+  npm: { install: 'write.deps', i: 'write.deps', ci: 'write.deps', add: 'write.deps', test: 'test.code', t: 'test.code', start: 'run.code', run: 'run.code' },
+  pnpm: { install: 'write.deps', i: 'write.deps', add: 'write.deps', test: 'test.code', start: 'run.code', run: 'run.code' },
+  yarn: { install: 'write.deps', add: 'write.deps', test: 'test.code', start: 'run.code', run: 'run.code' },
+  go: { build: 'build.code', test: 'test.code', run: 'run.code', vet: 'lint.code', get: 'write.deps', install: 'write.deps' },
 };
-export const DESTRUCTIVE_FIRST_TOKENS = new Set(['rm', 'mv', 'rmdir']);
+
 export const CONTROL_TOKENS = new Set([
   'cd', 'echo', 'sleep', 'for', 'export', 'source', 'set', 'pgrep', 'kill', 'pkill', 'wait', 'true', ':',
   // shell loop/conditional keywords + the test builtin: a segment that IS one of
@@ -129,6 +185,33 @@ export function meaningfulCommand(cmd: string): string {
   return s || cmd.trim();
 }
 
+/** A command run directly by path — `./x`, `../x`, `/abs/x`, or `*.sh`. Such
+ *  invocations execute code → run.code. */
+function isPathExec(tok: string): boolean {
+  return tok.startsWith('/') || tok.startsWith('./') || tok.startsWith('../') || tok.endsWith('.sh');
+}
+
+/** Classify a single (control-prefix-stripped) command string. */
+function classifyCommand(cmdStr: string): TagResult {
+  const tok = firstToken(cmdStr);
+  if (!tok || CONTROL_TOKENS.has(tok)) return { tag: null, disposition: 'control' };
+  if (isPathExec(tok)) return { tag: 'run.code', disposition: 'tagged' };
+  // tsc is a single tool whose intent flips with --noEmit (type-check = lint).
+  if (tok === 'tsc') {
+    return { tag: cmdStr.includes('--noEmit') ? 'lint.code' : 'build.code', disposition: 'tagged' };
+  }
+  // multiplexer: subcommand decides the verb (unknown → unmatched).
+  const subMap = TOOL_SUBCOMMAND_TAGS[tok];
+  if (subMap) {
+    const sub = firstToken(cmdStr.slice(tok.length).trim());
+    const t = subMap[sub];
+    return t ? { tag: t, disposition: 'tagged' } : { tag: null, disposition: 'unmatched' };
+  }
+  const t = BASH_FIRST_TOKEN_TAGS[tok];
+  if (t) return { tag: t, disposition: 'tagged' };
+  return { tag: null, disposition: 'unmatched' };
+}
+
 export function tagForEvent(e: ObservedEventDto): TagResult {
   const tool = e.tool_name;
   const input = ((e.payload as Record<string, unknown>)?.input ?? {}) as Record<string, unknown>;
@@ -143,22 +226,12 @@ export function tagForEvent(e: ObservedEventDto): TagResult {
     if (!cmd) return { tag: null, disposition: 'control' };
     // Classify a compound (`cd … && git add … && git status`) by its first
     // MEANINGFUL sub-command: split on separators + newlines, skip control
-    // segments (cd) and assignment/keyword prefixes (`VAR=x`, `do`), tag by the
-    // first real command. Meaningful-but-unknown → `unmatched`; all-control →
-    // `control`.
+    // segments (cd) and assignment/keyword prefixes (`VAR=x`, `do`).
     for (const seg of segmentCommand(cmd)) {
       const cmdStr = commandOf(seg);
       const tok = firstToken(cmdStr);
       if (!tok || CONTROL_TOKENS.has(tok)) continue; // empty/assignment-only or control → next segment
-      if (DESTRUCTIVE_FIRST_TOKENS.has(tok)) return { tag: 'destructive', disposition: 'tagged' };
-      if (tok === 'git') {
-        const sub = firstToken(cmdStr.slice(3).trim());
-        const t = GIT_SUBCOMMAND_TAGS[sub];
-        return t ? { tag: t, disposition: 'tagged' } : { tag: null, disposition: 'unmatched' };
-      }
-      const t = BASH_FIRST_TOKEN_TAGS[tok];
-      if (t) return { tag: t, disposition: 'tagged' };
-      return { tag: null, disposition: 'unmatched' }; // first meaningful but unknown
+      return classifyCommand(cmdStr);
     }
     return { tag: null, disposition: 'control' }; // every segment was control
   }
@@ -175,6 +248,24 @@ export interface UntaggedRow {
   eventId: string;
 }
 
+/** Aggregation token for an untagged command. Multiplexers aggregate by
+ *  `tool sub` (e.g. `git worktree`, `cargo bench`) so the panel/loop points at
+ *  the exact subcommand to add; everything else by its first token. */
+function untaggedToken(cmdStr: string): string {
+  const tok = firstToken(cmdStr);
+  if (TOOL_SUBCOMMAND_TAGS[tok]) {
+    const sub = firstToken(cmdStr.slice(tok.length).trim());
+    return sub ? `${tok} ${sub}` : tok;
+  }
+  return tok;
+}
+
+function untaggedHint(token: string): string {
+  return token.includes(' ')
+    ? `add '${token.split(' ')[1]}': '<tag>' to TOOL_SUBCOMMAND_TAGS['${token.split(' ')[0]}'] in eventTags.ts`
+    : `add '${token}': '<tag>' to BASH_FIRST_TOKEN_TAGS in eventTags.ts`;
+}
+
 export function collectUntagged(events: ObservedEventDto[]): UntaggedRow[] {
   const byToken = new Map<string, { count: number; sample: string; eventId: string }>();
   for (const e of events) {
@@ -184,11 +275,11 @@ export function collectUntagged(events: ObservedEventDto[]): UntaggedRow[] {
     const cmd = isCmd
       ? stripCommentLines(input.command as string)
       : typeof input.file_path === 'string' ? input.file_path : '';
-    // Aggregate a compound under its first MEANINGFUL command token (e.g. `gh`),
-    // with comment lines / control prefixes / `VAR=` assignments stripped — so
-    // the panel hint points at the real command worth tagging, not noise.
+    // Aggregate under the first MEANINGFUL command token (or `tool sub` for a
+    // multiplexer), with comments / control prefixes / `VAR=` assignments
+    // stripped — so the hint points at the real command worth tagging.
     const meaningful = isCmd ? commandOf(firstMeaningfulSegment(segmentCommand(cmd)) ?? cmd) : cmd;
-    const tok = firstToken(meaningful);
+    const tok = isCmd ? untaggedToken(meaningful) : meaningful;
     const cur = byToken.get(tok);
     if (cur) cur.count++;
     else byToken.set(tok, { count: 1, sample: (meaningful || cmd).slice(0, 80), eventId: e.event_id });
@@ -199,7 +290,7 @@ export function collectUntagged(events: ObservedEventDto[]): UntaggedRow[] {
       count: v.count,
       sample: v.sample,
       eventId: v.eventId,
-      hint: `add '${token}': '<tag>' to BASH_FIRST_TOKEN_TAGS in eventTags.ts`,
+      hint: untaggedHint(token),
     }))
     .sort((a, b) => b.count - a.count);
 }
