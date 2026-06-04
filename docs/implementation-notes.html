@@ -3656,7 +3656,7 @@ vitest: 69 passed
     <ul>
       <li><strong>백엔드 추가 없음 · SSOT 유지</strong>: untagged 분류는 프론트 <code>eventTags.ts</code>의 <code>collectUntagged</code> 한 곳에만 존재.
         이를 Rust로 포팅(중복·드리프트 위험)하는 대신 <strong>그대로 재사용하는 Node CLI</strong>로 노출.</li>
-      <li><code>webui/scripts/untagged-bash.ts</code> (<code>npm run untagged -- &lt;sessionId&gt;</code> 또는 <code>--all</code>):
+      <li><code>webui/scripts/untagged-bash.ts</code> (<code>node scripts/untagged-bash.ts &lt;sessionId&gt;</code> 또는 <code>--all</code> — Node 22+ 타입 스트리핑, npm 배너 없는 깨끗한 stdout):
         read-only Pull API(<code>/v1/sessions/:id/events</code>)에서 세션 전체 이벤트를 <code>before=</code> 페이지네이션으로 모아
         <code>collectUntagged</code> 적용 → <code>[{token,count,sample,eventId,sessionId,hint}]</code> JSON(count desc) 출력.
         UI 패널과 동일 분류지만 로드된 window가 아니라 세션 전체 커버.</li>

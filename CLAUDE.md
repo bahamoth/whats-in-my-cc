@@ -83,10 +83,11 @@ graph-backed 모델을 서술하므로 그대로 따르지 말 것.
 확인하고 태깅 규칙을 어떻게 강화할지 **제안**한다(자율 태깅 개선 루프를 닫는다). 규칙 추가는
 소스 편집이라 read-only API 원칙과 충돌하지 않는다.
 
-1. `cd webui && npm run untagged -- --all` 실행(특정 세션만 보려면 `-- <sessionId>`).
-   `/v1/sessions`는 최신순이라 방금 작업한 세션이 맨 위. read-only Pull API +
-   프론트 `collectUntagged`(SSOT) 재사용 — backend 불필요.
-   출력: `[{token,count,sample,eventId,sessionId,hint}]` (count 내림차순 JSON).
+1. `cd webui && node scripts/untagged-bash.ts --all` 실행(특정 세션만 보려면 끝에 `<sessionId>`).
+   stdout이 **깨끗한 JSON**(npm 배너 없음 — `npm run`은 stdout에 배너를 찍으므로 node 직접 실행).
+   Node 22+ 네이티브 타입 스트리핑으로 실행, 백엔드·vite-node 불필요. `/v1/sessions`는 최신순이라
+   방금 작업한 세션이 맨 위. read-only Pull API + 프론트 `collectUntagged`(SSOT) 재사용.
+   출력: `[{token,count,sample,eventId,sessionId,hint}]` (count 내림차순).
 2. count 높은 untagged 토큰부터, 각 row의 `sample`을 근거로 분류가 타당한지 검토한 뒤,
    `hint`가 가리키는 대로 `webui/src/components/replay/stream/eventTags.ts`에 어떤 태그를
    추가할지 **제안**한다: 일반 첫 토큰은 `BASH_FIRST_TOKEN_TAGS`, `git` 서브커맨드는
