@@ -120,6 +120,30 @@ export function nodeLabel(node: { node_kind: string; payload: unknown }): NodeLa
         primary: 'diff',
         secondary: (p.file_path as string) ?? (p.path as string) ?? '',
       };
+    case 'log_record': {
+      // State-change log beats (the STREAM_STATE_LOG whitelist) render here.
+      // Friendly name per event_name + the single most salient attribute, so a
+      // beat reads e.g. "subagent · Explore" / "mcp · connected", never a bare
+      // "log_record". Unknown names fall back to the raw event_name.
+      const name = typeof p.event_name === 'string' ? p.event_name : 'log';
+      const a = asObj(p.attributes);
+      const FRIENDLY: Record<string, string> = {
+        subagent_completed: 'subagent',
+        mcp_server_connection: 'mcp',
+        permission_mode_changed: 'permission mode',
+        skill_activated: 'skill',
+        compaction: 'compaction',
+        at_mention: '@mention',
+        feedback_survey: 'survey',
+      };
+      const detail =
+        a.agent_type ?? a.status ?? a.mention_type ?? a.permission_mode ?? a.skill_name ?? '';
+      return {
+        kind: 'other',
+        primary: FRIENDLY[name] ?? name,
+        secondary: typeof detail === 'string' ? detail : '',
+      };
+    }
     default:
       return { kind: 'other', primary: node.node_kind, secondary: '' };
   }

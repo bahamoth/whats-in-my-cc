@@ -2,7 +2,7 @@
 // key — no graph node, no facet fold. The "a failed tool's error output must be
 // visible in Raw" contract lives in buildRawBlocksFromEvents below.
 
-import { asRecord } from '../facets/entityFacets';
+import { asRecord } from '../../../lib/asRecord';
 import type { RawBlock } from './RawTab';
 import type { ObservedEventDto } from '../../../api/types';
 import { parseLlmRequestSpan } from '../stream/llmRequestMetrics';

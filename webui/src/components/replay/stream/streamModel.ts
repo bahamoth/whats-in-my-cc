@@ -93,11 +93,20 @@ function userText(p: Record<string, unknown>): string {
 /** log_record event_names that represent genuine state changes and should
  *  appear as beats in the message view. All other log_record names are
  *  telemetry / facet observations and are dropped from the stream. */
+// log_record event_names that are standalone, unique session beats worth
+// showing in the message view. Excludes telemetry/duplicates: api_request,
+// tool_decision, tool_result (folded into their owner entity's detail);
+// user_prompt (duplicate of user_message); hook_execution_start/complete
+// (redundant with the transcript hook_event already shown, and very high
+// volume — would flood the stream).
 const STREAM_STATE_LOG = new Set([
   'compaction',
   'skill_activated',
   'permission_mode_changed',
   'mcp_server_connection',
+  'subagent_completed',
+  'at_mention',
+  'feedback_survey',
 ]);
 
 function classify(

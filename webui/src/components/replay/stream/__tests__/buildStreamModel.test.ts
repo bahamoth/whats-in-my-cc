@@ -122,6 +122,20 @@ describe('buildStreamModel — classify refinement (#7)', () => {
     expect(evIds).not.toContain('3'); // facet log dropped
   });
 
+  it('keeps standalone session-beat log_records (subagent_completed) but drops folded/duplicate ones', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'sub', kind: 'log_record', actor: 'system', payload: { event_name: 'subagent_completed', attributes: { agent_type: 'Explore' } } }),
+      ev({ event_id: 'api', kind: 'log_record', actor: 'system', payload: { event_name: 'api_request', attributes: {} } }),
+      ev({ event_id: 'hx', kind: 'log_record', actor: 'system', payload: { event_name: 'hook_execution_complete', attributes: {} } }),
+    ]);
+    const evIds = items
+      .filter((i) => i.type === 'activity-run')
+      .flatMap((a: any) => a.events.map((e: any) => e.event.event_id));
+    expect(evIds).toContain('sub');     // standalone unique beat → kept
+    expect(evIds).not.toContain('api'); // folded into assistant detail → dropped
+    expect(evIds).not.toContain('hx');  // redundant w/ transcript hook_event + high volume → dropped
+  });
+
   it('computes a tool_call activity event duration from its matched tool_result timestamp', () => {
     const items = buildStreamModel([
       ev({ event_id: 'c1', kind: 'tool_call', tool_use_id: 'u1', observed_at: '2026-05-28T00:00:00.000Z',
