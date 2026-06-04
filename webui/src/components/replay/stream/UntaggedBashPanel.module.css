@@ -1,7 +1,9 @@
-.wrap { position: fixed; right: 8px; bottom: 8px; z-index: 50; font-size: 11px; }
-.toggle { background: var(--witmcc-surface-2, #2a2f3a); color: var(--witmcc-text-dim, #9aa4b2); border: none; border-radius: 6px; padding: 2px 8px; cursor: pointer; opacity: 0.6; }
-.toggle:hover { opacity: 1; }
-.list { margin-top: 4px; max-height: 40vh; overflow: auto; background: var(--witmcc-surface-1, #1a1e26); border: 1px solid var(--witmcc-border, #333); border-radius: 6px; padding: 6px; width: min(560px, 80vw); }
+/* Lives in the stream footer bar (left side). Relative so the expandable list
+   can pop UP above the toggle (the footer sits at the bottom of the column). */
+.wrap { position: relative; font-size: 11px; }
+.toggle { background: transparent; color: var(--witmcc-fg-subtle, #6a7180); border: none; border-radius: 6px; padding: 4px 6px; cursor: pointer; opacity: 0.8; white-space: nowrap; }
+.toggle:hover { opacity: 1; color: var(--witmcc-fg, #e6e8ee); }
+.list { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 50; max-height: 40vh; overflow: auto; background: var(--witmcc-surface-1, #1a1e26); border: 1px solid var(--witmcc-border, #333); border-radius: 6px; padding: 6px; width: min(560px, 80vw); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35); }
 .row { display: grid; grid-template-columns: auto auto 1fr; gap: 6px; align-items: center; padding: 2px 0; }
 .token { color: var(--witmcc-text, #e6e6e6); } .count { color: var(--witmcc-text-dim, #9aa4b2); }
 .sample { color: var(--witmcc-text-dim, #9aa4b2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

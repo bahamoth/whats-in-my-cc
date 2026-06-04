@@ -56,4 +56,17 @@ describe('AutoscrollToggle', () => {
     );
     expect(screen.queryByTestId('autoscroll-new-count')).toBeNull();
   });
+
+  it('renders a leftSlot in the footer (e.g. the untagged-Bash control)', () => {
+    render(
+      <AutoscrollToggle
+        autoscroll={true}
+        newCount={0}
+        onEnable={() => {}}
+        onDisable={() => {}}
+        leftSlot={<span data-testid="left-slot-content">extra</span>}
+      />,
+    );
+    expect(screen.getByTestId('left-slot-content')).toBeInTheDocument();
+  });
 });
