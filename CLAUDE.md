@@ -10,36 +10,28 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
 - 외부 접근: Pull API / MCP Streamable HTTP — **read-only**
 - 기본 네트워크: `127.0.0.1` binding
 
+### 현시점 설계 결정 — view / graph 분리 (as of 2026-06-04, 폐기·대체 가능)
+
+위 "OTel-first 실행 그래프"는 graph가 **모든 뷰의 backing model이라는 뜻이 아니다.**
+메세지·디테일·raw **뷰**는 `ObservedEvent` + correlation 키로 직접 그리고, graph는
+**causal-edge inference + `/graph` Pull API/MCP 전용**이다. 사양서(00~04)는 옛
+graph-backed 모델을 서술하므로 그대로 따르지 말 것.
+
+> **현시점 결정**이며(이전 episode 분류·graph-backed 뷰가 폐기됐듯) 폐기·대체될 수 있다.
+> 상세·근거·glossary·영향 사양·재설계 시 갱신 지점: **`docs/implementation-notes.html#event-first-redesign`**.
+
 ## Status
 
-- 현재 단계: **MVP EXIT — 2026-05-27. slice-1~19 완료. M3·M5·M6·M7 모두 closed. AC-1~7 모두 green.**
-  - slice-1~10a: transcript / OTel / hook / ObservedEvent + telemetry facet · graph builder · WebUI replay · SSE · windowed events
-  - slice-11: VerificationRun ingest + graph edges + Pull API (M3 일부)
-  - slice-12: ~~Episode segmentation + Pull API~~ — **제거됨** (episode-phase-removal, 2026-05-31). message-view activity-run fold로 대체.
-  - slice-13: Causal-edge inference v1 — three rules (M3 CLOSED)
-  - slice-14: Insight L1 deterministic extractors + /v1/findings* (M5 일부)
-  - slice-15: Insight L2 infra — JudgeRuntime + BudgetGuard + CachedProvider + CLI
-  - slice-16: Insight L2 categories — risky_action + context_bloat + final_state_mismatch (M5 CLOSED)
-  - slice-17: MCP Streamable HTTP — POST+GET /mcp + 6 tools + 6 resources (M6 CLOSED)
-  - slice-18: Redaction gate v1 — rule_pack@v1 + engine + manifest + ingest wiring (AC-7 CLOSED)
-  - slice-19: Bearer token auth + retention sweep + audit table + /v1/audit + 410 Gone (M7 CLOSED, AC-6 CLOSED)
+- **단계: MVP EXIT (2026-05-27). slice-1~19 완료, M3·M5·M6·M7 closed, AC-1~7 green.** slice별 구현 상세·이력은 `docs/implementation-notes.html`(§33~36 + `#event-first-redesign` + `#episode-removal`)와 git history.
 - **남은 계획:** UX 재설계 epic (`2026-05-27-witmcc-ux-redesign-epic.md`) — 마일스톤 밖 별도 트랙.
-- **모든 마일스톤 closed:** ~~M3~~ ✓ · ~~M5~~ ✓ · ~~M6~~ ✓ · ~~M7~~ ✓
-- 구현 상세: `docs/implementation-notes.html` §33(slice-18) · §34(slice-19) · §35(MVP Exit Summary) · §36(UX S1 payload enrichment).
-- **운영 주의 (UX S1 — payload enrichment):** `tool_call` payload에 `tool_name`, `assistant_message` payload에 `model` 추가. schema migration 없음 (JSON BLOB). 기존 dev DB 이벤트는 새 필드 없음 — `witmcc init-db` + 재ingest 필요.
-- **운영 주의 (slice-19):** Bearer token auth 추가. **Default는 `--auth off` (DEV-S19-08)** — 단일 사용자 dev에서 브라우저로 그대로 접속 가능. token 인증을 켜려면 `witmcc serve --auth on`. Token 위치는 macOS `~/Library/Application Support/witmcc/token`, Linux `~/.config/witmcc/token` (mode 0600). `--auth on`일 때 모든 `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요. `witmcc serve --retention-profile default`로 retention sweep 활성화. 신규 migration 0012 + 0013; `witmcc init-db` 필요.
-- **운영 주의 (slice-14):** `finding` 테이블 추가 (migration 0008). 기존 dev DB는
-  `witmcc init-db`로 재생성 후 재ingest 필요.
-- **운영 주의 (slice-13):** `graph_edge` 테이블에 `inference_rule_id`, `confidence` 컬럼 추가 (migration 0007). 기존 dev DB는 `witmcc init-db`로 재생성 후 재ingest 필요.
-- **운영 주의 (episode-phase-removal, 2026-05-31):** Episode/phase 분류 + `missing_verification` extractor + `episode` 테이블 + `/episodes` endpoint 제거됨. migration `0017`이 `DROP TABLE episode` (직전 최신은 0016) — 기존 dev DB는 `witmcc init-db` 필요. message-view activity-run fold + telemetry fold/facets는 유지. 상세는 `docs/implementation-notes.html#episode-removal`.
-- **운영 주의 (slice-11):** `verification_run` 테이블 추가 (migration 0005). 기존 dev DB는
-  `witmcc init-db`로 재생성 후 재ingest 필요. `witmcc ingest --all` 시 세션당 VR 자동 추출.
-- **운영 주의 (slice-10a):** 기존 dev DB (`.witmcc.sqlite*`)는 폐기 후
-  `witmcc init-db`로 재생성 필요. sqlx migration hash 변경됨.
+- **인증 default = `--auth off`** (단일 사용자 dev, DEV-S19-08) — 브라우저로 그대로 접속. 켜려면 `witmcc serve --auth on`: 모든 `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요. Token 위치 macOS `~/Library/Application Support/witmcc/token` · Linux `~/.config/witmcc/token` (0600). retention sweep는 `witmcc serve --retention-profile default`.
+- **dev DB 재생성 규칙:** migration 변경(현재 최신 `0017`) 시 `witmcc init-db` + 재ingest 필요. payload 필드(`tool_call.tool_name`, `assistant_message.model` 등)도 JSON BLOB이라 schema migration 없이 추가되므로 기존 이벤트엔 없음 — 재ingest해야 채워진다.
 
 ## Document Map
 
 작업 시작 전 관련 사양서를 먼저 읽는다. 모두 자기완결 HTML(외부 JS/CSS 없음).
+
+> **⚠ event-first 뷰 재설계(2026-06-04, PR #33) 반영 주의:** 아래 01/02/03/04 문서는 메세지/디테일/raw 뷰가 **graph node/facet 기반**이라고 서술하지만, 실제 구현은 **`ObservedEvent` + correlation 키 기반**으로 바뀌었다. 각 문서에 해당 지점 callout이 있으며, 정식 기록은 `docs/implementation-notes.html#event-first-redesign`. 뷰/window/events-API/facet 관련 작업 전 반드시 이 섹션을 먼저 읽을 것.
 
 | 작업 영역 | 먼저 읽을 문서 |
 |----------|--------------|

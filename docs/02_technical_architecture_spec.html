@@ -101,6 +101,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 }</code></pre>
 </section>
 <section id="serving"><h2><span class="num">08</span>Serving Architecture</h2>
+<div class="callout"><strong>⚠ 2026-06-04 변경 (PR #33):</strong> Local UI의 메세지·디테일·raw 뷰는 <strong>Graph Store(GraphNode/facet-fold)를 읽지 않는다.</strong> Normalized Event Store(<code>ObservedEvent</code>) + Raw Evidence Store를 correlation 키(<code>tool_use_id</code>/<code>request_id</code>)로 직접 읽는다. Stage 4 Merge의 graph node·facet-fold(Stage 3의 telemetry facet과 다름)는 Stage 5 Edge Build(causal inference)와 <code>/graph</code> Pull API/MCP 전용이다. 상세: <a href="implementation-notes.html#event-first-redesign"><code>implementation-notes.html#event-first-redesign</code></a>.</div>
 <div class="grid three"><div class="card"><h4>Local UI</h4><p>Human-first exploration. Uses the same internal read service as API.</p></div><div class="card"><h4>Pull API</h4><p>HTTP GET endpoints for sessions, graph, findings, lineage, context, export manifest.</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p>Single local MCP endpoint exposes resources and read-only tools for MCP clients.</p></div></div>
 <div class="callout danger"><strong>Boundary:</strong> serving layer never applies improvements. No CLAUDE.md update, no hook install, no skill generation, no memory write.</div>
 </section>
