@@ -64,14 +64,12 @@ export function ConversationStream({
     // heights map to the wrong items → rows overlap. Stable ids remap correctly.
     getItemKey: (index) => items[index]?.id ?? index,
     overscan: 8,
-    // Keep `anchorTo:'end'` for PREPEND stability only: when older pages are
-    // prepended, the virtualizer captures the visible keyed item and re-anchors
-    // scroll so it stays in place as above-viewport rows re-measure.
-    // Implicit auto-follow (`followOnAppend`) is OFF — the explicit
-    // useAutoscroll controller owns following the live tip, so the two no longer
-    // compete (that competition caused the live-append jitter / jump-to-tip).
-    anchorTo: 'end',
-    followOnAppend: false,
+    // NOTE: react-virtual's `anchorTo:'end'` is intentionally NOT used. It fails
+    // to hold position when a prepend lands at scrollTop≈0 (the common case
+    // during a fast upward scroll) — the viewport jumps to the new top, so the
+    // reader cannot keep paging older history without a scroll-down-then-up
+    // dance. Prepend anchoring is done manually below (scrollHeight-delta), the
+    // standard chat-log technique; live-tip following is owned by useAutoscroll.
     scrollMargin,
   });
 
@@ -113,6 +111,10 @@ export function ConversationStream({
   // after a prepend), so a load can never re-trigger itself into a cascade.
   const hasInteractedRef = useRef(false);
   const prevScrollTopRef = useRef(0);
+  // scrollHeight captured the instant loadOlder is triggered, so the prepend
+  // layout effect below can shift scrollTop by exactly the height the older
+  // page added — keeping the reader's content fixed in place.
+  const prependAnchorRef = useRef<number | null>(null);
   const markUserScroll = () => {
     hasInteractedRef.current = true;
   };
@@ -138,9 +140,32 @@ export function ConversationStream({
         topThreshold,
       })
     ) {
+      // capture the pre-prepend height so the layout effect can hold position
+      prependAnchorRef.current = el.scrollHeight;
       onLoadOlder();
     }
   };
+
+  // Manual prepend anchoring (standard chat-log technique): when an older page
+  // is prepended (first item id changes, last stays), shift scrollTop down by
+  // exactly the height that was added above the viewport, so the reader's
+  // content stays put and they can keep scrolling up to page further — instead
+  // of the viewport snapping to the new top (react-virtual's anchorTo:'end'
+  // left scrollTop at 0 in that case).
+  const prevAnchorSigRef = useRef<{ first: string | null; last: string | null } | null>(null);
+  useLayoutEffect(() => {
+    const el = parentRef.current;
+    const prev = prevAnchorSigRef.current;
+    prevAnchorSigRef.current = { first: signature.first, last: signature.last };
+    if (!el || prev === null) return;
+    const isPrepend = signature.first !== prev.first && signature.last === prev.last;
+    if (isPrepend && prependAnchorRef.current !== null) {
+      const delta = el.scrollHeight - prependAnchorRef.current;
+      if (delta > 0) el.scrollTop += delta;
+    }
+    prependAnchorRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature.first, signature.last]);
 
   // Scroll the selected item into view when selection changes from an external
   // source (e.g. subgraph click). Keyed on selectedEventId only so it does not

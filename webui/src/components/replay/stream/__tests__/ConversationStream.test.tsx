@@ -94,12 +94,14 @@ describe('ConversationStream', () => {
     expect(opts.getItemKey(2)).toBe('e2');
   });
 
-  // Contract lock: react-virtual keeps `anchorTo:'end'` for PREPEND stability
-  // only — its implicit auto-follow (`followOnAppend`) is OFF, because the
-  // explicit useAutoscroll controller now owns following the live tip (it
-  // replaced followOnAppend + the 2s bottom-pin that competed and caused the
-  // live-append jitter / jump-to-tip). Real scroll behaviour: browser smoke.
-  it('keeps anchorTo:end for prepend stability but disables implicit followOnAppend', () => {
+  // Contract lock: the stream does NOT delegate scroll anchoring to
+  // react-virtual. `anchorTo:'end'` left scrollTop at 0 when a prepend landed at
+  // the top (the reader then could not page further — a scroll-down-then-up
+  // dance). Prepend anchoring is manual (scrollHeight-delta) and live-tip
+  // following is the explicit useAutoscroll controller, so neither
+  // `anchorTo:'end'` nor `followOnAppend` is used. Real scroll behaviour:
+  // browser smoke.
+  it('does not delegate scroll anchoring/following to react-virtual', () => {
     hoisted.captured.opts = null;
     render(
       <ConversationStream
@@ -111,8 +113,8 @@ describe('ConversationStream', () => {
     );
     const opts = hoisted.captured.opts;
     expect(opts).not.toBeNull();
-    expect(opts.anchorTo).toBe('end');
-    expect(opts.followOnAppend).toBe(false);
+    expect(opts.anchorTo).not.toBe('end');
+    expect(opts.followOnAppend).toBeFalsy();
   });
 
   // The autoscroll state pill is always present (its label reflects ON/OFF).
