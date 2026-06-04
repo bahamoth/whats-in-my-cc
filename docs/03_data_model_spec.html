@@ -102,6 +102,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 }</code></pre>
 </section>
 <section id="graph"><h2><span class="num">05</span>GraphNode and GraphEdge</h2>
+<div class="callout"><strong>⚠ 2026-06-04 설계 변경 (PR #33):</strong> 메세지·디테일·raw <strong>뷰는 더 이상 GraphNode/facet을 데이터원으로 쓰지 않는다.</strong> 뷰는 <code>ObservedEvent</code> + <code>raw_event</code> + correlation 키(<code>tool_use_id</code>/<code>request_id</code>)로 직접 그린다. GraphNode/GraphEdge와 facet-fold(아래 telemetry facet)는 <strong>causal-edge inference + 공개 <code>/graph</code> Pull API/MCP 전용</strong>으로 남는다. 상세·용어·근거: <a href="implementation-notes.html#event-first-redesign"><code>implementation-notes.html#event-first-redesign</code></a>.</div>
 <div class="grid"><div class="card"><h4>GraphNode</h4><pre><code>{
   "node_id": "node_01J...",
   "schema_version": "graph_node.v1",

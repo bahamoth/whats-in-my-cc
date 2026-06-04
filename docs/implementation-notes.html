@@ -3402,6 +3402,54 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="event-first-redesign">
+    <h2>★ Event-first 뷰 재설계 — 데이터 모델·뷰 계층 변경 (2026-06-02~04, PR #33)</h2>
+    <p><strong>이 섹션은 메세지/디테일/raw 뷰가 "graph node + facet"에서 "ObservedEvent + correlation 키"로 바뀐
+      재설계의 정식 기록이자 cross-reference 대상이다.</strong> 사양서(<code>02_technical_architecture</code>·
+      <code>03_data_model</code>·<code>04_api_mcp</code>·<code>01_product_design</code>)는 옛 graph-backed 모델을 서술하므로,
+      그 문서들에는 이 섹션을 가리키는 callout이 삽입돼 있다.</p>
+
+    <h3>개념 전환 (한 줄)</h3>
+    <p>세 뷰(메세지·디테일·raw)는 <strong>graph를 거치지 않고</strong> <code>ObservedEvent</code> + <code>raw_event</code> +
+      correlation 키(<code>tool_use_id</code>=한 도구 호출, <code>request_id</code>=한 LLM 턴, <code>event_uuid/parent_uuid</code>=스레드)로
+      직접 그린다. <strong>graph(node·edge·facet-fold)는 이제 causal-edge inference + 공개 <code>/graph</code> Pull API/MCP 전용</strong>이고
+      뷰 경로에선 완전히 빠졌다.</p>
+
+    <h3>용어 (혼동 주의)</h3>
+    <ul>
+      <li><strong>event</strong> = <code>ObservedEvent</code>. 뷰가 다루는 유일한 단위. raw에서 정규화되고 raw 포인터를 보존.</li>
+      <li><strong>raw_event</strong> = 동결된 원본(transcript 줄/OTLP/hook). <code>/v1/events/:id/raw</code>.</li>
+      <li><strong>node / entity</strong> = backbone event가 승격된 <code>GraphNode</code> (event의 부분집합). <em>뷰에선 더 이상 안 씀.</em></li>
+      <li><strong>facet ①</strong> (ingest) = <code>observed.rs</code>의 <code>TelemetryFacet/LogFacet/MetricFacet</code> — 한 텔레메트리 관측의 정규화 단면(= 그 event payload의 모양). <strong>유지.</strong></li>
+      <li><strong>facet ③</strong> (graph fold 결과) = <code>build.rs</code>가 owner node의 <code>payload.facets</code>에 접어넣은 것. <strong>뷰에서 제거</strong>(graph/insight 경로에만 잔존). ①과 ③은 무관한데 한 단어를 공유 — webui에선 ③을 완전히 삭제했다.</li>
+      <li><strong>correlate</strong> = <code>tool_use_id</code>/<code>request_id</code>로 두 event를 잇기(node/facet 아님).</li>
+      <li><strong>beat</strong> = message stream에 독립 카드/활동으로 그려지는 event.</li>
+    </ul>
+
+    <h3>변경 5가지</h3>
+    <ol>
+      <li><strong>event-first 뷰</strong> — DetailPanel/InsightTab이 <code>node: GraphNodeDto</code> → <code>event: ObservedEventDto</code>; <code>SessionDetailPage</code>가 graph 쿼리/매핑 제거; findings는 <code>event_id</code>로 매칭. 상세: <a href="#views-without-graph">#views-without-graph</a>.</li>
+      <li><strong>conversation-anchored 초기 window</strong> — no-cursor window가 raw가 아니라 <em>렌더되는</em> event 기준 <code>[limit번째 최신 렌더 event, 최신 렌더 event]</code> 범위. 텔레메트리 버스트로 끝나는 세션의 빈-화면 해결. 상세: <a href="#conversation-anchored-window">#conversation-anchored-window</a>.</li>
+      <li><strong>facet ③ 완전 제거</strong> — 죽은 <code>buildEntityFacets/FacetEntry/FacetGroup</code> 삭제, 범용 <code>asRecord</code>를 <code>lib/asRecord</code>로 분리, <code>toolMetrics/eventMetrics</code>가 텔레메트리 event의 <code>attributes</code>를 직접 파싱(가짜 facet wrapper 제거).</li>
+      <li><strong>beat 확장</strong> — <code>nodeLabel</code>이 <code>log_record</code>를 event_name별 친숙한 라벨+핵심 attribute로 렌더(맨 "log_record" 탈피). <code>STREAM_STATE_LOG</code>에 독립 고유 beat <code>subagent_completed·at_mention·feedback_survey</code> 추가. 제외: fold/중복(<code>api_request·tool_decision·tool_result·user_prompt</code>)과 고볼륨 중복 <code>hook_execution_*</code>(transcript <code>hook_event</code>가 이미 표시 + 수천 건이라 홍수).</li>
+      <li><strong>on-demand correlated telemetry</strong> — <code>GET /v1/sessions/:id/events?tool_use_id=…</code> / <code>?request_id=…</code>가 payload에 그 키를 가진 텔레메트리를 반환(log는 <code>json_extract(payload,'$.attributes.*')</code>, llm_request span은 <code>raw_span.attributes[]</code>를 <code>json_each</code>로 매칭). 디테일 패널이 entity 선택 시 이를 조회해 window와 병합 → 상관 텔레메트리가 window 밖이어도 메트릭이 채워진다. (cursor 없이 targeted, prev/next_cursor=null.)</li>
+    </ol>
+
+    <h3>왜 (소비처 전수 추적)</h3>
+    <p>graph node/facet은 이전 telemetry-fold redesign의 산출물인데 그 주 명분(episode 분류·시각 subgraph)이 모두 제거되어 뷰엔 관성으로만 남아 있었다. 세 뷰는 graph가 본질적으로 불필요: 메세지 뷰는 이미 event 기반, 디테일 메트릭은 correlation 키로 직접 묶임(tool_result/tool_decision log 100%가 <code>attributes.tool_use_id</code> 보유, <code>api_request</code> log가 LLM 지표 전부 보유), findings <code>evidence_refs</code>는 이미 event_id. 핵심: correlation 키(<code>tool_use_id</code>/<code>request_id</code>)는 컬럼이 아니라 <strong>payload JSON</strong>에 있다.</p>
+
+    <h3>영향받은 사양서 (deviation)</h3>
+    <ul>
+      <li><code>03_data_model_spec</code> §05 GraphNode/GraphEdge, "telemetry facet" 원칙 — graph node/facet③은 더 이상 뷰의 데이터원이 아님. callout 삽입.</li>
+      <li><code>04_api_mcp_spec</code> events 윈도우/쿼리 — no-cursor가 conversation-anchored, <code>tool_use_id</code>/<code>request_id</code> 상관 조회 파라미터 추가. callout 삽입.</li>
+      <li><code>02_technical_architecture_spec</code> graph builder/facet — fold는 insight/API 전용. callout 삽입.</li>
+      <li><code>01_product_design_spec</code> detail/why-panel — node 선택이 아니라 event 선택. callout 삽입.</li>
+    </ul>
+
+    <h3>검증</h3>
+    <p>전체 <code>cargo test</code> green(<code>repo_window</code> 14: anchor·correlated·interleaved 포함), webui <code>vitest</code> 344, <code>tsc --noEmit</code> clean. 브라우저: <code>/graph</code> 미요청, 텔레메트리-꼬리 세션(8020·12126 event) 대화 렌더, tool_call 선택 시 <code>?tool_use_id=</code> 발사 후 실 메트릭(소요·결과·결정·크기) 표시.</p>
+  </section>
+
   <section id="views-without-graph">
     <h2>뷰를 그래프에서 분리 — event-first 메세지/디테일/raw 뷰 (2026-06-02)</h2>
     <p>브랜치: <code>refactor/views-without-graph</code> · 날짜: 2026-06-02.
