@@ -1,5 +1,6 @@
 // webui/src/components/replay/stream/ConversationStream.tsx
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { MessageCard } from './MessageCard';
 import { ActivityStack } from './ActivityStack';
@@ -35,6 +36,9 @@ interface ConversationStreamProps {
   /** Count of live arrivals received while detached (the page counts them since
    *  backfill is paused). Shown as the "N ↓" badge on the autoscroll toggle. */
   pendingNewCount?: number;
+  /** Extra content for the LEFT of the stream footer (e.g. the untagged-Bash
+   *  control), so footer affordances are consistent in one bar. */
+  footerExtra?: ReactNode;
 }
 
 /** True when the item is a message with the given eventId, or an activity-run
@@ -55,6 +59,7 @@ export function ConversationStream({
   canLoadOlder = false,
   onFollowingChange,
   pendingNewCount,
+  footerExtra,
 }: ConversationStreamProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
 
@@ -329,6 +334,7 @@ export function ConversationStream({
         newCount={pendingNewCount ?? auto.newCount}
         onEnable={auto.enable}
         onDisable={auto.disable}
+        leftSlot={footerExtra}
       />
     </>
   );

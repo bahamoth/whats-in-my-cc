@@ -3,6 +3,7 @@
 // Presentational only — all state/decisions live in useAutoscroll.
 //   ON  : "자동 스크롤" + switch on   (following the live tip; click to stop)
 //   OFF : "자동 스크롤" + switch off + "N ↓"  (detached; click to jump + follow)
+import type { ReactNode } from 'react';
 import styles from './AutoscrollToggle.module.css';
 
 interface AutoscrollToggleProps {
@@ -12,12 +13,16 @@ interface AutoscrollToggleProps {
   onEnable: () => void;
   /** ON → click: stop following. */
   onDisable: () => void;
+  /** Optional content shown on the LEFT of the footer bar (e.g. the
+   *  untagged-Bash control), so all stream-footer affordances live together. */
+  leftSlot?: ReactNode;
 }
 
-export function AutoscrollToggle({ autoscroll, newCount, onEnable, onDisable }: AutoscrollToggleProps) {
+export function AutoscrollToggle({ autoscroll, newCount, onEnable, onDisable, leftSlot }: AutoscrollToggleProps) {
   const showCount = !autoscroll && newCount > 0;
   return (
     <div className={styles.footer} role="status" aria-live="off">
+      <div className={styles.left}>{leftSlot}</div>
       <button
         type="button"
         className={styles.toggle}

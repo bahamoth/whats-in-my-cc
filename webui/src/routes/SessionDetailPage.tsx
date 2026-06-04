@@ -268,6 +268,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               canLoadOlder={window_.oldest !== null}
               onFollowingChange={handleFollowingChange}
               pendingNewCount={pendingNew}
+              footerExtra={<UntaggedBashPanel events={window_.events} />}
             />
           </div>
 
@@ -281,8 +282,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               rawBlocks={rawBlocks}
             />
           </div>
-
-          <UntaggedBashPanel events={window_.events} />
         </div>
       )}
 
