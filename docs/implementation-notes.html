@@ -3647,6 +3647,24 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="untagged-bash-loop">
+    <h2>untagged Bash 태깅 루프 — 프론트 SSOT 재사용 CLI (2026-06-04)</h2>
+    <p>
+      목적: LLM이 매 턴 "아직 분류 안 된 Bash 명령"을 읽고 <code>BASH_FIRST_TOKEN_TAGS</code>(eventTags.ts)에 규칙을 추가해
+      자율적으로 태깅을 개선하는 루프를 닫는다. 규칙 개선은 <strong>소스 편집</strong>이라 read-only API 원칙과 충돌 없음.
+    </p>
+    <ul>
+      <li><strong>백엔드 추가 없음 · SSOT 유지</strong>: untagged 분류는 프론트 <code>eventTags.ts</code>의 <code>collectUntagged</code> 한 곳에만 존재.
+        이를 Rust로 포팅(중복·드리프트 위험)하는 대신 <strong>그대로 재사용하는 Node CLI</strong>로 노출.</li>
+      <li><code>webui/scripts/untagged-bash.ts</code> (<code>npm run untagged -- &lt;sessionId&gt;</code> 또는 <code>--all</code>):
+        read-only Pull API(<code>/v1/sessions/:id/events</code>)에서 세션 전체 이벤트를 <code>before=</code> 페이지네이션으로 모아
+        <code>collectUntagged</code> 적용 → <code>[{token,count,sample,eventId,sessionId,hint}]</code> JSON(count desc) 출력.
+        UI 패널과 동일 분류지만 로드된 window가 아니라 세션 전체 커버.</li>
+      <li>UI 패널(푸터)도 같은 <code>collectUntagged</code>를 쓰고, 각 행에 "카드로 ↗"(첫 발생 event 선택→scroll-into-view) + 불투명 고대비 팝업으로 가독성 개선.</li>
+      <li>외부/원격 LLM이 HTTP·MCP로만 접근해야 하면 그때 분류를 백엔드 SSOT로 이전(Pull API+MCP 노출)하는 리팩토링을 고려 — 현재는 로컬 에이전트 루프 가정.</li>
+    </ul>
+  </section>
+
   <footer class="footer">
     <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · facet correlation + 지표 중심 insight · telemetry fold Slice 1–2 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
