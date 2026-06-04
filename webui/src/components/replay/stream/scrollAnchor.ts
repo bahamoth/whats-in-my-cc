@@ -10,17 +10,18 @@
 //   1. hasInteracted — the reader has scrolled/clicked at least once, so the
 //      initial pin-to-bottom and any pre-interaction programmatic scroll never
 //      trigger a load.
-//   2. scrolling UP — excludes the native anchorTo:'end' re-anchor (which
-//      scrolls DOWN to keep the viewport stable on a prepend) and the initial
-//      bottom-pin, so a load never re-triggers itself into a cascade.
+//   2. scrolling UP — excludes the manual prepend re-anchor (ConversationStream
+//      shifts scrollTop DOWN by the prepended height to hold the viewport) and
+//      the initial bottom-pin, so a load never re-triggers itself into a cascade.
 //   3. near the top — only the zone where older history belongs.
 // A time-based "recent gesture" window was tried first but missed loads when
 // smooth-scroll momentum outlived the window; the interaction latch + direction
 // is robust to scroll cadence.
 //
-// Live-append follow + prepend-anchor are handled natively by
-// @tanstack/react-virtual's `anchorTo: 'end'` + `followOnAppend`, so those
-// concerns no longer live here.
+// Live-append follow is owned by the `useAutoscroll` hook; prepend anchoring is
+// done manually in ConversationStream (scrollHeight-delta) — react-virtual's
+// `anchorTo:'end'`/`followOnAppend` were removed (they jumped to the new top
+// when a prepend landed at scrollTop≈0). Neither concern lives here.
 
 /** Distance (px) from the top within which scrolling pages in older history.
  *  Sized to ~a viewport (not a thin strip) so the next older page is PREFETCHED
@@ -44,7 +45,7 @@ export function isNearTop(m: ScrollMetrics, threshold = LOAD_OLDER_TOP_PX): bool
 
 /** Whether a scroll event should trigger loading the next older window: the
  *  reader must have interacted (so mount/programmatic scrolls are excluded), be
- *  scrolling UP (so the anchorTo:'end' re-anchor and the initial bottom-pin —
+ *  scrolling UP (so the manual prepend re-anchor and the initial bottom-pin —
  *  both downward — are excluded, preventing a self-retriggering cascade), land
  *  near the top, and older pages must still remain. */
 export function shouldLoadOlder(args: {

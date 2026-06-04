@@ -3,9 +3,10 @@
  * ConversationStream renders a StreamItem[] (MessageCard for messages, one
  * ActivityStack per activity-run), oldest→newest (newest at the DOM bottom),
  * forwards clicks, reflects selection, and preserves virtualization /
- * scroll-into-view. Live-append follow + prepend-anchor are delegated to
- * react-virtual's anchorTo:'end' (verified by the options-contract test below
- * + browser smoke, since they need real layout). Spec §3.
+ * scroll-into-view. Live-append follow is owned by useAutoscroll; prepend
+ * anchoring is manual (scrollHeight-delta) — react-virtual's anchorTo:'end' was
+ * removed (verified by the options-contract test below + browser smoke, since
+ * real anchoring needs layout). Spec §3.
  */
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';

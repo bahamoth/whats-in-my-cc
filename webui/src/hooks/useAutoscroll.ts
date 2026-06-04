@@ -93,6 +93,11 @@ export function useAutoscroll(
   // Scroll to the bottom and remember where we landed, so the scroll event this
   // produces (and any from content re-measuring) is not mistaken for a gesture.
   const pinToBottom = useCallback(() => {
+    // Following-gated on the REF (not state): the consumer's measurement-settle
+    // pin reads the autoscroll STATE, which can lag a synchronous detach by one
+    // render. Refusing to pin while the fresh ref is false prevents yanking a
+    // just-scrolled-up reader back to the tip. enable() flips the ref true first.
+    if (!autoscrollRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
     lastPinnedTopRef.current = scrollToBottom(el);
@@ -148,8 +153,8 @@ export function useAutoscroll(
   }, [scrollRef, threshold, setFollow]);
 
   const enable = useCallback(() => {
+    setFollow(true); // flip the ref true BEFORE pinning — pinToBottom is ref-gated
     pinToBottom();
-    setFollow(true);
     setNewCount(0);
   }, [pinToBottom, setFollow]);
 
