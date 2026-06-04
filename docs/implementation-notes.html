@@ -3491,7 +3491,7 @@ vitest: 69 passed
     <p>
       "facet"은 코드베이스에서 ① ingest 수준 텔레메트리 facet(<code>observed.rs</code>의 <code>TelemetryFacet</code>/<code>LogFacet</code>/<code>MetricFacet</code> — 한 관측의 구조화 단면)과
       ③ graph fold 결과(<code>build.rs</code> + webui <code>FacetEntry</code> — owner entity에 fold된 것) 두 의미로 겹쳐 있다. 이번 변경으로 뷰는 ③을 더 이상 쓰지 않는다(③은 graph/insight 경로에만 잔존).
-      트레이드오프: 디테일 메트릭이 로드된 window에서 파생되므로, 상관 텔레메트리가 window 밖이거나 세션에 OTel이 없으면 "지표 미수집"으로 표시된다(옛 빈-facet 동작과 parity). window 밖 상관 텔레메트리 타깃 조회는 후속 과제.
+      트레이드오프: 디테일 메트릭이 로드된 window에서 파생되므로, 상관 텔레메트리가 window 밖이거나 세션에 OTel이 없으면 "지표 미수집"으로 표시된다(옛 빈-facet 동작과 parity). window 밖 상관 텔레메트리 타깃 조회는 후속 과제. <strong>(2026-06-04 갱신: tool_call <code>success</code>에 한해 <a href="#tool-metrics-transcript-fallback">transcript tool_result 폴백</a>으로 해소 — 검증실패/OTel-없는 도구 호출도 결과 표시.)</strong>
     </p>
   </section>
 
@@ -3692,6 +3692,51 @@ vitest: 69 passed
           <li>잔존 <code>/Users/…</code> 절대경로 토큰은 heredoc 본문 파편(멀티라인 노이즈) — 추적 비권장으로 합의.</li>
         </ul>
       </li>
+    </ul>
+  </section>
+
+  <section id="tool-metrics-transcript-fallback">
+    <h2>tool_call "지표 미수집" 오탐 — transcript tool_result 폴백 (2026-06-04)</h2>
+    <p>
+      증상: <code>kind=tool_call</code>을 디테일에서 선택하면 Raw 탭엔 결과(에러 메시지 포함)가
+      멀쩡히 보이는데 Insight 패널은 <strong>"지표 미수집"</strong>으로 빔. 실데이터로 추적한 근본 원인:
+      <code>buildToolMetricsFromEvents</code>(<code>detail/eventMetrics.ts</code>)가 도구 메트릭을
+      <strong>OTel <code>log_record</code></strong>(<code>event_name = tool_result | tool_decision</code>)에서만
+      <code>tool_use_id</code>로 찾는다. 그런데 <strong>입력 검증 단계에서 거부된 도구 호출</strong>
+      (예: Edit "File has not been read yet", Read "exceeds maximum allowed tokens")은 OTel
+      tool_result/tool_decision 로그를 <strong>남기지 않는다</strong> — 결과는 오직 transcript의
+      <code>tool_result</code> event(<code>kind='tool_result'</code>, <code>payload.tool_result.is_error</code>)에만 존재.
+      이 event를 메트릭 빌더가 보지 않아, 하필 가장 보여줄 가치가 큰 <em>실패</em>가 "미수집"으로 가려졌다.
+      (관측 표본: 한 세션 172개 tool_call 중 OTel 미수집+transcript 결과만 있는 게 2건, 둘 다 검증실패 Edit.
+      OTel 자체가 없는 transcript-only 세션에선 <strong>모든</strong> tool_call이 영향.)
+    </p>
+    <h3>고침 — 두 계층</h3>
+    <ul>
+      <li><strong>프론트 폴백</strong>(<code>buildToolMetricsFromEvents</code>): OTel attrs를 모은 뒤
+        같은 <code>tool_use_id</code>의 transcript <code>tool_result</code> event를 찾아
+        <code>success = (is_error === true ? 'false' : 'true')</code>를 <strong>맨 뒤에</strong> fold한다.
+        <code>buildToolMetrics</code>는 first-non-null-wins이므로 <strong>OTel가 있으면 OTel가 이긴다</strong>(권위 보존).
+        소요시간·결정출처·입출력 크기·순서는 OTel 전용이라 정직하게 <code>null</code>(=UI "—") 유지 —
+        검증실패 호출엔 그 텔레메트리가 실제로 없다.</li>
+      <li><strong>백엔드 correlated 확장</strong>(<code>events_correlated</code>, <code>repo_observed.rs</code>):
+        <code>?tool_use_id=</code> on-demand 조회가 <code>payload.attributes.tool_use_id</code>(OTel log)만
+        매칭해 transcript 결과의 <code>payload.tool_result.tool_use_id</code>를 놓쳤다(그래서 0건 반환).
+        OR 절을 추가해 transcript <code>tool_result</code>도 돌려준다 — 이로써 tool_result가 로드된 window
+        밖에 있어도(on-demand 조회의 본래 목적) 폴백이 작동. tool_call payload엔 <code>tool_use_id</code>가
+        column에만 있고 <code>$.tool_result.*</code>엔 없어 tool_call 자신은 중복 매칭되지 않는다.</li>
+    </ul>
+    <p>
+      이는 <a href="#event-first-redesign">event-first 재설계</a>의 트레이드오프 노트("상관 텔레메트리가 window 밖이거나
+      세션에 OTel이 없으면 지표 미수집 … window 밖 타깃 조회는 후속 과제")를 tool_call <code>success</code>에 대해 해소한 것.
+    </p>
+    <h3>검증 (TDD red-first)</h3>
+    <ul>
+      <li><code>detail/__tests__/eventMetrics.test.ts</code> +4: transcript is_error→<code>success=false</code>(타 필드 null),
+        is_error 없음→<code>success=true</code>, OTel 우선(transcript override 안 함), 다른 tool_use_id 무시.</li>
+      <li><code>tests/repo_window.rs</code> +1: <code>events_correlated</code>가 transcript tool_result를
+        <code>payload.tool_result.tool_use_id</code>로 매칭(타 id 제외). real-data-verified payload 모양 사용.</li>
+      <li>브라우저 smoke(OTel-없는 transcript-only 세션 <code>063201c8…</code>): 검증실패 Read 선택→<strong>"결과: error"</strong>,
+        성공 Bash 선택→<strong>"결과: ok"</strong>, 둘 다 "지표 미수집" 사라짐, OTel 전용 필드는 "—".</li>
     </ul>
   </section>
 

@@ -376,6 +376,8 @@ pub async fn list_session_window(
 /// correlated telemetry falls outside the loaded message window. The
 /// correlation keys live in payload JSON (NOT columns):
 ///   - tool_result / tool_decision / api_request log_record → `attributes.{tool_use_id|request_id}`
+///   - transcript tool_result event → `tool_result.tool_use_id` (a tool call rejected
+///     at validation has NO OTel log, only this — its only `success` signal)
 ///   - llm_request otel_span → `request_id` inside the OTLP `raw_span.attributes[]` array
 pub async fn events_correlated(
     pool: &SqlitePool,
@@ -386,6 +388,7 @@ pub async fn events_correlated(
     let rows = sqlx::query(
         "SELECT * FROM observed_event WHERE session_id = ? AND ( \
            (? IS NOT NULL AND json_extract(payload, '$.attributes.tool_use_id') = ?) \
+           OR (? IS NOT NULL AND json_extract(payload, '$.tool_result.tool_use_id') = ?) \
            OR (? IS NOT NULL AND json_extract(payload, '$.attributes.request_id') = ?) \
            OR (? IS NOT NULL AND kind = 'otel_span' AND EXISTS ( \
                  SELECT 1 FROM json_each(json_extract(payload, '$.raw_span.attributes')) je \
@@ -394,6 +397,8 @@ pub async fn events_correlated(
          ) ORDER BY observed_at ASC, event_id ASC LIMIT 500",
     )
     .bind(session_id)
+    .bind(tool_use_id)
+    .bind(tool_use_id)
     .bind(tool_use_id)
     .bind(tool_use_id)
     .bind(request_id)
