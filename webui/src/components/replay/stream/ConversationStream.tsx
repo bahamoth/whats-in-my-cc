@@ -28,6 +28,13 @@ interface ConversationStreamProps {
   /** Whether older history remains to be paged in (drives the near-top trigger
    *  and stops it once the session start is reached). */
   canLoadOlder?: boolean;
+  /** Reports the follow state (true = following the live tip, false = reading
+   *  history) so the page can pause SSE backfill while detached and catch up on
+   *  resume. Fired on every change. */
+  onFollowingChange?: (following: boolean) => void;
+  /** Count of live arrivals received while detached (the page counts them since
+   *  backfill is paused). Shown as the "N ↓" badge on the autoscroll toggle. */
+  pendingNewCount?: number;
 }
 
 /** True when the item is a message with the given eventId, or an activity-run
@@ -46,6 +53,8 @@ export function ConversationStream({
   findingEventIds,
   onLoadOlder,
   canLoadOlder = false,
+  onFollowingChange,
+  pendingNewCount,
 }: ConversationStreamProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
 
@@ -100,6 +109,15 @@ export function ConversationStream({
   useLayoutEffect(() => {
     if (auto.autoscroll) auto.pinToBottom();
   }, [totalSize, auto.autoscroll, auto.pinToBottom]);
+
+  // Report follow-state changes up to the page (pause/resume SSE backfill).
+  // Kept in a ref so a changing callback identity does not re-fire the effect;
+  // it must fire only when the follow state actually flips.
+  const onFollowingChangeRef = useRef(onFollowingChange);
+  onFollowingChangeRef.current = onFollowingChange;
+  useEffect(() => {
+    onFollowingChangeRef.current?.(auto.autoscroll);
+  }, [auto.autoscroll]);
 
   // Paging OLDER history is driven by the stream's own scroll (the previous
   // IntersectionObserver sentinel lived in a non-scrolling container and
@@ -305,7 +323,10 @@ export function ConversationStream({
       </div>
       <AutoscrollToggle
         autoscroll={auto.autoscroll}
-        newCount={auto.newCount}
+        // While detached, SSE backfill is paused (no appends), so the page-level
+        // pending count is the source of truth for the "N ↓" badge; fall back to
+        // the controller's own count when the page does not supply one.
+        newCount={pendingNewCount ?? auto.newCount}
         onEnable={auto.enable}
         onDisable={auto.disable}
       />

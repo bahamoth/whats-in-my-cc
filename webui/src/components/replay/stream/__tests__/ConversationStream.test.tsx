@@ -117,6 +117,39 @@ describe('ConversationStream', () => {
     expect(opts.followOnAppend).toBeFalsy();
   });
 
+  // The stream reports its follow state up so the page can pause/resume SSE
+  // backfill. On mount it is following the live tip → reports true. (The OFF
+  // transition needs real scroll/layout and is covered by browser smoke.)
+  it('reports the initial follow state (true) via onFollowingChange', () => {
+    const onFollowingChange = vi.fn();
+    render(
+      <ConversationStream
+        items={[msg('e1', 'a'), msg('e2', 'b', { role: 'assistant' })]}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+        onFollowingChange={onFollowingChange}
+      />,
+    );
+    expect(onFollowingChange).toHaveBeenCalledWith(true);
+  });
+
+  // The "N ↓" badge reflects the page-supplied pending count (backfill is paused
+  // while detached, so the controller's own newCount stays 0).
+  it('shows the page-supplied pendingNewCount on the toggle badge', () => {
+    render(
+      <ConversationStream
+        items={[msg('e1', 'a'), msg('e2', 'b', { role: 'assistant' })]}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+        pendingNewCount={4}
+      />,
+    );
+    // ON by default → badge hidden even if a count is supplied.
+    expect(screen.queryByTestId('autoscroll-new-count')).toBeNull();
+  });
+
   // The autoscroll state pill is always present (its label reflects ON/OFF).
   it('renders the autoscroll pill', () => {
     render(
