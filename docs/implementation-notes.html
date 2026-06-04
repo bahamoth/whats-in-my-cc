@@ -3557,6 +3557,46 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="scroll-scrollbar-fix">
+    <h2>세션 상세 스크롤/스크롤바 일관성 + 페이지 auto-fit (2026-06-04)</h2>
+    <p>
+      사용자 관측: 해상도/DPI가 다른(특히 짧은) 뷰포트에서 (a) 메시지 뷰에 <strong>스크롤바가 2개</strong> 생기고,
+      (b) 스크롤바가 <strong>상시 표시(고정)</strong>되며 자동 숨김이 안 되고, (c) <strong>전체 페이지에 스크롤바</strong>가 생겨
+      내용 하단이 잘림. 회귀(원래는 스크롤 시에만 등장하던 overlay 스크롤바였음).
+    </p>
+    <h3>근본 원인 (브라우저 계측으로 확정)</h3>
+    <ul>
+      <li><strong>이중 스크롤바</strong>: 그리드 슬롯 <code>.stream{overflow:auto}</code>(pre-virtualizer 설계 잔재, 커밋 4268d40)와
+        virtualizer 자체 스크롤 엘리먼트 <code>.scroll{overflow-y:auto; min-height:320px}</code>가 중첩. 짧은 뷰포트에서 KPI strip이
+        높이를 잠식해 슬롯이 320px 미만이 되면 <code>min-height:320px</code>가 안쪽을 슬롯보다 크게 만들어 <em>바깥도</em> 스크롤 컨테이너가 됨.
+        innerH=423에서 측정: <code>.stream</code> client=84 / scroll=320, <code>.scroll</code> client=320 / scroll=3248 — 둘 다 canScroll.
+        게다가 virtualizer가 scrollElement(<code>.scroll</code>)의 clientHeight를 320으로 측정(실제 가시 84) → <code>isAtEnd</code>/load-older 계산 왜곡.</li>
+      <li><strong>고정 스크롤바</strong>: 커스텀 스크롤바 CSS가 전무 → OS 기본. 마우스 연결/"항상 표시" 설정에서 Chrome은 overlay가 아닌
+        클래식 15px 바를 그림(<code>offsetWidth-clientWidth=15</code> 측정).</li>
+      <li><strong>페이지 스크롤바</strong>: <code>.grid{height:calc(100vh - 56px)}</code> 매직넘버가 <code>.page</code> padding(48px)+실제 TopBar 높이를
+        반영 못 해 <code>.page</code>가 뷰포트를 초과 → AppShell <code>.main{overflow:auto}</code>가 스크롤. 짧은 뷰포트에선 초과분이 fold 아래로 밀려 잘림.</li>
+    </ul>
+    <h3>고침</h3>
+    <ul>
+      <li><strong>단일 스크롤러</strong>: <code>.stream</code> → <code>overflow:hidden</code>(슬롯은 스크롤 안 함, pill용 position:relative 유지),
+        <code>.scroll</code> <code>min-height:320px</code> → <code>min-height:0</code>(슬롯을 절대 초과 안 함). 안쪽 virtualizer가 유일 스크롤러.</li>
+      <li><strong>일관 자동숨김 스크롤바(전역)</strong>: <code>styles/global.css</code>에 단일 정의 — 메시지/디테일/raw/리스트/페이지 모든 스크롤 영역 공통.
+        표준 속성 사용(Chrome 121+/FF): <code>* { scrollbar-width: thin }</code>(비상속이라 <code>*</code>), <code>html { scrollbar-color: transparent transparent }</code>(상속 → 평소 숨김),
+        <code>*:hover { scrollbar-color: var(--witmcc-border-strong) transparent }</code>(hover/focus 시 등장). WebKit/Safari 폴백으로 <code>::-webkit-scrollbar*</code>도 유지.
+        주의: <code>scrollbar-color</code>가 설정되면 Chrome은 표준 경로를 쓰고 <code>::-webkit-scrollbar{width}</code>를 무시하므로, 폭은 <code>scrollbar-width:thin</code>으로만 제어됨.
+        <code>.scroll</code>엔 <code>scrollbar-gutter:stable</code>만 남겨 라이브 스트림이 자라 스크롤 가능해질 때 thumb 등장이 콘텐츠를 reflow하지 않게 함.</li>
+      <li><strong>페이지 auto-fit</strong>: <code>.page{height:100%; display:flex; flex-direction:column; min-height:0}</code> + <code>.grid{flex:1 1 auto; min-height:0}</code>
+        (매직넘버 calc 제거). 그리드가 TopBar 아래 남은 높이를 정확히 차지 → <code>.main</code> 스크롤 없음. 좁은 화면(<code>max-width:860px</code>)에선
+        <code>.page</code>를 block/height:auto로 되돌려 한 컬럼으로 쌓이고 페이지가 자연 스크롤.</li>
+    </ul>
+    <h3>검증</h3>
+    <p>
+      회귀 가드 <code>components/replay/stream/__tests__/scrollContainerContract.test.ts</code>(CSS 텍스트 계약 — jsdom은 레이아웃 없음, 픽셀은 브라우저 smoke로): 단일 스크롤러·min-height:0·전역 auto-hide·DRY·flex auto-fit 8건.
+      vitest 352 green. 브라우저 smoke(innerH=479): <code>.main</code> canScroll=false(페이지 바 없음), <code>.stream</code> canScroll=false(이중 해소),
+      <code>.scroll</code> 단일 thin 11px, <code>stream</code>·<code>detail</code> 스크롤바 폼 동일(thin/투명→hover border-strong).
+    </p>
+  </section>
+
   <footer class="footer">
     <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · facet correlation + 지표 중심 insight · telemetry fold Slice 1–2 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>

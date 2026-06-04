@@ -1,4 +1,15 @@
-.page { padding: 24px; }
+/* Fill the AppShell `.main` exactly and lay the page out as a flex column
+   (TopBar, then the grid). The grid takes the leftover height via flex:1 — NOT
+   a magic `calc(100vh - Npx)` that ignored this padding + the real TopBar
+   height and overshot the viewport, growing a page-level scrollbar and pushing
+   the bottom of the stream/detail below the fold on short viewports. */
+.page {
+  padding: 24px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
 .grid {
   display: grid;
@@ -11,12 +22,19 @@
     "stream detail";
   gap: 16px;
   margin-top: 8px;
-  height: calc(100vh - 56px);
+  /* fill the column below the TopBar; min-height:0 lets the inner rows own
+     their overflow instead of forcing the page taller than the viewport. */
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .kpi { grid-area: kpi; }
-/* min-height:0 is required for grid children to allow their own overflow.
-   position:relative anchors the loadOlder status pill (below). */
-.stream { grid-area: stream; min-height: 0; overflow: auto; position: relative; }
+/* min-height:0 lets this grid child shrink below its content so its CHILD (the
+   virtualizer `.scroll`) owns the overflow. The slot itself must NOT scroll —
+   `overflow:auto` here made it a SECOND scroll container the moment `.scroll`
+   was forced past the slot height (two stacked scrollbars). `hidden` keeps the
+   single scroller inside `.scroll`. position:relative anchors the loadOlder
+   status pill (below). */
+.stream { grid-area: stream; min-height: 0; overflow: hidden; position: relative; }
 .detail { grid-area: detail; min-height: 0; overflow: auto; }
 .placeholder { color: var(--witmcc-fg-subtle, #6a7180); }
 
@@ -56,6 +74,14 @@
 }
 
 @media (max-width: 860px) {
+  /* Narrow: stack the panels and let the page (AppShell `.main`) scroll as one
+     column. Reverting `.page` to normal block flow makes the grid's flex:1
+     inert, so the stacked content grows naturally instead of being squeezed
+     into one viewport. */
+  .page {
+    display: block;
+    height: auto;
+  }
   .grid {
     grid-template-columns: 1fr;
     grid-template-rows: none;

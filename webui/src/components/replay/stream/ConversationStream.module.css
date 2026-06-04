@@ -1,3 +1,21 @@
 /* webui/src/components/replay/stream/ConversationStream.module.css */
-.scroll { height: 100%; min-height: 320px; overflow-y: auto; padding-right: 4px; }
+
+/* The single scroll container for the conversation column. It is the
+   virtualizer's scrollElement, so it MUST fill its grid slot exactly and never
+   be forced taller than it — a fixed min-height here used to spill past a short
+   slot and turn the parent `.stream` into a SECOND scroll container (two
+   stacked scrollbars + a virtualizer measuring the wrong viewport height).
+   `min-height: 0` keeps it bounded by the slot.
+
+   The scrollbar's VISUAL form (thin, auto-hiding) is defined once, globally, in
+   styles/global.css so every scroll region (this stream, the detail/raw panel,
+   the page) looks the same. Here we only reserve a stable gutter so the thumb
+   appearing as the live stream grows never reflows the messages. */
+.scroll {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
 .empty { color: var(--witmcc-fg-subtle, #6a7180); padding: 12px; }
