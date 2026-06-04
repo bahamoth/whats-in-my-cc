@@ -113,10 +113,17 @@ export function tagForEvent(e: ObservedEventDto): TagResult {
   return { tag: null, disposition: 'control' };
 }
 
-export interface UntaggedRow { token: string; count: number; sample: string; hint: string; }
+export interface UntaggedRow {
+  token: string;
+  count: number;
+  sample: string;
+  hint: string;
+  /** event_id of the FIRST occurrence — the panel links to this card. */
+  eventId: string;
+}
 
 export function collectUntagged(events: ObservedEventDto[]): UntaggedRow[] {
-  const byToken = new Map<string, { count: number; sample: string }>();
+  const byToken = new Map<string, { count: number; sample: string; eventId: string }>();
   for (const e of events) {
     if (tagForEvent(e).disposition !== 'unmatched') continue;
     const input = ((e.payload as Record<string, unknown>)?.input ?? {}) as Record<string, unknown>;
@@ -127,9 +134,15 @@ export function collectUntagged(events: ObservedEventDto[]): UntaggedRow[] {
     const tok = firstToken(isCmd ? (firstMeaningfulSegment(segmentCommand(cmd)) ?? cmd) : cmd);
     const cur = byToken.get(tok);
     if (cur) cur.count++;
-    else byToken.set(tok, { count: 1, sample: cmd.slice(0, 80) });
+    else byToken.set(tok, { count: 1, sample: cmd.slice(0, 80), eventId: e.event_id });
   }
   return [...byToken.entries()]
-    .map(([token, v]) => ({ token, count: v.count, sample: v.sample, hint: `add '${token}': '<tag>' to BASH_FIRST_TOKEN_TAGS in eventTags.ts` }))
+    .map(([token, v]) => ({
+      token,
+      count: v.count,
+      sample: v.sample,
+      eventId: v.eventId,
+      hint: `add '${token}': '<tag>' to BASH_FIRST_TOKEN_TAGS in eventTags.ts`,
+    }))
     .sort((a, b) => b.count - a.count);
 }
