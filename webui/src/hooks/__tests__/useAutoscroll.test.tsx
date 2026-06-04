@@ -152,6 +152,24 @@ describe('useAutoscroll', () => {
     expect(result.current.newCount).toBe(0);
   });
 
+  it('pinToBottom() is a no-op while detached (guards against stale-state pin)', () => {
+    // The consumer's measurement-settle effect gates on the autoscroll STATE,
+    // which can lag a synchronous detach by one render. pinToBottom must itself
+    // refuse to pin when the (fresh) follow ref is false, or it would yank a
+    // just-scrolled-up reader back to the tip — the exact jitter this PR kills.
+    const el = makeEl(1000, 100, 1000);
+    const { result } = setup(sig('a', 'c', 3), el);
+    act(() => {
+      el.scrollTop = 200; // user scrolls up → detaches (ref false synchronously)
+      result.current.onScroll();
+    });
+    expect(result.current.autoscroll).toBe(false);
+    act(() => {
+      result.current.pinToBottom(); // measurement-settle pin while detached
+    });
+    expect(el.scrollTop).toBe(200); // viewport held, NOT yanked to 1000
+  });
+
   it('disable() stops following without moving the viewport', () => {
     const el = makeEl(1000, 100, 1000);
     const { result } = setup(sig('a', 'c', 3), el);

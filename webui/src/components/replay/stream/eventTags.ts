@@ -126,6 +126,9 @@ export const CONTROL_TOKENS = new Set([
 // `then cat …`). Unlike CONTROL_TOKENS they are stripped as a prefix so the real
 // command after them is classified.
 const PREFIX_KEYWORDS = new Set(['do', 'then', 'else', 'elif']);
+// `timeout` flags whose VALUE is a separate token (so we skip the next token too
+// when unwrapping). `--signal=KILL` / `--kill-after=10` (with `=`) need no skip.
+const TIMEOUT_ARG_FLAGS = new Set(['-s', '--signal', '-k', '--kill-after']);
 // A leading `NAME=value` shell variable assignment (env prefix). Stripped like a
 // prefix so `VAR=x grep …` classifies as the grep, not as an unknown `var=x`.
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
@@ -176,14 +179,22 @@ function commandOf(segment: string): string {
       continue;
     }
     // `timeout [flags] DURATION cmd…` — a wrapper that runs an inner command.
-    // Strip `timeout`, any leading `-flags`, and one duration token (180 / 5s)
-    // so the INNER command (npm/cargo/…) is what classifies.
+    // Strip `timeout`, any leading `-flags` (skipping the VALUE token of the
+    // arg-consuming `-s SIGNAL` / `-k DURATION`), and one duration token
+    // (180 / 5s) so the INNER command (npm/cargo/…) is what classifies.
     if (firstToken(s) === 'timeout') {
       let rest = s.slice('timeout'.length).trim();
       while (rest.startsWith('-')) {
+        const flag = firstToken(rest);
         const sp = rest.indexOf(' ');
         if (sp < 0) { rest = ''; break; }
         rest = rest.slice(sp + 1).trim();
+        // -s/--signal and -k/--kill-after (space-separated form) take a value.
+        if (TIMEOUT_ARG_FLAGS.has(flag)) {
+          const sp2 = rest.indexOf(' ');
+          if (sp2 < 0) { rest = ''; break; }
+          rest = rest.slice(sp2 + 1).trim();
+        }
       }
       if (/^\d+(\.\d+)?[smhd]?$/.test(firstToken(rest))) {
         const sp = rest.indexOf(' ');

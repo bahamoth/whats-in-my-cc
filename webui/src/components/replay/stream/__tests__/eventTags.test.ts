@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tagForEvent, collectUntagged, meaningfulCommand, tagVerb } from '../eventTags';
+import { tagForEvent, collectUntagged, meaningfulCommand, tagVerb, BASH_FIRST_TOKEN_TAGS, TOOL_SUBCOMMAND_TAGS } from '../eventTags';
 import type { ObservedEventDto } from '../../../../api/types';
 
 const bash = (command: string): ObservedEventDto =>
@@ -84,6 +84,10 @@ describe('tagForEvent — verb.object taxonomy', () => {
     expect(tagForEvent(bash('timeout 180 npm run dev')).tag).toBe('run.code');
     expect(tagForEvent(bash('timeout 60 cargo test')).tag).toBe('test.code');
     expect(tagForEvent(bash('timeout 5s git status')).tag).toBe('read.vcs');
+    // arg-consuming flags (-s SIGNAL, -k DURATION) must skip their value token too
+    expect(tagForEvent(bash('timeout -s SIGTERM 5 cargo test')).tag).toBe('test.code');
+    expect(tagForEvent(bash('timeout -k 10 30 npm test')).tag).toBe('test.code');
+    expect(tagForEvent(bash('timeout --signal=KILL 10 npm test')).tag).toBe('test.code');
   });
   it('tags bare relative-path execution (no ./ prefix) as run.code', () => {
     expect(tagForEvent(bash('target/debug/witmcc --help')).tag).toBe('run.code');
@@ -131,6 +135,15 @@ describe('tagForEvent — Read by extension', () => {
     expect(tagForEvent(read('README.md')).tag).toBe('read.docs');
     expect(tagForEvent(read('Cargo.toml')).tag).toBe('read.config');
     expect(tagForEvent(read('data.json')).tag).toBe('read.data');
+  });
+});
+
+describe('classifier invariants', () => {
+  it('no map key contains a slash (isPathExec runs FIRST and would shadow it)', () => {
+    // isPathExec tags any unquoted slash-containing first token as run.code BEFORE
+    // the tsc/multiplexer/BASH lookups — so a slash in a key would be unreachable.
+    for (const k of Object.keys(BASH_FIRST_TOKEN_TAGS)) expect(k).not.toContain('/');
+    for (const k of Object.keys(TOOL_SUBCOMMAND_TAGS)) expect(k).not.toContain('/');
   });
 });
 
