@@ -4,22 +4,22 @@
 
 use assert_cmd::Command;
 
-fn witmcc() -> Command {
-    Command::cargo_bin("witmcc").unwrap()
+fn wimcc() -> Command {
+    Command::cargo_bin("wimcc").unwrap()
 }
 
 #[test]
 fn print_token_prints_to_stderr_and_exits_zero() {
     let dir = tempfile::tempdir().unwrap();
-    let out = witmcc()
-        .env("WITMCC_CONFIG_DIR", dir.path())
+    let out = wimcc()
+        .env("WIMCC_CONFIG_DIR", dir.path())
         .args(["serve", "--print-token"])
         .assert()
         .success();
     let stderr = String::from_utf8_lossy(&out.get_output().stderr);
     assert!(
-        stderr.contains("witmcc_"),
-        "stderr should contain the token (witmcc_ prefix), got: {stderr}"
+        stderr.contains("wimcc_"),
+        "stderr should contain the token (wimcc_ prefix), got: {stderr}"
     );
 }
 
@@ -28,8 +28,8 @@ fn rotate_token_changes_token_file() {
     let dir = tempfile::tempdir().unwrap();
 
     // First, generate initial token via --print-token
-    witmcc()
-        .env("WITMCC_CONFIG_DIR", dir.path())
+    wimcc()
+        .env("WIMCC_CONFIG_DIR", dir.path())
         .args(["serve", "--print-token"])
         .assert()
         .success();
@@ -37,8 +37,8 @@ fn rotate_token_changes_token_file() {
     let t1 = std::fs::read_to_string(dir.path().join("token")).unwrap();
 
     // Rotate
-    witmcc()
-        .env("WITMCC_CONFIG_DIR", dir.path())
+    wimcc()
+        .env("WIMCC_CONFIG_DIR", dir.path())
         .args(["serve", "--rotate-token"])
         .assert()
         .success();
@@ -46,28 +46,28 @@ fn rotate_token_changes_token_file() {
     let t2 = std::fs::read_to_string(dir.path().join("token")).unwrap();
     assert_ne!(t1, t2, "--rotate-token should change the token file");
     assert!(
-        t2.starts_with("witmcc_"),
-        "new token should still have witmcc_ prefix, got: {t2}"
+        t2.starts_with("wimcc_"),
+        "new token should still have wimcc_ prefix, got: {t2}"
     );
 }
 
 #[test]
 fn rotate_token_prints_new_token_to_stderr() {
     let dir = tempfile::tempdir().unwrap();
-    witmcc()
-        .env("WITMCC_CONFIG_DIR", dir.path())
+    wimcc()
+        .env("WIMCC_CONFIG_DIR", dir.path())
         .args(["serve", "--print-token"])
         .assert()
         .success();
 
-    let out = witmcc()
-        .env("WITMCC_CONFIG_DIR", dir.path())
+    let out = wimcc()
+        .env("WIMCC_CONFIG_DIR", dir.path())
         .args(["serve", "--rotate-token"])
         .assert()
         .success();
     let stderr = String::from_utf8_lossy(&out.get_output().stderr);
     assert!(
-        stderr.contains("witmcc_"),
+        stderr.contains("wimcc_"),
         "rotate should print new token to stderr, got: {stderr}"
     );
 }

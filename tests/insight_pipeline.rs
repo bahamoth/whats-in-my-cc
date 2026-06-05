@@ -8,8 +8,8 @@
 //! integrity (which is covered by ingest_store.rs).
 
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::{migrate, repo_diff_hunk};
-use witmcc::db::repo_diff_hunk::NewDiffHunk;
+use wimcc::db::{migrate, repo_diff_hunk};
+use wimcc::db::repo_diff_hunk::NewDiffHunk;
 
 async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -133,7 +133,7 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
 #[tokio::test]
 async fn pipeline_writes_finding_rows() {
     let pool = seeded_pool_with_failing_session().await;
-    let findings = witmcc::insight::pipeline::run_extractors(&pool, "sess_t")
+    let findings = wimcc::insight::pipeline::run_extractors(&pool, "sess_t")
         .await
         .unwrap();
     assert!(
@@ -146,11 +146,11 @@ async fn pipeline_writes_finding_rows() {
 async fn pipeline_dedupes_via_finding_id() {
     let pool = seeded_pool_with_failing_session().await;
 
-    witmcc::insight::pipeline::run_extractors(&pool, "sess_t").await.unwrap();
+    wimcc::insight::pipeline::run_extractors(&pool, "sess_t").await.unwrap();
     let count_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM finding")
         .fetch_one(&pool).await.unwrap();
 
-    witmcc::insight::pipeline::run_extractors(&pool, "sess_t").await.unwrap();
+    wimcc::insight::pipeline::run_extractors(&pool, "sess_t").await.unwrap();
     let count_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM finding")
         .fetch_one(&pool).await.unwrap();
 
@@ -163,7 +163,7 @@ async fn pipeline_dedupes_via_finding_id() {
 #[tokio::test]
 async fn pipeline_drops_below_confidence_floor() {
     let pool = seeded_pool_with_failing_session().await;
-    witmcc::insight::pipeline::run_extractors(&pool, "sess_t").await.unwrap();
+    wimcc::insight::pipeline::run_extractors(&pool, "sess_t").await.unwrap();
     let below: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM finding WHERE confidence < 0.5")
             .fetch_one(&pool).await.unwrap();

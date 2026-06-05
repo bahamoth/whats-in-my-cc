@@ -3,9 +3,9 @@
 use sqlx::sqlite::SqlitePoolOptions;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use witmcc::db::migrate;
-use witmcc::insight::judge::cache::CachedProvider;
-use witmcc::insight::judge::{JudgeError, JudgePrompt, JudgeProvider, JudgeVerdict};
+use wimcc::db::migrate;
+use wimcc::insight::judge::cache::CachedProvider;
+use wimcc::insight::judge::{JudgeError, JudgePrompt, JudgeProvider, JudgeVerdict};
 
 /// Scripted judge: returns verdicts from a pre-built list; panics when list is exhausted.
 struct ScriptedJudge {

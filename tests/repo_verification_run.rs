@@ -2,7 +2,7 @@
 //! (Phase 2 regression lock.)
 
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::{migrate, repo_verification_run};
+use wimcc::db::{migrate, repo_verification_run};
 
 #[tokio::test]
 async fn roundtrip_with_null_optionals() {

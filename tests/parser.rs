@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use std::path::Path;
-use witmcc::ingest::transcript::{stream_file, ParsedRecord};
+use wimcc::ingest::transcript::{stream_file, ParsedRecord};
 
 #[tokio::test]
 async fn parses_five_record_types_in_minimal_fixture() {

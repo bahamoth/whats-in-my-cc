@@ -18,8 +18,8 @@
 mod common;
 
 use serde_json::{json, Value};
-use witmcc::graph::build::compute;
-use witmcc::model::observed::{EventKind, ObservedEvent};
+use wimcc::graph::build::compute;
+use wimcc::model::observed::{EventKind, ObservedEvent};
 
 fn user_ev(event_id: &str) -> ObservedEvent {
     let mut e = common::base_event(EventKind::UserMessage, event_id);

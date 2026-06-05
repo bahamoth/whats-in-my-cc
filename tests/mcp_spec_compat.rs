@@ -9,7 +9,7 @@
 use axum_test::TestServer;
 use serde_json::{json, Value};
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::migrate;
+use wimcc::db::migrate;
 
 async fn make_server() -> TestServer {
     let pool = SqlitePoolOptions::new()
@@ -18,8 +18,8 @@ async fn make_server() -> TestServer {
         .await
         .unwrap();
     migrate(&pool).await.unwrap();
-    let state = witmcc::api::AppState::new_for_tests(pool);
-    TestServer::new(witmcc::api::router(state)).unwrap()
+    let state = wimcc::api::AppState::new_for_tests(pool);
+    TestServer::new(wimcc::api::router(state)).unwrap()
 }
 
 async fn init_session(server: &TestServer) -> String {

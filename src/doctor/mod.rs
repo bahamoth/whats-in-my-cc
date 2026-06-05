@@ -1,4 +1,4 @@
-//! `witmcc doctor` — read-only diagnostic for collector wiring.
+//! `wimcc doctor` — read-only diagnostic for collector wiring.
 //!
 //! Slice-6 v0.1: process env + single user settings.json.
 //! Slice-7 v0.2: full Claude Code settings hierarchy walk (managed > local >
@@ -47,7 +47,7 @@ struct EnvCheck {
 struct HookSettingsCheck {
     settings_path: String,
     settings_present: bool,
-    wired_for_witmcc: bool,
+    wired_for_wimcc: bool,
     wired_hook_events: Vec<String>,
     note: Option<String>,
 }
@@ -161,7 +161,7 @@ fn read_hook_settings() -> HookSettingsCheck {
             return HookSettingsCheck {
                 settings_path: "~/.claude/settings.json".into(),
                 settings_present: false,
-                wired_for_witmcc: false,
+                wired_for_wimcc: false,
                 wired_hook_events: vec![],
                 note: Some("HOME not set".into()),
             }
@@ -173,7 +173,7 @@ fn read_hook_settings() -> HookSettingsCheck {
             return HookSettingsCheck {
                 settings_path: path.display().to_string(),
                 settings_present: false,
-                wired_for_witmcc: false,
+                wired_for_wimcc: false,
                 wired_hook_events: vec![],
                 note: Some("file missing — hook collector will receive nothing".into()),
             }
@@ -185,7 +185,7 @@ fn read_hook_settings() -> HookSettingsCheck {
             return HookSettingsCheck {
                 settings_path: path.display().to_string(),
                 settings_present: true,
-                wired_for_witmcc: false,
+                wired_for_wimcc: false,
                 wired_hook_events: vec![],
                 note: Some(format!("settings.json parse error: {e}")),
             }
@@ -218,24 +218,24 @@ fn read_hook_settings() -> HookSettingsCheck {
     HookSettingsCheck {
         settings_path: path.display().to_string(),
         settings_present: true,
-        wired_for_witmcc: wired,
+        wired_for_wimcc: wired,
         wired_hook_events: wired_events,
         note: if wired {
             None
         } else {
-            Some("no hook entries forward to witmcc — see README".into())
+            Some("no hook entries forward to wimcc — see README".into())
         },
     }
 }
 
-/// Attempt to load the witmcc token from `WITMCC_CONFIG_DIR/token` or
-/// `~/.config/witmcc/token`. Returns `None` if the file doesn't exist or can't
+/// Attempt to load the wimcc token from `WIMCC_CONFIG_DIR/token` or
+/// `~/.config/wimcc/token`. Returns `None` if the file doesn't exist or can't
 /// be read (doctor stays useful even without credentials).
-fn witmcc_token_from_env_or_file() -> Option<String> {
-    let dir = if let Ok(v) = std::env::var("WITMCC_CONFIG_DIR") {
+fn wimcc_token_from_env_or_file() -> Option<String> {
+    let dir = if let Ok(v) = std::env::var("WIMCC_CONFIG_DIR") {
         std::path::PathBuf::from(v)
     } else {
-        dirs::config_dir()?.join("witmcc")
+        dirs::config_dir()?.join("wimcc")
     };
     let path = dir.join("token");
     std::fs::read_to_string(path)
@@ -264,7 +264,7 @@ async fn probe_server(server: &str) -> ServerProbe {
     // Slice-19: attempt with token from the token file (if available).
     // Fall back to unauthenticated so doctor remains useful even without the
     // token file (e.g., on a different machine than the server).
-    let token: Option<String> = witmcc_token_from_env_or_file();
+    let token: Option<String> = wimcc_token_from_env_or_file();
     let health_req = if let Some(ref t) = token {
         client
             .get(&health_url)
@@ -393,7 +393,7 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
     // The substring match on `hooks/v1/events` is a heuristic that produces
     // false negatives whenever the user runs a wrapper script, pipes through
     // jq, or targets a non-default endpoint. doctor cannot tell from settings
-    // alone whether a hook command will reach witmcc. Whether hook events
+    // alone whether a hook command will reach wimcc. Whether hook events
     // actually arrived is observable in /v1/health/sources (informational
     // table), which is the source of truth for "is data flowing".
     //
@@ -415,7 +415,7 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
 
     if !report.server.reachable {
         out.push(
-            "witmcc server unreachable. Start it with: `witmcc serve --auto-migrate`.".into(),
+            "wimcc server unreachable. Start it with: `wimcc serve --auto-migrate`.".into(),
         );
     } else {
         // Hook is user-configured and intentionally excluded from the
@@ -431,7 +431,7 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
             .collect();
         if !no_data.is_empty() {
             out.push(format!(
-                "No data yet from: {}. Run a `claude` session against witmcc to populate.",
+                "No data yet from: {}. Run a `claude` session against wimcc to populate.",
                 no_data.join(", ")
             ));
         }
@@ -462,7 +462,7 @@ fn compute_exit_code(report: &DoctorReport) -> i32 {
 }
 
 fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<()> {
-    writeln!(w, "witmcc doctor — read-only diagnostic\n")?;
+    writeln!(w, "wimcc doctor — read-only diagnostic\n")?;
     writeln!(w, "{}", dim("# Environment (Claude Code OTel)"))?;
     for e in &report.envs {
         let marker = match e.status {
@@ -493,13 +493,13 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
 
     writeln!(w, "{}", dim("# Hook settings (~/.claude/settings.json)"))?;
     let hs = &report.hook_settings;
-    let marker = if hs.wired_for_witmcc {
+    let marker = if hs.wired_for_wimcc {
         green("✓")
     } else {
         yellow("∅")
     };
     writeln!(w, "  {marker} {}", hs.settings_path)?;
-    if hs.wired_for_witmcc {
+    if hs.wired_for_wimcc {
         writeln!(
             w,
             "      wired hook events: {}",
@@ -599,27 +599,27 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
     }
     writeln!(w)?;
 
-    writeln!(w, "{}", dim("# Hook forwarding to witmcc"))?;
+    writeln!(w, "{}", dim("# Hook forwarding to wimcc"))?;
     let mut all_hooks = report.hook_entries.clone();
     all_hooks.extend(report.plugin_hooks.iter().cloned());
-    let witmcc_hooks: Vec<&HookEntry> =
-        all_hooks.iter().filter(|h| h.forwards_to_witmcc).collect();
-    if witmcc_hooks.is_empty() {
+    let wimcc_hooks: Vec<&HookEntry> =
+        all_hooks.iter().filter(|h| h.forwards_to_wimcc).collect();
+    if wimcc_hooks.is_empty() {
         writeln!(
             w,
             "  {} no hook entry forwards to /hooks/v1/events in any scope",
             yellow("∅"),
         )?;
     } else {
-        for h in &witmcc_hooks {
+        for h in &wimcc_hooks {
             writeln!(w, "  {} {:<14} → {} ({})", green("✓"), h.event, h.command, h.scope)?;
         }
     }
-    // surface non-witmcc hooks too if present
+    // surface non-wimcc hooks too if present
     let other_hooks: Vec<&HookEntry> =
-        all_hooks.iter().filter(|h| !h.forwards_to_witmcc).collect();
+        all_hooks.iter().filter(|h| !h.forwards_to_wimcc).collect();
     if !other_hooks.is_empty() {
-        writeln!(w, "  {}", dim("(other hooks observed; not relevant to witmcc):"))?;
+        writeln!(w, "  {}", dim("(other hooks observed; not relevant to wimcc):"))?;
         for h in other_hooks.iter().take(5) {
             writeln!(w, "    {:<14} {} ({})", h.event, h.command, h.scope)?;
         }
@@ -676,7 +676,7 @@ pub async fn run(opts: DoctorOpts) -> std::io::Result<i32> {
         .unwrap_or_else(|| PathBuf::from("."));
     let settings_scopes = settings::scopes(&project_start);
     let effective_env_map = settings::effective_env(&settings_scopes);
-    let plugins_root_override = std::env::var_os("WITMCC_DOCTOR_PLUGINS_ROOT").map(PathBuf::from);
+    let plugins_root_override = std::env::var_os("WIMCC_DOCTOR_PLUGINS_ROOT").map(PathBuf::from);
     let plugins_root = plugins_root_override
         .or_else(settings::default_plugins_root)
         .unwrap_or_else(|| PathBuf::from("/nonexistent"));

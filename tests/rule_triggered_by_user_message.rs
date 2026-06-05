@@ -3,8 +3,8 @@ mod common;
 use common::edge_inference::{
     synth_user_then_assistant_text_then_tool, synth_user_then_tool_no_assistant_text,
 };
-use witmcc::insight::edge_inference::rules::triggered_by_user_message_v1::TriggeredByUserMessageV1;
-use witmcc::insight::edge_inference::EdgeInferenceRule;
+use wimcc::insight::edge_inference::rules::triggered_by_user_message_v1::TriggeredByUserMessageV1;
+use wimcc::insight::edge_inference::EdgeInferenceRule;
 
 #[test]
 fn emits_edge_when_assistant_skipped_text() {

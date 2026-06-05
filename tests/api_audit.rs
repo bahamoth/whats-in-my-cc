@@ -6,15 +6,15 @@ use axum_test::TestServer;
 use serde_json::json;
 
 async fn build_auth_server_with_pool() -> (TestServer, sqlx::SqlitePool, String) {
-    let token = witmcc::security::token::generate_token();
+    let token = wimcc::security::token::generate_token();
 
-    let pool = witmcc::db::connect(":memory:").await.unwrap();
-    witmcc::db::migrate(&pool).await.unwrap();
+    let pool = wimcc::db::connect(":memory:").await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
 
-    let mut state = witmcc::api::AppState::new_for_tests(pool.clone());
+    let mut state = wimcc::api::AppState::new_for_tests(pool.clone());
     state.token = token.clone();
 
-    let app = witmcc::api::router(state);
+    let app = wimcc::api::router(state);
     let server = TestServer::new(app).unwrap();
     (server, pool, token)
 }

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum WitmccError {
+pub enum WimccError {
     #[error("io error at {path}: {source}")]
     Io {
         path: PathBuf,
@@ -33,4 +33,4 @@ pub enum WitmccError {
     Other(#[from] anyhow::Error),
 }
 
-pub type Result<T> = std::result::Result<T, WitmccError>;
+pub type Result<T> = std::result::Result<T, WimccError>;

@@ -1,7 +1,7 @@
 use chrono::Utc;
-use witmcc::db::{migrate, repo_observed, repo_raw, repo_runs};
-use witmcc::model::meta::{PARSER_VERSION_TRANSCRIPT, SCHEMA_VERSION};
-use witmcc::model::observed::{Actor, EventKind, ObservedEvent, TelemetryFacet};
+use wimcc::db::{migrate, repo_observed, repo_raw, repo_runs};
+use wimcc::model::meta::{PARSER_VERSION_TRANSCRIPT, SCHEMA_VERSION};
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent, TelemetryFacet};
 
 use sqlx::sqlite::SqlitePoolOptions;
 
@@ -102,7 +102,7 @@ async fn round_trip_preserves_telemetry_facet() {
             end_unix_nano: 1_734_567_890_123_000_000,
             attributes: serde_json::json!({"tool.name": "Bash"}),
             resource: serde_json::json!({"service.name": "claude-code"}),
-            scope_name: Some("witmcc.test".into()),
+            scope_name: Some("wimcc.test".into()),
             scope_version: Some("0.1.0".into()),
         }),
         payload: serde_json::json!({"raw_span": {"name": "tool.invoke"}}),
@@ -125,5 +125,5 @@ async fn round_trip_preserves_telemetry_facet() {
     let tel = got.telemetry.as_ref().expect("telemetry facet round-trips");
     assert_eq!(tel.span_name, "tool.invoke");
     assert_eq!(tel.span_kind.as_deref(), Some("client"));
-    assert_eq!(tel.scope_name.as_deref(), Some("witmcc.test"));
+    assert_eq!(tel.scope_name.as_deref(), Some("wimcc.test"));
 }

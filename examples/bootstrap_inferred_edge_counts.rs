@@ -10,11 +10,11 @@
 
 use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::BTreeMap;
-use witmcc::db::{migrate, repo_diff_hunk, repo_observed, repo_verification_run};
-use witmcc::graph::build::compute;
-use witmcc::ingest::store;
-use witmcc::insight::edge_inference::{all_rules, SessionGraphView};
-use witmcc::live::NoopSink;
+use wimcc::db::{migrate, repo_diff_hunk, repo_observed, repo_verification_run};
+use wimcc::graph::build::compute;
+use wimcc::ingest::store;
+use wimcc::insight::edge_inference::{all_rules, SessionGraphView};
+use wimcc::live::NoopSink;
 
 /// Map fixture file name to session_id prefix (first 8 chars).
 const FIXTURES: &[(&str, &str)] = &[

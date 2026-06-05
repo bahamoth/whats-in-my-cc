@@ -8,7 +8,7 @@
 // user expectation that F5 should feel continuous and reopening the app
 // should start fresh.
 
-const KEY_PREFIX = 'witmcc:cursor:';
+const KEY_PREFIX = 'wimcc:cursor:';
 
 export function readCursor(scope: string): string | null {
   return sessionStorage.getItem(KEY_PREFIX + scope);

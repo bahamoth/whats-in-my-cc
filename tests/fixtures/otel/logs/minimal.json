@@ -9,7 +9,7 @@
       },
       "scopeLogs": [
         {
-          "scope": {"name": "witmcc.smoke", "version": "0.1.0"},
+          "scope": {"name": "wimcc.smoke", "version": "0.1.0"},
           "logRecords": [
             {
               "timeUnixNano":         "1734567890000000000",

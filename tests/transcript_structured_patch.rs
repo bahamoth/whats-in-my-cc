@@ -15,7 +15,7 @@
 //! this tradeoff is recorded in DEV-S10A-07.
 
 use serde_json::Value;
-use witmcc::ingest::diff_hunk::{
+use wimcc::ingest::diff_hunk::{
     extract_diff_hunks, DiffHunkRecord, TranscriptHunk, TranscriptToolUseResult,
     PATCH_PREVIEW_MAX_BYTES,
 };
@@ -281,7 +281,7 @@ fn patch_preview_constant_matches_slice5() {
 /// the constant + helper migrate from `file_git` into `diff_hunk`.
 #[test]
 fn truncate_patch_preview_appends_marker_when_dropped() {
-    use witmcc::ingest::diff_hunk::truncate_patch_preview;
+    use wimcc::ingest::diff_hunk::truncate_patch_preview;
     let big = "a".repeat(PATCH_PREVIEW_MAX_BYTES + 100);
     let out = truncate_patch_preview(&big);
     assert!(out.len() < big.len() + 32);

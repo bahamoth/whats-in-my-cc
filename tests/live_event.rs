@@ -1,6 +1,6 @@
 use strum::IntoEnumIterator;
-use witmcc::live::LiveEvent;
-use witmcc::model::observed::EventKind;
+use wimcc::live::LiveEvent;
+use wimcc::model::observed::EventKind;
 
 #[test]
 fn liveevent_envelope_v1_roundtrip() {

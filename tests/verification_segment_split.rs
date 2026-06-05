@@ -17,14 +17,14 @@
 //! `src/ingest/verification_run.rs`.
 
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::{migrate, repo_observed};
-use witmcc::ingest::{store, verification_run::extract_verification_runs};
-use witmcc::live::NoopSink;
+use wimcc::db::{migrate, repo_observed};
+use wimcc::ingest::{store, verification_run::extract_verification_runs};
+use wimcc::live::NoopSink;
 
 const SESSION: &str = "npx0001-aaaa-bbbb-cccc-000000000001";
 const FIXTURE: &str = "tests/fixtures/transcripts/real/verification_npx_v01.jsonl";
 
-async fn load_runs() -> Vec<witmcc::ingest::verification_run::VerificationRunRecord> {
+async fn load_runs() -> Vec<wimcc::ingest::verification_run::VerificationRunRecord> {
     let pool = SqlitePoolOptions::new()
         .max_connections(2)
         .connect("sqlite::memory:")
@@ -41,9 +41,9 @@ async fn load_runs() -> Vec<witmcc::ingest::verification_run::VerificationRunRec
 }
 
 fn run_for_kind<'a>(
-    runs: &'a [witmcc::ingest::verification_run::VerificationRunRecord],
+    runs: &'a [wimcc::ingest::verification_run::VerificationRunRecord],
     contains: &str,
-) -> Option<&'a witmcc::ingest::verification_run::VerificationRunRecord> {
+) -> Option<&'a wimcc::ingest::verification_run::VerificationRunRecord> {
     runs.iter().find(|r| r.command.contains(contains))
 }
 

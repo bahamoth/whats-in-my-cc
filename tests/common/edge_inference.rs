@@ -2,10 +2,10 @@
 
 use chrono::{TimeZone, Utc};
 use serde_json::json;
-use witmcc::graph::build::compute;
-use witmcc::insight::edge_inference::SessionGraphView;
-use witmcc::model::graph::{GraphEdge, GraphNode};
-use witmcc::model::observed::{Actor, EventKind, ObservedEvent};
+use wimcc::graph::build::compute;
+use wimcc::insight::edge_inference::SessionGraphView;
+use wimcc::model::graph::{GraphEdge, GraphNode};
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 /// Build a base ObservedEvent with index-derived fields.
 pub fn ev(

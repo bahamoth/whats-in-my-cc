@@ -1,4 +1,4 @@
-use witmcc::insight::edge_inference::RULE_IDS;
+use wimcc::insight::edge_inference::RULE_IDS;
 
 #[test]
 fn rule_ids_are_canonical() {

@@ -10,12 +10,12 @@
 //! `tests/fixtures/judge/scenario_combined.json`.
 
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::migrate;
-use witmcc::db::repo_diff_hunk::NewDiffHunk;
-use witmcc::db::repo_verification_run::VerificationRunRow;
-use witmcc::insight::judge::cache::evidence_hash;
-use witmcc::insight::judge::runtime::JudgeRuntime;
-use witmcc::insight::pipeline::run_extractors_with_runtime;
+use wimcc::db::migrate;
+use wimcc::db::repo_diff_hunk::NewDiffHunk;
+use wimcc::db::repo_verification_run::VerificationRunRow;
+use wimcc::insight::judge::cache::evidence_hash;
+use wimcc::insight::judge::runtime::JudgeRuntime;
+use wimcc::insight::pipeline::run_extractors_with_runtime;
 
 const FIXTURE_JUDGE_PATH: &str = "tests/fixtures/judge/scenario_combined.json";
 
@@ -345,7 +345,7 @@ async fn seed_final_state_mismatch_positive(pool: &sqlx::SqlitePool, sess: &str)
         raw_event_id: "raw_001".into(),
         parser_version: "v1".into(),
     };
-    witmcc::db::repo_verification_run::insert(pool, &vr)
+    wimcc::db::repo_verification_run::insert(pool, &vr)
         .await
         .unwrap();
 }

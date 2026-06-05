@@ -6,9 +6,9 @@ use chrono::{DateTime, TimeZone, Utc};
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool;
 
-use witmcc::db::{migrate, repo_observed, repo_raw, repo_runs};
-use witmcc::model::cursor::Cursor;
-use witmcc::model::observed::{Actor, EventKind, ObservedEvent};
+use wimcc::db::{migrate, repo_observed, repo_raw, repo_runs};
+use wimcc::model::cursor::Cursor;
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 const SESS: &str = "sess-window";
 const SEED_N: usize = 1500;

@@ -1,6 +1,6 @@
 mod common;
-use witmcc::graph::build::compute;
-use witmcc::model::observed::{EventKind, ObservedEvent};
+use wimcc::graph::build::compute;
+use wimcc::model::observed::{EventKind, ObservedEvent};
 use serde_json::json;
 
 fn tool_call_ev(event_id: &str, tuid: &str) -> ObservedEvent {

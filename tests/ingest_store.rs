@@ -1,7 +1,7 @@
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Row as _Row;
-use witmcc::db::{migrate, repo_observed};
-use witmcc::ingest::store;
+use wimcc::db::{migrate, repo_observed};
+use wimcc::ingest::store;
 
 async fn make_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -17,8 +17,8 @@ async fn make_pool() -> sqlx::SqlitePool {
 async fn ingest_minimal_fixture_twice_is_idempotent() {
     let pool = make_pool().await;
     let path = std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl");
-    let stats1 = store::ingest_file(&pool, path, &witmcc::live::NoopSink).await.unwrap();
-    let stats2 = store::ingest_file(&pool, path, &witmcc::live::NoopSink).await.unwrap();
+    let stats1 = store::ingest_file(&pool, path, &wimcc::live::NoopSink).await.unwrap();
+    let stats2 = store::ingest_file(&pool, path, &wimcc::live::NoopSink).await.unwrap();
     assert!(stats1.observed_inserted > 0);
     assert_eq!(stats2.raw_inserted, 0, "second run inserts no new raw rows");
     let evs = repo_observed::list_session(&pool, "sess-A", 100)
@@ -39,7 +39,7 @@ async fn ingest_minimal_fixture_twice_is_idempotent() {
 async fn ingest_file_populates_graph_nodes() {
     let pool = make_pool().await;
     let path = std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl");
-    store::ingest_file(&pool, path, &witmcc::live::NoopSink).await.unwrap();
+    store::ingest_file(&pool, path, &wimcc::live::NoopSink).await.unwrap();
     let node_count: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM graph_node WHERE session_id = 'sess-A'")
             .fetch_one(&pool)
@@ -58,13 +58,13 @@ async fn ingest_file_populates_graph_nodes() {
 async fn ingest_file_graph_rebuild_is_idempotent() {
     let pool = make_pool().await;
     let path = std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl");
-    store::ingest_file(&pool, path, &witmcc::live::NoopSink).await.unwrap();
+    store::ingest_file(&pool, path, &wimcc::live::NoopSink).await.unwrap();
     let first: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM graph_node WHERE session_id = 'sess-A'")
             .fetch_one(&pool)
             .await
             .unwrap();
-    store::ingest_file(&pool, path, &witmcc::live::NoopSink).await.unwrap();
+    store::ingest_file(&pool, path, &wimcc::live::NoopSink).await.unwrap();
     let second: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM graph_node WHERE session_id = 'sess-A'")
             .fetch_one(&pool)

@@ -8,7 +8,7 @@ async fn migrate_creates_expected_tables() {
         .connect(url)
         .await
         .unwrap();
-    witmcc::db::migrate(&pool).await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
     for t in [
         "ingest_run",
         "raw_event",

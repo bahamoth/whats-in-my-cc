@@ -44,7 +44,7 @@
   flex-direction: column;
 }
 .detail { grid-area: detail; min-height: 0; overflow: auto; }
-.placeholder { color: var(--witmcc-fg-subtle, #6a7180); }
+.placeholder { color: var(--wimcc-fg-subtle, #6a7180); }
 
 /* loadOlder feedback — a transient pill that floats over the top of the stream
    so it does not shift the virtualized content or its scroll position. */
@@ -59,9 +59,9 @@
   gap: 8px;
   padding: 6px 14px;
   border-radius: 999px;
-  border: 1px solid var(--witmcc-border-strong, #2a3040);
-  background: var(--witmcc-surface-2, #161a23);
-  color: var(--witmcc-fg-muted, #aab0bd);
+  border: 1px solid var(--wimcc-border-strong, #2a3040);
+  background: var(--wimcc-surface-2, #161a23);
+  color: var(--wimcc-fg-muted, #aab0bd);
   font-size: 12px;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
   pointer-events: none;
@@ -69,12 +69,12 @@
 .spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid var(--witmcc-border-strong, #2a3040);
-  border-top-color: var(--witmcc-accent, #4f8cff);
+  border: 2px solid var(--wimcc-border-strong, #2a3040);
+  border-top-color: var(--wimcc-accent, #4f8cff);
   border-radius: 50%;
-  animation: witmcc-spin 0.7s linear infinite;
+  animation: wimcc-spin 0.7s linear infinite;
 }
-@keyframes witmcc-spin {
+@keyframes wimcc-spin {
   to { transform: rotate(360deg); }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -50,7 +50,7 @@ pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
-/// slice-6 — per-source freshness summary for `witmcc doctor`.
+/// slice-6 — per-source freshness summary for `wimcc doctor`.
 ///
 /// Groups `raw_event` by source_type, returns the fixed taxonomy with
 /// `null`/`0` rows for sources that have never ingested anything. The mapping
@@ -193,7 +193,7 @@ pub struct EventsQuery {
 }
 
 /// Slice-9 — cursor-paged event window. See
-/// `docs/superpowers/specs/2026-05-21-witmcc-slice9-windowed-buffer-design.md`
+/// `docs/superpowers/specs/2026-05-21-wimcc-slice9-windowed-buffer-design.md`
 /// §4 for the cursor format and `prev_cursor`/`next_cursor` semantics.
 pub async fn session_events(
     State(pool): State<SqlitePool>,

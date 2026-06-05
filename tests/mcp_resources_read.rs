@@ -3,9 +3,9 @@
 use axum_test::TestServer;
 use serde_json::{json, Value};
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::migrate;
-use witmcc::ingest::store;
-use witmcc::graph::build;
+use wimcc::db::migrate;
+use wimcc::ingest::store;
+use wimcc::graph::build;
 
 async fn make_server_with_session() -> TestServer {
     let pool = SqlitePoolOptions::new()
@@ -17,14 +17,14 @@ async fn make_server_with_session() -> TestServer {
     store::ingest_file(
         &pool,
         std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl"),
-        &witmcc::live::NoopSink,
+        &wimcc::live::NoopSink,
     )
     .await
     .unwrap();
     build::rebuild_session(&pool, "sess-A").await.unwrap();
 
-    let state = witmcc::api::AppState::new_for_tests(pool);
-    TestServer::new(witmcc::api::router(state)).unwrap()
+    let state = wimcc::api::AppState::new_for_tests(pool);
+    TestServer::new(wimcc::api::router(state)).unwrap()
 }
 
 async fn init_session(server: &TestServer) -> String {

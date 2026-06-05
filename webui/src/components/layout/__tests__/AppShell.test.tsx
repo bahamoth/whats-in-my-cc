@@ -61,7 +61,7 @@ describe('AppShell', () => {
     // We assert on the data attribute the implementation must set so the
     // CSS grid contract is testable independent of computed-style flakiness
     // in jsdom (jsdom does not implement layout).
-    const shell = container.querySelector('[data-witmcc-shell]') as HTMLElement | null;
+    const shell = container.querySelector('[data-wimcc-shell]') as HTMLElement | null;
     expect(shell).not.toBeNull();
     expect(shell!.dataset.layout).toBe('grid');
   });

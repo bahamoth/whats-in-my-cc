@@ -1,8 +1,8 @@
 mod common;
 
 use common::edge_inference::synth_tool_result_then_assistant_msg;
-use witmcc::insight::edge_inference::rules::large_output_to_next_action_v1::LargeOutputToNextActionV1;
-use witmcc::insight::edge_inference::EdgeInferenceRule;
+use wimcc::insight::edge_inference::rules::large_output_to_next_action_v1::LargeOutputToNextActionV1;
+use wimcc::insight::edge_inference::EdgeInferenceRule;
 
 #[test]
 fn emits_edge_when_payload_exceeds_threshold() {

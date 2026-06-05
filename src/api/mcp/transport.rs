@@ -3,7 +3,7 @@
 //! POST /mcp — JSON-RPC over HTTP
 //! GET  /mcp — SSE channel for server notifications
 //!
-//! Design ref: docs/superpowers/specs/2026-05-27-witmcc-slice17-mcp-streamable-http-design.md §4
+//! Design ref: docs/superpowers/specs/2026-05-27-wimcc-slice17-mcp-streamable-http-design.md §4
 
 use std::convert::Infallible;
 use std::time::Duration;

@@ -7,9 +7,9 @@
   width: 16px;
   height: 16px;
   border-radius: 999px;
-  border: 1px solid var(--witmcc-border-strong);
-  background: var(--witmcc-surface-3);
-  color: var(--witmcc-fg-muted);
+  border: 1px solid var(--wimcc-border-strong);
+  background: var(--wimcc-surface-3);
+  color: var(--wimcc-fg-muted);
   font-size: 10px;
   line-height: 1;
   cursor: help;
@@ -26,9 +26,9 @@
   padding: 8px 10px;
   font-size: 11px;
   line-height: 1.5;
-  color: var(--witmcc-fg);
-  background: var(--witmcc-surface-3);
-  border: 1px solid var(--witmcc-border-strong);
+  color: var(--wimcc-fg);
+  background: var(--wimcc-surface-3);
+  border: 1px solid var(--wimcc-border-strong);
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }

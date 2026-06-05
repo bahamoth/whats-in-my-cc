@@ -19,10 +19,10 @@
 
 use axum_test::TestServer;
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::{migrate, repo_observed};
-use witmcc::graph::build;
-use witmcc::ingest::store;
-use witmcc::live::NoopSink;
+use wimcc::db::{migrate, repo_observed};
+use wimcc::graph::build;
+use wimcc::ingest::store;
+use wimcc::live::NoopSink;
 
 const ORPHAN_TELEMETRY_KINDS: &[&str] = &["metric_sample", "hook_event", "otel_span", "log_record"];
 const BACKBONE_KINDS: &[&str] = &[
@@ -95,7 +95,7 @@ async fn real_orphan_logs_stay_in_observed_event_but_drop_from_graph() {
     // Ingest the real OTLP logs fixture (orphan hook/mcp log records) via the
     // HTTP receiver, which also rebuilds the touched session's graph.
     let pool = make_pool().await;
-    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool.clone()));
+    let app = wimcc::api::router(wimcc::api::AppState::new_for_tests(pool.clone()));
     let server = TestServer::new(app).unwrap();
 
     let body = std::fs::read("tests/fixtures/otel/real/logs_v01.json").unwrap();

@@ -76,7 +76,7 @@ pub struct HookEntry {
     pub event: String,
     pub command: String,
     pub scope: String,        // scope label
-    pub forwards_to_witmcc: bool, // command contains "hooks/v1/events"
+    pub forwards_to_wimcc: bool, // command contains "hooks/v1/events"
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -239,7 +239,7 @@ pub fn effective_env(scopes: &[SettingsScope]) -> BTreeMap<String, EnvSource> {
 
 // -- Hook discovery --------------------------------------------------------
 
-const WITMCC_FORWARD_SUBSTR: &str = "hooks/v1/events";
+const WIMCC_FORWARD_SUBSTR: &str = "hooks/v1/events";
 
 fn collect_hooks_into(scope: &SettingsScope, out: &mut Vec<HookEntry>) {
     let parsed = match &scope.parsed {
@@ -278,7 +278,7 @@ fn collect_hooks_into(scope: &SettingsScope, out: &mut Vec<HookEntry>) {
                     event: event_name.clone(),
                     command: cmd.to_string(),
                     scope: scope.label.clone(),
-                    forwards_to_witmcc: cmd.contains(WITMCC_FORWARD_SUBSTR),
+                    forwards_to_wimcc: cmd.contains(WIMCC_FORWARD_SUBSTR),
                 });
             }
         }
@@ -407,18 +407,18 @@ mod tests {
     }
 
     #[test]
-    fn hook_entries_match_witmcc_substring_and_attribute_scope() {
+    fn hook_entries_match_wimcc_substring_and_attribute_scope() {
         let tmp = tempfile::tempdir().unwrap();
         let user_path = tmp.path().join("user.json");
         write(
             &user_path,
-            &json!({"hooks":{"PostToolUse":[{"hooks":[{"type":"command","command":"/usr/local/bin/witmcc-forward.sh /hooks/v1/events"}]}]}}),
+            &json!({"hooks":{"PostToolUse":[{"hooks":[{"type":"command","command":"/usr/local/bin/wimcc-forward.sh /hooks/v1/events"}]}]}}),
         );
         let scopes = vec![read_scope(ScopeKind::User, user_path, None)];
         let plugins_root = tmp.path().join("nonexistent-plugins");
         let hooks = hook_entries(&scopes, &plugins_root);
         assert_eq!(hooks.len(), 1);
-        assert!(hooks[0].forwards_to_witmcc);
+        assert!(hooks[0].forwards_to_wimcc);
         assert_eq!(hooks[0].event, "PostToolUse");
         assert_eq!(hooks[0].scope, "user");
     }
@@ -435,7 +435,7 @@ mod tests {
         let hooks = hook_entries(&[], tmp.path());
         assert_eq!(hooks.len(), 1);
         assert_eq!(hooks[0].scope, "plugin:my-plugin");
-        assert!(hooks[0].forwards_to_witmcc);
+        assert!(hooks[0].forwards_to_wimcc);
     }
 
     #[test]

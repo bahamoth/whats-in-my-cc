@@ -2,7 +2,7 @@
 //!
 //! The order here is canonical; `tests/insight_registry.rs` asserts it.
 //! Adding or removing a category requires updating that test AND the category
-//! table in `docs/superpowers/specs/2026-05-27-witmcc-insight-engine-architecture.md`.
+//! table in `docs/superpowers/specs/2026-05-27-wimcc-insight-engine-architecture.md`.
 
 use crate::insight::extractor::InsightExtractor;
 use crate::insight::extractors::{

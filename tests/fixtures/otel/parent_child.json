@@ -8,7 +8,7 @@
       },
       "scopeSpans": [
         {
-          "scope": {"name": "witmcc.smoke"},
+          "scope": {"name": "wimcc.smoke"},
           "spans": [
             {
               "traceId": "7c8aa5a2d2c872e8321cf37308d69df0",

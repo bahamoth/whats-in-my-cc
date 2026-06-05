@@ -12,8 +12,8 @@
 
 use chrono::Utc;
 use serde_json::json;
-use witmcc::ingest::verification_run::extract_verification_runs;
-use witmcc::model::observed::{Actor, EventKind, ObservedEvent};
+use wimcc::ingest::verification_run::extract_verification_runs;
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 fn make_otel_verification_span(session_id: &str, vk: &str) -> ObservedEvent {
     ObservedEvent {

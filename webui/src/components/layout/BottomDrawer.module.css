@@ -13,20 +13,20 @@
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
   pointer-events: auto;
-  animation: fade-in var(--witmcc-motion-fast) ease;
+  animation: fade-in var(--wimcc-motion-fast) ease;
 }
 
 .panel {
   position: relative;
   pointer-events: auto;
-  background: var(--witmcc-surface-1);
-  border-top: 1px solid var(--witmcc-border-strong);
+  background: var(--wimcc-surface-1);
+  border-top: 1px solid var(--wimcc-border-strong);
   height: 40vh;
   min-height: 240px;
   display: flex;
   flex-direction: column;
   transform: translateY(0);
-  animation: slide-up var(--witmcc-motion-base) var(--witmcc-easing-spring);
+  animation: slide-up var(--wimcc-motion-base) var(--wimcc-easing-spring);
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
 }
 
@@ -35,33 +35,33 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 14px;
-  border-bottom: 1px solid var(--witmcc-border);
+  border-bottom: 1px solid var(--wimcc-border);
 }
 
 .title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--witmcc-fg);
+  color: var(--wimcc-fg);
   margin: 0;
 }
 
 .closeBtn {
   background: transparent;
-  color: var(--witmcc-fg-muted);
+  color: var(--wimcc-fg-muted);
   border: none;
   font-size: 20px;
   cursor: pointer;
   padding: 0 6px;
   line-height: 1;
 }
-.closeBtn:hover { color: var(--witmcc-fg); }
+.closeBtn:hover { color: var(--wimcc-fg); }
 
 .body {
   padding: 12px 14px;
   overflow: auto;
   flex: 1;
   font-size: 12px;
-  color: var(--witmcc-fg);
+  color: var(--wimcc-fg);
 }
 
 @keyframes slide-up {

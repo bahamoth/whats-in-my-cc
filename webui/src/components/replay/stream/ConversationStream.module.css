@@ -20,7 +20,7 @@
   scrollbar-gutter: stable;
 }
 
-.empty { color: var(--witmcc-fg-subtle, #6a7180); padding: 12px; }
+.empty { color: var(--wimcc-fg-subtle, #6a7180); padding: 12px; }
 
 /* "대화 시작" marker — shown at the very top once the session start is loaded,
    so the reader knows there is no more older history (not that loading broke).
@@ -30,10 +30,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--witmcc-fg-subtle, #6a7180);
+  color: var(--wimcc-fg-subtle, #6a7180);
   font-size: 12px;
   letter-spacing: 0.04em;
-  border-bottom: 1px solid var(--witmcc-border, #1d212c);
+  border-bottom: 1px solid var(--wimcc-border, #1d212c);
   white-space: nowrap;
   overflow: hidden;
 }

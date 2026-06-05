@@ -11,10 +11,10 @@ use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Row;
 use std::io::Write;
 use tempfile::NamedTempFile;
-use witmcc::db::{migrate, repo_diff_hunk};
-use witmcc::graph::build;
-use witmcc::ingest::store;
-use witmcc::live::NoopSink;
+use wimcc::db::{migrate, repo_diff_hunk};
+use wimcc::graph::build;
+use wimcc::ingest::store;
+use wimcc::live::NoopSink;
 
 const SESSION_ID: &str = "s_gdh_test";
 const TOOL_USE_ID: &str = "toolu_gdh_1";

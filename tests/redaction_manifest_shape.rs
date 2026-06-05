@@ -3,7 +3,7 @@
 //! Locks the manifest field contract: rules_applied, items_redacted_count,
 //! redaction_state, schema_version, rule_pack.
 
-use witmcc::security::redaction::{engine::scan, manifest::RedactionState};
+use wimcc::security::redaction::{engine::scan, manifest::RedactionState};
 
 #[test]
 fn manifest_records_rules_applied_and_counts() {

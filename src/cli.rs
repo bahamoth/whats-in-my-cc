@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 /// Whether to require bearer-token authentication on Pull API + MCP.
 /// Default is `Off` for single-user local dev — `On` to enforce the slice-19
-/// bearer scheme (token in `~/Library/Application Support/witmcc/token` on
-/// macOS, `~/.config/witmcc/token` on Linux). DEV-S19-08.
+/// bearer scheme (token in `~/Library/Application Support/wimcc/token` on
+/// macOS, `~/.config/wimcc/token` on Linux). DEV-S19-08.
 #[derive(Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
 pub enum AuthMode {
     Off,
@@ -24,7 +24,7 @@ pub enum JudgeMode {
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "witmcc", version, about = "What's in My Claude Code — slice-1")]
+#[command(name = "wimcc", version, about = "What's in My Claude Code — local execution inspection")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -33,8 +33,8 @@ pub struct Cli {
     #[arg(
         long,
         global = true,
-        default_value = ".witmcc.sqlite",
-        env = "WITMCC_DB"
+        default_value = ".wimcc.sqlite",
+        env = "WIMCC_DB"
     )]
     pub db_path: PathBuf,
 
@@ -72,8 +72,8 @@ pub enum Command {
         /// Emit structured JSON instead of the pretty table.
         #[arg(long)]
         json: bool,
-        /// witmcc server to probe. Defaults to WITMCC_SERVER or http://127.0.0.1:7878.
-        #[arg(long, env = "WITMCC_SERVER", default_value = "http://127.0.0.1:7878")]
+        /// wimcc server to probe. Defaults to WIMCC_SERVER or http://127.0.0.1:7878.
+        #[arg(long, env = "WIMCC_SERVER", default_value = "http://127.0.0.1:7878")]
         server: String,
         /// Project root to walk for `.claude/settings.json` and `.claude/settings.local.json`.
         /// Defaults to CWD; slice-7 settings hierarchy.
@@ -94,7 +94,7 @@ pub enum Command {
         shutdown_after_ms: Option<u64>,
         /// Disable the transcript live tail (slice-7). Use this if you only
         /// want the OTel / hook receivers and prefer to backfill transcripts
-        /// later with `witmcc ingest --all`.
+        /// later with `wimcc ingest --all`.
         #[arg(long)]
         no_watch_transcripts: bool,
         /// Override the transcripts root that the live tail watches.

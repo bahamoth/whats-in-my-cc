@@ -1,8 +1,8 @@
 //! Slice-15 — FixtureJudge replays recorded verdicts by (category, evidence_hash) key.
 
 use std::path::Path;
-use witmcc::insight::judge::providers::FixtureJudge;
-use witmcc::insight::judge::{JudgeError, JudgePrompt};
+use wimcc::insight::judge::providers::FixtureJudge;
+use wimcc::insight::judge::{JudgeError, JudgePrompt};
 
 #[tokio::test]
 async fn fixture_judge_loads_and_returns_verdict() {

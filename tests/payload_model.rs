@@ -4,15 +4,15 @@
 /// which contains assistant messages with model:"claude-opus-4-7" (lines 2 and 4).
 /// The fixture is frozen at tests/fixtures/transcripts/minimal_session.jsonl.
 use futures::StreamExt;
-use witmcc::ingest::mapping::map_record;
-use witmcc::ingest::transcript::stream_file;
-use witmcc::model::observed::EventKind;
+use wimcc::ingest::mapping::map_record;
+use wimcc::ingest::transcript::stream_file;
+use wimcc::model::observed::EventKind;
 
-async fn mapped_events() -> Vec<witmcc::model::observed::ObservedEvent> {
+async fn mapped_events() -> Vec<wimcc::model::observed::ObservedEvent> {
     let p = std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl");
     let mut stream = Box::pin(stream_file(p).await.unwrap());
     let mut events = vec![];
-    let mut gen = witmcc::ids::MonotonicUlidGen::new();
+    let mut gen = wimcc::ids::MonotonicUlidGen::new();
     while let Some(item) = stream.next().await {
         let (meta, rec) = item.unwrap();
         let raw_id = gen.generate();

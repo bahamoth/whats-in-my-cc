@@ -3,11 +3,11 @@
 
 use chrono::{TimeZone, Utc};
 use serde_json::json;
-use witmcc::insight::extractors::tool_failure::ToolFailure;
-use witmcc::insight::extractors::tool_failure::{classify_failure, FailureClass};
-use witmcc::insight::extractor::InsightExtractor;
-use witmcc::insight::view::SessionInsightView;
-use witmcc::model::observed::{Actor, EventKind, ObservedEvent};
+use wimcc::insight::extractors::tool_failure::ToolFailure;
+use wimcc::insight::extractors::tool_failure::{classify_failure, FailureClass};
+use wimcc::insight::extractor::InsightExtractor;
+use wimcc::insight::view::SessionInsightView;
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 fn base_event(i: usize, actor: Actor, kind: EventKind) -> ObservedEvent {
     ObservedEvent {

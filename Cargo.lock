@@ -3306,6 +3306,54 @@ dependencies = [
 ]
 
 [[package]]
+name = "wimcc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert-json-diff",
+ "assert_cmd",
+ "async-trait",
+ "axum",
+ "axum-test",
+ "base64",
+ "chrono",
+ "clap",
+ "dirs",
+ "flate2",
+ "futures",
+ "hex",
+ "http-body-util",
+ "insta",
+ "mime_guess",
+ "notify",
+ "once_cell",
+ "portpicker",
+ "pretty_assertions",
+ "rand 0.9.4",
+ "regex",
+ "reqwest",
+ "rust-embed",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "strum",
+ "subtle",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tower",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "ulid",
+ "urlencoding",
+ "walkdir",
+]
+
+[[package]]
 name = "winapi-util"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3613,54 +3661,6 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser",
-]
-
-[[package]]
-name = "witmcc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert-json-diff",
- "assert_cmd",
- "async-trait",
- "axum",
- "axum-test",
- "base64",
- "chrono",
- "clap",
- "dirs",
- "flate2",
- "futures",
- "hex",
- "http-body-util",
- "insta",
- "mime_guess",
- "notify",
- "once_cell",
- "portpicker",
- "pretty_assertions",
- "rand 0.9.4",
- "regex",
- "reqwest",
- "rust-embed",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "strum",
- "subtle",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tower",
- "tower-http 0.5.2",
- "tracing",
- "tracing-subscriber",
- "ulid",
- "urlencoding",
- "walkdir",
 ]
 
 [[package]]

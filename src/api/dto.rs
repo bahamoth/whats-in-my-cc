@@ -34,7 +34,7 @@ pub struct OtelLogsRawResponse {
     pub sessions_touched: Vec<String>,
 }
 
-/// slice-6 — per-source freshness for `/v1/health/sources`. Powers `witmcc doctor`.
+/// slice-6 — per-source freshness for `/v1/health/sources`. Powers `wimcc doctor`.
 #[derive(Debug, Serialize)]
 pub struct SourceHealth {
     pub label: String,

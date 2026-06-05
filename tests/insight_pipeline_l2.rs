@@ -4,9 +4,9 @@
 //! Uses the cfg(test) NoopTestExtractor registered inside run_extractors_with_runtime.
 
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::migrate;
-use witmcc::insight::judge::runtime::JudgeRuntime;
-use witmcc::insight::pipeline::run_extractors_with_runtime;
+use wimcc::db::migrate;
+use wimcc::insight::judge::runtime::JudgeRuntime;
+use wimcc::insight::pipeline::run_extractors_with_runtime;
 
 /// A minimal migrated pool. No events needed for NoopTestExtractor (it emits
 /// a synthetic candidate regardless of what events are in the DB).

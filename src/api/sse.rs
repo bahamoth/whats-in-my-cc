@@ -1,6 +1,6 @@
 //! Slice-8 — GET /v1/stream SSE handler.
 //!
-//! Spec: `docs/superpowers/specs/2026-05-21-witmcc-slice8-sse-design.md` §3 + §5.
+//! Spec: `docs/superpowers/specs/2026-05-21-wimcc-slice8-sse-design.md` §3 + §5.
 //!
 //! Subscribe-before-SELECT to close the race window; backfill from
 //! `Last-Event-ID` cursor (header or `?last_event_id=` query) with

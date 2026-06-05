@@ -11,15 +11,15 @@ use serde_json::json;
 /// Token is generated in-process (no file I/O) to avoid env-var races.
 async fn build_auth_test_server() -> (TestServer, String) {
     // Use generate_token() directly — no file system interaction.
-    let token = witmcc::security::token::generate_token();
+    let token = wimcc::security::token::generate_token();
 
-    let pool = witmcc::db::connect(":memory:").await.unwrap();
-    witmcc::db::migrate(&pool).await.unwrap();
+    let pool = wimcc::db::connect(":memory:").await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
 
-    let mut state = witmcc::api::AppState::new_for_tests(pool);
+    let mut state = wimcc::api::AppState::new_for_tests(pool);
     state.token = token.clone();
 
-    let app = witmcc::api::router(state);
+    let app = wimcc::api::router(state);
     let server = TestServer::new(app).unwrap();
     (server, token)
 }

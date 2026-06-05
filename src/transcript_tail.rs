@@ -7,7 +7,7 @@
 //! `docs/implementation-notes.html` (DEV-S7-01): every flush rehashes the
 //! whole file, which is bounded by Claude Code's per-session JSONL size
 //! (typically MB-scale). In exchange we get zero cursor-management state to
-//! corrupt, and a single code path with `witmcc ingest --all`.
+//! corrupt, and a single code path with `wimcc ingest --all`.
 //!
 //! Failure semantics mirror slice-5 file watcher: fail-soft, never panic,
 //! never poison the serve process. Cancellation via `CancellationToken`.

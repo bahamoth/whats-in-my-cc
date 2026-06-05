@@ -3,11 +3,11 @@
 //! These tests will FAIL until `src/security/retention.rs` and
 //! migrations 0012 + 0013 are implemented.
 
-use witmcc::security::retention::{Profile, RetentionPolicy};
+use wimcc::security::retention::{Profile, RetentionPolicy};
 
 async fn test_pool() -> sqlx::SqlitePool {
-    let pool = witmcc::db::connect(":memory:").await.unwrap();
-    witmcc::db::migrate(&pool).await.unwrap();
+    let pool = wimcc::db::connect(":memory:").await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
     pool
 }
 
@@ -47,7 +47,7 @@ async fn sweep_default_profile_deletes_raw_older_than_30d() {
     seed_old_raw_event(&pool, 5).await; // should NOT be deleted
 
     let p = RetentionPolicy { profile: Profile::Default };
-    let report = witmcc::security::retention::run_sweep(&pool, &p).await.unwrap();
+    let report = wimcc::security::retention::run_sweep(&pool, &p).await.unwrap();
 
     assert_eq!(
         report.deletions.get("raw_event").copied().unwrap_or(0),
@@ -70,7 +70,7 @@ async fn sweep_none_profile_deletes_nothing() {
     seed_old_raw_event(&pool, 400).await;
 
     let p = RetentionPolicy { profile: Profile::None };
-    let report = witmcc::security::retention::run_sweep(&pool, &p).await.unwrap();
+    let report = wimcc::security::retention::run_sweep(&pool, &p).await.unwrap();
 
     let total_deleted: u64 = report.deletions.values().sum();
     assert_eq!(total_deleted, 0, "none profile should delete nothing");
@@ -83,7 +83,7 @@ async fn sweep_strict_profile_deletes_raw_older_than_7d() {
     seed_old_raw_event(&pool, 3).await;  // should NOT be deleted
 
     let p = RetentionPolicy { profile: Profile::Strict };
-    let report = witmcc::security::retention::run_sweep(&pool, &p).await.unwrap();
+    let report = wimcc::security::retention::run_sweep(&pool, &p).await.unwrap();
 
     assert_eq!(
         report.deletions.get("raw_event").copied().unwrap_or(0),
@@ -98,7 +98,7 @@ async fn deleted_resource_has_tombstone() {
     let id = seed_old_raw_event(&pool, 31).await;
 
     let p = RetentionPolicy { profile: Profile::Default };
-    witmcc::security::retention::run_sweep(&pool, &p).await.unwrap();
+    wimcc::security::retention::run_sweep(&pool, &p).await.unwrap();
 
     let tomb: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM retention_tombstone WHERE resource_id = ?",
@@ -116,7 +116,7 @@ async fn sweep_writes_audit_row() {
     seed_old_raw_event(&pool, 31).await;
 
     let p = RetentionPolicy { profile: Profile::Default };
-    witmcc::security::retention::run_sweep(&pool, &p).await.unwrap();
+    wimcc::security::retention::run_sweep(&pool, &p).await.unwrap();
 
     let n: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM audit WHERE event = 'retention.deleted'",

@@ -2,8 +2,8 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use witmcc::insight::judge::budget::BudgetGuard;
-use witmcc::insight::judge::{JudgeError, JudgePrompt, JudgeProvider, JudgeVerdict};
+use wimcc::insight::judge::budget::BudgetGuard;
+use wimcc::insight::judge::{JudgeError, JudgePrompt, JudgeProvider, JudgeVerdict};
 
 struct InfiniteJudge {
     call_count: Arc<AtomicU32>,

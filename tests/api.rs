@@ -1,9 +1,9 @@
 use axum_test::TestServer;
 use serde_json::Value;
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::migrate;
-use witmcc::graph::build;
-use witmcc::ingest::store;
+use wimcc::db::migrate;
+use wimcc::graph::build;
+use wimcc::ingest::store;
 
 async fn make_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -15,7 +15,7 @@ async fn make_pool() -> sqlx::SqlitePool {
     store::ingest_file(
         &pool,
         std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl"),
-        &witmcc::live::NoopSink,
+        &wimcc::live::NoopSink,
     )
     .await
     .unwrap();
@@ -25,13 +25,13 @@ async fn make_pool() -> sqlx::SqlitePool {
 
 async fn setup() -> TestServer {
     let pool = make_pool().await;
-    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool));
+    let app = wimcc::api::router(wimcc::api::AppState::new_for_tests(pool));
     TestServer::new(app).unwrap()
 }
 
 async fn setup_with_pool() -> (sqlx::SqlitePool, TestServer) {
     let pool = make_pool().await;
-    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool.clone()));
+    let app = wimcc::api::router(wimcc::api::AppState::new_for_tests(pool.clone()));
     let server = TestServer::new(app).unwrap();
     (pool, server)
 }

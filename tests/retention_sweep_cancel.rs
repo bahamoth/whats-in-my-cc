@@ -9,16 +9,16 @@ use tokio_util::sync::CancellationToken;
 
 #[tokio::test]
 async fn sweep_task_exits_on_cancel() {
-    let pool = witmcc::db::connect(":memory:").await.unwrap();
-    witmcc::db::migrate(&pool).await.unwrap();
+    let pool = wimcc::db::connect(":memory:").await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
 
-    let policy = witmcc::security::retention::RetentionPolicy {
-        profile: witmcc::security::retention::Profile::Default,
+    let policy = wimcc::security::retention::RetentionPolicy {
+        profile: wimcc::security::retention::Profile::Default,
     };
     let cancel = CancellationToken::new();
 
     let handle =
-        witmcc::security::retention::spawn_sweep_task(pool, policy, cancel.clone());
+        wimcc::security::retention::spawn_sweep_task(pool, policy, cancel.clone());
 
     // Give the task a tick to install its select; then cancel.
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -32,16 +32,16 @@ async fn sweep_task_exits_on_cancel() {
 
 #[tokio::test]
 async fn sweep_task_none_profile_exits_immediately_regardless_of_cancel() {
-    let pool = witmcc::db::connect(":memory:").await.unwrap();
-    witmcc::db::migrate(&pool).await.unwrap();
+    let pool = wimcc::db::connect(":memory:").await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
 
-    let policy = witmcc::security::retention::RetentionPolicy {
-        profile: witmcc::security::retention::Profile::None,
+    let policy = wimcc::security::retention::RetentionPolicy {
+        profile: wimcc::security::retention::Profile::None,
     };
     let cancel = CancellationToken::new();
 
     let handle =
-        witmcc::security::retention::spawn_sweep_task(pool, policy, cancel.clone());
+        wimcc::security::retention::spawn_sweep_task(pool, policy, cancel.clone());
 
     tokio::time::timeout(Duration::from_millis(200), handle)
         .await

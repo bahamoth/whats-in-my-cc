@@ -1,8 +1,8 @@
 /* Lives in the stream footer bar (left side). Relative so the expandable list
    can pop UP above the toggle (the footer sits at the bottom of the column). */
 .wrap { position: relative; font-size: 11px; }
-.toggle { background: transparent; color: var(--witmcc-fg-subtle, #6a7180); border: none; border-radius: 6px; padding: 4px 6px; cursor: pointer; opacity: 0.8; white-space: nowrap; }
-.toggle:hover { opacity: 1; color: var(--witmcc-fg, #e6e8ee); }
+.toggle { background: transparent; color: var(--wimcc-fg-subtle, #6a7180); border: none; border-radius: 6px; padding: 4px 6px; cursor: pointer; opacity: 0.8; white-space: nowrap; }
+.toggle:hover { opacity: 1; color: var(--wimcc-fg, #e6e8ee); }
 
 /* Pop-up list. Opaque, high-contrast surface + strong shadow so it stays
    readable when it overlaps the conversation behind it. */
@@ -15,8 +15,8 @@
   overflow: auto;
   width: min(640px, 85vw);
   padding: 4px;
-  background: var(--witmcc-surface-2, #161a23);
-  border: 1px solid var(--witmcc-border-strong, #2a3040);
+  background: var(--wimcc-surface-2, #161a23);
+  border: 1px solid var(--wimcc-border-strong, #2a3040);
   border-radius: 8px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
   font-size: 12px;
@@ -26,39 +26,39 @@
   padding: 7px 8px;
   border-radius: 6px;
 }
-.row + .row { border-top: 1px solid var(--witmcc-border, #1d212c); }
-.row:hover { background: var(--witmcc-surface-3, #1b202a); }
+.row + .row { border-top: 1px solid var(--wimcc-border, #1d212c); }
+.row:hover { background: var(--wimcc-surface-3, #1b202a); }
 
 .head { display: flex; align-items: center; gap: 8px; }
 .token {
-  color: var(--witmcc-fg, #e6e8ee);
+  color: var(--wimcc-fg, #e6e8ee);
   font-weight: 600;
   font-size: 13px;
 }
 .count {
-  color: var(--witmcc-fg-muted, #aab0bd);
+  color: var(--wimcc-fg-muted, #aab0bd);
   font-variant-numeric: tabular-nums;
 }
 .jump {
   margin-left: auto;
   flex: 0 0 auto;
   background: transparent;
-  color: var(--witmcc-accent, #4f8cff);
-  border: 1px solid var(--witmcc-accent-soft, #1f3a78);
+  color: var(--wimcc-accent, #4f8cff);
+  border: 1px solid var(--wimcc-accent-soft, #1f3a78);
   border-radius: 999px;
   padding: 1px 9px;
   font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
 }
-.jump:hover { background: var(--witmcc-accent-soft, #1f3a78); color: var(--witmcc-fg, #e6e8ee); }
-.jump:focus-visible { outline: 2px solid var(--witmcc-accent, #4f8cff); outline-offset: 1px; }
+.jump:hover { background: var(--wimcc-accent-soft, #1f3a78); color: var(--wimcc-fg, #e6e8ee); }
+.jump:focus-visible { outline: 2px solid var(--wimcc-accent, #4f8cff); outline-offset: 1px; }
 
 .sample {
   display: block;
   margin-top: 4px;
-  color: var(--witmcc-fg-muted, #aab0bd);
-  font-family: var(--witmcc-mono, ui-monospace, monospace);
+  color: var(--wimcc-fg-muted, #aab0bd);
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
   white-space: pre-wrap;
   word-break: break-all;
   line-height: 1.4;
@@ -66,7 +66,7 @@
 .hint {
   display: block;
   margin-top: 4px;
-  color: var(--witmcc-fg-subtle, #6a7180);
+  color: var(--wimcc-fg-subtle, #6a7180);
   font-size: 10.5px;
 }
-.empty { color: var(--witmcc-fg-subtle, #6a7180); padding: 8px; }
+.empty { color: var(--wimcc-fg-subtle, #6a7180); padding: 8px; }

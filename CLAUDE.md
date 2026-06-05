@@ -23,9 +23,9 @@ graph-backed 모델을 서술하므로 그대로 따르지 말 것.
 ## Status
 
 - **단계: MVP EXIT (2026-05-27). slice-1~19 완료, M3·M5·M6·M7 closed, AC-1~7 green.** slice별 구현 상세·이력은 `docs/implementation-notes.html`(§33~36 + `#event-first-redesign` + `#episode-removal`)와 git history.
-- **남은 계획:** UX 재설계 epic (`2026-05-27-witmcc-ux-redesign-epic.md`) — 마일스톤 밖 별도 트랙.
-- **인증 default = `--auth off`** (단일 사용자 dev, DEV-S19-08) — 브라우저로 그대로 접속. 켜려면 `witmcc serve --auth on`: 모든 `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요. Token 위치 macOS `~/Library/Application Support/witmcc/token` · Linux `~/.config/witmcc/token` (0600). retention sweep는 `witmcc serve --retention-profile default`.
-- **dev DB 재생성 규칙:** migration 변경(현재 최신 `0017`) 시 `witmcc init-db` + 재ingest 필요. payload 필드(`tool_call.tool_name`, `assistant_message.model` 등)도 JSON BLOB이라 schema migration 없이 추가되므로 기존 이벤트엔 없음 — 재ingest해야 채워진다.
+- **남은 계획:** UX 재설계 epic (`2026-05-27-wimcc-ux-redesign-epic.md`) — 마일스톤 밖 별도 트랙.
+- **인증 default = `--auth off`** (단일 사용자 dev, DEV-S19-08) — 브라우저로 그대로 접속. 켜려면 `wimcc serve --auth on`: 모든 `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요. Token 위치 macOS `~/Library/Application Support/wimcc/token` · Linux `~/.config/wimcc/token` (0600). retention sweep는 `wimcc serve --retention-profile default`.
+- **dev DB 재생성 규칙:** migration 변경(현재 최신 `0017`) 시 `wimcc init-db` + 재ingest 필요. payload 필드(`tool_call.tool_name`, `assistant_message.model` 등)도 JSON BLOB이라 schema migration 없이 추가되므로 기존 이벤트엔 없음 — 재ingest해야 채워진다.
 
 ## Document Map
 
@@ -66,7 +66,7 @@ graph-backed 모델을 서술하므로 그대로 따르지 말 것.
   invariant assertion. 둘 다 없는 가정은 spec/commit log/주석에 적지 않는다.
   표본 1건으로 일반화하지 않는다 — 패턴인지 단일 케이스인지 명시.
 - **UI는 브라우저 smoke 후 commit**: WebUI 변경은 `cargo build` + `vitest` 통과만으로는
-  완료가 아니다. 사용자 환경에서 `witmcc serve` + 브라우저 navigation (claude-in-chrome
+  완료가 아니다. 사용자 환경에서 `wimcc serve` + 브라우저 navigation (claude-in-chrome
   도구) + 시각 검증까지 끝낸 뒤 commit. 가능한 한 매 incremental 변경마다 smoke.
 
 ## Self-check before every commit (의무 체크리스트)

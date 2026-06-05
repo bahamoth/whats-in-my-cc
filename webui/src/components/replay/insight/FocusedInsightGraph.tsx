@@ -72,11 +72,11 @@ function buildLayout(
         height: NODE_HEIGHT,
         padding: 0,
         border: isCenter
-          ? '2px solid var(--witmcc-accent, #4f8cff)'
-          : '1px solid var(--witmcc-border-strong, #2a3040)',
+          ? '2px solid var(--wimcc-accent, #4f8cff)'
+          : '1px solid var(--wimcc-border-strong, #2a3040)',
         background: isCenter
-          ? 'var(--witmcc-accent-soft, #1f3a78)'
-          : 'var(--witmcc-surface-2, #161a23)',
+          ? 'var(--wimcc-accent-soft, #1f3a78)'
+          : 'var(--wimcc-surface-2, #161a23)',
         borderRadius: 4,
         cursor: 'pointer',
       },

@@ -23,7 +23,7 @@ describe('SessionListPage', () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(envelope([]));
     render(withRouter(<SessionListPage />));
     await waitFor(() => expect(screen.getByText(/no sessions yet/i)).toBeInTheDocument());
-    expect(screen.getByText(/witmcc ingest --all/)).toBeInTheDocument();
+    expect(screen.getByText(/wimcc ingest --all/)).toBeInTheDocument();
   });
 
   it('renders rows sorted by last_observed_at desc', async () => {

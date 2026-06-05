@@ -1,7 +1,7 @@
 pub mod edge_inference;
 
 use chrono::{TimeZone, Utc};
-use witmcc::model::observed::{EventKind, ObservedEvent};
+use wimcc::model::observed::{EventKind, ObservedEvent};
 
 /// Minimal ObservedEvent for unit tests. All optional fields are None / default;
 /// callers can override with struct update syntax. `observed_at` is derived

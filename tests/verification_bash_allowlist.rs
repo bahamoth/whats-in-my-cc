@@ -8,7 +8,7 @@
 //! include exact prefixes drawn from the `verification_v01.jsonl` real fixture
 //! (e.g., `cargo test --test api`, `cargo build`).
 
-use witmcc::insight::verification_allowlist::{allowlist_patterns, classify};
+use wimcc::insight::verification_allowlist::{allowlist_patterns, classify};
 
 #[test]
 fn allowlist_has_expected_pattern_count() {

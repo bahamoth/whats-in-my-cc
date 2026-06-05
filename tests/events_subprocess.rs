@@ -1,5 +1,5 @@
 //! Slice-9 L3 subprocess E2E for the windowed events endpoint. Seeds a
-//! 1200-event session into a file-backed DB, then spawns a real `witmcc
+//! 1200-event session into a file-backed DB, then spawns a real `wimcc
 //! serve` against that DB and pages backwards through `/v1/sessions/:id/events`
 //! using only raw TCP HTTP/1.1.
 //!
@@ -21,8 +21,8 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use witmcc::db::{connect, migrate, repo_observed, repo_raw, repo_runs};
-use witmcc::model::observed::{Actor, EventKind, ObservedEvent};
+use wimcc::db::{connect, migrate, repo_observed, repo_raw, repo_runs};
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 const SESS: &str = "sess-paged";
 const SEED_N: usize = 1200;
@@ -77,12 +77,12 @@ async fn seed_db(path: &Path) {
     pool.close().await;
 }
 
-/// Spawn a witmcc server. Returns (child, host, token, config_dir).
+/// Spawn a wimcc server. Returns (child, host, token, config_dir).
 /// `config_dir` must be kept alive while the server runs.
 fn spawn_serve(db_path: &Path) -> (Child, String, String, tempfile::TempDir) {
     let port = pick_port();
-    let bin = env!("CARGO_BIN_EXE_witmcc");
-    // Slice-19: isolated config dir so tests don't touch ~/.config/witmcc.
+    let bin = env!("CARGO_BIN_EXE_wimcc");
+    // Slice-19: isolated config dir so tests don't touch ~/.config/wimcc.
     let config_dir = tempfile::tempdir().expect("config tempdir");
     let child = Command::new(bin)
         .args([
@@ -96,11 +96,11 @@ fn spawn_serve(db_path: &Path) -> (Child, String, String, tempfile::TempDir) {
             "15000",
             "--no-watch-transcripts",
         ])
-        .env("WITMCC_CONFIG_DIR", config_dir.path())
+        .env("WIMCC_CONFIG_DIR", config_dir.path())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .expect("spawn witmcc serve");
+        .expect("spawn wimcc serve");
     let host = format!("127.0.0.1:{port}");
     let deadline = Instant::now() + Duration::from_secs(3);
     while Instant::now() < deadline {

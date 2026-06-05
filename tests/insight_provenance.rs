@@ -2,7 +2,7 @@
 //! and the correct extractor version stamp.
 
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::migrate;
+use wimcc::db::migrate;
 
 #[tokio::test]
 async fn l1_finding_has_null_judge_and_l1_layer() {
@@ -133,7 +133,7 @@ async fn pipeline_l1_findings_have_null_judge() {
     .bind(r#"{"tool_result":{"tool_use_id":"tid_p0","is_error":true,"content":"compile error E0001"}}"#)
     .execute(&pool).await.unwrap();
 
-    witmcc::insight::pipeline::run_extractors(&pool, sess).await.unwrap();
+    wimcc::insight::pipeline::run_extractors(&pool, sess).await.unwrap();
 
     let provenance_rows: Vec<(String,)> =
         sqlx::query_as("SELECT provenance FROM finding WHERE session_id = ?")
