@@ -12,9 +12,9 @@ use chrono::{DateTime, TimeZone, Utc};
 use sqlx::Row;
 use std::sync::Arc;
 use tempfile::tempdir;
-use witmcc::db::{connect, migrate, repo_observed, repo_raw, repo_runs};
-use witmcc::graph::build::rebuild_session;
-use witmcc::model::observed::{Actor, EventKind, ObservedEvent};
+use wimcc::db::{connect, migrate, repo_observed, repo_raw, repo_runs};
+use wimcc::graph::build::rebuild_session;
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 const SESS: &str = "sess-atomic";
 const SEED_N: usize = 60;

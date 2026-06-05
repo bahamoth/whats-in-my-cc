@@ -16,7 +16,7 @@ use http_body_util::BodyExt;
 use serde_json::json;
 use sqlx::sqlite::SqlitePoolOptions;
 use tower::ServiceExt;
-use witmcc::db::migrate;
+use wimcc::db::migrate;
 
 const FRAME_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -27,8 +27,8 @@ async fn make_app() -> (axum::Router, sqlx::SqlitePool) {
         .await
         .unwrap();
     migrate(&pool).await.unwrap();
-    let state = witmcc::api::AppState::new_for_tests(pool.clone());
-    let app = witmcc::api::router(state);
+    let state = wimcc::api::AppState::new_for_tests(pool.clone());
+    let app = wimcc::api::router(state);
     (app, pool)
 }
 

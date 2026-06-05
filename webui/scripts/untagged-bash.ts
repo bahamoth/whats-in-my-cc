@@ -39,7 +39,7 @@ function arg(name: string): string | undefined {
 }
 const hasFlag = (name: string) => process.argv.includes(name);
 
-const BASE = arg('--base') ?? process.env.WITMCC_BASE ?? 'http://127.0.0.1:7878';
+const BASE = arg('--base') ?? process.env.WIMCC_BASE ?? 'http://127.0.0.1:7878';
 // `?? 500` does NOT catch NaN (a value-less `--limit` makes arg() undefined →
 // Number(undefined)=NaN), so validate explicitly to avoid `limit=NaN` in the URL.
 const limitArg = Number(arg('--limit'));

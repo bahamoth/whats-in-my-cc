@@ -3,14 +3,14 @@
 
 use chrono::{TimeZone, Utc};
 use serde_json::json;
-use witmcc::db::repo_diff_hunk::DiffHunkRow;
-use witmcc::db::repo_verification_run::VerificationRunRow;
-use witmcc::insight::extractor::InsightExtractor;
-use witmcc::insight::extractors::final_state_mismatch::FinalStateMismatch;
-use witmcc::insight::types::PromotionPolicy;
-use witmcc::insight::view::SessionInsightView;
-use witmcc::model::graph::{GraphEdge, GraphNode};
-use witmcc::model::observed::{Actor, EventKind, ObservedEvent};
+use wimcc::db::repo_diff_hunk::DiffHunkRow;
+use wimcc::db::repo_verification_run::VerificationRunRow;
+use wimcc::insight::extractor::InsightExtractor;
+use wimcc::insight::extractors::final_state_mismatch::FinalStateMismatch;
+use wimcc::insight::types::PromotionPolicy;
+use wimcc::insight::view::SessionInsightView;
+use wimcc::model::graph::{GraphEdge, GraphNode};
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 fn base_event(i: usize, actor: Actor, kind: EventKind) -> ObservedEvent {
     ObservedEvent {

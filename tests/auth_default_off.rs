@@ -8,16 +8,16 @@ use axum_test::TestServer;
 use serde_json::json;
 
 /// Build a test server with auth DISABLED (token = empty string).
-/// Matches the production path produced by `witmcc serve --auth off`.
+/// Matches the production path produced by `wimcc serve --auth off`.
 async fn build_anonymous_test_server() -> TestServer {
-    let pool = witmcc::db::connect(":memory:").await.unwrap();
-    witmcc::db::migrate(&pool).await.unwrap();
+    let pool = wimcc::db::connect(":memory:").await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
 
     // new_for_tests() leaves token = "" by default — this is the auth-off shape.
-    let state = witmcc::api::AppState::new_for_tests(pool);
+    let state = wimcc::api::AppState::new_for_tests(pool);
     assert!(state.token.is_empty(), "auth-off invariant: token must be empty");
 
-    let app = witmcc::api::router(state);
+    let app = wimcc::api::router(state);
     TestServer::new(app).unwrap()
 }
 
@@ -63,7 +63,7 @@ async fn empty_token_allows_anonymous_mcp_initialize() {
 /// RED — until `--auth` flag with `default: off` is added to `serve`.
 #[test]
 fn serve_help_lists_auth_flag_with_default_off() {
-    let out = assert_cmd::Command::cargo_bin("witmcc")
+    let out = assert_cmd::Command::cargo_bin("wimcc")
         .unwrap()
         .args(["serve", "--help"])
         .output()

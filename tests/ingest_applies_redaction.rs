@@ -2,7 +2,7 @@
 //! before persisting payload and must write a redaction_manifest.
 
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::migrate;
+use wimcc::db::migrate;
 
 async fn test_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -16,8 +16,8 @@ async fn test_pool() -> sqlx::SqlitePool {
 
 #[tokio::test]
 async fn ingest_masks_anthropic_key_in_stored_payload() {
-    use witmcc::live::NoopSink;
-    use witmcc::ingest::store;
+    use wimcc::live::NoopSink;
+    use wimcc::ingest::store;
 
     let pool = test_pool().await;
     // Use the synthetic fixture which contains sk-ant-api03-SYNTHETIC_KEY_...
@@ -47,8 +47,8 @@ async fn ingest_masks_anthropic_key_in_stored_payload() {
 
 #[tokio::test]
 async fn ingest_masks_private_key_pem_in_stored_payload() {
-    use witmcc::live::NoopSink;
-    use witmcc::ingest::store;
+    use wimcc::live::NoopSink;
+    use wimcc::ingest::store;
 
     let pool = test_pool().await;
     store::ingest_file(
@@ -76,8 +76,8 @@ async fn ingest_masks_private_key_pem_in_stored_payload() {
 
 #[tokio::test]
 async fn ingest_writes_redaction_manifest_column() {
-    use witmcc::live::NoopSink;
-    use witmcc::ingest::store;
+    use wimcc::live::NoopSink;
+    use wimcc::ingest::store;
 
     let pool = test_pool().await;
     store::ingest_file(
@@ -104,8 +104,8 @@ async fn ingest_writes_redaction_manifest_column() {
 
 #[tokio::test]
 async fn ingest_sets_redaction_state_to_redacted_when_secret_found() {
-    use witmcc::live::NoopSink;
-    use witmcc::ingest::store;
+    use wimcc::live::NoopSink;
+    use wimcc::ingest::store;
 
     let pool = test_pool().await;
     store::ingest_file(

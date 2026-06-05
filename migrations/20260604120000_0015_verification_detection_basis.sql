@@ -10,7 +10,7 @@
 --
 -- Backfill: existing rows predate the rewrite. They were all Tier-1 matches
 -- with exit-derived status, so defaulting to 'known_tool' / 'exit' is correct
--- for historical rows; re-ingest (witmcc init-db + ingest --all) recomputes
+-- for historical rows; re-ingest (wimcc init-db + ingest --all) recomputes
 -- them precisely under the new detector.
 
 ALTER TABLE verification_run

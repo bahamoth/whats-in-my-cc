@@ -243,7 +243,7 @@ export function meaningfulCommand(cmd: string): string {
 }
 
 /** A command run directly by path → run.code: `./x`, `../x`, `/abs/x`, `*.sh`,
- *  or a bare relative path with a slash (`target/debug/witmcc`,
+ *  or a bare relative path with a slash (`target/debug/wimcc`,
  *  `.claude/skills/ch/scripts/ch`). A token CONTAINING a slash in command
  *  position names a file to execute. Quoted tokens are excluded — those are
  *  heredoc/string-body fragments, not commands. */

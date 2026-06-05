@@ -1,11 +1,11 @@
 /* webui/src/components/replay/detail/DetailPanel.module.css */
-.panel { display: flex; flex-direction: column; height: 100%; border: 1px solid var(--witmcc-border, #1d212c); border-radius: 6px; background: var(--witmcc-surface-1, #11141b); }
-.empty { color: var(--witmcc-fg-subtle, #6a7180); padding: 16px; }
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--witmcc-border, #1d212c); padding: 6px 6px 0; }
-.tab { background: none; border: none; color: var(--witmcc-fg-muted, #aab0bd); padding: 6px 12px; cursor: pointer; border-radius: 4px 4px 0 0; font: inherit; }
-.tab.active { color: var(--witmcc-fg, #e6e8ee); background: var(--witmcc-surface-2, #161a23); border-bottom: 2px solid var(--witmcc-accent, #4f8cff); }
+.panel { display: flex; flex-direction: column; height: 100%; border: 1px solid var(--wimcc-border, #1d212c); border-radius: 6px; background: var(--wimcc-surface-1, #11141b); }
+.empty { color: var(--wimcc-fg-subtle, #6a7180); padding: 16px; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--wimcc-border, #1d212c); padding: 6px 6px 0; }
+.tab { background: none; border: none; color: var(--wimcc-fg-muted, #aab0bd); padding: 6px 12px; cursor: pointer; border-radius: 4px 4px 0 0; font: inherit; }
+.tab.active { color: var(--wimcc-fg, #e6e8ee); background: var(--wimcc-surface-2, #161a23); border-bottom: 2px solid var(--wimcc-accent, #4f8cff); }
 .tab { display: inline-flex; align-items: center; gap: 4px; }
 /* Raw tab carries a record but isn't open → invite discovery (#2). */
-.tabEmphasis { color: var(--witmcc-fg, #e6e8ee); }
-.tabDot { width: 6px; height: 6px; border-radius: 50%; background: var(--witmcc-accent, #4f8cff); }
+.tabEmphasis { color: var(--wimcc-fg, #e6e8ee); }
+.tabDot { width: 6px; height: 6px; border-radius: 50%; background: var(--wimcc-accent, #4f8cff); }
 .body { padding: 10px; overflow: auto; flex: 1; min-height: 0; }

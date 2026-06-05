@@ -16,7 +16,7 @@ use tokio_util::sync::CancellationToken;
 #[tokio::test]
 async fn shutdown_returns_immediately_after_cancel() {
     let cancel = CancellationToken::new();
-    let fut = witmcc::serve::shutdown_with_grace(cancel.clone());
+    let fut = wimcc::serve::shutdown_with_grace(cancel.clone());
     let handle = tokio::spawn(fut);
 
     cancel.cancel();
@@ -33,7 +33,7 @@ async fn shutdown_propagates_cancel_to_outer_token() {
     // cancel-branch invariant instead: when cancel is observed, the helper
     // returns AND the token remains cancelled (idempotent).
     let cancel = CancellationToken::new();
-    let fut = witmcc::serve::shutdown_with_grace(cancel.clone());
+    let fut = wimcc::serve::shutdown_with_grace(cancel.clone());
     let handle = tokio::spawn(fut);
 
     cancel.cancel();
@@ -48,7 +48,7 @@ async fn shutdown_propagates_cancel_to_outer_token() {
 #[test]
 fn default_shutdown_grace_is_five_seconds() {
     assert_eq!(
-        witmcc::serve::DEFAULT_SHUTDOWN_GRACE,
+        wimcc::serve::DEFAULT_SHUTDOWN_GRACE,
         Duration::from_secs(5)
     );
 }
@@ -65,7 +65,7 @@ async fn grace_timer_does_not_fire_before_cancel() {
 
     let result = tokio::time::timeout(
         Duration::from_millis(400),
-        witmcc::serve::run_serve_with_grace(never_finishing_serve, cancel, grace),
+        wimcc::serve::run_serve_with_grace(never_finishing_serve, cancel, grace),
     )
     .await;
 
@@ -89,7 +89,7 @@ async fn grace_timer_fires_after_cancel() {
 
     let result = tokio::time::timeout(
         Duration::from_millis(400),
-        witmcc::serve::run_serve_with_grace(never_finishing_serve, cancel, grace),
+        wimcc::serve::run_serve_with_grace(never_finishing_serve, cancel, grace),
     )
     .await;
 

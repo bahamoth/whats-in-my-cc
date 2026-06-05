@@ -4,8 +4,8 @@
 
 #[tokio::test]
 async fn retention_tombstone_table_has_expected_columns() {
-    let pool = witmcc::db::connect(":memory:").await.unwrap();
-    witmcc::db::migrate(&pool).await.unwrap();
+    let pool = wimcc::db::connect(":memory:").await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
 
     let rows: Vec<(String,)> = sqlx::query_as(
         "SELECT name FROM pragma_table_info('retention_tombstone') ORDER BY name",
@@ -22,8 +22,8 @@ async fn retention_tombstone_table_has_expected_columns() {
 
 #[tokio::test]
 async fn retention_tombstone_resource_id_is_primary_key() {
-    let pool = witmcc::db::connect(":memory:").await.unwrap();
-    witmcc::db::migrate(&pool).await.unwrap();
+    let pool = wimcc::db::connect(":memory:").await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
 
     // Try to insert duplicate — should fail
     sqlx::query(

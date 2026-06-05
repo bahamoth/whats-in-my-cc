@@ -4,24 +4,24 @@
   line-height: 1.4;
   padding: 1px 6px;
   border-radius: 999px;
-  border: 1px solid var(--witmcc-border-strong);
-  color: var(--witmcc-fg-muted);
+  border: 1px solid var(--wimcc-border-strong);
+  color: var(--wimcc-fg-muted);
   white-space: nowrap;
 }
 
 .badge[data-provenance='measured'] {
-  color: var(--witmcc-success);
-  border-color: var(--witmcc-success);
+  color: var(--wimcc-success);
+  border-color: var(--wimcc-success);
 }
 .badge[data-provenance='mixed'] {
-  color: var(--witmcc-info);
-  border-color: var(--witmcc-info);
+  color: var(--wimcc-info);
+  border-color: var(--wimcc-info);
 }
 .badge[data-provenance='estimated'] {
-  color: var(--witmcc-warning);
-  border-color: var(--witmcc-warning);
+  color: var(--wimcc-warning);
+  border-color: var(--wimcc-warning);
 }
 .badge[data-provenance='uncollected'] {
-  color: var(--witmcc-fg-subtle);
-  border-color: var(--witmcc-border);
+  color: var(--wimcc-fg-subtle);
+  border-color: var(--wimcc-border);
 }

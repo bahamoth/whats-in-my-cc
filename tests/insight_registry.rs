@@ -5,7 +5,7 @@
 
 #[test]
 fn registry_contains_all_mvp_categories_in_locked_order() {
-    let cats: Vec<&str> = witmcc::insight::registry::all_extractors()
+    let cats: Vec<&str> = wimcc::insight::registry::all_extractors()
         .iter()
         .map(|e| e.category())
         .collect();
@@ -20,7 +20,7 @@ fn registry_contains_all_mvp_categories_in_locked_order() {
 
 #[test]
 fn registry_floor_values() {
-    let exts = witmcc::insight::registry::all_extractors();
+    let exts = wimcc::insight::registry::all_extractors();
     let tf = exts.iter().find(|e| e.category() == "tool_failure").unwrap();
     let ra = exts.iter().find(|e| e.category() == "risky_action").unwrap();
     let cb = exts.iter().find(|e| e.category() == "context_bloat").unwrap();

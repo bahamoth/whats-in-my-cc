@@ -106,8 +106,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 
   <section id="overview">
     <h2><span class="num">00</span>Overview</h2>
-    <p>이 문서는 <code>docs/superpowers/specs/2026-05-19-witmcc-slice1-transcript-design.md</code> 및
-    <code>docs/superpowers/plans/2026-05-19-witmcc-slice1-transcript.md</code> 대비 실제 구현의 차이를 기록한다.
+    <p>이 문서는 <code>docs/superpowers/specs/2026-05-19-wimcc-slice1-transcript-design.md</code> 및
+    <code>docs/superpowers/plans/2026-05-19-wimcc-slice1-transcript.md</code> 대비 실제 구현의 차이를 기록한다.
     CLAUDE.md 지침에 따라 설계 결정, 편차, 트레이드오프, 열린 질문을 모두 포함한다.</p>
     <div class="callout good">
       <strong>전체 상태:</strong> slice-1 완료. 22개 테스트 통과. Pull API 4 endpoint 정상 동작.
@@ -274,7 +274,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
           <td>DEV-01 (MSRV bump)</td>
           <td><code id="commit-2288329">2288329</code></td>
           <td><code>22883292ed9e0709b79520d615157f0439d91021</code></td>
-          <td>chore: cargo bootstrap (witmcc slice-1)</td>
+          <td>chore: cargo bootstrap (wimcc slice-1)</td>
         </tr>
         <tr>
           <td>DEV-02, DEV-03 (IpAddr, loopback)</td>
@@ -734,7 +734,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
         <p><strong>사양 원문:</strong> CLAUDE.md 명시적 non-goal —
         "Claude Code 설정 / hook / command / skill / memory 변경".</p>
         <p><strong>실제 구현:</strong> README에 forward script 예제와 settings.json
-        스니펫만 제공. <code>witmcc init-hooks</code> 같은 자동 설치 서브커맨드는 없음.</p>
+        스니펫만 제공. <code>wimcc init-hooks</code> 같은 자동 설치 서브커맨드는 없음.</p>
         <p><strong>이유:</strong> Claude Code 설정에 대한 write는 product principle 위반.
         사용자가 명시적으로 hook을 등록해야 데이터가 들어온다.</p>
       </div>
@@ -1003,7 +1003,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       <code>raw_event</code> verbatim; Stage 2 (anchored on real Claude Code v01 fixtures)
       normalises per-data-point / per-record into <code>MetricSample</code> /
       <code>LogRecord</code> <code>ObservedEvent</code> rows + graph nodes. A new
-      <code>witmcc doctor</code> CLI reports env / hook-settings / per-source freshness
+      <code>wimcc doctor</code> CLI reports env / hook-settings / per-source freshness
       without mutating anything. SCHEMA_VERSION 0.4.0 → 0.5.0.</p>
     <p><strong>전체 상태:</strong> slice-6 완료. 9 commits, +1486 LOC, 123 cargo + 36 vitest
       tests (slice-5 대비 +20 cargo, +5 vitest). 실 Claude Code 2.1.145 payload로 fixture를
@@ -1104,7 +1104,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       <p><strong>맥락:</strong> 두 spec HTML은 single-line으로 거대해서 안전한 in-place
         patch가 어렵다.</p>
       <p><strong>구현:</strong> 본 slice에서는 design spec
-        (<code>docs/superpowers/specs/2026-05-20-witmcc-slice6-...md</code>) +
+        (<code>docs/superpowers/specs/2026-05-20-wimcc-slice6-...md</code>) +
         implementation-notes (이 페이지)가 사실상 spec patch 역할. docs/02 (architecture) /
         docs/03 (data model)의 HTML 통합은 별도 작업으로 분리. design spec과 이 페이지에
         모든 결정·매핑이 명시되어 있다.</p>
@@ -1131,8 +1131,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       <li><code>df6b198</code> — test(otel): freeze real Claude Code OTel payloads v01 — metrics/logs/traces (redacted)</li>
       <li><code>5e899b4</code> — feat(ingest): Stage2 normalize — MetricSample + LogRecord + graph nodes</li>
       <li><code>790629d</code> — feat(webui): metric_sample / log_record markers on OTel lane</li>
-      <li><code>f48562c</code> — feat(api): GET /v1/health/sources — per-source freshness for witmcc doctor</li>
-      <li><code>2904f64</code> — feat(cli): witmcc doctor — env / hook settings / server probe (read-only)</li>
+      <li><code>f48562c</code> — feat(api): GET /v1/health/sources — per-source freshness for wimcc doctor</li>
+      <li><code>2904f64</code> — feat(cli): wimcc doctor — env / hook settings / server probe (read-only)</li>
     </ul>
   </section>
 
@@ -1140,11 +1140,11 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <h2><span class="num">19</span>Slice-7 Overview</h2>
     <p><code>slice7-live-tail-doctor</code> branch — finishes M1 by making
       every Claude Code source land in real-time without a second command,
-      and rebuilds <code>witmcc doctor</code> to walk the actual settings
+      and rebuilds <code>wimcc doctor</code> to walk the actual settings
       hierarchy instead of just <code>~/.claude/settings.json</code>.</p>
     <p><strong>Trigger:</strong> user observed after slice-6 merge that
       "OTel 만 수집되고 채팅이나 훅은 인입이 안되는데" — transcripts still required
-      <code>witmcc ingest --all</code>, hooks required user-side registration, and
+      <code>wimcc ingest --all</code>, hooks required user-side registration, and
       doctor v0.1 falsely reported <code>OTEL_*</code> as <code>unset</code> when
       they actually lived in <code>~/.claude/settings.json</code>'s <code>env</code>
       block (which Claude Code injects into its own child process but doesn't
@@ -1156,7 +1156,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       ingested, including the current conversation's 1,751 events.
       Doctor v0.2 verified end-to-end on bahamoth's <code>~/.claude/settings.json</code>
       — all 14 OTel keys correctly attributed to <code>user</code> scope,
-      shell divergence flagged, hook-only-not-witmcc PreToolUse entry shown
+      shell divergence flagged, hook-only-not-wimcc PreToolUse entry shown
       under "other hooks observed".</p>
   </section>
 
@@ -1186,7 +1186,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <div class="dev">
       <h3>DEV-S7-02 Initial catch-up scan runs in a background task</h3>
       <p><strong>증상:</strong> first impl awaited the catch-up scan inline,
-        which made <code>witmcc serve</code> startup time = total transcript
+        which made <code>wimcc serve</code> startup time = total transcript
         bytes / parse rate. CI test <code>serve_accepts_watch_and_poll_flags</code>
         (8s budget) failed because the test host's real
         <code>~/.claude/projects</code> contained too many MB to scan in time.</p>
@@ -1240,7 +1240,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       <p><strong>구현:</strong> plugin manifests appear with scope label
         <code>plugin:my-plugin</code> rather than just <code>plugin</code>, so
         users with multiple plugins can tell which one contributed which hook.
-        For tests, <code>WITMCC_DOCTOR_PLUGINS_ROOT</code> env overrides the
+        For tests, <code>WIMCC_DOCTOR_PLUGINS_ROOT</code> env overrides the
         default <code>~/.claude/plugins</code> location so the test harness
         doesn't touch the host's real plugins dir.</p>
     </div>
@@ -1330,7 +1330,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       foundation for M6 MCP Streamable HTTP, so this slice is dual-purpose.</p>
     <p><strong>전체 상태:</strong> slice-8 완료. 7 commits, +1.2k LOC. 147 cargo +
       55 vitest tests still green; 3 new L3 subprocess tests verify per-ingest-path SSE
-      emission against the real <code>witmcc serve</code> binary. End-to-end smoke
+      emission against the real <code>wimcc serve</code> binary. End-to-end smoke
       manually verified: POST /hooks/v1/events → SSE envelope received with
       <code>source_type="hook"</code> + ULID event_id within ~50ms (loopback).</p>
   </section>
@@ -1368,7 +1368,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
           wiring guard (ingest_file → BroadcastSink → live_tx 구독자 도달 검증, HTTP 없음)와
           (b) 동기 에러 경로 (<code>last_event_id=NOT-A-ULID</code> → HTTP 400)만 in-process로
           검증. streaming 거동은 <code>tests/sse_subprocess.rs</code>의 L3 테스트가 실제
-          <code>witmcc serve</code> 바이너리 + raw TCP HTTP/1.1로 검증.</p>
+          <code>wimcc serve</code> 바이너리 + raw TCP HTTP/1.1로 검증.</p>
         <p><strong>대안 검토:</strong> reqwest의 streaming feature를 dev-dep으로 추가하면
           in-process도 가능하지만 axum-test와 비교해 가치가 작아 보류.</p>
       </div>
@@ -1397,20 +1397,20 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       </div>
       <div class="dev-body">
         <p><strong>맥락:</strong> spec §7.6은 commit 전 claude-in-chrome 기반 L5 smoke 11건을
-          의무로 했다. 본 세션에서 release 바이너리 (<code>./target/release/witmcc</code>) +
+          의무로 했다. 본 세션에서 release 바이너리 (<code>./target/release/wimcc</code>) +
           claude-in-chrome 도구로 실 브라우저 검증을 수행했다.</p>
         <p><strong>통과 시나리오:</strong></p>
         <ul>
           <li><strong>S-10 (SessionListPage 라이브 신규 row):</strong> 빈 DB로 띄운
-            <code>witmcc serve --port 17878</code>에 <code>POST /hooks/v1/events</code>
+            <code>wimcc serve --port 17878</code>에 <code>POST /hooks/v1/events</code>
             (session_id=sess_browser_smoke) → 새로고침 없이 SessionListPage에 1개 행 등장.
             LIVE 뱃지 자동 ON, tooltip "received an SSE envelope within 60s".</li>
           <li><strong>S-3 (SessionDetail 라이브 marker append):</strong> 같은 session
             상세 페이지에서 PostToolUse + UserPromptSubmit 2건 추가 POST → DOM에 3 events,
             SVG marker 3개 자동 추가 (1→3). 새로고침 0회.</li>
           <li><strong>S-5 (F5 reload + cursor 영속화):</strong> <code>location.reload()</code>
-            후 sessionStorage의 <code>witmcc:cursor:global</code> +
-            <code>witmcc:cursor:sess_browser_smoke</code> 키 유지. EventSource는 새
+            후 sessionStorage의 <code>wimcc:cursor:global</code> +
+            <code>wimcc:cursor:sess_browser_smoke</code> 키 유지. EventSource는 새
             <code>?last_event_id=&lt;cursor&gt;</code> 쿼리로 재연결, 데이터 유지 (3 events).</li>
           <li><strong>S-7 (reload 후 라이브 continuity):</strong> reload 직후 Notification
             hook 4번째 POST → DOM 3→4 events / 3→4 markers 즉시 갱신. EventSource 재연결이
@@ -1671,8 +1671,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       <span class="badge">windowed-buffer</span>
       <span class="badge">DEV-S8-12/13/14 superseded</span>
     </div>
-    <p>이 절은 <code>docs/superpowers/specs/2026-05-21-witmcc-slice9-windowed-buffer-design.md</code> 와
-      <code>docs/superpowers/plans/2026-05-21-witmcc-slice9-windowed-buffer.md</code> 대비 실제 구현의 차이를 기록한다.</p>
+    <p>이 절은 <code>docs/superpowers/specs/2026-05-21-wimcc-slice9-windowed-buffer-design.md</code> 와
+      <code>docs/superpowers/plans/2026-05-21-wimcc-slice9-windowed-buffer.md</code> 대비 실제 구현의 차이를 기록한다.</p>
     <p><strong>전체 상태:</strong> slice-9 완료. 5 commits, cargo 70+ tests + vitest 64 + L3 subprocess 1
       모두 green. browser smoke 5 시나리오 모두 통과 (사용자 실 53k+ event DB).</p>
     <p>슬라이스 8의 임시방편 3건이 superseded 됐다:</p>
@@ -1787,8 +1787,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       M5 Insight engine을 시작하기 위한 prerequisite — 모든 ObservedEvent가 진짜 session_id를 갖게 됨 (<code>FILESYSTEM_SESSION_ID</code> 합성 세션 제거).</p>
     <h3>Spec / Plan</h3>
     <ul>
-      <li><code>docs/superpowers/specs/2026-05-22-witmcc-slice10a-filesystem-removal-design.md</code></li>
-      <li><code>docs/superpowers/plans/2026-05-22-witmcc-slice10a-filesystem-removal.md</code></li>
+      <li><code>docs/superpowers/specs/2026-05-22-wimcc-slice10a-filesystem-removal-design.md</code></li>
+      <li><code>docs/superpowers/plans/2026-05-22-wimcc-slice10a-filesystem-removal.md</code></li>
     </ul>
   </section>
 
@@ -1839,7 +1839,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       <p><strong>맥락:</strong> diff_hunk 컬럼 변경을 위해 0005 신규 migration 대신 기존 0003을 in-place 편집.</p>
       <p><strong>편차:</strong> migration history가 마치 transcript-only가 처음부터 설계된 것처럼 보임.
         <strong>중요 부작용</strong>: sqlx의 migration hash 검증이 기존 dev DB에 대해 fail →
-        <code>.witmcc.sqlite*</code> 삭제 후 <code>witmcc init-db</code> 재생성 필요. 사용자가 명시적으로
+        <code>.wimcc.sqlite*</code> 삭제 후 <code>wimcc init-db</code> 재생성 필요. 사용자가 명시적으로
         "임시 데이터 폐기 무방"으로 결정.</p>
       <p><strong>실제 수정:</strong> <code>migrations/20260520120000_0003_diff_hunk.sql</code>만 변경 (file_event/commit 테이블은
         애초에 별도 migration이 없었고, observed_event.kind는 freeform TEXT라 CHECK 변경 불요).</p>
@@ -2308,7 +2308,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
           AtomicI64 counters — in-memory, server restart 시 reset (DEV-S15-03).</dd>
 
       <dt>CLI</dt>
-      <dd><code>witmcc serve --judge {none|anthropic|fixture} --judge-budget N --judge-fixture-path &lt;path&gt;</code>.
+      <dd><code>wimcc serve --judge {none|anthropic|fixture} --judge-budget N --judge-fixture-path &lt;path&gt;</code>.
           <code>none</code>은 <code>noop</code>의 alias. Default = none (L2 OFF).</dd>
     </dl>
 
@@ -2627,14 +2627,14 @@ vitest: 69 passed
 
     <h3>Roadmap + 핵심 설계</h3>
     <ul>
-      <li><code>docs/superpowers/specs/2026-05-27-witmcc-remaining-milestones-roadmap.md</code> — 슬라이스 그래프, AC 매핑, 표준 검증 구조(L1–L6), 리스크 레지스터, 정의-of-done.</li>
-      <li><code>docs/superpowers/specs/2026-05-27-witmcc-insight-engine-architecture.md</code> — L1 deterministic + L2 LLM judge 분리. 비용 모델, 캐시 키, 예산 가드, 카테고리 라우팅 표.</li>
-      <li><code>docs/superpowers/specs/2026-05-27-witmcc-ux-redesign-epic.md</code> — UI 재설계 deferral 차터 + 데이터 컨트랙트 전제조건 (C1..C10).</li>
+      <li><code>docs/superpowers/specs/2026-05-27-wimcc-remaining-milestones-roadmap.md</code> — 슬라이스 그래프, AC 매핑, 표준 검증 구조(L1–L6), 리스크 레지스터, 정의-of-done.</li>
+      <li><code>docs/superpowers/specs/2026-05-27-wimcc-insight-engine-architecture.md</code> — L1 deterministic + L2 LLM judge 분리. 비용 모델, 캐시 키, 예산 가드, 카테고리 라우팅 표.</li>
+      <li><code>docs/superpowers/specs/2026-05-27-wimcc-ux-redesign-epic.md</code> — UI 재설계 deferral 차터 + 데이터 컨트랙트 전제조건 (C1..C10).</li>
     </ul>
 
     <h3>Slice별 spec + TDD plan</h3>
     <ul>
-      <li>slice-11 VerificationRun ingest — <code>specs/2026-05-27-witmcc-slice11-verification-run-design.md</code> + <code>plans/2026-05-27-witmcc-slice11-verification-run.md</code></li>
+      <li>slice-11 VerificationRun ingest — <code>specs/2026-05-27-wimcc-slice11-verification-run-design.md</code> + <code>plans/2026-05-27-wimcc-slice11-verification-run.md</code></li>
       <li>slice-12 Episode segmentation — <code>specs/.../slice12-episode-segmentation-design.md</code> + <code>plans/.../slice12-episode-segmentation.md</code></li>
       <li>slice-13 Causal-edge inference — <code>specs/.../slice13-causal-edge-inference-design.md</code> + <code>plans/.../slice13-causal-edge-inference.md</code></li>
       <li>slice-14 Insight L1 — <code>specs/.../slice14-insight-l1-design.md</code> + <code>plans/.../slice14-insight-l1.md</code></li>
@@ -2690,8 +2690,8 @@ vitest: 69 passed
 
     <h3>Token Authentication</h3>
     <ul>
-      <li><strong>Token generation:</strong> 32바이트 CSPRNG → base64url → <code>witmcc_&lt;43-char&gt;</code> 형식 (~50자)</li>
-      <li><strong>Token file:</strong> <code>$WITMCC_CONFIG_DIR/token</code> (미설정 시 <code>~/.config/witmcc/token</code>), mode <strong>0600</strong> POSIX. 과잉 권한이면 기동 거부.</li>
+      <li><strong>Token generation:</strong> 32바이트 CSPRNG → base64url → <code>wimcc_&lt;43-char&gt;</code> 형식 (~50자)</li>
+      <li><strong>Token file:</strong> <code>$WIMCC_CONFIG_DIR/token</code> (미설정 시 <code>~/.config/wimcc/token</code>), mode <strong>0600</strong> POSIX. 과잉 권한이면 기동 거부.</li>
       <li><strong>Middleware:</strong> <code>require_token</code> — <code>Authorization: Bearer &lt;token&gt;</code> 헤더 검증. <code>subtle::ConstantTimeEq</code> 사용 (타이밍 사이드채널 방어).</li>
       <li><strong>Coverage:</strong> 모든 <code>/v1/*</code> + <code>/mcp</code> 라우트 auth-gated. <code>/otel/*</code>, <code>/hooks/*</code>, <code>/v1/stream</code>, static SPA는 열린 상태.</li>
       <li><strong>CLI flags (serve 서브명령):</strong> <code>--print-token</code> (token 출력 후 exit 0), <code>--rotate-token</code> (atomic 교체 후 exit 0).</li>
@@ -2718,16 +2718,16 @@ vitest: 69 passed
     </ul>
 
     <h3>Doctor Integration</h3>
-    <p><code>witmcc doctor</code>가 <code>WITMCC_CONFIG_DIR/token</code>을 자동으로 읽어 Bearer 헤더를 추가. 401 응답을 "server reachable" (not connectivity error)로 처리.</p>
+    <p><code>wimcc doctor</code>가 <code>WIMCC_CONFIG_DIR/token</code>을 자동으로 읽어 Bearer 헤더를 추가. 401 응답을 "server reachable" (not connectivity error)로 처리.</p>
 
     <h3>Smoke Evidence</h3>
     <ul>
-      <li><code>witmcc serve --print-token</code> → stderr에 <code>witmcc_…</code> 출력, exit 0. Token file mode 0600 확인.</li>
+      <li><code>wimcc serve --print-token</code> → stderr에 <code>wimcc_…</code> 출력, exit 0. Token file mode 0600 확인.</li>
       <li><code>curl /v1/health</code> → 401 (no token)</li>
       <li><code>curl -H "Authorization: Bearer $T" /v1/health</code> → 200, <code>security.auth_required: true</code>, <code>security.retention_profile: "none"</code></li>
       <li><code>curl -H "Authorization: Bearer wrong" /v1/health</code> → 401</li>
       <li><code>POST /mcp</code> without token → 401; with token → 200</li>
-      <li><code>witmcc serve --rotate-token</code> → 새 token 파일 기록, stderr 출력, exit 0</li>
+      <li><code>wimcc serve --rotate-token</code> → 새 token 파일 기록, stderr 출력, exit 0</li>
       <li>단위 테스트: <code>sweep_default_profile_deletes_raw_older_than_30d</code>, <code>deleted_resource_has_tombstone</code>, <code>sweep_writes_audit_row</code> → 모두 green</li>
     </ul>
   </section>
@@ -2820,7 +2820,7 @@ vitest: 69 passed
     </ul>
     <h3>Migration 불필요</h3>
     <p>payload는 <code>observed_event</code> 테이블의 JSON BLOB 컬럼이다. 스키마 변경 없이 payload JSON에 새 키만 추가한다.
-    단, 기존 dev DB에 이미 수집된 이벤트는 새 키가 없으므로 <code>witmcc init-db</code> + 재ingest가 필요하다.</p>
+    단, 기존 dev DB에 이미 수집된 이벤트는 새 키가 없으므로 <code>wimcc init-db</code> + 재ingest가 필요하다.</p>
     <h3>실 데이터 고정</h3>
     <p>모든 assertion은 <code>tests/fixtures/transcripts/minimal_session.jsonl</code> 실 fixture에 고정:
     assistant 메시지의 <code>model:"claude-opus-4-7"</code>, tool_use 블록의 <code>name:"Bash"</code>.</p>
@@ -2836,8 +2836,8 @@ vitest: 69 passed
     <h2><span class="num">37</span>UX S2–S6 — Stream Readability Redesign (frontend)</h2>
     <p>좌측 대화 스트림을 채팅 구조로, 노드/카드를 휴먼 리더블 라벨로, 우측 패널을
       2탭(Insight 상세 + Raw)으로 재설계. Spec:
-      <code>docs/superpowers/specs/2026-05-29-witmcc-stream-readability-design.md</code>,
-      Plan: <code>docs/superpowers/plans/2026-05-29-witmcc-stream-readability.md</code>.</p>
+      <code>docs/superpowers/specs/2026-05-29-wimcc-stream-readability-design.md</code>,
+      Plan: <code>docs/superpowers/plans/2026-05-29-wimcc-stream-readability.md</code>.</p>
     <h3>설계 결정 / 편차</h3>
     <ul>
       <li><strong>버그 수정:</strong> 기존 <code>buildStreamCards</code>는 user_message preview를
@@ -2918,7 +2918,7 @@ vitest: 69 passed
     <h3>검증</h3>
     <p>289 vitest green(42 files) · <code>tsc -b</code> clean · 각 슬라이스 브라우저 smoke
       (:5173 Vite dev, /v1 → :7878 프록시). <strong>운영 주의:</strong> WebUI는 <code>webui/dist</code>를
-      rust-embed로 바이너리에 임베드하므로 <code>witmcc serve</code>(:7878)에 반영하려면
+      rust-embed로 바이너리에 임베드하므로 <code>wimcc serve</code>(:7878)에 반영하려면
       <code>npm run build</code> + <code>cargo build</code> 재빌드 필요. 스키마/마이그레이션 변경 없음.</p>
     <h3>Commit Reference (UX S7–S12)</h3>
     <ul>
@@ -2935,7 +2935,7 @@ vitest: 69 passed
   <section id="insight-surface-slice-1">
     <h2><span class="num">39</span>Insight-Surface Redesign Slice 1 — <code>usage_facet</code> (migration 0014)</h2>
     <p><strong>브랜치:</strong> <code>insight-surface-redesign</code> · <strong>날짜:</strong> 2026-05-30 · <strong>트랙:</strong> insight-surface-redesign epic (슬라이스 1/6).
-    Spec: <code>docs/superpowers/specs/2026-05-30-witmcc-insight-surface-redesign-design.md</code>.</p>
+    Spec: <code>docs/superpowers/specs/2026-05-30-wimcc-insight-surface-redesign-design.md</code>.</p>
 
     <h3>신규 테이블: <code>usage_facet</code> (migration 0014)</h3>
     <p>파일: <code>migrations/20260603120000_0014_usage_facet.sql</code>.
@@ -2992,7 +2992,7 @@ vitest: 69 passed
     <p>cache_hit_ratio ≈ 0.983 — 전체 입력의 98%가 캐시에서 읽힘. billed_tokens 14,287,008 (cache_read 693M은 미과금).</p>
 
     <h3>운영 주의 (migration 0014)</h3>
-    <p>신규 migration 0014 추가. 기존 dev DB는 <code>witmcc init-db</code> 후 <code>witmcc ingest --all</code>로 재ingest 필요.
+    <p>신규 migration 0014 추가. 기존 dev DB는 <code>wimcc init-db</code> 후 <code>wimcc ingest --all</code>로 재ingest 필요.
     재ingest 전에는 <code>usage_facet</code>에 행이 없어 <code>GET /v1/sessions/:id/usage</code>가 turns=0을 반환한다.</p>
     <p>재ingest 확인 쿼리: <code>SELECT COUNT(*) AS rows, COUNT(DISTINCT session_id) AS sessions FROM usage_facet;</code></p>
 
@@ -3010,7 +3010,7 @@ vitest: 69 passed
 
   <section>
     <h2>Insight Surface Redesign — Slices 2–7 (2026-05-30)</h2>
-    <p>사양 <code>docs/superpowers/specs/2026-05-30-witmcc-insight-surface-redesign-design.md</code>의 나머지 슬라이스.
+    <p>사양 <code>docs/superpowers/specs/2026-05-30-wimcc-insight-surface-redesign-design.md</code>의 나머지 슬라이스.
     상단 표면을 "5개 진단 질문에 답하는 화면"으로 재편한다. subagent-driven 워크플로우로 구현, 최종 whole-branch 검증
     <strong>all-green</strong> (cargo test 0 failed · webui vitest 314 passed · tsc -b clean; migration 0014/0015/0016 모두 in-memory migrate()로 적용 확인).</p>
 
@@ -3053,7 +3053,7 @@ vitest: 69 passed
     앞 슬라이스의 <em>실제 API</em>를 소비: 검증 카드는 <code>detection_basis</code>가 전부 known_tool+exit이면 측정, 아니면 혼합; 도구실패는 slice-3 <code>user_visible</code> 요약이 있으면 측정; 비용은 slice-5 <code>estimated_cost_usd</code>(추정); baseline 델타는 slice-6에서. 순수 <code>buildInsightCards</code> 뷰모델은 jsdom 단위테스트.</p>
 
     <h3>운영 주의 (migration 0015·0016)</h3>
-    <p>신규 migration <code>0015</code>(verification detection_basis/status_basis) + <code>0016</code>(finding subkind). 기존 dev DB는 <code>witmcc init-db</code> + <code>witmcc ingest --all</code> 재ingest 필요(usage/cost/baseline/tool-failures 데이터 채움).</p>
+    <p>신규 migration <code>0015</code>(verification detection_basis/status_basis) + <code>0016</code>(finding subkind). 기존 dev DB는 <code>wimcc init-db</code> + <code>wimcc ingest --all</code> 재ingest 필요(usage/cost/baseline/tool-failures 데이터 채움).</p>
     <p><strong>워크플로우 교훈:</strong> 슬라이스별 dev-DB 재ingest를 implementer가 매번 돌리다 한 에이전트가 <code>ingest</code>를 backgrounded로 오판해 중복 실행 → 동일 SQLite lock 교착. <code>ingest --all</code> 자체는 정상(단일 실행이면 OK). 이후 워크플로우는 dev-DB 비접촉(정확성은 <code>cargo test</code> in-memory migrate가 게이트), 재ingest는 컨트롤러가 최종 1회만 수행하도록 변경.</p>
 
     <h3>Commit Reference (Slices 2–7)</h3>
@@ -3180,10 +3180,10 @@ vitest: 69 passed
 
     <h3 style="color:#ff9f0a">운영 주의 — 재ingest + 실행 중 serve 재시작 (필수)</h3>
     <ul>
-      <li>그래프 로직 변경이므로 <strong>재ingest로 그래프 rebuild 필요</strong>. <code>witmcc ingest --path &lt;transcript&gt;</code>(또는 <code>--all</code>)가
+      <li>그래프 로직 변경이므로 <strong>재ingest로 그래프 rebuild 필요</strong>. <code>wimcc ingest --path &lt;transcript&gt;</code>(또는 <code>--all</code>)가
         세션을 touch하면 <code>rebuild_session</code>이 <em>DB에 이미 저장된 OTel 이벤트까지 함께</em> 읽어 facet 엣지를 생성한다.
         <code>init-db</code>는 OTel 데이터를 지우므로 쓰지 말 것(그래프만 rebuild하면 됨, 마이그레이션 없음).</li>
-      <li><strong>이미 실행 중이던 <code>witmcc serve</code>를 반드시 재시작</strong>(옛 프로세스 kill 후 새 바이너리로). 검증 중 발견한 함정:
+      <li><strong>이미 실행 중이던 <code>wimcc serve</code>를 반드시 재시작</strong>(옛 프로세스 kill 후 새 바이너리로). 검증 중 발견한 함정:
         실행 중인 옛 서버는 메모리에 옛 코드를 들고 있어, 라이브 세션의 OTLP를 받을 때마다
         <strong>옛 코드로 그래프를 rebuild → facet_of 엣지를 매번 덮어쓴다</strong>. 이 때문에 ingest 직후
         in-process 조회는 facet 2158개를 보는데 외부에서 본 DB는 0이었다(동시 writer 경쟁). 디스크의 바이너리를 새로 빌드해도
@@ -3271,8 +3271,8 @@ vitest: 69 passed
       스키마 마이그레이션 없음 — <code>graph_node.payload</code>는 이미 JSON 컬럼이고, fold는 그 안에 nest되는 내용만 바꾼다.
       기존 dev-DB의 graph 행은 fold 이전 형태를 그대로 들고 있다. fold된 행으로 재생성하려면 세션을 다시 빌드해야 한다 —
       transcript를 재ingest하거나 <code>serve</code>가 빌드하게 두면 된다(<code>serve</code>는 각 OTLP 배치마다, 그리고 시작 시
-      transcript ingest에서 그래프를 rebuild한다). <code>witmcc init-db</code>는 <strong>스키마만 보장하고 데이터를 지우지 않는다</strong> —
-      완전히 깨끗한 DB가 필요하면 먼저 <code>.witmcc.sqlite*</code>를 삭제한 뒤 <code>init-db</code>를 실행한다.
+      transcript ingest에서 그래프를 rebuild한다). <code>wimcc init-db</code>는 <strong>스키마만 보장하고 데이터를 지우지 않는다</strong> —
+      완전히 깨끗한 DB가 필요하면 먼저 <code>.wimcc.sqlite*</code>를 삭제한 뒤 <code>init-db</code>를 실행한다.
     </p>
   </section>
 
@@ -3396,7 +3396,7 @@ vitest: 69 passed
     <h3 style="color:#ff9f0a">운영 주의 — migration 0017 (DROP TABLE episode)</h3>
     <p>
       migration <code>0017</code>이 <code>episode</code> 테이블을 DROP한다(직전 최신 migration은 0016).
-      기존 dev DB(<code>.witmcc.sqlite*</code>)는 <code>witmcc init-db</code>로 재생성해야 한다.
+      기존 dev DB(<code>.wimcc.sqlite*</code>)는 <code>wimcc init-db</code>로 재생성해야 한다.
       episode 데이터는 derived 산출물이라 SSOT(<code>observed_event</code>/<code>raw_event</code>)에서 다시 빌드 가능하므로
       잃는 원본은 없다.
     </p>
@@ -3582,7 +3582,7 @@ vitest: 69 passed
         <code>.scroll</code> <code>min-height:320px</code> → <code>min-height:0</code>(슬롯을 절대 초과 안 함). 안쪽 virtualizer가 유일 스크롤러.</li>
       <li><strong>일관 자동숨김 스크롤바(전역)</strong>: <code>styles/global.css</code>에 단일 정의 — 메시지/디테일/raw/리스트/페이지 모든 스크롤 영역 공통.
         표준 속성 사용(Chrome 121+/FF): <code>* { scrollbar-width: thin }</code>(비상속이라 <code>*</code>), <code>html { scrollbar-color: transparent transparent }</code>(상속 → 평소 숨김),
-        <code>*:hover { scrollbar-color: var(--witmcc-border-strong) transparent }</code>(hover/focus 시 등장). WebKit/Safari 폴백으로 <code>::-webkit-scrollbar*</code>도 유지.
+        <code>*:hover { scrollbar-color: var(--wimcc-border-strong) transparent }</code>(hover/focus 시 등장). WebKit/Safari 폴백으로 <code>::-webkit-scrollbar*</code>도 유지.
         주의: <code>scrollbar-color</code>가 설정되면 Chrome은 표준 경로를 쓰고 <code>::-webkit-scrollbar{width}</code>를 무시하므로, 폭은 <code>scrollbar-width:thin</code>으로만 제어됨.
         <code>.scroll</code>엔 <code>scrollbar-gutter:stable</code>만 남겨 라이브 스트림이 자라 스크롤 가능해질 때 thumb 등장이 콘텐츠를 reflow하지 않게 함.</li>
       <li><strong>페이지 auto-fit</strong>: <code>.page{height:100%; display:flex; flex-direction:column; min-height:0}</code> + <code>.grid{flex:1 1 auto; min-height:0}</code>

@@ -4,9 +4,9 @@
 use axum_test::TestServer;
 use serde_json::Value;
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::api::{router, AppState};
-use witmcc::db::repo_usage_facet::UsageFacetRow;
-use witmcc::db::{migrate, repo_usage_facet};
+use wimcc::api::{router, AppState};
+use wimcc::db::repo_usage_facet::UsageFacetRow;
+use wimcc::db::{migrate, repo_usage_facet};
 
 async fn empty_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()

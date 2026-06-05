@@ -1,9 +1,9 @@
 //! Slice-19 — Bearer token generation, persistence, and rotation.
 //!
-//! Token file location: `$WITMCC_CONFIG_DIR/token` (POSIX mode 0600).
-//! If `WITMCC_CONFIG_DIR` is not set, falls back to `~/.config/witmcc/token`.
+//! Token file location: `$WIMCC_CONFIG_DIR/token` (POSIX mode 0600).
+//! If `WIMCC_CONFIG_DIR` is not set, falls back to `~/.config/wimcc/token`.
 //!
-//! Token format: `witmcc_<43-char base64url>` (~50 chars total).
+//! Token format: `wimcc_<43-char base64url>` (~50 chars total).
 
 use std::path::PathBuf;
 
@@ -11,14 +11,14 @@ use anyhow::{bail, Context, Result};
 use base64::Engine as _;
 
 /// Return the path to the token file.
-/// Uses `WITMCC_CONFIG_DIR` env var for test overriding; otherwise
-/// `~/.config/witmcc/token`.
+/// Uses `WIMCC_CONFIG_DIR` env var for test overriding; otherwise
+/// `~/.config/wimcc/token`.
 pub fn token_file_path() -> Result<PathBuf> {
-    let dir = if let Ok(v) = std::env::var("WITMCC_CONFIG_DIR") {
+    let dir = if let Ok(v) = std::env::var("WIMCC_CONFIG_DIR") {
         PathBuf::from(v)
     } else {
         dirs::config_dir()
-            .map(|d| d.join("witmcc"))
+            .map(|d| d.join("wimcc"))
             .ok_or_else(|| anyhow::anyhow!("cannot determine config directory"))?
     };
     Ok(dir.join("token"))
@@ -29,7 +29,7 @@ pub fn generate_token() -> String {
     let mut bytes = [0u8; 32];
     rand::Fill::fill(&mut bytes, &mut rand::rng());
     let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
-    format!("witmcc_{encoded}")
+    format!("wimcc_{encoded}")
 }
 
 /// Load the token from the token file, checking permissions on POSIX.

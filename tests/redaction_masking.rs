@@ -3,7 +3,7 @@
 //! Each test locks the exact masked output for a canonical example of each rule.
 //! Length-preservation is asserted where spec §4 requires it.
 
-use witmcc::security::redaction::engine::apply_text;
+use wimcc::security::redaction::engine::apply_text;
 
 // --- api_key_anthropic.v1 ---
 

@@ -4,9 +4,9 @@
 //! This test asserts the gate masks each synthetic secret at ingest time.
 
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::migrate;
-use witmcc::ingest::store;
-use witmcc::live::NoopSink;
+use wimcc::db::migrate;
+use wimcc::ingest::store;
+use wimcc::live::NoopSink;
 
 async fn test_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()

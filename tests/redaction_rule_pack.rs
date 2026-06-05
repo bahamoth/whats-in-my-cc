@@ -3,7 +3,7 @@
 //! Locks exactly 11 rule IDs at v1. Any addition requires a `_v2` bump.
 //! Any removal is a breaking change — update the golden + note deviation.
 
-use witmcc::security::redaction::rules::{all_rules, RULE_IDS};
+use wimcc::security::redaction::rules::{all_rules, RULE_IDS};
 
 #[test]
 fn rule_ids_are_canonical_and_versioned() {

@@ -3,8 +3,8 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  background: var(--witmcc-surface-1);
-  border-bottom: 1px solid var(--witmcc-border);
+  background: var(--wimcc-surface-1);
+  border-bottom: 1px solid var(--wimcc-border);
 }
 
 .row {
@@ -18,12 +18,12 @@
   flex-direction: column;
   gap: 4px;
   padding: 10px 12px;
-  background: var(--witmcc-surface-2);
-  border: 1px solid var(--witmcc-border);
+  background: var(--wimcc-surface-2);
+  border: 1px solid var(--wimcc-border);
   border-radius: 6px;
   min-width: 0;
 }
-.card[data-open='true'] { border-color: var(--witmcc-accent); }
+.card[data-open='true'] { border-color: var(--wimcc-accent); }
 
 .cardHead {
   display: flex;
@@ -35,7 +35,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--witmcc-fg-subtle);
+  color: var(--wimcc-fg-subtle);
 }
 
 .cardToggle {
@@ -53,7 +53,7 @@
 .cardValue {
   font-size: 16px;
   font-weight: 600;
-  color: var(--witmcc-fg);
+  color: var(--wimcc-fg);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -61,7 +61,7 @@
 }
 .cardDetail {
   font-size: 11px;
-  color: var(--witmcc-fg-muted);
+  color: var(--wimcc-fg-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -76,19 +76,19 @@
 }
 .baselineDelta {
   font-size: 10px;
-  color: var(--witmcc-fg-subtle);
+  color: var(--wimcc-fg-subtle);
 }
 
 .drill {
   padding: 10px 12px;
-  background: var(--witmcc-surface-2);
-  border: 1px solid var(--witmcc-border);
+  background: var(--wimcc-surface-2);
+  border: 1px solid var(--wimcc-border);
   border-radius: 6px;
 }
 .drillList { margin: 0; padding-left: 18px; }
 .drillItem {
   font-size: 12px;
-  color: var(--witmcc-fg-muted);
+  color: var(--wimcc-fg-muted);
   line-height: 1.6;
 }
 

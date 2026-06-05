@@ -1,9 +1,9 @@
 //! Real-data anchoring: ingesting the frozen verification_v01 transcript must
 //! populate usage_facet with real token counts (cache_read > 0).
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::{migrate, repo_usage_facet};
-use witmcc::ingest::store;
-use witmcc::live::NoopSink;
+use wimcc::db::{migrate, repo_usage_facet};
+use wimcc::ingest::store;
+use wimcc::live::NoopSink;
 
 async fn empty_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()

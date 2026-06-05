@@ -1,7 +1,7 @@
 use chrono::Utc;
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use tempfile::TempDir;
-use witmcc::db::{migrate, repo_raw, repo_runs};
+use wimcc::db::{migrate, repo_raw, repo_runs};
 
 async fn test_pool() -> (SqlitePool, TempDir) {
     let tmp = tempfile::tempdir().unwrap();
@@ -68,7 +68,7 @@ async fn get_for_event_id_returns_joined_row() {
     .await
     .unwrap();
 
-    let raw = witmcc::db::repo_raw::NewRaw {
+    let raw = wimcc::db::repo_raw::NewRaw {
         raw_event_id: "raw_x_001".into(),
         ingest_run_id: run_id.into(),
         source_type: "transcript".into(),
@@ -82,7 +82,7 @@ async fn get_for_event_id_returns_joined_row() {
         redaction_state: "not_applicable".into(),
         redaction_manifest: None,
     };
-    witmcc::db::repo_raw::insert_dedup(&pool, &raw)
+    wimcc::db::repo_raw::insert_dedup(&pool, &raw)
         .await
         .unwrap();
 
@@ -98,7 +98,7 @@ async fn get_for_event_id_returns_joined_row() {
     .await
     .unwrap();
 
-    let row = witmcc::db::repo_raw::get_for_event_id(&pool, "ev_x_001")
+    let row = wimcc::db::repo_raw::get_for_event_id(&pool, "ev_x_001")
         .await
         .unwrap()
         .expect("row");
@@ -114,7 +114,7 @@ async fn get_for_event_id_returns_joined_row() {
 #[tokio::test]
 async fn get_for_event_id_returns_none_when_missing() {
     let (pool, _tmp) = test_pool().await;
-    let row = witmcc::db::repo_raw::get_for_event_id(&pool, "no_such_event")
+    let row = wimcc::db::repo_raw::get_for_event_id(&pool, "no_such_event")
         .await
         .unwrap();
     assert!(row.is_none());

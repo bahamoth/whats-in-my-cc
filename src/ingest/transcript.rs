@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncBufReadExt;
 
-use crate::error::WitmccError;
+use crate::error::WimccError;
 
 pub const MAX_LINE_BYTES: usize = 4 * 1024 * 1024;
 
@@ -172,7 +172,7 @@ pub struct FileHistorySnapshotRecord {
 
 pub async fn stream_file(
     path: &Path,
-) -> std::io::Result<impl Stream<Item = Result<(LineMeta, ParsedRecord), WitmccError>>> {
+) -> std::io::Result<impl Stream<Item = Result<(LineMeta, ParsedRecord), WimccError>>> {
     let file = tokio::fs::File::open(path).await?;
     let reader = tokio::io::BufReader::with_capacity(64 * 1024, file);
     let source_uri: PathBuf = path.to_path_buf();
@@ -198,13 +198,13 @@ pub async fn stream_file(
                     let value: Result<Value, _> = serde_json::from_str(&line);
                     let result = match value {
                         Ok(v) => dispatch(v).map(|rec| (meta.clone(), rec)).map_err(|e| {
-                            WitmccError::ParseLine {
+                            WimccError::ParseLine {
                                 source_uri: src.display().to_string(),
                                 line_no: new_line_no,
                                 message: e,
                             }
                         }),
-                        Err(e) => Err(WitmccError::ParseLine {
+                        Err(e) => Err(WimccError::ParseLine {
                             source_uri: src.display().to_string(),
                             line_no: new_line_no,
                             message: e.to_string(),
@@ -214,7 +214,7 @@ pub async fn stream_file(
                 }
                 Ok(None) => None,
                 Err(e) => Some((
-                    Err(WitmccError::Io {
+                    Err(WimccError::Io {
                         path: src.clone(),
                         source: e,
                     }),

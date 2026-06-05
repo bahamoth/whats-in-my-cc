@@ -1,7 +1,7 @@
 mod common;
 
 use common::edge_inference::synth_session_with_known_repair_pattern;
-use witmcc::graph::build::compute;
+use wimcc::graph::build::compute;
 
 #[test]
 fn inferred_edges_carry_rule_id_and_confidence() {

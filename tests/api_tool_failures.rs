@@ -3,8 +3,8 @@
 use axum_test::TestServer;
 use serde_json::Value;
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::api::AppState;
-use witmcc::db::migrate;
+use wimcc::api::AppState;
+use wimcc::db::migrate;
 
 async fn pool_with_classified_failures() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -47,7 +47,7 @@ async fn pool_with_classified_failures() -> sqlx::SqlitePool {
 
 fn build_server(pool: sqlx::SqlitePool) -> TestServer {
     let state = AppState::new_for_tests(pool);
-    TestServer::new(witmcc::api::router(state)).unwrap()
+    TestServer::new(wimcc::api::router(state)).unwrap()
 }
 
 #[tokio::test]

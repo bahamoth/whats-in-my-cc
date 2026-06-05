@@ -1,5 +1,5 @@
-use witmcc::db::{migrate, repo_observed};
-use witmcc::ingest::store;
+use wimcc::db::{migrate, repo_observed};
+use wimcc::ingest::store;
 
 #[tokio::test]
 async fn backfills_turn_id_for_assistant_in_minimal_session() {
@@ -12,7 +12,7 @@ async fn backfills_turn_id_for_assistant_in_minimal_session() {
     store::ingest_file(
         &pool,
         std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl"),
-        &witmcc::live::NoopSink,
+        &wimcc::live::NoopSink,
     )
     .await
     .unwrap();
@@ -24,7 +24,7 @@ async fn backfills_turn_id_for_assistant_in_minimal_session() {
         .iter()
         .find(|e| {
             e.event_uuid.as_deref() == Some("a1")
-                && matches!(e.kind, witmcc::model::observed::EventKind::AssistantMessage)
+                && matches!(e.kind, wimcc::model::observed::EventKind::AssistantMessage)
         })
         .unwrap();
     assert_eq!(assistant.turn_id.as_deref(), Some("p1"));

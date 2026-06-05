@@ -9,7 +9,7 @@ fn serve_rejects_removed_watch_and_poll_flags() {
     let db = tempfile::NamedTempFile::new().unwrap().into_temp_path();
     let watch_dir = tempfile::tempdir().unwrap();
     let port: u16 = portpicker::pick_unused_port().expect("port");
-    assert_cmd::Command::cargo_bin("witmcc")
+    assert_cmd::Command::cargo_bin("wimcc")
         .unwrap()
         .args([
             "--db-path",
@@ -26,7 +26,7 @@ fn serve_rejects_removed_watch_and_poll_flags() {
         .assert()
         .failure();
 
-    assert_cmd::Command::cargo_bin("witmcc")
+    assert_cmd::Command::cargo_bin("wimcc")
         .unwrap()
         .args([
             "--db-path",
@@ -44,14 +44,14 @@ fn serve_rejects_removed_watch_and_poll_flags() {
 async fn serve_returns_health_ok() {
     // Set up DB
     let db = tempfile::NamedTempFile::new().unwrap().into_temp_path();
-    assert_cmd::Command::cargo_bin("witmcc")
+    assert_cmd::Command::cargo_bin("wimcc")
         .unwrap()
         .args(["--db-path", db.to_str().unwrap(), "init-db"])
         .assert()
         .success();
 
     let port: u16 = portpicker::pick_unused_port().expect("port");
-    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_witmcc"))
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_wimcc"))
         .args([
             "--db-path",
             db.to_str().unwrap(),

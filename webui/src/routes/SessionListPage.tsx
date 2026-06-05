@@ -184,7 +184,7 @@ export default function SessionListPage() {
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <h1>witmcc · Sessions</h1>
+        <h1>wimcc · Sessions</h1>
         <button type="button" onClick={() => void load()}>refresh</button>
       </header>
       {state.kind === 'loading' && <p>Loading…</p>}
@@ -197,7 +197,7 @@ export default function SessionListPage() {
       {state.kind === 'ok' && state.rows.length === 0 && (
         <div className={styles.empty}>
           <p>No sessions yet.</p>
-          <p>Run <code>witmcc serve --auto-migrate</code> and let claude code talk to it, or backfill with <code>witmcc ingest --all</code>.</p>
+          <p>Run <code>wimcc serve --auto-migrate</code> and let claude code talk to it, or backfill with <code>wimcc ingest --all</code>.</p>
         </div>
       )}
       {state.kind === 'ok' && state.rows.length > 0 && (

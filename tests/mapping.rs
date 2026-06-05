@@ -1,14 +1,14 @@
 use futures::StreamExt;
-use witmcc::ingest::mapping::map_record;
-use witmcc::ingest::transcript::stream_file;
-use witmcc::model::observed::{Actor, EventKind};
+use wimcc::ingest::mapping::map_record;
+use wimcc::ingest::transcript::stream_file;
+use wimcc::model::observed::{Actor, EventKind};
 
 #[tokio::test]
 async fn maps_minimal_fixture_to_six_observed_events() {
     let p = std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl");
     let mut stream = Box::pin(stream_file(p).await.unwrap());
     let mut events = vec![];
-    let mut gen = witmcc::ids::MonotonicUlidGen::new();
+    let mut gen = wimcc::ids::MonotonicUlidGen::new();
     while let Some(item) = stream.next().await {
         let (meta, rec) = item.unwrap();
         let raw_id = gen.generate();

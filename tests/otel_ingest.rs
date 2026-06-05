@@ -1,9 +1,9 @@
 use axum_test::TestServer;
 use chrono::Utc;
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::migrate;
-use witmcc::graph::build;
-use witmcc::ingest::otel;
+use wimcc::db::migrate;
+use wimcc::graph::build;
+use wimcc::ingest::otel;
 
 async fn make_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -24,7 +24,7 @@ async fn store_single_span_inserts_one_observed_event() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
     let parsed = otel::parse_otlp_json(&body);
-    let res = otel::store(&pool, parsed, Utc::now(), &witmcc::live::NoopSink).await.unwrap();
+    let res = otel::store(&pool, parsed, Utc::now(), &wimcc::live::NoopSink).await.unwrap();
     assert_eq!(res.accepted_spans, 1);
     assert_eq!(res.rejected_spans, 0);
     assert_eq!(res.sessions_touched, vec!["sess-otel-A".to_string()]);
@@ -50,10 +50,10 @@ async fn store_single_span_inserts_one_observed_event() {
 async fn store_is_idempotent() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
-    let r1 = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink)
+    let r1 = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink)
         .await
         .unwrap();
-    let r2 = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink)
+    let r2 = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink)
         .await
         .unwrap();
     assert_eq!(r1.accepted_spans, 1);
@@ -75,7 +75,7 @@ async fn store_is_idempotent() {
 async fn orphan_spans_stay_in_observed_event_but_produce_no_graph_node() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/parent_child.json");
-    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink)
+    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink)
         .await
         .unwrap();
 
@@ -103,7 +103,7 @@ async fn orphan_spans_stay_in_observed_event_but_produce_no_graph_node() {
 
 async fn http_setup() -> TestServer {
     let pool = make_pool().await;
-    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool));
+    let app = wimcc::api::router(wimcc::api::AppState::new_for_tests(pool));
     TestServer::new(app).unwrap()
 }
 
@@ -193,11 +193,11 @@ async fn post_traces_without_session_id_skips_session_listing() {
 async fn session_detail_returns_otel_span_with_telemetry() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
-    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink)
+    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink)
         .await
         .unwrap();
 
-    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool));
+    let app = wimcc::api::router(wimcc::api::AppState::new_for_tests(pool));
     let server = TestServer::new(app).unwrap();
 
     // Slice-9 — session_detail dropped events; fetch via the new endpoint.
@@ -271,7 +271,7 @@ async fn re_post_triggers_rebuild_when_raw_dedup_skips_insert() {
     let body = fixture("tests/fixtures/otel/single_span.json");
 
     // First store — observed inserted + graph rebuilt (orphan span → 0 nodes).
-    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink).await.unwrap();
+    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink).await.unwrap();
 
     // SSOT row present regardless of graph projection.
     let observed: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM observed_event WHERE kind = 'otel_span'")
@@ -279,7 +279,7 @@ async fn re_post_triggers_rebuild_when_raw_dedup_skips_insert() {
     assert_eq!(observed.0, 1);
 
     // Re-POST — raw is duplicate, but session must still be marked for rebuild.
-    let res = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &witmcc::live::NoopSink).await.unwrap();
+    let res = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink).await.unwrap();
     assert_eq!(res.duplicate_spans, 1);
     assert_eq!(res.accepted_spans, 0);
     assert_eq!(

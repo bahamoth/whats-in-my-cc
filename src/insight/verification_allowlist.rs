@@ -301,7 +301,7 @@ pub fn classify_segment(segment: &str) -> Option<(&'static str, &'static str)> {
     // Tokenise on whitespace and the identifier separators `: _ - .` but NOT
     // `/`. Splitting on `/` would make any argument PATH containing a `tests/`
     // directory (e.g. the real command
-    // `witmcc ingest tests/fixtures/transcripts/x.jsonl`) a false positive —
+    // `wimcc ingest tests/fixtures/transcripts/x.jsonl`) a false positive —
     // observed in this project's own transcripts. Keeping `/` intact means a
     // bare `tests` token only appears when the EXECUTABLE or a standalone
     // argument is the keyword (`./run_integration_test.sh`, `make spec`),
@@ -374,16 +374,16 @@ mod tests {
     #[test]
     fn classify_segment_tier2_path_with_tests_dir_is_not_a_run() {
         // Real-data anchoring: this project's transcripts contain
-        //   `./target/debug/witmcc ingest tests/fixtures/transcripts/x.jsonl`
+        //   `./target/debug/wimcc ingest tests/fixtures/transcripts/x.jsonl`
         // — a non-test command whose argument PATH contains a `tests/` dir.
         // Tier-2 must NOT treat a `tests/` path component as a verification
         // keyword (the tokenizer does not split on `/`).
         assert_eq!(
-            classify_segment("./target/debug/witmcc ingest tests/fixtures/transcripts/minimal_session.jsonl"),
+            classify_segment("./target/debug/wimcc ingest tests/fixtures/transcripts/minimal_session.jsonl"),
             None
         );
         assert_eq!(
-            classify_segment("witmcc ingest tests/fixtures/a.jsonl"),
+            classify_segment("wimcc ingest tests/fixtures/a.jsonl"),
             None
         );
     }

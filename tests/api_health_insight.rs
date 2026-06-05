@@ -2,8 +2,8 @@
 
 use axum_test::TestServer;
 use std::sync::Arc;
-use witmcc::api::AppState;
-use witmcc::insight::judge::runtime::JudgeRuntime;
+use wimcc::api::AppState;
+use wimcc::insight::judge::runtime::JudgeRuntime;
 
 async fn test_server() -> TestServer {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -15,7 +15,7 @@ async fn test_server() -> TestServer {
         .execute(&pool)
         .await
         .unwrap();
-    witmcc::db::migrate(&pool).await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
 
     let (tx, _) = tokio::sync::broadcast::channel(64);
     let state = AppState {
@@ -24,13 +24,13 @@ async fn test_server() -> TestServer {
         sse_keepalive_secs: 30,
         sse_channel_capacity: 512,
         judge_runtime: Arc::new(JudgeRuntime::noop()),
-        mcp_sessions: witmcc::api::mcp::SessionRegistry::new(),
+        mcp_sessions: wimcc::api::mcp::SessionRegistry::new(),
         // Slice-19: empty token disables auth check in test mode.
         token: String::new(),
         retention_profile: "none".to_string(),
         shutdown: tokio_util::sync::CancellationToken::new(),
     };
-    TestServer::new(witmcc::api::router(state)).unwrap()
+    TestServer::new(wimcc::api::router(state)).unwrap()
 }
 
 #[tokio::test]

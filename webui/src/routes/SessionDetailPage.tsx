@@ -236,7 +236,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
       )}
 
       {!isLoading && !is404 && detail.data && (
-        <div className={styles.grid} data-witmcc-detail-grid>
+        <div className={styles.grid} data-wimcc-detail-grid>
           <div className={styles.kpi} data-slot="kpi">
             <InsightStrip
               usage={usage.data}

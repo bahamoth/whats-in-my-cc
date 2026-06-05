@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Redact PII and freeze the largest real OTel payload per signal as fixtures.
 
-One-shot helper used during slice-6 capture. Reads .witmcc.sqlite, picks the
+One-shot helper used during slice-6 capture. Reads .wimcc.sqlite, picks the
 largest payload per source_type, replaces PII with stable placeholders, and
 writes pretty JSON to tests/fixtures/otel/real/{metrics,logs,traces}_v01.json.
 
@@ -26,7 +26,7 @@ import sqlite3
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-DB = REPO / ".witmcc.sqlite"
+DB = REPO / ".wimcc.sqlite"
 OUT = REPO / "tests" / "fixtures" / "otel" / "real"
 
 REDACT = {

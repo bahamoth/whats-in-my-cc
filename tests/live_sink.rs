@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use witmcc::live::{BroadcastSink, CapturingSink, LiveEvent, LiveSink, NoopSink};
-use witmcc::model::observed::EventKind;
+use wimcc::live::{BroadcastSink, CapturingSink, LiveEvent, LiveSink, NoopSink};
+use wimcc::model::observed::EventKind;
 
 fn sample(id: &str) -> LiveEvent {
     LiveEvent {

@@ -52,7 +52,7 @@ describe('tagForEvent — verb.object taxonomy', () => {
     expect(tagForEvent(bash('python3 script.py')).tag).toBe('run.code');
     expect(tagForEvent(bash('node x.js')).tag).toBe('run.code');
     expect(tagForEvent(bash('bash tests/x.sh')).tag).toBe('run.code');
-    expect(tagForEvent(bash('./target/release/witmcc serve')).tag).toBe('run.code');
+    expect(tagForEvent(bash('./target/release/wimcc serve')).tag).toBe('run.code');
     expect(tagForEvent(bash('/usr/local/bin/foo')).tag).toBe('run.code');
     expect(tagForEvent(bash('tests/structural/x.sh ch-prod')).tag).toBe('run.code'); // *.sh path
   });
@@ -90,7 +90,7 @@ describe('tagForEvent — verb.object taxonomy', () => {
     expect(tagForEvent(bash('timeout --signal=KILL 10 npm test')).tag).toBe('test.code');
   });
   it('tags bare relative-path execution (no ./ prefix) as run.code', () => {
-    expect(tagForEvent(bash('target/debug/witmcc --help')).tag).toBe('run.code');
+    expect(tagForEvent(bash('target/debug/wimcc --help')).tag).toBe('run.code');
     expect(tagForEvent(bash('.claude/skills/ch/scripts/ch ch-prod')).tag).toBe('run.code');
   });
   it('just / shasum single-purpose tools', () => {

@@ -3,8 +3,8 @@ mod common;
 use common::edge_inference::{
     synth_view_with_error_then_repair, synth_view_with_error_then_delayed_repair,
 };
-use witmcc::insight::edge_inference::rules::caused_repair_v1::CausedRepairV1;
-use witmcc::insight::edge_inference::EdgeInferenceRule;
+use wimcc::insight::edge_inference::rules::caused_repair_v1::CausedRepairV1;
+use wimcc::insight::edge_inference::EdgeInferenceRule;
 
 #[test]
 fn emits_edge_when_error_text_overlaps_next_call_input() {

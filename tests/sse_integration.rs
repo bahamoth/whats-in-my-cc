@@ -24,11 +24,11 @@ use http_body_util::BodyExt;
 use sqlx::sqlite::SqlitePoolOptions;
 use tokio::sync::broadcast;
 use tower::ServiceExt;
-use witmcc::api::AppState;
-use witmcc::db::migrate;
-use witmcc::ingest::store;
-use witmcc::live::{BroadcastSink, LiveEvent};
-use witmcc::model::observed::EventKind;
+use wimcc::api::AppState;
+use wimcc::db::migrate;
+use wimcc::ingest::store;
+use wimcc::live::{BroadcastSink, LiveEvent};
+use wimcc::model::observed::EventKind;
 
 const FRAME_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -45,8 +45,8 @@ async fn setup() -> (sqlx::SqlitePool, AppState) {
         live_tx: Arc::new(tx),
         sse_keepalive_secs: 30,
         sse_channel_capacity: 512,
-        judge_runtime: std::sync::Arc::new(witmcc::insight::judge::runtime::JudgeRuntime::noop()),
-        mcp_sessions: witmcc::api::mcp::SessionRegistry::new(),
+        judge_runtime: std::sync::Arc::new(wimcc::insight::judge::runtime::JudgeRuntime::noop()),
+        mcp_sessions: wimcc::api::mcp::SessionRegistry::new(),
         // Slice-19: empty token disables auth check in test mode.
         token: String::new(),
         retention_profile: "none".to_string(),
@@ -111,8 +111,8 @@ async fn insert_observed(
     kind: EventKind,
     observed_at: &str,
 ) {
-    use witmcc::db::{repo_observed, repo_raw, repo_runs};
-    use witmcc::model::observed::{Actor, ObservedEvent};
+    use wimcc::db::{repo_observed, repo_raw, repo_runs};
+    use wimcc::model::observed::{Actor, ObservedEvent};
 
     let run_id = repo_runs::start(pool).await.expect("run start");
     let raw_id = format!("raw_{event_id}");
@@ -174,7 +174,7 @@ async fn transcript_ingest_publishes_to_live_tx() {
 #[tokio::test]
 async fn last_event_id_malformed_returns_400() {
     let (_pool, state) = setup().await;
-    let app = witmcc::api::router(state);
+    let app = wimcc::api::router(state);
     let req = Request::builder()
         .uri("/v1/stream?last_event_id=with%0Acontrol")
         .header("host", "127.0.0.1")
@@ -188,7 +188,7 @@ async fn last_event_id_malformed_returns_400() {
 #[tokio::test]
 async fn last_event_id_header_empty_returns_400() {
     let (_pool, state) = setup().await;
-    let app = witmcc::api::router(state);
+    let app = wimcc::api::router(state);
     let req = Request::builder()
         .uri("/v1/stream")
         .header("host", "127.0.0.1")
@@ -226,7 +226,7 @@ async fn backfill_emits_only_rows_after_cursor() {
     )
     .await;
 
-    let app = witmcc::api::router(state);
+    let app = wimcc::api::router(state);
     let req = Request::builder()
         .uri("/v1/stream?last_event_id=01HAAAAAAAAAAAAAAAAAAAAAAA")
         .header("host", "127.0.0.1")
@@ -265,7 +265,7 @@ async fn metric_format_cursor_resumes_correctly() {
     )
     .await;
 
-    let app = witmcc::api::router(state);
+    let app = wimcc::api::router(state);
     let req = Request::builder()
         .uri("/v1/stream?last_event_id=metric%3Aabc%3Aclaude_code.token.usage%3A1779340143371000000%3Ac334b58e")
         .header("host", "127.0.0.1")
@@ -281,7 +281,7 @@ async fn metric_format_cursor_resumes_correctly() {
 async fn live_envelope_arrives_via_stream() {
     let (_pool, state) = setup().await;
     let tx_alive = state.live_tx.clone();
-    let app = witmcc::api::router(state);
+    let app = wimcc::api::router(state);
 
     // Spawn the publisher; clone the Arc again so the spawned task has its
     // own handle and the original Arc in this scope keeps the channel open
@@ -316,7 +316,7 @@ async fn live_envelope_arrives_via_stream() {
 async fn unknown_cursor_emits_resync_frame() {
     let (_pool, state) = setup().await;
     let _tx_alive = state.live_tx.clone();
-    let app = witmcc::api::router(state);
+    let app = wimcc::api::router(state);
     let req = Request::builder()
         .uri("/v1/stream?last_event_id=01HZZZZZZZZZZZZZZZZZZZZZZA")
         .header("host", "127.0.0.1")
@@ -334,7 +334,7 @@ async fn unknown_cursor_emits_resync_frame() {
 async fn session_filter_drops_other_sessions() {
     let (_pool, state) = setup().await;
     let tx_alive = state.live_tx.clone();
-    let app = witmcc::api::router(state);
+    let app = wimcc::api::router(state);
 
     let tx_for_task = tx_alive.clone();
     tokio::spawn(async move {

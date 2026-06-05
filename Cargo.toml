@@ -1,16 +1,16 @@
 [package]
-name = "witmcc"
+name = "wimcc"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.88"
-description = "What's in My Claude Code — local execution inspection (slice-1: transcript)"
+description = "What's in My Claude Code — local-only execution inspection with evidence-linked insight"
 
 [[bin]]
-name = "witmcc"
+name = "wimcc"
 path = "src/main.rs"
 
 [lib]
-name = "witmcc"
+name = "wimcc"
 path = "src/lib.rs"
 
 [dependencies]

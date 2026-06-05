@@ -9,8 +9,8 @@
 use axum_test::TestServer;
 use serde_json::Value;
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::api::{router, AppState};
-use witmcc::db::migrate;
+use wimcc::api::{router, AppState};
+use wimcc::db::migrate;
 
 async fn empty_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()

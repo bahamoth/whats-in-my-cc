@@ -2,7 +2,7 @@
   display: flex;
   align-items: center;
   padding: 8px 0 12px;
-  border-bottom: 1px solid var(--witmcc-border, #1d212c);
+  border-bottom: 1px solid var(--wimcc-border, #1d212c);
   margin-bottom: 12px;
 }
 .crumbs {
@@ -14,16 +14,16 @@
   padding: 0;
 }
 .link {
-  color: var(--witmcc-accent, #4f8cff);
+  color: var(--wimcc-accent, #4f8cff);
   text-decoration: none;
 }
 .link:hover {
   text-decoration: underline;
 }
 .sep {
-  color: var(--witmcc-fg-subtle, #6a7180);
+  color: var(--wimcc-fg-subtle, #6a7180);
 }
 .current {
-  color: var(--witmcc-fg-muted, #aab0bd);
-  font-family: var(--witmcc-mono, ui-monospace, monospace);
+  color: var(--wimcc-fg-muted, #aab0bd);
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
 }

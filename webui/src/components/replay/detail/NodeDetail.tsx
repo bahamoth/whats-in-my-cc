@@ -49,7 +49,7 @@ function ParamValue({ paramKey, val }: { paramKey: string; val: string }) {
     return <pre className={styles.paramPre}>{val}</pre>;
   }
   if (isFilePath(paramKey, val)) {
-    return <span className={`${styles.paramVal}`} style={{ fontFamily: 'var(--witmcc-mono, ui-monospace, monospace)' }}>{val}</span>;
+    return <span className={`${styles.paramVal}`} style={{ fontFamily: 'var(--wimcc-mono, ui-monospace, monospace)' }}>{val}</span>;
   }
   return <span className={styles.paramVal}>{val}</span>;
 }

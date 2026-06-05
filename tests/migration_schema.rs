@@ -4,7 +4,7 @@
 
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Row;
-use witmcc::db::migrate;
+use wimcc::db::migrate;
 
 async fn fresh_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()

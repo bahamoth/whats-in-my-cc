@@ -11,7 +11,7 @@ use crate::security::redaction::engine::scan;
 
 /// Row type for the turn_id backfill query: (event_uuid, parent_uuid, turn_id, event_id)
 type TurnBackfillRow = (String, Option<String>, Option<String>, Option<String>);
-use crate::error::{Result, WitmccError};
+use crate::error::{Result, WimccError};
 use crate::ids::MonotonicUlidGen;
 use crate::ingest::{diff_hunk, mapping, transcript, usage_facet, verification_run};
 use crate::model::observed::EventKind;
@@ -38,7 +38,7 @@ pub async fn ingest_file(
         Box::pin(
             transcript::stream_file(path)
                 .await
-                .map_err(|e| WitmccError::Io {
+                .map_err(|e| WimccError::Io {
                     path: path.to_path_buf(),
                     source: e,
                 })?,
@@ -162,7 +162,7 @@ pub async fn ingest_file(
                     }
                 }
             }
-            Err(WitmccError::ParseLine {
+            Err(WimccError::ParseLine {
                 source_uri,
                 line_no,
                 message,

@@ -9,7 +9,7 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::io::Write;
-use witmcc::db::migrate;
+use wimcc::db::migrate;
 
 async fn make_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -23,7 +23,7 @@ async fn make_pool() -> sqlx::SqlitePool {
 
 async fn http_setup() -> (TestServer, sqlx::SqlitePool) {
     let pool = make_pool().await;
-    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool.clone()));
+    let app = wimcc::api::router(wimcc::api::AppState::new_for_tests(pool.clone()));
     let server = TestServer::new(app).unwrap();
     (server, pool)
 }

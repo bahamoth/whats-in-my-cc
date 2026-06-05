@@ -1,6 +1,6 @@
-//! Slice-6 — `witmcc doctor` CLI smoke tests.
+//! Slice-6 — `wimcc doctor` CLI smoke tests.
 //!
-//! These tests don't mock the server; they spin up a real witmcc server
+//! These tests don't mock the server; they spin up a real wimcc server
 //! against a tempfile DB and probe via the doctor subcommand.
 
 use assert_cmd::Command as AssertCmd;
@@ -11,7 +11,7 @@ fn pick_port() -> u16 {
     portpicker::pick_unused_port().expect("no free port")
 }
 
-/// Spawn a witmcc server bound to an ephemeral port + tempfile DB. Returns the
+/// Spawn a wimcc server bound to an ephemeral port + tempfile DB. Returns the
 /// child + the URL + the config dir tempdir (held to keep the dir alive).
 fn spawn_server(
     extra_env: &[(&str, &str)],
@@ -19,10 +19,10 @@ fn spawn_server(
     let port = pick_port();
     let db = tempfile::NamedTempFile::new().expect("tempfile");
     // Slice-19: give the server its own config dir so the token file is isolated
-    // from the real ~/.config/witmcc. We keep the TempDir alive until the caller
+    // from the real ~/.config/wimcc. We keep the TempDir alive until the caller
     // drops it so the token file persists for the doctor subcommand.
     let config_dir = tempfile::tempdir().expect("config tempdir");
-    let bin = env!("CARGO_BIN_EXE_witmcc");
+    let bin = env!("CARGO_BIN_EXE_wimcc");
     let mut cmd = Command::new(bin);
     cmd.args([
         "--db-path",
@@ -37,13 +37,13 @@ fn spawn_server(
         // host's real ~/.claude/projects contents.
         "--no-watch-transcripts",
     ])
-    .env("WITMCC_CONFIG_DIR", config_dir.path())
+    .env("WIMCC_CONFIG_DIR", config_dir.path())
     .stdout(Stdio::null())
     .stderr(Stdio::null());
     for (k, v) in extra_env {
         cmd.env(k, v);
     }
-    let child = cmd.spawn().expect("spawn witmcc serve");
+    let child = cmd.spawn().expect("spawn wimcc serve");
     // Poll /v1/health to confirm readiness.
     let url = format!("http://127.0.0.1:{port}");
     let deadline = std::time::Instant::now() + Duration::from_secs(2);
@@ -88,17 +88,17 @@ fn ureq_get(url: &str) -> std::io::Result<bool> {
 #[test]
 fn doctor_pretty_against_live_server_lists_taxonomy_and_exits_0() {
     let (mut child, url, _db, config_dir) = spawn_server(&[]);
-    let out = AssertCmd::cargo_bin("witmcc")
+    let out = AssertCmd::cargo_bin("wimcc")
         .unwrap()
         .args(["doctor", "--server", &url])
-        .env("WITMCC_CONFIG_DIR", config_dir.path())
+        .env("WIMCC_CONFIG_DIR", config_dir.path())
         .env_remove("CLAUDE_CODE_ENABLE_TELEMETRY")
         .env_remove("OTEL_EXPORTER_OTLP_ENDPOINT")
         .output()
         .expect("doctor");
     let _ = child.kill();
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("witmcc doctor"));
+    assert!(stdout.contains("wimcc doctor"));
     assert!(stdout.contains("transcript"));
     assert!(stdout.contains("otel-metrics"));
     assert!(stdout.contains("otel-logs"));
@@ -109,10 +109,10 @@ fn doctor_pretty_against_live_server_lists_taxonomy_and_exits_0() {
 #[test]
 fn doctor_json_mode_emits_parseable_report() {
     let (mut child, url, _db, config_dir) = spawn_server(&[]);
-    let out = AssertCmd::cargo_bin("witmcc")
+    let out = AssertCmd::cargo_bin("wimcc")
         .unwrap()
         .args(["doctor", "--json", "--server", &url])
-        .env("WITMCC_CONFIG_DIR", config_dir.path())
+        .env("WIMCC_CONFIG_DIR", config_dir.path())
         .env_remove("CLAUDE_CODE_ENABLE_TELEMETRY")
         .output()
         .expect("doctor");
@@ -156,7 +156,7 @@ fn doctor_v02_project_scope_env_attribution() {
             }
         }),
     );
-    let out = AssertCmd::cargo_bin("witmcc")
+    let out = AssertCmd::cargo_bin("wimcc")
         .unwrap()
         .args([
             "doctor",
@@ -168,7 +168,7 @@ fn doctor_v02_project_scope_env_attribution() {
         ])
         .env_remove("OTEL_METRICS_EXPORTER")
         .env_remove("OTEL_EXPORTER_OTLP_ENDPOINT")
-        .env("WITMCC_DOCTOR_PLUGINS_ROOT", project.path().join("noplugins"))
+        .env("WIMCC_DOCTOR_PLUGINS_ROOT", project.path().join("noplugins"))
         .output()
         .expect("doctor");
     let _ = child.kill();
@@ -197,7 +197,7 @@ fn doctor_v02_local_overrides_project_scope() {
         &project.path().join(".claude").join("settings.local.json"),
         &serde_json::json!({ "env": { "OTEL_EXPORTER_OTLP_ENDPOINT": "http://local:7878/otel" } }),
     );
-    let out = AssertCmd::cargo_bin("witmcc")
+    let out = AssertCmd::cargo_bin("wimcc")
         .unwrap()
         .args([
             "doctor",
@@ -208,7 +208,7 @@ fn doctor_v02_local_overrides_project_scope() {
             project.path().to_str().unwrap(),
         ])
         .env_remove("OTEL_EXPORTER_OTLP_ENDPOINT")
-        .env("WITMCC_DOCTOR_PLUGINS_ROOT", project.path().join("noplugins"))
+        .env("WIMCC_DOCTOR_PLUGINS_ROOT", project.path().join("noplugins"))
         .output()
         .expect("doctor");
     let _ = child.kill();
@@ -238,7 +238,7 @@ fn doctor_v02_plugin_manifest_hook_picked_up() {
     );
     let project = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(project.path().join(".git")).unwrap();
-    let out = AssertCmd::cargo_bin("witmcc")
+    let out = AssertCmd::cargo_bin("wimcc")
         .unwrap()
         .args([
             "doctor",
@@ -248,17 +248,17 @@ fn doctor_v02_plugin_manifest_hook_picked_up() {
             "--project",
             project.path().to_str().unwrap(),
         ])
-        .env("WITMCC_DOCTOR_PLUGINS_ROOT", &plugins_root)
+        .env("WIMCC_DOCTOR_PLUGINS_ROOT", &plugins_root)
         .output()
         .expect("doctor");
     let _ = child.kill();
     let v: serde_json::Value =
         serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).expect("json");
     let plugin_hooks = v["plugin_hooks"].as_array().expect("plugin_hooks array");
-    let any_witmcc = plugin_hooks
+    let any_wimcc = plugin_hooks
         .iter()
-        .any(|h| h["forwards_to_witmcc"].as_bool().unwrap_or(false));
-    assert!(any_witmcc, "plugin hook forwarding to /hooks/v1/events should be flagged");
+        .any(|h| h["forwards_to_wimcc"].as_bool().unwrap_or(false));
+    assert!(any_wimcc, "plugin hook forwarding to /hooks/v1/events should be flagged");
     assert!(plugin_hooks
         .iter()
         .any(|h| h["scope"].as_str().unwrap_or("").starts_with("plugin:")));
@@ -273,7 +273,7 @@ fn doctor_v02_env_divergence_when_settings_has_more_than_shell() {
         &project.path().join(".claude").join("settings.json"),
         &serde_json::json!({ "env": { "OTEL_METRICS_EXPORTER": "otlp" } }),
     );
-    let out = AssertCmd::cargo_bin("witmcc")
+    let out = AssertCmd::cargo_bin("wimcc")
         .unwrap()
         .args([
             "doctor",
@@ -284,7 +284,7 @@ fn doctor_v02_env_divergence_when_settings_has_more_than_shell() {
             project.path().to_str().unwrap(),
         ])
         .env_remove("OTEL_METRICS_EXPORTER")
-        .env("WITMCC_DOCTOR_PLUGINS_ROOT", project.path().join("noplugins"))
+        .env("WIMCC_DOCTOR_PLUGINS_ROOT", project.path().join("noplugins"))
         .output()
         .expect("doctor");
     let _ = child.kill();
@@ -308,7 +308,7 @@ fn doctor_v02_env_divergence_when_settings_has_more_than_shell() {
 #[test]
 fn doctor_recommendations_omit_hook_and_file_git() {
     let (mut child, url, _db, _cfg) = spawn_server(&[]);
-    let out = AssertCmd::cargo_bin("witmcc")
+    let out = AssertCmd::cargo_bin("wimcc")
         .unwrap()
         .args(["doctor", "--server", &url])
         .env_remove("CLAUDE_CODE_ENABLE_TELEMETRY")
@@ -338,7 +338,7 @@ fn doctor_recommendations_omit_hook_and_file_git() {
 fn doctor_exit_ignores_hook_only_data() {
     let port = pick_port();
     let db = tempfile::NamedTempFile::new().expect("tempfile");
-    let bin = env!("CARGO_BIN_EXE_witmcc");
+    let bin = env!("CARGO_BIN_EXE_wimcc");
 
     // Migrate then insert a single hook raw row.
     let init = std::process::Command::new(bin)
@@ -359,7 +359,7 @@ fn doctor_exit_ignores_hook_only_data() {
     ).unwrap();
     drop(conn);
 
-    // Spawn witmcc serve against this DB.
+    // Spawn wimcc serve against this DB.
     let mut child = std::process::Command::new(bin)
         .args([
             "--db-path",
@@ -392,7 +392,7 @@ fn doctor_exit_ignores_hook_only_data() {
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
 
-    let out = AssertCmd::cargo_bin("witmcc")
+    let out = AssertCmd::cargo_bin("wimcc")
         .unwrap()
         .args(["doctor", "--server", &url])
         .output()
@@ -438,7 +438,7 @@ fn doctor_unreachable_server_exits_1_with_error() {
     // No spawn; point at an unbound port.
     let port = pick_port();
     let url = format!("http://127.0.0.1:{port}");
-    let out = AssertCmd::cargo_bin("witmcc")
+    let out = AssertCmd::cargo_bin("wimcc")
         .unwrap()
         .args(["doctor", "--server", &url])
         .output()

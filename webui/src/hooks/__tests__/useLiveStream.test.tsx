@@ -29,7 +29,7 @@ describe('useLiveStream', () => {
   });
 
   it('appends ?last_event_id= when cursor present', () => {
-    sessionStorage.setItem('witmcc:cursor:global', '01HZZ');
+    sessionStorage.setItem('wimcc:cursor:global', '01HZZ');
     renderHook(() =>
       useLiveStream({ url: '/v1/stream', scope: 'global', onEnvelope: () => {} }),
     );
@@ -37,7 +37,7 @@ describe('useLiveStream', () => {
   });
 
   it('appends &last_event_id= when URL already has a query', () => {
-    sessionStorage.setItem('witmcc:cursor:sess-1', '01HZZ');
+    sessionStorage.setItem('wimcc:cursor:sess-1', '01HZZ');
     renderHook(() =>
       useLiveStream({
         url: '/v1/stream?session=sess-1',
@@ -53,13 +53,13 @@ describe('useLiveStream', () => {
     renderHook(() => useLiveStream({ url: '/v1/stream', scope: 'global', onEnvelope }));
     const es = MockEventSource.latest()!;
     act(() => es.emit('message', JSON.stringify(sampleEnv({ event_id: 'A' }))));
-    expect(sessionStorage.getItem('witmcc:cursor:global')).toBe('A');
+    expect(sessionStorage.getItem('wimcc:cursor:global')).toBe('A');
     expect(onEnvelope).toHaveBeenCalledOnce();
     expect(onEnvelope.mock.calls[0][0].event_id).toBe('A');
   });
 
   it('invokes onGap on event: gap and keeps cursor', () => {
-    sessionStorage.setItem('witmcc:cursor:global', 'B');
+    sessionStorage.setItem('wimcc:cursor:global', 'B');
     const onGap = vi.fn();
     renderHook(() =>
       useLiveStream({ url: '/v1/stream', scope: 'global', onEnvelope: () => {}, onGap }),
@@ -67,11 +67,11 @@ describe('useLiveStream', () => {
     const es = MockEventSource.latest()!;
     act(() => es.emit('gap', JSON.stringify({ dropped: 5 })));
     expect(onGap).toHaveBeenCalledWith({ dropped: 5 });
-    expect(sessionStorage.getItem('witmcc:cursor:global')).toBe('B');
+    expect(sessionStorage.getItem('wimcc:cursor:global')).toBe('B');
   });
 
   it('invokes onResync on event: resync and clears cursor', () => {
-    sessionStorage.setItem('witmcc:cursor:global', 'B');
+    sessionStorage.setItem('wimcc:cursor:global', 'B');
     const onResync = vi.fn();
     renderHook(() =>
       useLiveStream({ url: '/v1/stream', scope: 'global', onEnvelope: () => {}, onResync }),
@@ -79,7 +79,7 @@ describe('useLiveStream', () => {
     const es = MockEventSource.latest()!;
     act(() => es.emit('resync', JSON.stringify({ reason: 'unknown_cursor' })));
     expect(onResync).toHaveBeenCalledWith({ reason: 'unknown_cursor' });
-    expect(sessionStorage.getItem('witmcc:cursor:global')).toBeNull();
+    expect(sessionStorage.getItem('wimcc:cursor:global')).toBeNull();
   });
 
   it('closes EventSource on unmount', () => {

@@ -7,9 +7,9 @@ use serde_json::Value;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::io::Write;
 use tempfile::NamedTempFile;
-use witmcc::db::migrate;
-use witmcc::ingest::store;
-use witmcc::live::NoopSink;
+use wimcc::db::migrate;
+use wimcc::ingest::store;
+use wimcc::live::NoopSink;
 
 const SESSION_ID: &str = "s_api_dh_test";
 const TOOL_USE_ID: &str = "toolu_api_dh";
@@ -74,7 +74,7 @@ async fn setup() -> TestServer {
     migrate(&pool).await.unwrap();
     let f = write_synth_transcript();
     store::ingest_file(&pool, f.path(), &NoopSink).await.unwrap();
-    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool));
+    let app = wimcc::api::router(wimcc::api::AppState::new_for_tests(pool));
     TestServer::new(app).unwrap()
 }
 

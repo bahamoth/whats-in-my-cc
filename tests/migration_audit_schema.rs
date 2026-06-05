@@ -4,8 +4,8 @@
 
 #[tokio::test]
 async fn audit_table_has_expected_columns() {
-    let pool = witmcc::db::connect(":memory:").await.unwrap();
-    witmcc::db::migrate(&pool).await.unwrap();
+    let pool = wimcc::db::connect(":memory:").await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
 
     let rows: Vec<(String,)> = sqlx::query_as(
         "SELECT name FROM pragma_table_info('audit') ORDER BY name",
@@ -23,8 +23,8 @@ async fn audit_table_has_expected_columns() {
 
 #[tokio::test]
 async fn audit_insert_and_query_works() {
-    let pool = witmcc::db::connect(":memory:").await.unwrap();
-    witmcc::db::migrate(&pool).await.unwrap();
+    let pool = wimcc::db::connect(":memory:").await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
 
     sqlx::query(
         "INSERT INTO audit (audit_id, event, actor, payload) VALUES ('aud_001', 'test.event', 'test_actor', '{\"k\":1}')",

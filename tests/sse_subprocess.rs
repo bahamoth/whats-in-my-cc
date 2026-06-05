@@ -1,4 +1,4 @@
-//! Slice-8 L3 subprocess E2E for SSE — spawn real `witmcc serve` and verify
+//! Slice-8 L3 subprocess E2E for SSE — spawn real `wimcc serve` and verify
 //! frames actually arrive over a real HTTP/1.1 connection.
 //!
 //! These are the silent-regression guards for production wiring: if anyone
@@ -16,7 +16,7 @@ fn pick_port() -> u16 {
     portpicker::pick_unused_port().expect("no free port")
 }
 
-/// Spawn `witmcc serve` against a tempfile DB on an ephemeral port. Returns
+/// Spawn `wimcc serve` against a tempfile DB on an ephemeral port. Returns
 /// (child, host:port, db file, token, config_dir). Keep db + config_dir alive.
 fn spawn_serve_with(
     extra_args: &[&str],
@@ -24,7 +24,7 @@ fn spawn_serve_with(
     let port = pick_port();
     let db = tempfile::NamedTempFile::new().expect("tempfile");
     let config_dir = tempfile::tempdir().expect("config tempdir");
-    let bin = env!("CARGO_BIN_EXE_witmcc");
+    let bin = env!("CARGO_BIN_EXE_wimcc");
     let mut cmd = Command::new(bin);
     cmd.args([
         "--db-path",
@@ -40,10 +40,10 @@ fn spawn_serve_with(
     for a in extra_args {
         cmd.arg(a);
     }
-    cmd.env("WITMCC_CONFIG_DIR", config_dir.path())
+    cmd.env("WIMCC_CONFIG_DIR", config_dir.path())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    let child = cmd.spawn().expect("spawn witmcc serve");
+    let child = cmd.spawn().expect("spawn wimcc serve");
     let host = format!("127.0.0.1:{port}");
 
     // Poll /v1/health to confirm readiness.

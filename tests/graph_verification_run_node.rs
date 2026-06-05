@@ -8,10 +8,10 @@
 
 use chrono::Utc;
 use serde_json::json;
-use witmcc::db::repo_diff_hunk::DiffHunkRow;
-use witmcc::db::repo_verification_run::VerificationRunRow;
-use witmcc::graph::build::compute;
-use witmcc::model::observed::{Actor, EventKind, ObservedEvent};
+use wimcc::db::repo_diff_hunk::DiffHunkRow;
+use wimcc::db::repo_verification_run::VerificationRunRow;
+use wimcc::graph::build::compute;
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 const SESSION_ID: &str = "sess_vr_test";
 const TOOL_USE_ID: &str = "toolu_vr_test_01";

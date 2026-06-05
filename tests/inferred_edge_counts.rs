@@ -7,19 +7,19 @@
 //!   `store::ingest_file` on `tests/fixtures/transcripts/real/*.jsonl`.
 
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::{migrate, repo_diff_hunk, repo_observed, repo_verification_run};
-use witmcc::graph::build::compute;
-use witmcc::ingest::store;
-use witmcc::insight::edge_inference::{all_rules, SessionGraphView};
-use witmcc::live::NoopSink;
+use wimcc::db::{migrate, repo_diff_hunk, repo_observed, repo_verification_run};
+use wimcc::graph::build::compute;
+use wimcc::ingest::store;
+use wimcc::insight::edge_inference::{all_rules, SessionGraphView};
+use wimcc::live::NoopSink;
 
 async fn load_fixture(
     fixture_name: &str,
 ) -> (
     String,
-    Vec<witmcc::model::observed::ObservedEvent>,
-    Vec<witmcc::db::repo_diff_hunk::DiffHunkRow>,
-    Vec<witmcc::db::repo_verification_run::VerificationRunRow>,
+    Vec<wimcc::model::observed::ObservedEvent>,
+    Vec<wimcc::db::repo_diff_hunk::DiffHunkRow>,
+    Vec<wimcc::db::repo_verification_run::VerificationRunRow>,
 ) {
     let pool = SqlitePoolOptions::new()
         .max_connections(2)
@@ -52,7 +52,7 @@ async fn load_fixture(
 fn run_rule_by_id(
     rule_id: &str,
     view: &SessionGraphView<'_>,
-) -> Vec<witmcc::model::graph::GraphEdge> {
+) -> Vec<wimcc::model::graph::GraphEdge> {
     for rule in all_rules() {
         if rule.rule_id() == rule_id {
             return rule.infer(view);

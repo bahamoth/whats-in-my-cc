@@ -1,8 +1,8 @@
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::{migrate, repo_graph};
-use witmcc::graph::build;
-use witmcc::ingest::store;
-use witmcc::model::observed::{Actor, EventKind, ObservedEvent};
+use wimcc::db::{migrate, repo_graph};
+use wimcc::graph::build;
+use wimcc::ingest::store;
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 #[tokio::test]
 async fn deterministic_minimal_graph() {
@@ -15,7 +15,7 @@ async fn deterministic_minimal_graph() {
     store::ingest_file(
         &pool,
         std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl"),
-        &witmcc::live::NoopSink,
+        &wimcc::live::NoopSink,
     )
     .await
     .unwrap();
@@ -26,10 +26,10 @@ async fn deterministic_minimal_graph() {
     build::rebuild_session(&pool, "sess-A").await.unwrap();
     let (n2, e2) = repo_graph::load_session(&pool, "sess-A").await.unwrap();
 
-    let ids = |ns: &[witmcc::model::graph::GraphNode]| -> Vec<String> {
+    let ids = |ns: &[wimcc::model::graph::GraphNode]| -> Vec<String> {
         ns.iter().map(|n| n.node_id.clone()).collect()
     };
-    let eids = |es: &[witmcc::model::graph::GraphEdge]| -> Vec<String> {
+    let eids = |es: &[wimcc::model::graph::GraphEdge]| -> Vec<String> {
         es.iter().map(|e| e.edge_id.clone()).collect()
     };
     assert_eq!(ids(&n1), ids(&n2));

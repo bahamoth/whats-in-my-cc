@@ -4,20 +4,20 @@
 
 .shell {
   display: grid;
-  grid-template-columns: var(--witmcc-nav-rail-w, 56px) 1fr auto;
+  grid-template-columns: var(--wimcc-nav-rail-w, 56px) 1fr auto;
   grid-template-rows: 100%;
   height: 100%;
   min-height: 100vh;
-  background: var(--witmcc-bg, #0b0d12);
-  color: var(--witmcc-fg, #e6e8ee);
+  background: var(--wimcc-bg, #0b0d12);
+  color: var(--wimcc-fg, #e6e8ee);
 }
 
 .skipLink {
   position: absolute;
   left: -9999px;
   top: 8px;
-  background: var(--witmcc-accent, #4f8cff);
-  color: var(--witmcc-fg-on-accent, #0b0d12);
+  background: var(--wimcc-accent, #4f8cff);
+  color: var(--wimcc-fg-on-accent, #0b0d12);
   padding: 6px 12px;
   border-radius: 4px;
   z-index: 100;
@@ -32,8 +32,8 @@
   align-items: stretch;
   padding: 12px 6px;
   gap: 4px;
-  background: var(--witmcc-surface-1, #11141b);
-  border-right: 1px solid var(--witmcc-border, #1d212c);
+  background: var(--wimcc-surface-1, #11141b);
+  border-right: 1px solid var(--wimcc-border, #1d212c);
 }
 
 .navLink {
@@ -42,16 +42,16 @@
   gap: 10px;
   padding: 8px 10px;
   border-radius: 6px;
-  color: var(--witmcc-fg-muted, #aab0bd);
+  color: var(--wimcc-fg-muted, #aab0bd);
   text-decoration: none;
   font-size: 13px;
 }
 .navLink:hover {
-  background: var(--witmcc-surface-2, #161a23);
-  color: var(--witmcc-fg, #e6e8ee);
+  background: var(--wimcc-surface-2, #161a23);
+  color: var(--wimcc-fg, #e6e8ee);
 }
 .navLink:focus-visible {
-  outline: 2px solid var(--witmcc-accent, #4f8cff);
+  outline: 2px solid var(--wimcc-accent, #4f8cff);
   outline-offset: 2px;
 }
 
@@ -82,7 +82,7 @@
 
 .rightSlot {
   min-width: 0;
-  border-left: 1px solid var(--witmcc-border, #1d212c);
+  border-left: 1px solid var(--wimcc-border, #1d212c);
 }
 
 /* When rightSlot is empty, collapse to 0 so existing pages keep their full

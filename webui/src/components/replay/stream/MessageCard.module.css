@@ -11,7 +11,7 @@
 }
 
 .card[data-selected='true'] .bubble {
-  outline: 1px solid var(--witmcc-accent, #4f8cff);
+  outline: 1px solid var(--wimcc-accent, #4f8cff);
 }
 
 /* ---- alignment ----
@@ -40,7 +40,7 @@
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: var(--witmcc-fg-muted, #aab0bd);
+  color: var(--wimcc-fg-muted, #aab0bd);
   margin-bottom: 4px;
 }
 
@@ -50,7 +50,7 @@
 
 .icon {
   flex: none;
-  color: var(--witmcc-fg-muted, #aab0bd);
+  color: var(--wimcc-fg-muted, #aab0bd);
 }
 
 .label {
@@ -59,23 +59,23 @@
 
 /* origin chip — small, muted, monospace; reveals raw role (external/subagent/agent) */
 .sourceBadge {
-  font-family: var(--witmcc-mono, ui-monospace, monospace);
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
   font-size: 9px;
   line-height: 1;
   padding: 2px 5px;
   border-radius: 4px;
-  color: var(--witmcc-fg-subtle, #6a7180);
-  background: var(--witmcc-surface-3, #1b202a);
-  border: 1px solid var(--witmcc-border, #1d212c);
+  color: var(--wimcc-fg-subtle, #6a7180);
+  background: var(--wimcc-surface-3, #1b202a);
+  border: 1px solid var(--wimcc-border, #1d212c);
 }
 
 .time {
-  color: var(--witmcc-fg-subtle, #6a7180);
+  color: var(--wimcc-fg-subtle, #6a7180);
 }
 
 .finding {
   flex: none;
-  color: var(--witmcc-warning, #f0b429);
+  color: var(--wimcc-warning, #f0b429);
 }
 
 /* ---- bubble ---- */
@@ -90,40 +90,40 @@
 
 /* user: right-aligned accent bubble */
 .userBubble {
-  background: var(--witmcc-accent, #4f8cff);
-  color: var(--witmcc-fg-on-accent, #0b0d12);
+  background: var(--wimcc-accent, #4f8cff);
+  color: var(--wimcc-fg-on-accent, #0b0d12);
   border-bottom-right-radius: 3px;
 }
 
 /* assistant: left surface bubble */
 .assistantBubble {
-  background: var(--witmcc-surface-2, #161a23);
-  color: var(--witmcc-fg, #e6e8ee);
+  background: var(--wimcc-surface-2, #161a23);
+  color: var(--wimcc-fg, #e6e8ee);
   border-bottom-left-radius: 3px;
 }
 
 /* subagent prompt (Task sidechain): left, clearly not the human user */
 .subagentBubble {
-  background: var(--witmcc-surface-2, #161a23);
-  color: var(--witmcc-fg-muted, #aab0bd);
+  background: var(--wimcc-surface-2, #161a23);
+  color: var(--wimcc-fg-muted, #aab0bd);
   border-bottom-left-radius: 3px;
 }
 
 /* system_summary: left, muted surface with an accent rail — a CC work recap */
 .systemBubble {
-  background: var(--witmcc-surface-1, #11141b);
-  color: var(--witmcc-fg-muted, #aab0bd);
-  border-left: 2px solid var(--witmcc-fg-subtle, #6a7180);
+  background: var(--wimcc-surface-1, #11141b);
+  color: var(--wimcc-fg-muted, #aab0bd);
+  border-left: 2px solid var(--wimcc-fg-subtle, #6a7180);
   border-radius: 4px;
   border-bottom-left-radius: 3px;
 }
 
 /* thinking: left, visually distinct */
 .thinkingBubble {
-  background: var(--witmcc-surface-1, #11141b);
-  color: var(--witmcc-fg-muted, #aab0bd);
+  background: var(--wimcc-surface-1, #11141b);
+  color: var(--wimcc-fg-muted, #aab0bd);
   font-style: italic;
-  border-left: 2px dashed var(--witmcc-accent, #4f8cff);
+  border-left: 2px dashed var(--wimcc-accent, #4f8cff);
   border-radius: 4px;
   border-bottom-left-radius: 3px;
 }

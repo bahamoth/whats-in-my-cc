@@ -1,101 +1,166 @@
-# witmcc — What's in My Claude Code (slice-1)
+# wimcc — What's in My Claude Code
 
-Local-only inspection of Claude Code execution. **Slice-1 ships:** transcript
-JSONL ingest → SQLite → deterministic-edge session graph → 127.0.0.1 read-only Pull API.
+**English** · [한국어](README.ko.md)
 
-Out of slice-1 (later slices): OTel/Hook/File-Git collectors, UI, MCP, redaction, auth.
+**Replay what Claude Code actually did — not what it said.**
 
-## Quick start (one running process, all sources live)
+## What's in my cc?
+
+wimcc replays a Claude Code session — the one that just ran, or the one running
+now — as an execution you can step through. It surfaces what the chat log alone
+doesn't: which tool failed and why, how much time and how many tokens a model
+request cost, what a hook blocked, which edit changed which lines of which file
+— all on one screen, each item traceable straight back to the raw record it
+came from.
+
+Things you can do with wimcc:
+
+- See **which tool calls failed in this session, and why**.
+- Track **where the tokens went** — usage, cost, and context efficiency.
+- Trace **which edit changed which lines of which file** (file lineage).
+- Check **what a hook blocked or let through**.
+- Follow **how model requests, tool calls, and hooks interleaved** over time.
+- Read all of the above in a browser UI — or pull it into another tool or agent
+  over the **Pull API / MCP**.
+
+Everything runs locally on `127.0.0.1` and nothing is sent outward. External
+access is read-only.
+
+## Quick start
 
 ```bash
-cargo run -- init-db
-cargo run -- serve --auto-migrate             # 127.0.0.1:7878
-#  ↳ transcripts live-tailed from ~/.claude/projects (slice-7)
-#  ↳ file/git watcher when --watch <repo> is passed (slice-5)
-#  ↳ OTel + hook receivers always on
-cargo run -- doctor                           # verify collector wiring
+just build-release                            # build the SPA + release binary (target/release/wimcc) in one step
+./target/release/wimcc init-db                # apply migrations, prepare .wimcc.sqlite
+./target/release/wimcc serve --auto-migrate   # http://127.0.0.1:7878  (auth off by default)
+./target/release/wimcc doctor                 # verify collector wiring
 ```
 
-`witmcc ingest --all` is still available for backfill (cold-start sweep of
-existing JSONLs) but no longer required for live operation.
+`serve` runs everything in one process: the read-only Pull API, the embedded
+WebUI, the OTel + hook receivers, and a live tail of `~/.claude/projects`
+transcripts. For Claude Code to emit OTel + hook events into wimcc you set up
+`~/.claude/settings.json` once — see [Connecting Claude Code](#connecting-claude-code).
+`wimcc doctor` tells you what's connected and what's missing.
 
-For Claude Code to actually emit OTel + hook events into witmcc, the user
-still has to wire `~/.claude/settings.json` once — see [OTel Receivers](#otel-receivers-slice-3-traces-slice-6-metrics--logs)
-and [Hook Collector](#hook-collector-slice-4). `witmcc doctor` will tell you
-which scope each value came from and what's still missing.
+`wimcc ingest --all` is still available for backfill (a cold-start sweep of
+existing transcript JSONLs) but is not required for live operation.
+
+## CLI
+
+```
+wimcc [--db-path <PATH>] [--log-format pretty|json] [--verbose] <command>
+```
+
+Global flags apply to every subcommand. `--db-path` defaults to
+`.wimcc.sqlite` (env `WIMCC_DB`).
+
+| Command | Purpose |
+| --- | --- |
+| `init-db` | Apply migrations and prepare the database. |
+| `ingest --all` / `ingest --path <P>` | Backfill: scan transcript JSONL files into raw + observed events (idempotent). |
+| `doctor [--json] [--server <URL>] [--project <DIR>]` | Read-only diagnosis of collector wiring (settings hierarchy, hooks, server probe). Never mutates anything. |
+| `serve` | Start the local service: Pull API + WebUI + OTel/hook receivers + transcript live tail. |
+
+### `wimcc serve` flags
+
+```
+wimcc serve [--bind 127.0.0.1] [--port 7878]
+             [--auto-migrate]                    # apply pending migrations on startup
+             [--transcripts-root <PATH>]         # override ~/.claude/projects
+             [--no-watch-transcripts]            # disable the live tail (OTel/hook only)
+             [--auth off|on]                      # bearer-token auth on /v1 + /mcp (default: off)
+             [--retention-profile none|default|strict]   # background retention sweep (default: none)
+             [--judge none|fixture|anthropic]     # L2 judge backend for findings (default: none)
+             [--judge-budget N]                   # max judge API calls per rebuild (default: 20)
+             [--judge-fixture-path <PATH>]        # required when --judge=fixture
+             [--print-token] [--rotate-token]     # manage the bearer token, then exit
+             [--sse-keepalive-secs N]             # WebUI live-stream keep-alive (default: 30)
+             [--sse-channel-capacity N]           # broadcast channel capacity (default: 512)
+             [--shutdown-after-ms N]              # test/smoke convenience
+```
+
+## What it observes
+
+| Source | How it arrives | Notes |
+| --- | --- | --- |
+| **Transcript** | live tail of `~/.claude/projects/**/*.jsonl` (or `ingest` backfill) | user/assistant messages, tool calls + results, thinking, attachments |
+| **OTel traces / metrics / logs** | `POST /otel/v1/*` from Claude Code's OTLP exporter | traces are beta (`CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`) |
+| **Hook lifecycle** | `POST /hooks/v1/events` from a forward script | nine `hook_event_name`s recognised; unknown names ingest as `subkind="unknown"` |
+| **Edit diffs** | extracted from each transcript tool-result's `toolUseResult.structuredPatch` | only `Edit` produces hunks; `Write` emits an empty patch. Powers `/v1/sessions/:id/diff-hunks` and the `get_file_lineage` MCP tool |
+| **Verification runs / token usage** | derived from transcript + telemetry facets | surface via the verification-run and usage endpoints |
 
 ## Endpoints
 
-| GET path | response |
+All `/v1/*` and `/mcp` responses are wrapped in
+`{meta: {schema_version, collection_profile, generated_at, ...}, data: ...}`.
+When `--auth on`, every `/v1/*` and `/mcp` request needs
+`Authorization: Bearer <token>`; the OTel/hook collectors and the SSE stream are
+always unauthenticated loopback endpoints.
+
+### Read-only Pull API (`GET`)
+
+| Path | Response |
 | --- | --- |
 | `/v1/health` | `{status, build_sha}` |
-| `/v1/sessions` | list of `{session_id, first_observed_at, last_observed_at, event_count}` |
+| `/v1/health/sources` | per-source freshness (used by `doctor`) |
+| `/v1/sessions` | session list (newest first) |
 | `/v1/sessions/{id}` | `{summary, events[]}` |
-| `/v1/sessions/{id}/graph` | `{nodes[], edges[]}` |
+| `/v1/sessions/{id}/events` | paged observed events |
+| `/v1/sessions/{id}/graph` | `{nodes[], edges[]}` (causal-edge inference) |
+| `/v1/sessions/{id}/diff-hunks` | edit hunks for the session |
+| `/v1/sessions/{id}/usage` | token-usage rollup |
+| `/v1/sessions/{id}/findings` | findings scoped to the session |
+| `/v1/sessions/{id}/tool-failures` | tool-failure summaries |
+| `/v1/sessions/{id}/verification-runs` | verification runs in the session |
+| `/v1/verification-runs/{id}` | a single verification run |
+| `/v1/usage/baseline` | cross-session usage baseline |
+| `/v1/findings`, `/v1/findings/{id}`, `/v1/findings/{id}/evidence` | findings + their evidence refs |
+| `/v1/events/{event_id}/raw` | source-preserving raw payload of one event |
+| `/v1/audit` | audit log |
+| `/v1/stream` | Server-Sent Events live stream (drives the WebUI) |
 
-All non-health responses are wrapped in `{meta: {schema_version, collection_profile, generated_at, ...}, data: ...}`.
+### Collectors (`POST`, loopback, unauthenticated)
 
-## Tests
+| Path | Signal |
+| --- | --- |
+| `/otel/v1/traces` | OTel traces (beta) |
+| `/otel/v1/metrics` | OTel metrics |
+| `/otel/v1/logs` | OTel logs |
+| `/hooks/v1/events` | hook lifecycle events (single object or array, ≤ 1 MB) |
 
-`cargo test` requires `webui/dist/` to be present at compile time (rust-embed
-embeds it). On a fresh clone, build the SPA once first:
+OTLP bodies are OTLP/JSON, gzip optional, ≤ 4 MB. The `/otel` prefix is
+**required** — without it the OTel SDK posts to `…/v1/metrics` and wimcc
+returns 404.
 
-```
-just webui-build
-cargo test
-just webui-test    # frontend unit tests (vitest)
-```
+### MCP (Streamable HTTP)
 
-## Known limits in slice-1
+`POST`/`GET /mcp` exposes the same read-only data as MCP tools:
 
-- No redaction. Do not point at JSONL files that may contain secrets you're unwilling to expose to anything that can reach 127.0.0.1.
-- No live tail. Re-run `ingest` to pick up newly appended JSONL lines (idempotent).
-- `tool_call_to_result` edges appear as a self-loop (`from == to == tool_call`) with `attributes.merged = true` for matched calls; dangling tool_results get a regular call→result edge.
-- `last-prompt`, `permission-mode`, `file-history-snapshot`, `thinking`, and non-hook `attachment` events are preserved as ObservedEvents but do not get their own graph nodes.
+- `whats_in_my_cc.search_sessions`
+- `whats_in_my_cc.get_session_graph`
+- `whats_in_my_cc.search_findings`
+- `whats_in_my_cc.explain_node`
+- `whats_in_my_cc.get_file_lineage`
+- `whats_in_my_cc.get_otel_trace`
 
-## Web UI (slice-2)
+## Web UI
 
-The `witmcc` binary embeds a small React SPA at runtime. Build it once before
-`cargo build`:
-
-```
-just webui-build      # cd webui && npm install && npm run build
-just build-release    # cargo build --release
-./target/release/witmcc serve --auto-migrate
-# then open http://127.0.0.1:7878/
-```
-
-For frontend-only iteration:
-
-```
-just serve-dev        # axum on 127.0.0.1:7878
-just webui-dev        # vite on 127.0.0.1:5173, proxies /v1 → 7878
-```
-
-The SPA has two pages:
+The `wimcc` binary embeds a React SPA (rust-embed), served at
+`http://127.0.0.1:7878/`. Two pages:
 
 - `/sessions` — session list
-- `/sessions/:id` — six-lane timeline + raw source panel
+- `/sessions/:id` — event-first replay: a conversation stream with per-event
+  detail panel, raw-source tab, an insight strip (findings / tool failures /
+  usage), and an untagged-Bash panel for the tagging loop.
 
-Node 20 is required; see `webui/.nvmrc`.
+For local development (dev servers, builds, tests) see
+[Build, test, develop](#build-test-develop).
 
-### OTel Receivers (slice-3 traces, slice-6 metrics + logs)
+## Connecting Claude Code
 
-witmcc accepts all three Claude Code OTel signals at a single loopback origin:
+wimcc doesn't modify `settings.json` automatically — add the blocks below once,
+then run `wimcc doctor` to confirm scope attribution.
 
-| Endpoint | Signal | Notes |
-|---|---|---|
-| `POST /otel/v1/metrics` | metrics (slice-6) | OTLP/JSON, gzip optional, ≤4 MB |
-| `POST /otel/v1/logs`    | logs (slice-6)    | OTLP/JSON, gzip optional, ≤4 MB |
-| `POST /otel/v1/traces`  | traces (slice-3, beta) | requires `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` |
-
-Receiver is two-stage: raw OTLP body is persisted verbatim into `raw_event` first
-(source-preserving), then normalised into per-data-point `MetricSample` and
-per-record `LogRecord` `ObservedEvent` rows + graph nodes (slice-6 Stage 2).
-Each signal also surfaces on the `OTel` lane in the WebUI with kind-specific
-markers (indigo dashed = span, sky-blue = metric, amber = log).
-
-#### Wire Claude Code via `~/.claude/settings.json`
+### OTel
 
 ```jsonc
 {
@@ -114,114 +179,27 @@ markers (indigo dashed = span, sky-blue = metric, amber = log).
 }
 ```
 
-The `/otel` suffix on the endpoint is **required** — without it the OTel SDK
-posts to `…/v1/metrics` instead of `…/otel/v1/metrics` and witmcc returns 404.
-witmcc does **not** auto-edit settings.json (CLAUDE.md non-goal).
+Traces are beta — without `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` the SDK never
+emits spans. Records without `session.id` are stored but excluded from
+`/v1/sessions`.
 
-Manual smoke (any signal):
+### Hooks
 
-```bash
-curl -X POST http://127.0.0.1:7878/otel/v1/metrics \
-  -H 'Content-Type: application/json' \
-  --data-binary @tests/fixtures/otel/real/metrics_v01.json
-```
-
-#### Re-freeze real fixtures
-
-After a noteworthy Claude Code release, refresh the v01 fixtures to keep
-parser anchors on real bytes:
-
-```bash
-./target/release/witmcc serve --auto-migrate &
-cd /any/repo && claude   # short interactive session, /exit
-python3 scripts/freeze_real_otel_fixtures.py
-# inspect + commit the diff in tests/fixtures/otel/real/
-```
-
-PII (user.email / user.id / *.account_* / organization.id / session.id) is
-auto-redacted to stable placeholders by the freeze script. Always grep for
-your own email before committing.
-
-Notes:
-- Traces are beta in Claude Code — without `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`
-  the SDK never emits spans.
-- No redaction (M7). Logs in particular carry user prompts and tool input;
-  treat the SQLite file as sensitive until M7 ships.
-- Records without `session.id` are stored but excluded from `/v1/sessions`.
-
-### Doctor (slice-6 v0.1, expanded in slice-7 v0.2)
-
-```bash
-witmcc doctor                            # pretty table; exit 0 when collectors are healthy
-witmcc doctor --json                     # structured report for tooling; always exits 0
-witmcc doctor --server http://127.0.0.1:7878
-witmcc doctor --project /path/to/repo    # use this project root for the .claude/ walk
-```
-
-Walks the full Claude Code settings hierarchy per the [official docs](https://code.claude.com/docs/en/settings):
-
-```
-managed  (/Library/Application Support/ClaudeCode/managed-settings.json + .d/)
-   ↓
-local    (<project>/.claude/settings.local.json)
-   ↓
-project  (<project>/.claude/settings.json)
-   ↓
-user     (~/.claude/settings.json)
-```
-
-For each scope the `env` and `hooks` blocks are surfaced with **scope attribution**
-— so you can see exactly where `OTEL_EXPORTER_OTLP_ENDPOINT` is coming from
-(or that it's missing everywhere). Plugin manifests under
-`~/.claude/plugins/<plugin>/{plugin,manifest,hooks}.json` are walked for
-forward entries to `/hooks/v1/events`; matches appear with scope `plugin:<name>`.
-
-Managed policy flags (`allowManagedHooksOnly`, `disableAllHooks`,
-`allowedHttpHookUrls`) are detected and warned about — a user-scope hook
-entry might be silently ignored if managed policy says so.
-
-Pure read-only: doctor never writes to settings.json, env, or anything else.
-The recommendations block prints copy-pastable snippets only.
-
-### `witmcc serve` flags (slice-1 → slice-7 accumulated)
-
-```
-witmcc serve [--bind 127.0.0.1] [--port 7878]
-             [--auto-migrate]                       # slice-1
-             [--watch <repo>]                       # slice-5: file + git watcher
-             [--git-poll-secs N]                    # slice-5
-             [--shutdown-after-ms N]                # smoke-test convenience
-             [--transcripts-root <PATH>]            # slice-7: override ~/.claude/projects
-             [--no-watch-transcripts]               # slice-7: disable the live tail
-```
-
-### Hook Collector (slice-4)
-
-`POST /hooks/v1/events` accepts Claude Code hook lifecycle events directly. The
-body is a single hook JSON object **or** a JSON array of hook objects (≤ 1 MB).
-Nine `hook_event_name` values are recognised (`PreToolUse`, `PostToolUse`,
-`UserPromptSubmit`, `Stop`, `SubagentStop`, `Notification`, `PreCompact`,
-`SessionStart`, `SessionEnd`); unknown names ingest with `subkind="unknown"`.
-
-Wire it up via a forward script registered in `~/.claude/settings.json`:
+Register a forward script for the lifecycle events you care about
+(`PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStop`,
+`Notification`, `PreCompact`, `SessionStart`, `SessionEnd`):
 
 ```jsonc
 {
   "hooks": {
-    "PreToolUse":  [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
-    "Notification": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
-    "PreCompact":   [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
-    "SessionEnd":   [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
-    "Stop":         [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }],
-    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/witmcc-forward.sh" }] }]
+    "PreToolUse":  [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/wimcc-forward.sh" }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/wimcc-forward.sh" }] }]
+    // … repeat for the other events
   }
 }
 ```
 
-`/usr/local/bin/witmcc-forward.sh`:
+`/usr/local/bin/wimcc-forward.sh`:
 
 ```bash
 #!/bin/bash
@@ -231,81 +209,93 @@ exec curl -sS -m 2 -X POST \
   http://127.0.0.1:7878/hooks/v1/events > /dev/null 2>&1 || true
 ```
 
-`-m 2` (2 second timeout) combined with `|| true` implements **fail-soft degrade
-semantics** (PRD OBS-3): if the witmcc receiver is down, slow, or unreachable,
-your Claude Code session is never blocked.
+`-m 2` + `|| true` gives **fail-soft degrade semantics** (PRD OBS-3): if wimcc
+is down or slow, your Claude Code session is never blocked.
 
-Manual smoke test:
+### Smoke tests
 
 ```bash
+curl -X POST http://127.0.0.1:7878/otel/v1/metrics \
+  -H 'Content-Type: application/json' \
+  --data-binary @tests/fixtures/otel/real/metrics_v01.json
+
 curl -X POST http://127.0.0.1:7878/hooks/v1/events \
   -H 'content-type: application/json' \
   --data-binary @tests/fixtures/hook/pre_tool_use.json
 ```
 
-Notes:
-- witmcc does **not** install the forward script automatically (CLAUDE.md
-  non-goal: "Claude Code 설정 / hook / command / skill / memory 변경").
-- Hook payloads can carry secrets (prompt text, command output, `tool_input`);
-  redaction is M7. Only enable forwarding in trusted contexts until then.
-- External hook events appear on the new `Hook` lane in the UI.
+## Auth & retention
 
-### File/Git observer (slice-5)
+- **Auth** defaults to `off` (single-user local dev) — open the browser
+  directly. `wimcc serve --auth on` enforces a bearer token on `/v1/*` + `/mcp`.
+  Token file: macOS `~/Library/Application Support/wimcc/token`, Linux
+  `~/.config/wimcc/token` (mode `0600`). Manage it with `serve --print-token`
+  / `--rotate-token`.
+- **Retention** defaults to `none` (no deletion). `--retention-profile default`
+  (30d/180d/90d) or `strict` (7d/30d/30d) enables a background sweep.
 
-`witmcc serve --watch <path>` spawns two background tokio tasks alongside the
-HTTP server. A filesystem watcher (`notify` 7.x) emits debounced `file_event`
-records on create / modify / delete / rename. If `<path>/.git` exists, a git
-poller (default 5 s) emits one `git_commit` + one `diff_hunk` per hunk on every
-new commit. Hunks are also persisted in a dedicated `diff_hunk` side-table for
-the spec-defined `file_lineage_idx` (migration `0003`).
+## Security notes
 
-All file/git events live on a synthetic `session_id = "filesystem"` — they
-surface through the same `/v1/sessions` endpoint as transcript / OTel / hook
-sessions, and the SPA's new `Files` lane (8th) renders the three new node kinds.
+- **No redaction yet.** Transcripts, OTel logs, and hook payloads can carry
+  prompts, tool input, command output, and secrets. Treat the SQLite file and
+  anything reachable on `127.0.0.1` as sensitive.
+- Edit-hunk text is truncated; binary diffs surface as `<binary>`.
+- The OTel real-fixture freeze script auto-redacts PII to stable placeholders,
+  but always grep for your own email before committing fixtures.
 
-Smoke:
+## Build, test, develop
 
-```bash
-mkdir -p /tmp/witmcc-smoke && (cd /tmp/witmcc-smoke && git init && touch a.txt && \
-  git -c user.email=t@t -c user.name=t commit --allow-empty -m init)
-./target/release/witmcc serve --bind 127.0.0.1 --port 7878 \
-  --watch /tmp/witmcc-smoke --git-poll-secs 1 --auto-migrate &
-sleep 1
-echo hello > /tmp/witmcc-smoke/a.txt
-(cd /tmp/witmcc-smoke && git add . && git -c user.email=t@t -c user.name=t commit -m bump)
-sleep 3
-curl -sS http://127.0.0.1:7878/v1/sessions/filesystem/graph | \
-  jq '.data.nodes[].node_kind' | sort -u
-# expect: diff_hunk, file_event, git_commit
+Build and test are wrapped as `just` recipes. The backend binary embeds
+`webui/dist/` at compile time (rust-embed), so **the SPA must be built before you
+build or test the backend.**
+
+| Recipe | What it does |
+| --- | --- |
+| `just webui-install` | install webui npm deps (idempotent) |
+| `just webui-build` | production SPA build → `webui/dist/` (`tsc -b && vite build`) |
+| `just webui-test` | frontend unit tests (`vitest run`) |
+| `just webui-dev` | vite dev server (`127.0.0.1:5173`, proxies `/v1` · `/otel` · `/hooks` → `7878`) |
+| `just serve-dev` | run the backend in dev (`cargo run -- serve --auto-migrate`) |
+| `just build-release` | `webui-build`, then `cargo build --release` → `target/release/wimcc` |
+
+**Release build** — a single binary with the WebUI embedded:
+
+```
+just build-release
+./target/release/wimcc serve --auto-migrate
 ```
 
-Flags:
+**Backend tests** — `cargo test`. rust-embed needs `webui/dist/` at compile
+time, so on a fresh clone build the SPA once first:
 
-- `--watch <path>` — directory to observe; both collectors disabled if the path is missing.
-- `--git-poll-secs N` — polling interval (default `5`, minimum `1`).
-- `--shutdown-after-ms N` — test/smoke convenience: auto-shutdown after `N` ms.
+```
+just webui-build
+cargo test
+```
 
-Known limits in slice-5:
+**Frontend tests** — `just webui-test` (`vitest run`). Watch mode:
+`cd webui && npm run test:watch`.
 
-- File mutations between commits surface as `file_event` only — there is no
-  per-file content diff. Hunks come from `git commit` diffs only.
-- Hunk text is truncated to 4 KB per hunk. Binary diffs surface with
-  `line_range_after = null` and `patch_preview = "<binary>"`.
-- `MAX_HUNKS_PER_COMMIT = 2000`; surplus hunks are dropped (and counted in the ingest result).
-- No redaction (M7). Hunks may carry secrets.
-- `session_id="filesystem"` is reserved.
-- Watcher applies a hardcoded system-default ignore list (`src/watcher.rs` →
-  `default_ignore` module): VCS metadata (`.git`, `.hg`, `.svn`, `.bzr`),
-  `target/`, macOS metadata (`.DS_Store`, `.Spotlight-V100/`, `.fseventsd/`,
-  `.Trashes/`, `.TemporaryItems/`), Windows metadata (`Thumbs.db`, `desktop.ini`),
-  all SQLite sidecars (`*.sqlite`, `*.sqlite-*`), and common editor temp/swap
-  files (`*.swp`, `*.swo`, `4913`, `.#*`, `*~`). The list is NOT user-configurable
-  in slice-5; service-specific `.witmccignore` is a follow-up.
-- The git poller on startup uses the current `HEAD` as `last_seen` — commits made before `serve` started are not back-filled.
+**Frontend dev loop** — run both processes: `just serve-dev` (backend) and
+`just webui-dev` (vite with HMR), then open `http://127.0.0.1:5173`.
+
+**Node version** — Node 20 for the build (`webui/.nvmrc`). The untagged-Bash
+tooling script (`webui/scripts/untagged-bash.ts`) needs Node 22+ for native type
+stripping.
+
+**dev DB regeneration** — after a migration change (latest `0017`), run
+`wimcc init-db` and re-ingest. Payload fields stored as JSON BLOBs
+(`tool_call.tool_name`, `assistant_message.model`, …) are added without a schema
+migration, so existing events won't have them until re-ingested.
 
 ## Reference docs
 
-- Spec (this slice): `docs/superpowers/specs/2026-05-19-witmcc-slice1-transcript-design.md`
-- Plan: `docs/superpowers/plans/2026-05-19-witmcc-slice1-transcript.md`
-- Full system docs: `docs/index.html` and `docs/00..06_*.html`
-- Implementation notes (deviations & decisions): `docs/implementation-notes.html`
+- Full system specs: `docs/index.html` and `docs/00..06_*.html`
+- Implementation notes (deviations, decisions, event-first redesign):
+  `docs/implementation-notes.html`
+- Project guidance for contributors: `CLAUDE.md`
+
+> The HTML specs (01–04) still describe the older graph-backed view model. The
+> shipped views are **event-first** (`ObservedEvent` + correlation keys); graph
+> is inference for `/v1/sessions/:id/graph` and MCP only. See
+> `docs/implementation-notes.html#event-first-redesign`.

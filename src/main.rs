@@ -1,5 +1,5 @@
 use clap::Parser;
-use witmcc::{cli, db, doctor, error, insight::judge::runtime::JudgeRuntime, paths, telemetry};
+use wimcc::{cli, db, doctor, error, insight::judge::runtime::JudgeRuntime, paths, telemetry};
 
 fn main() -> error::Result<()> {
     let cli = cli::Cli::parse();
@@ -42,13 +42,13 @@ fn main() -> error::Result<()> {
             } => {
                 // Slice-19: --print-token and --rotate-token short-circuit server start.
                 if print_token {
-                    let token = witmcc::security::token::ensure_token()
+                    let token = wimcc::security::token::ensure_token()
                         .map_err(anyhow::Error::from)?;
                     eprintln!("{token}");
                     return Ok(());
                 }
                 if rotate_token {
-                    let token = witmcc::security::token::rotate_token()
+                    let token = wimcc::security::token::rotate_token()
                         .map_err(anyhow::Error::from)?;
                     eprintln!("{token}");
                     return Ok(());
@@ -104,7 +104,7 @@ async fn serve_cmd(
     // Strict 127.0.0.1-only would use `bind == IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)`.
     // Slice-1 uses is_loopback() to also allow ::1 for IPv6 loopback.
     if !bind.is_loopback() {
-        return Err(error::WitmccError::Invalid(format!(
+        return Err(error::WimccError::Invalid(format!(
             "only loopback addresses are allowed (got {bind})"
         )));
     }
@@ -121,8 +121,8 @@ async fn serve_cmd(
         .fetch_one(&pool)
         .await?;
         if exists.0 == 0 {
-            return Err(error::WitmccError::Invalid(
-                "DB has not been migrated; run `witmcc init-db` or pass --auto-migrate".into(),
+            return Err(error::WimccError::Invalid(
+                "DB has not been migrated; run `wimcc init-db` or pass --auto-migrate".into(),
             ));
         }
     }
@@ -130,7 +130,7 @@ async fn serve_cmd(
     let mut bg_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
     let (live_tx, _) =
-        tokio::sync::broadcast::channel::<witmcc::live::LiveEvent>(sse_channel_capacity as usize);
+        tokio::sync::broadcast::channel::<wimcc::live::LiveEvent>(sse_channel_capacity as usize);
     let live_tx = std::sync::Arc::new(live_tx);
 
     if !no_watch_transcripts {
@@ -144,7 +144,7 @@ async fn serve_cmd(
                 let tok = cancel.clone();
                 let live_cl = live_tx.clone();
                 bg_handles.push(tokio::spawn(async move {
-                    if let Err(e) = witmcc::transcript_tail::run(pool_cl, r, live_cl, tok).await {
+                    if let Err(e) = wimcc::transcript_tail::run(pool_cl, r, live_cl, tok).await {
                         tracing::error!(error=?e, "transcript tail exited with error");
                     }
                 }));
@@ -170,7 +170,7 @@ async fn serve_cmd(
         cli::JudgeMode::None => JudgeRuntime::noop(),
         cli::JudgeMode::Fixture => {
             let path = judge_fixture_path.ok_or_else(|| {
-                error::WitmccError::Invalid(
+                error::WimccError::Invalid(
                     "--judge-fixture-path is required when --judge=fixture".into(),
                 )
             })?;
@@ -190,21 +190,21 @@ async fn serve_cmd(
             String::new()
         }
         cli::AuthMode::On => {
-            let t = witmcc::security::token::ensure_token()
+            let t = wimcc::security::token::ensure_token()
                 .map_err(anyhow::Error::from)?;
-            eprintln!("witmcc: serving with token {t}");
+            eprintln!("wimcc: serving with token {t}");
             t
         }
     };
 
     // Slice-19: Parse retention profile and spawn sweep if enabled.
-    let profile: witmcc::security::retention::Profile = retention_profile
+    let profile: wimcc::security::retention::Profile = retention_profile
         .parse()
         .map_err(anyhow::Error::from)?;
-    if profile != witmcc::security::retention::Profile::None {
+    if profile != wimcc::security::retention::Profile::None {
         let pool_cl = pool.clone();
-        let policy = witmcc::security::retention::RetentionPolicy { profile: profile.clone() };
-        bg_handles.push(witmcc::security::retention::spawn_sweep_task(
+        let policy = wimcc::security::retention::RetentionPolicy { profile: profile.clone() };
+        bg_handles.push(wimcc::security::retention::spawn_sweep_task(
             pool_cl,
             policy,
             cancel.clone(),
@@ -212,39 +212,39 @@ async fn serve_cmd(
         tracing::info!(profile = retention_profile, "retention sweep enabled");
     }
 
-    let state = witmcc::api::AppState {
+    let state = wimcc::api::AppState {
         pool: pool.clone(),
         live_tx: live_tx.clone(),
         sse_keepalive_secs,
         sse_channel_capacity: sse_channel_capacity as usize,
         judge_runtime: std::sync::Arc::new(judge_runtime),
         // Slice-17: MCP session registry starts empty; sessions are created on initialize.
-        mcp_sessions: witmcc::api::mcp::SessionRegistry::new(),
+        mcp_sessions: wimcc::api::mcp::SessionRegistry::new(),
         // Slice-19: bearer token + retention profile for health block.
         token,
         retention_profile,
         // Post-slice-19: same token long-lived stream handlers observe.
         shutdown: cancel.clone(),
     };
-    let app = witmcc::api::router(state);
+    let app = wimcc::api::router(state);
     let addr = std::net::SocketAddr::new(bind, port);
     tracing::info!(%addr, "serving");
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .map_err(anyhow::Error::from)?;
-    let shutdown_signal = witmcc::serve::shutdown_with_grace(cancel.clone());
+    let shutdown_signal = wimcc::serve::shutdown_with_grace(cancel.clone());
     let serve_fut = axum::serve(listener, app).with_graceful_shutdown(shutdown_signal);
     // Grace window counts from cancel — never aborts a still-active server.
-    witmcc::serve::run_serve_with_grace(
+    wimcc::serve::run_serve_with_grace(
         serve_fut,
         cancel.clone(),
-        witmcc::serve::DEFAULT_SHUTDOWN_GRACE,
+        wimcc::serve::DEFAULT_SHUTDOWN_GRACE,
     )
     .await;
     cancel.cancel();
     // bg_handles join is also bounded by grace; tokens have been cancelled
     // so well-behaved tasks return immediately. anything stuck is dropped.
-    let _ = tokio::time::timeout(witmcc::serve::DEFAULT_SHUTDOWN_GRACE, async {
+    let _ = tokio::time::timeout(wimcc::serve::DEFAULT_SHUTDOWN_GRACE, async {
         for h in bg_handles {
             let _ = h.await;
         }
@@ -268,10 +268,10 @@ async fn ingest_cmd(
     }
     for f in files {
         tracing::info!(?f, "ingesting");
-        let stats = witmcc::ingest::store::ingest_file(&pool, &f, &witmcc::live::NoopSink).await?;
+        let stats = wimcc::ingest::store::ingest_file(&pool, &f, &wimcc::live::NoopSink).await?;
         tracing::info!(?stats, "ingest done");
         for sid in &stats.sessions_touched {
-            let g = witmcc::graph::build::rebuild_session(&pool, sid).await?;
+            let g = wimcc::graph::build::rebuild_session(&pool, sid).await?;
             tracing::info!(session_id=%sid, nodes=g.0, edges=g.1, "graph rebuilt");
         }
     }
@@ -288,17 +288,17 @@ fn collect_files(
         } else if p.is_dir() {
             Ok(walk_jsonl(&p))
         } else {
-            Err(error::WitmccError::Invalid(format!(
+            Err(error::WimccError::Invalid(format!(
                 "not found: {}",
                 p.display()
             )))
         }
     } else if all {
         let root = paths::default_transcripts_root()
-            .ok_or_else(|| error::WitmccError::Invalid("HOME not set".into()))?;
+            .ok_or_else(|| error::WimccError::Invalid("HOME not set".into()))?;
         Ok(walk_jsonl(&root))
     } else {
-        Err(error::WitmccError::Invalid(
+        Err(error::WimccError::Invalid(
             "provide --path or --all".into(),
         ))
     }

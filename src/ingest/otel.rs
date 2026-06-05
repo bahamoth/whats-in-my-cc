@@ -500,7 +500,7 @@ mod tests {
                     {"key": "session.id",   "value": {"stringValue": "sess-otel-A"}}
                 ]},
                 "scopeSpans": [{
-                    "scope": {"name": "witmcc.test", "version": "0.1.0"},
+                    "scope": {"name": "wimcc.test", "version": "0.1.0"},
                     "spans": [{
                         "traceId": "5b8aa5a2d2c872e8321cf37308d69df2",
                         "spanId":  "051581bf3cb55c13",
@@ -530,7 +530,7 @@ mod tests {
         assert_eq!(s.kind.as_deref(), Some("client"));
         assert_eq!(s.status_code.as_deref(), Some("ok"));
         assert_eq!(s.session_id.as_deref(), Some("sess-otel-A"));
-        assert_eq!(s.scope_name.as_deref(), Some("witmcc.test"));
+        assert_eq!(s.scope_name.as_deref(), Some("wimcc.test"));
         assert_eq!(
             s.attributes.get("tool.name").and_then(|v| v.as_str()),
             Some("Bash")

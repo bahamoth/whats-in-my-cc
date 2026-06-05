@@ -2,7 +2,7 @@ use assert_cmd::Command;
 
 #[test]
 fn help_shows_subcommands() {
-    let assert = Command::cargo_bin("witmcc")
+    let assert = Command::cargo_bin("wimcc")
         .unwrap()
         .arg("--help")
         .assert()

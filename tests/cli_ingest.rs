@@ -4,13 +4,13 @@ use tempfile::tempdir;
 #[test]
 fn ingest_minimal_fixture_via_cli() {
     let dir = tempdir().unwrap();
-    let db = dir.path().join("witmcc.sqlite");
-    Command::cargo_bin("witmcc")
+    let db = dir.path().join("wimcc.sqlite");
+    Command::cargo_bin("wimcc")
         .unwrap()
         .args(["--db-path", db.to_str().unwrap(), "init-db"])
         .assert()
         .success();
-    Command::cargo_bin("witmcc")
+    Command::cargo_bin("wimcc")
         .unwrap()
         .args([
             "--db-path",

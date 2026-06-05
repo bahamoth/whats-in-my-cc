@@ -9,8 +9,8 @@ use serde_json::Value;
 use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool;
 
-use witmcc::db::{migrate, repo_observed, repo_raw, repo_runs};
-use witmcc::model::observed::{Actor, EventKind, ObservedEvent};
+use wimcc::db::{migrate, repo_observed, repo_raw, repo_runs};
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 const SESS: &str = "sess-window";
 const SEED_N: usize = 100;
@@ -64,7 +64,7 @@ async fn seed_pool() -> SqlitePool {
 
 async fn setup() -> TestServer {
     let pool = seed_pool().await;
-    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool));
+    let app = wimcc::api::router(wimcc::api::AppState::new_for_tests(pool));
     TestServer::new(app).unwrap()
 }
 

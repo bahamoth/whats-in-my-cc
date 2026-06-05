@@ -11,9 +11,9 @@ use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::Row;
 use std::io::Write;
 use tempfile::NamedTempFile;
-use witmcc::db::{migrate, repo_diff_hunk};
-use witmcc::ingest::store;
-use witmcc::live::NoopSink;
+use wimcc::db::{migrate, repo_diff_hunk};
+use wimcc::ingest::store;
+use wimcc::live::NoopSink;
 
 /// Build a synthetic minimal transcript JSONL with one assistant Edit
 /// tool_use + one user tool_result containing a fixture-shaped structuredPatch.

@@ -7,8 +7,8 @@
 mod common;
 
 use serde_json::{json, Value};
-use witmcc::graph::build::compute;
-use witmcc::model::observed::{EventKind, ObservedEvent};
+use wimcc::graph::build::compute;
+use wimcc::model::observed::{EventKind, ObservedEvent};
 
 fn tool_call_ev(event_id: &str, tuid: &str) -> ObservedEvent {
     let mut e = common::base_event(EventKind::ToolCall, event_id);
@@ -36,7 +36,7 @@ fn tool_decision_log_ev(event_id: &str, tuid: &str) -> ObservedEvent {
     e
 }
 
-fn facets_of<'a>(nodes: &'a [witmcc::model::graph::GraphNode], kind: &str) -> Vec<&'a Value> {
+fn facets_of<'a>(nodes: &'a [wimcc::model::graph::GraphNode], kind: &str) -> Vec<&'a Value> {
     let n = nodes.iter().find(|n| n.node_kind == kind).expect("owner node");
     n.payload
         .get("facets")

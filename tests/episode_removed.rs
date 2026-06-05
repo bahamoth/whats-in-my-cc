@@ -20,7 +20,7 @@
 
 use axum_test::TestServer;
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::migrate;
+use wimcc::db::migrate;
 
 async fn make_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -34,7 +34,7 @@ async fn make_pool() -> sqlx::SqlitePool {
 
 async fn setup() -> TestServer {
     let pool = make_pool().await;
-    let app = witmcc::api::router(witmcc::api::AppState::new_for_tests(pool));
+    let app = wimcc::api::router(wimcc::api::AppState::new_for_tests(pool));
     TestServer::new(app).unwrap()
 }
 

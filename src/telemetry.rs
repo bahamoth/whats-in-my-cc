@@ -5,7 +5,7 @@ use crate::cli::LogFormat;
 pub fn init(format: &LogFormat, verbose: bool) {
     let default_level = if verbose { "debug" } else { "info" };
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(format!("witmcc={default_level},sqlx=warn,axum=info")));
+        .unwrap_or_else(|_| EnvFilter::new(format!("wimcc={default_level},sqlx=warn,axum=info")));
 
     let reg = tracing_subscriber::registry().with(filter);
     match format {

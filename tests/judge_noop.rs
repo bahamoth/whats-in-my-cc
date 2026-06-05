@@ -1,7 +1,7 @@
 //! Slice-15 — NoopJudge must return JudgeError::Disabled.
 
-use witmcc::insight::judge::providers::NoopJudge;
-use witmcc::insight::judge::{JudgeError, JudgePrompt, JudgeProvider};
+use wimcc::insight::judge::providers::NoopJudge;
+use wimcc::insight::judge::{JudgeError, JudgePrompt, JudgeProvider};
 
 fn synth_prompt() -> JudgePrompt {
     JudgePrompt {

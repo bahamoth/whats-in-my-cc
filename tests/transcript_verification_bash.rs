@@ -10,11 +10,11 @@
 //! 3. Determinism: two passes over the same events yield identical row IDs.
 
 use sqlx::sqlite::SqlitePoolOptions;
-use witmcc::db::{migrate, repo_observed};
-use witmcc::ingest::{store, verification_run::extract_verification_runs};
-use witmcc::live::NoopSink;
+use wimcc::db::{migrate, repo_observed};
+use wimcc::ingest::{store, verification_run::extract_verification_runs};
+use wimcc::live::NoopSink;
 
-async fn load_fixture_events(path: &str) -> Vec<witmcc::model::observed::ObservedEvent> {
+async fn load_fixture_events(path: &str) -> Vec<wimcc::model::observed::ObservedEvent> {
     let pool = SqlitePoolOptions::new()
         .max_connections(2)
         .connect("sqlite::memory:")
@@ -25,7 +25,7 @@ async fn load_fixture_events(path: &str) -> Vec<witmcc::model::observed::Observe
         .await
         .unwrap();
     // The real fixture only has one session
-    let sessions = witmcc::db::repo_observed::list_sessions(&pool, 10)
+    let sessions = wimcc::db::repo_observed::list_sessions(&pool, 10)
         .await
         .unwrap();
     assert!(!sessions.is_empty(), "fixture produced no sessions");

@@ -1,6 +1,6 @@
 //! Live event envelope and sinks for slice-8 SSE streaming.
 //!
-//! Spec: `docs/superpowers/specs/2026-05-21-witmcc-slice8-sse-design.md` §4.
+//! Spec: `docs/superpowers/specs/2026-05-21-wimcc-slice8-sse-design.md` §4.
 
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -30,7 +30,7 @@ impl LiveEvent {
 ///
 /// Implementations:
 /// - `NoopSink` — CLI `ingest --all` and tests that do not exercise live emission.
-/// - `BroadcastSink` — production `witmcc serve` path, wraps `tokio::sync::broadcast::Sender`.
+/// - `BroadcastSink` — production `wimcc serve` path, wraps `tokio::sync::broadcast::Sender`.
 /// - `CapturingSink` — test helper, collects envelopes into a `Vec`.
 ///
 /// `emit` is called inside the success path of `sqlx` commits and must not perform I/O.
