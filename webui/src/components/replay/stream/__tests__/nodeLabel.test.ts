@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { nodeLabel, formatModel } from '../nodeLabel';
 
-const L = (node_kind: string, payload: unknown) => nodeLabel({ node_kind, payload });
+const L = (node_kind: string, payload: unknown, telemetry?: unknown) =>
+  nodeLabel({ node_kind, payload, telemetry });
 
 describe('formatModel', () => {
   it('shortens known model ids', () => {
@@ -69,8 +70,11 @@ describe('nodeLabel', () => {
     expect(L('hook_event', { hookName: 'PreToolUse:Agent' }).secondary).toBe('PreToolUse:Agent');
     expect(L('hook_event', { hook: { hook_event_name: 'PreToolUse' } }).secondary).toBe('PreToolUse');
   });
-  it('otel_span: span name', () => {
-    expect(L('otel_span', { raw_span: { name: 'claude_code.interaction' } }).secondary).toBe('claude_code.interaction');
+  it('otel_span: span name from the telemetry facet (C4: not payload.raw_span)', () => {
+    expect(L('otel_span', {}, { span_name: 'claude_code.interaction' }).secondary).toBe('claude_code.interaction');
+    // graceful fallback when the facet is absent
+    expect(L('otel_span', {}, undefined).secondary).toBe('');
+    expect(L('otel_span', {}).secondary).toBe('');
   });
   it('log_record: friendly label by event_name + salient detail (state-change beats)', () => {
     expect(L('log_record', { event_name: 'subagent_completed', attributes: { agent_type: 'Explore' } }))

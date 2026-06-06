@@ -51,4 +51,25 @@ describe('buildRawBlocksFromEvents', () => {
     const msg = ev({ event_id: 'm1', kind: 'user_message', actor: 'user', payload: { text: 'hi' } });
     expect(buildRawBlocksFromEvents(msg, [msg])).toBeUndefined();
   });
+
+  // C4 (Tier 3-1): the llm_request span no longer re-embeds payload.raw_span;
+  // span name + attributes live in the telemetry facet. The correlated
+  // llm_request_span Raw block must be matched by the facet (not payload) and
+  // carry the facet as its record so the span data is still visible.
+  it('splits an assistant turn into entity + correlated llm_request span block (from telemetry facet)', () => {
+    const asst = ev({ event_id: 'a1', kind: 'assistant_message', actor: 'assistant',
+      request_id: 'req_1', payload: { model: 'claude-opus-4-8', text: 'hi' } });
+    const span = ev({ event_id: 's1', kind: 'otel_span', actor: 'system', request_id: 'req_1',
+      telemetry: { span_name: 'claude_code.llm_request',
+        attributes: { request_id: 'req_1', output_tokens: 900 } },
+      payload: {} });
+    const blocks = buildRawBlocksFromEvents(asst, [asst, span]);
+    expect(blocks).toBeDefined();
+    const llm = blocks!.find((b) => b.source === 'llm_request_span');
+    expect(llm).toBeDefined();
+    expect(llm!.label).toBe('claude_code.llm_request');
+    // the block carries the telemetry facet (the span data), not an empty payload
+    const rec = llm!.record as Record<string, unknown>;
+    expect((rec.attributes as Record<string, unknown>).output_tokens).toBe(900);
+  });
 });

@@ -10,23 +10,19 @@ import {
 } from '../llmRequestMetrics';
 import type { ObservedEventDto } from '../../../../api/types';
 
+// C4 (Tier 3-1): the otel_span event no longer re-embeds `payload.raw_span`.
+// Span name + metrics now come from the telemetry facet (sibling field), whose
+// `attributes` is a FLAT key→value object (backend `flatten_kv` unwrapped the
+// OTLP array). Real shape anchored by tests/fixtures/otel/real/traces_v01.json.
 function span(attrs: Record<string, string | number | boolean>, name = 'claude_code.llm_request'): ObservedEventDto {
-  const attributes = Object.entries(attrs).map(([key, v]) => {
-    const value =
-      typeof v === 'number'
-        ? Number.isInteger(v) ? { intValue: String(v) } : { doubleValue: v }
-        : typeof v === 'boolean'
-        ? { boolValue: v }
-        : { stringValue: v };
-    return { key, value };
-  });
   return {
     event_id: `sp-${attrs.request_id ?? name}`,
     raw_event_id: '', session_id: 's', event_uuid: null, parent_uuid: null,
     observed_at: '2026-05-30T00:00:00Z', actor: 'system', kind: 'otel_span',
     subkind: null, tool_use_id: null, tool_name: null, turn_id: null,
     is_sidechain: false, is_meta: false,
-    payload: { raw_span: { name, attributes } },
+    telemetry: { span_name: name, attributes: attrs },
+    payload: {},
   } as ObservedEventDto;
 }
 

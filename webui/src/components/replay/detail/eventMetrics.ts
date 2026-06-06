@@ -7,7 +7,8 @@
 // Real payload shapes (DB-verified):
 //   tool_result / tool_decision log_record:
 //     payload = { event_name, attributes: { tool_use_id, success, duration_ms, … } }
-//   llm_request span:  payload = { raw_span: { name, attributes: [{key,value}] } }
+//   llm_request span:  telemetry facet = { span_name, attributes: { … flat } }
+//     (C4 Tier 3-1: read from the facet, not the removed payload.raw_span)
 //   api_request log:   payload = { event_name:'api_request', attributes: { request_id, cost_usd, … } }
 import type { ObservedEventDto } from '../../../api/types';
 import { asRecord as asObj } from '../../../lib/asRecord';
@@ -70,7 +71,7 @@ export function buildLlmMetricsFromEvents(
   let base: LlmRequestMetrics | null = null;
   for (const e of events) {
     if (e.kind !== 'otel_span') continue;
-    const m = parseLlmRequestSpan(e.payload);
+    const m = parseLlmRequestSpan(e);
     if (m && m.requestId === requestId) {
       base = m;
       break;

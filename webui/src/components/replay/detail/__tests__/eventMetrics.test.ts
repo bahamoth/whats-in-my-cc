@@ -14,7 +14,9 @@ function ev(p: Partial<ObservedEventDto> & { event_id: string; kind: string }): 
 // graph node / facet fold. Real shapes:
 //   tool_result log_record payload = { event_name, attributes:{ tool_use_id,
 //     success, duration_ms, tool_input_size_bytes, ... } }  (DB-verified keys)
-//   llm_request span payload = { raw_span:{ name, attributes:[{key,value}] } }
+//   llm_request span: telemetry facet = { span_name:'claude_code.llm_request',
+//     attributes:{ request_id, output_tokens, ... } }  (C4 Tier 3-1: flat facet,
+//     not payload.raw_span — the raw_span double-store was removed)
 //   api_request log payload = { event_name:'api_request', attributes:{ request_id, cost_usd } }
 describe('buildToolMetricsFromEvents', () => {
   it('builds tool metrics from the tool_result log_record matching tool_use_id', () => {
@@ -116,13 +118,9 @@ describe('buildToolMetricsFromEvents', () => {
 
 describe('buildLlmMetricsFromEvents', () => {
   it('merges the llm_request span (by request_id) with the api_request log cost', () => {
-    const span = ev({ event_id: 's1', kind: 'otel_span', payload: { raw_span: {
-      name: 'claude_code.llm_request',
-      attributes: [
-        { key: 'request_id', value: { stringValue: 'r1' } },
-        { key: 'gen_ai.usage.output_tokens', value: { intValue: '2300' } },
-      ],
-    } } });
+    const span = ev({ event_id: 's1', kind: 'otel_span',
+      telemetry: { span_name: 'claude_code.llm_request',
+        attributes: { request_id: 'r1', 'gen_ai.usage.output_tokens': 2300 } } });
     const apiLog = ev({ event_id: 'a1', kind: 'log_record', payload: {
       event_name: 'api_request', attributes: { request_id: 'r1', cost_usd: 0.0123, query_source: 'repl_main_thread' } } });
     const m = buildLlmMetricsFromEvents([span, apiLog], 'r1');
@@ -141,13 +139,9 @@ describe('buildLlmMetricsFromEvents', () => {
   // null costUsd — NOT collapse the whole result to null. (Guards against a
   // future change that requires both records to be present.)
   it('returns the span base metrics with null cost when no api_request log is present', () => {
-    const span = ev({ event_id: 's1', kind: 'otel_span', payload: { raw_span: {
-      name: 'claude_code.llm_request',
-      attributes: [
-        { key: 'request_id', value: { stringValue: 'r1' } },
-        { key: 'output_tokens', value: { intValue: '900' } },
-      ],
-    } } });
+    const span = ev({ event_id: 's1', kind: 'otel_span',
+      telemetry: { span_name: 'claude_code.llm_request',
+        attributes: { request_id: 'r1', output_tokens: 900 } } });
     const m = buildLlmMetricsFromEvents([span], 'r1');
     expect(m).not.toBeNull();
     expect(m!.requestId).toBe('r1');
