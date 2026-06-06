@@ -1,7 +1,6 @@
 pub mod edge_inference;
 pub mod extractor;
 pub mod extractors;
-pub mod judge;
 pub mod pipeline;
 pub mod pricing;
 pub mod redaction_shim;

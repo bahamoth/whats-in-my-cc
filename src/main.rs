@@ -1,5 +1,5 @@
 use clap::Parser;
-use wimcc::{cli, db, doctor, error, insight::judge::runtime::JudgeRuntime, paths, telemetry};
+use wimcc::{cli, db, doctor, error, paths, telemetry};
 
 fn main() -> error::Result<()> {
     let cli = cli::Cli::parse();
@@ -32,9 +32,6 @@ fn main() -> error::Result<()> {
                 transcripts_root,
                 sse_keepalive_secs,
                 sse_channel_capacity,
-                judge,
-                judge_budget,
-                judge_fixture_path,
                 print_token,
                 rotate_token,
                 retention_profile,
@@ -63,9 +60,6 @@ fn main() -> error::Result<()> {
                     transcripts_root,
                     sse_keepalive_secs,
                     sse_channel_capacity,
-                    judge,
-                    judge_budget,
-                    judge_fixture_path,
                     retention_profile,
                     auth,
                 )
@@ -94,9 +88,6 @@ async fn serve_cmd(
     transcripts_root: Option<std::path::PathBuf>,
     sse_keepalive_secs: u64,
     sse_channel_capacity: u64,
-    judge_mode: cli::JudgeMode,
-    judge_budget: usize,
-    judge_fixture_path: Option<std::path::PathBuf>,
     retention_profile: String,
     auth: cli::AuthMode,
 ) -> error::Result<()> {
@@ -165,23 +156,6 @@ async fn serve_cmd(
         });
     }
 
-    // Slice-15: build judge runtime based on CLI flags.
-    let judge_runtime = match judge_mode {
-        cli::JudgeMode::None => JudgeRuntime::noop(),
-        cli::JudgeMode::Fixture => {
-            let path = judge_fixture_path.ok_or_else(|| {
-                error::WimccError::Invalid(
-                    "--judge-fixture-path is required when --judge=fixture".into(),
-                )
-            })?;
-            JudgeRuntime::fixture(&path, judge_budget).map_err(anyhow::Error::from)?
-        }
-        cli::JudgeMode::Anthropic => {
-            JudgeRuntime::anthropic(pool.clone(), judge_budget).map_err(anyhow::Error::from)?
-        }
-    };
-    tracing::info!(judge = %judge_runtime.kind, budget = judge_runtime.budget, "judge runtime ready");
-
     // DEV-S19-08: --auth off (default) → token empty string, middleware bypasses.
     // --auth on → ensure token exists, print on first boot.
     let token = match auth {
@@ -217,7 +191,6 @@ async fn serve_cmd(
         live_tx: live_tx.clone(),
         sse_keepalive_secs,
         sse_channel_capacity: sse_channel_capacity as usize,
-        judge_runtime: std::sync::Arc::new(judge_runtime),
         // Slice-17: MCP session registry starts empty; sessions are created on initialize.
         mcp_sessions: wimcc::api::mcp::SessionRegistry::new(),
         // Slice-19: bearer token + retention profile for health block.
