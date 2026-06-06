@@ -16,7 +16,7 @@ use serde_json::json;
 
 use crate::insight::extractor::InsightExtractor;
 use crate::insight::redaction_shim;
-use crate::insight::types::{FindingCandidate, PromotionPolicy};
+use crate::insight::types::FindingCandidate;
 use crate::insight::view::SessionInsightView;
 use crate::model::observed::EventKind;
 
@@ -38,10 +38,6 @@ impl InsightExtractor for ContextBloat {
 
     fn floor(&self) -> f32 {
         0.5
-    }
-
-    fn promotion_policy(&self) -> PromotionPolicy {
-        PromotionPolicy::IfAbove(1.0)
     }
 
     fn extract(&self, view: &SessionInsightView<'_>) -> Vec<FindingCandidate> {

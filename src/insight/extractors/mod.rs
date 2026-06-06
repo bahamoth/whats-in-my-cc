@@ -16,13 +16,13 @@ pub mod final_state_mismatch;
 pub mod risky_action;
 pub mod tool_failure;
 
-/// Test-only extractor that always emits one candidate with PromotionPolicy::Never,
-/// routing through the L2 judge path (DEV-S15-01). Only available when the
-/// `test-helpers` feature is enabled — never compiled into production binaries.
+/// Test-only extractor that always emits one synthetic candidate.
+/// Only available when the `test-helpers` feature is enabled — never compiled
+/// into production binaries.
 #[cfg(feature = "test-helpers")]
 pub mod noop_test {
     use crate::insight::extractor::InsightExtractor;
-    use crate::insight::types::{FindingCandidate, PromotionPolicy};
+    use crate::insight::types::FindingCandidate;
     use crate::insight::view::SessionInsightView;
 
     pub struct NoopTestExtractor;
@@ -34,16 +34,13 @@ pub mod noop_test {
         fn floor(&self) -> f32 {
             0.5
         }
-        fn promotion_policy(&self) -> PromotionPolicy {
-            PromotionPolicy::Never
-        }
         fn extract(&self, _view: &SessionInsightView<'_>) -> Vec<FindingCandidate> {
             vec![FindingCandidate {
                 category: "noop_test",
                 subkind: None,
                 confidence_l1: 0.9,
                 severity: "low",
-                summary: "noop_test: synthetic candidate for L2 path testing".to_string(),
+                summary: "noop_test: synthetic candidate for L1 testing".to_string(),
                 evidence_refs: vec!["ev_000".to_string()],
                 evidence_projection: serde_json::json!({"synthetic": true}),
             }]

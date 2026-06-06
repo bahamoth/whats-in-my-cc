@@ -7,7 +7,6 @@ use wimcc::db::repo_diff_hunk::DiffHunkRow;
 use wimcc::db::repo_verification_run::VerificationRunRow;
 use wimcc::insight::extractor::InsightExtractor;
 use wimcc::insight::extractors::final_state_mismatch::FinalStateMismatch;
-use wimcc::insight::types::PromotionPolicy;
 use wimcc::insight::view::SessionInsightView;
 use wimcc::model::graph::{GraphEdge, GraphNode};
 use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
@@ -198,20 +197,6 @@ fn does_not_fire_on_empty_session() {
     let view = view_with_runs(&[], &[]);
     let cands = FinalStateMismatch.extract(&view);
     assert!(cands.is_empty());
-}
-
-// ---------------------------------------------------------------------------
-// Promotion policy
-// ---------------------------------------------------------------------------
-
-#[test]
-fn promotion_policy_is_if_above_1() {
-    let policy = FinalStateMismatch.promotion_policy();
-    assert_eq!(
-        policy,
-        PromotionPolicy::IfAbove(1.0),
-        "final_state_mismatch must use IfAbove(1.0) to always require judge"
-    );
 }
 
 // ---------------------------------------------------------------------------

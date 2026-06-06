@@ -52,10 +52,6 @@ subtle             = "2"
 # Must NOT be enabled in production builds.
 test-helpers = []
 
-[[test]]
-name = "insight_pipeline_l2"
-required-features = ["test-helpers"]
-
 [dev-dependencies]
 assert-json-diff   = "2"
 insta              = { version = "1", features = ["json","redactions"] }

@@ -27,17 +27,6 @@ pub struct FindingCandidate {
     pub evidence_projection: serde_json::Value,
 }
 
-/// Which rule applies for promoting a candidate to a stored Finding.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PromotionPolicy {
-    /// L1 always promotes directly (no judge required).
-    Always,
-    /// L1 never alone promotes; requires L2 judge (judge disabled → dropped).
-    Never,
-    /// L1 promotes alone if `confidence_l1 > threshold`, otherwise queues for judge.
-    IfAbove(f32),
-}
-
 /// Provenance carried by every stored Finding.
 #[derive(Debug, Clone)]
 pub struct Provenance {

@@ -7,7 +7,6 @@ use wimcc::db::repo_diff_hunk::DiffHunkRow;
 use wimcc::db::repo_verification_run::VerificationRunRow;
 use wimcc::insight::extractor::InsightExtractor;
 use wimcc::insight::extractors::context_bloat::ContextBloat;
-use wimcc::insight::types::PromotionPolicy;
 use wimcc::insight::view::SessionInsightView;
 use wimcc::model::graph::{GraphEdge, GraphNode};
 use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
@@ -158,20 +157,6 @@ fn does_not_fire_on_empty_session() {
     let view = empty_view(&[]);
     let cands = ContextBloat.extract(&view);
     assert!(cands.is_empty());
-}
-
-// ---------------------------------------------------------------------------
-// Promotion policy — must be IfAbove(1.0) so judge is always required
-// ---------------------------------------------------------------------------
-
-#[test]
-fn promotion_policy_is_if_above_1() {
-    let policy = ContextBloat.promotion_policy();
-    assert_eq!(
-        policy,
-        PromotionPolicy::IfAbove(1.0),
-        "context_bloat must use IfAbove(1.0) to always require judge"
-    );
 }
 
 // ---------------------------------------------------------------------------
