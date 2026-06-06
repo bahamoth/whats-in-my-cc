@@ -35,6 +35,8 @@ pub struct MetricsIngestResult {
 pub struct MetricSampleRecord {
     pub facet: MetricFacet,
     pub session_id: String,
+    pub tool_use_id: Option<String>,
+    pub request_id: Option<String>,
 }
 
 /// Parse an OTLP/JSON `ExportMetricsServiceRequest` into a flat list of
@@ -161,6 +163,15 @@ fn push_for_instrument(
             .or_else(|| resource.get("session.id").and_then(|v| v.as_str()))
             .unwrap_or("")
             .to_string();
+        // Promote OTel attribute correlation keys to indexed columns.
+        let tool_use_id = attrs
+            .get("tool_use_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let request_id = attrs
+            .get("request_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
         let facet = MetricFacet {
             instrument_name: name.to_string(),
             instrument_kind: kind_str.to_string(),
@@ -178,7 +189,7 @@ fn push_for_instrument(
             time_unix_nano,
             start_time_unix_nano,
         };
-        out.push(MetricSampleRecord { facet, session_id });
+        out.push(MetricSampleRecord { facet, session_id, tool_use_id, request_id });
     }
 }
 
@@ -332,6 +343,8 @@ pub async fn store_request(
             observed_at,
             actor: Actor::System,
             kind: EventKind::MetricSample,
+            tool_use_id: rec.tool_use_id.clone(),
+            request_id: rec.request_id.clone(),
             parser_version: PARSER_VERSION_OTEL_METRICS.into(),
             payload,
             ..Default::default()
