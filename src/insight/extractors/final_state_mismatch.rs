@@ -1,4 +1,4 @@
-//! `FinalStateMismatch` L1+L2 extractor (slice-16).
+//! `FinalStateMismatch` L1 extractor (slice-16).
 //!
 //! Rule (spec §5):
 //! Fires when ALL of:
@@ -9,7 +9,7 @@
 //!
 //! Emits at most ONE finding per session (session-level grain, DEV-S16-06).
 //!
-//! L1 confidence: 0.6. Promotion: IfAbove(1.0) — always judge.
+//! L1 confidence: 0.6 — promotes directly (deterministic L1).
 //! Severity: medium.
 //!
 //! Goal verb lexicon and completion marker lexicon are frozen (DEV-S16-03).

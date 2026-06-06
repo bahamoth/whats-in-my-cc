@@ -1,4 +1,4 @@
-//! `RiskyAction` L1+L2 extractor (slice-16).
+//! `RiskyAction` L1 extractor (slice-16).
 //!
 //! Rule (spec §3):
 //! Fires when ANY of:
@@ -6,8 +6,7 @@
 //!     destructive pattern allowlist.
 //! (b) Any `diff_hunk` row with `user_modified == true`.
 //!
-//! L1 confidence: 0.7 for both branches.
-//! Promotion policy: IfAbove(1.0) — always routes through L2 judge.
+//! L1 confidence: 0.7 for both branches — promotes directly (deterministic L1).
 //! Severity: high.
 //!
 //! Evidence projection goes through the redaction shim (DEV-S16-05).
