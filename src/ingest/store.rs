@@ -81,11 +81,10 @@ pub async fn ingest_file(
                 .await?;
                 if !inserted {
                     stats.raw_skipped += 1;
-                    // slice-7: still mark the session as touched so a later
-                    // graph rebuild runs. Without this, replaying `ingest --all`
-                    // after the graph-rebuild fix landed has no effect on
-                    // already-ingested transcripts — every line dedups and
-                    // sessions_touched stays empty.
+                    // Still mark the session as touched so the insight pipeline
+                    // re-runs. Without this, replaying `ingest --all` on
+                    // already-ingested transcripts has no effect — every line
+                    // dedups and sessions_touched stays empty.
                     if let Some(sid) = rec.session_id() {
                         stats.sessions_touched.insert(sid.to_string());
                     }
@@ -196,8 +195,8 @@ pub async fn ingest_file(
         backfill_turn_ids(pool, session_id).await?;
 
         // Slice-11 — extract verification runs for this session and persist
-        // them before rebuild_session reads them. This mirrors the diff_hunk
-        // pattern: side-table is written then the graph builder reads it.
+        // them before the insight pipeline reads them (the pipeline's view
+        // loads verification_run + diff_hunk side-tables).
         if !session_id.is_empty() {
             let evs = repo_observed::list_session(pool, session_id, 100_000).await?;
             let vr_records = verification_run::extract_verification_runs(&evs);
@@ -259,12 +258,10 @@ pub async fn ingest_file(
             }
         }
 
-        // slice-7 fix: every touched session must have its graph rebuilt so
-        // the WebUI timeline renders markers. Without this, OTel ingest
-        // paths populate graph_node but the transcript path does not —
-        // SessionDetail shows zero markers even when /v1/sessions/<id>
-        // reports hundreds of events.
-        crate::graph::build::rebuild_session(pool, session_id).await?;
+        // Run the deterministic L1 insight pipeline for each touched session so
+        // findings are refreshed immediately after ingest. (Previously this was
+        // a side effect of the now-removed graph rebuild.)
+        crate::insight::pipeline::run_extractors(pool, session_id).await?;
     }
 
     repo_runs::finish(

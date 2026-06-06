@@ -306,11 +306,9 @@ pub async fn store(
         )
         .await?;
 
-        // Self-heal: even when the raw row is a duplicate, mark the session
-        // as touched so a follow-up graph rebuild can recover from prior
-        // inconsistent state (e.g. observed_event rows present but graph_node
-        // empty after a binary upgrade). Without this, re-POSTing the same
-        // span on an out-of-sync DB is a no-op and the graph stays empty.
+        // Self-heal: even when the raw row is a duplicate, mark the session as
+        // touched so the insight pipeline re-runs for it. Without this,
+        // re-POSTing the same span on an out-of-sync DB would be a no-op.
         if let Some(sid) = span.session_id.as_deref() {
             if !sid.is_empty() {
                 touched.insert(sid.to_string());
@@ -381,12 +379,10 @@ pub async fn store(
         result.accepted_spans += 1;
     }
 
-    // Rebuild graph for each session we touched so HTTP consumers see fresh
-    // graph_node rows immediately. Without this the /v1/sessions/:id/graph
-    // endpoint returns 404 for OTel-only sessions even though observed_event
-    // rows are present.
+    // Run the deterministic L1 insight pipeline for each touched session so
+    // findings stay fresh after OTel ingest.
     for session_id in &touched {
-        crate::graph::build::rebuild_session(pool, session_id).await?;
+        crate::insight::pipeline::run_extractors(pool, session_id).await?;
     }
 
     repo_runs::finish(

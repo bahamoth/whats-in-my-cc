@@ -1,7 +1,6 @@
 pub mod repo_audit;
 pub mod repo_diff_hunk;
 pub mod repo_finding;
-pub mod repo_graph;
 pub mod repo_observed;
 pub mod repo_raw;
 pub mod repo_retention;

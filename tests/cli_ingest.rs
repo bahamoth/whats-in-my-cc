@@ -24,8 +24,6 @@ fn ingest_minimal_fixture_via_cli() {
     // sanity: file exists and has rows
     let n: i64 = rusqlite_count(&db, "SELECT count(*) FROM observed_event");
     assert!(n >= 6, "got {n}");
-    let g: i64 = rusqlite_count(&db, "SELECT count(*) FROM graph_node");
-    assert!(g >= 4, "got {g}");
 }
 
 fn rusqlite_count(path: &std::path::Path, sql: &str) -> i64 {

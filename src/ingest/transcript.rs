@@ -30,12 +30,11 @@ pub enum ParsedRecord {
 }
 
 impl ParsedRecord {
-    /// slice-7 — return the `sessionId` field on every variant that carries
-    /// one. `Unknown` and `FileHistorySnapshot` (no embedded sessionId)
-    /// return `None`. Used by `ingest::store::ingest_file` so it can mark a
-    /// session as touched even when raw_event was a dedup no-op — needed to
-    /// rebuild graph_node for previously-ingested sessions after the slice-7
-    /// graph-rebuild gap was fixed.
+    /// Return the `sessionId` field on every variant that carries one.
+    /// `Unknown` and `FileHistorySnapshot` (no embedded sessionId) return
+    /// `None`. Used by `ingest::store::ingest_file` so it can mark a session as
+    /// touched even when raw_event was a dedup no-op — needed so the insight
+    /// pipeline re-runs for previously-ingested sessions.
     pub fn session_id(&self) -> Option<&str> {
         match self {
             ParsedRecord::User(r) => Some(&r.session_id),

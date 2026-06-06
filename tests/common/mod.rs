@@ -1,5 +1,3 @@
-pub mod edge_inference;
-
 use chrono::{TimeZone, Utc};
 use wimcc::model::observed::{EventKind, ObservedEvent};
 

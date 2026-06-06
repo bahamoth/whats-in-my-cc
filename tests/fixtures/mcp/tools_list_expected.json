@@ -1,18 +1,6 @@
 {
   "tools": [
     {
-      "name": "whats_in_my_cc.get_session_graph",
-      "description": "Return the execution graph (nodes + edges) for a Claude Code session.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "session_id": { "type": "string", "description": "Session ID" },
-          "include_sources": { "type": "boolean", "default": true, "description": "Include source event IDs on nodes" }
-        },
-        "required": ["session_id"]
-      }
-    },
-    {
       "name": "whats_in_my_cc.search_sessions",
       "description": "List recent Claude Code sessions observed locally.",
       "inputSchema": {
@@ -35,18 +23,6 @@
           "limit": { "type": "integer", "default": 50 }
         },
         "required": []
-      }
-    },
-    {
-      "name": "whats_in_my_cc.explain_node",
-      "description": "Explain a specific graph node: what it is, what findings it relates to.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "session_id": { "type": "string", "description": "Session ID" },
-          "node_id": { "type": "string", "description": "Graph node ID" }
-        },
-        "required": ["session_id", "node_id"]
       }
     },
     {
