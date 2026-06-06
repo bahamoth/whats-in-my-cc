@@ -23,17 +23,12 @@ use tokio_util::sync::CancellationToken;
 use tower_http::decompression::RequestDecompressionLayer;
 
 use crate::api::mcp::SessionRegistry;
-use crate::insight::judge::runtime::JudgeRuntime;
 use crate::live::LiveEvent;
 
 const MAX_REQUEST_BODY: usize = 4 * 1024 * 1024;
 
 /// Slice-8 — shared state for axum handlers, including the in-process broadcast
 /// channel that ingest writers emit into and the SSE handler subscribes to.
-///
-/// Slice-15 adds `judge_runtime` — the composed judge stack. Wrapped in `Arc`
-/// so handlers can take a `State<AppState>` clone without cloning the runtime
-/// contents (provider_factory + metrics).
 ///
 /// Slice-17 adds `mcp_sessions` — the in-memory MCP session registry.
 ///
@@ -50,8 +45,6 @@ pub struct AppState {
     pub live_tx: Arc<broadcast::Sender<LiveEvent>>,
     pub sse_keepalive_secs: u64,
     pub sse_channel_capacity: usize,
-    /// Slice-15: judge runtime. Default = `JudgeRuntime::noop()` (L2 OFF).
-    pub judge_runtime: Arc<JudgeRuntime>,
     /// Slice-17: MCP session registry (in-memory, DEV-S17-04).
     pub mcp_sessions: SessionRegistry,
     /// Slice-19: bearer token for API authentication.
@@ -67,7 +60,7 @@ pub struct AppState {
 impl AppState {
     /// Test-only constructor. Builds a fresh broadcast channel with default
     /// capacity. `live_tx::receiver_count()` will be 0 at first; `BroadcastSink`
-    /// tolerates that. Judge runtime defaults to noop. MCP sessions start empty.
+    /// tolerates that. MCP sessions start empty.
     /// Token defaults to empty string (auth middleware accepts any request when
     /// token is empty — callers that test auth must set `state.token`).
     pub fn new_for_tests(pool: SqlitePool) -> Self {
@@ -77,7 +70,6 @@ impl AppState {
             live_tx: Arc::new(tx),
             sse_keepalive_secs: 30,
             sse_channel_capacity: 512,
-            judge_runtime: Arc::new(JudgeRuntime::noop()),
             mcp_sessions: SessionRegistry::new(),
             token: String::new(),
             retention_profile: "none".to_string(),

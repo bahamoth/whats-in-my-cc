@@ -11,7 +11,7 @@ use sqlx::SqlitePool;
 use crate::api::dto::*;
 use crate::api::AppState;
 use crate::db::{
-    repo_audit, repo_diff_hunk, repo_finding, repo_findings_pending, repo_graph,
+    repo_audit, repo_diff_hunk, repo_finding, repo_graph,
     repo_observed, repo_raw, repo_retention, repo_usage_facet, repo_verification_run,
 };
 use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
@@ -21,28 +21,12 @@ pub struct ListQuery {
     pub limit: Option<i64>,
 }
 
-/// Slice-15: health now includes an `insight` block with judge counters.
-/// `judge_pending_count` is a live DB query (cheap); all `_24h` counters are
-/// in-memory atomics reset on server restart (DEV-S15-03).
-///
 /// Slice-19: adds a `security` block with `auth_required` and `retention_profile`.
 /// `/v1/health` is auth-gated (DEV-S19-02).
 pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
-    let snap = state.judge_runtime.metrics_snapshot();
-    let pending: i64 = repo_findings_pending::count_all(&state.pool)
-        .await
-        .unwrap_or(0);
     Json(json!({
         "status": "ok",
         "build_sha": option_env!("GIT_SHA").unwrap_or("dev"),
-        "insight": {
-            "judge_kind": state.judge_runtime.kind,
-            "judge_calls_24h": snap.calls_24h,
-            "judge_pending_count": pending,
-            "judge_cache_hits_24h": snap.cache_hits_24h,
-            "judge_cache_misses_24h": snap.cache_misses_24h,
-            "judge_budget_exhaustions_24h": snap.budget_exhaustions_24h,
-        },
         "security": {
             "auth_required": !state.token.is_empty(),
             "retention_profile": state.retention_profile,

@@ -45,7 +45,6 @@ async fn setup() -> (sqlx::SqlitePool, AppState) {
         live_tx: Arc::new(tx),
         sse_keepalive_secs: 30,
         sse_channel_capacity: 512,
-        judge_runtime: std::sync::Arc::new(wimcc::insight::judge::runtime::JudgeRuntime::noop()),
         mcp_sessions: wimcc::api::mcp::SessionRegistry::new(),
         // Slice-19: empty token disables auth check in test mode.
         token: String::new(),
