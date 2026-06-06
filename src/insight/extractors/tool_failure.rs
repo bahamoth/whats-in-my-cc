@@ -15,7 +15,7 @@
 use serde_json::json;
 
 use crate::insight::extractor::InsightExtractor;
-use crate::insight::types::{FindingCandidate, PromotionPolicy};
+use crate::insight::types::FindingCandidate;
 use crate::insight::view::SessionInsightView;
 use crate::model::observed::EventKind;
 
@@ -93,10 +93,6 @@ impl InsightExtractor for ToolFailure {
 
     fn floor(&self) -> f32 {
         1.0
-    }
-
-    fn promotion_policy(&self) -> PromotionPolicy {
-        PromotionPolicy::Always
     }
 
     fn extract(&self, view: &SessionInsightView<'_>) -> Vec<FindingCandidate> {

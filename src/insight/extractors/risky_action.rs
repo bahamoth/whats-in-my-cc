@@ -17,7 +17,7 @@ use serde_json::json;
 
 use crate::insight::extractor::InsightExtractor;
 use crate::insight::redaction_shim;
-use crate::insight::types::{FindingCandidate, PromotionPolicy};
+use crate::insight::types::FindingCandidate;
 use crate::insight::view::SessionInsightView;
 use crate::model::observed::EventKind;
 
@@ -45,11 +45,6 @@ impl InsightExtractor for RiskyAction {
 
     fn floor(&self) -> f32 {
         0.7
-    }
-
-    fn promotion_policy(&self) -> PromotionPolicy {
-        // Always queue for judge; never promote at L1 alone (spec §3).
-        PromotionPolicy::IfAbove(1.0)
     }
 
     fn extract(&self, view: &SessionInsightView<'_>) -> Vec<FindingCandidate> {
