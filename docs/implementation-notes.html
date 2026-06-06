@@ -3779,6 +3779,65 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="span-dedup">
+    <h2>otel_span 중복 저장 제거 — raw_span re-embed 삭제 (Tier 3-1, 2026-06-06)</h2>
+    <p>
+      하나의 <code>otel_span</code> <code>ObservedEvent</code>가 span을 <strong>세 번</strong> 저장하고 있었다:
+      (1) <code>raw_event.payload</code>에 verbatim span 바이트(source-preservation — <strong>유지</strong>),
+      (2) <code>observed_event.payload = {"raw_span": span.raw}</code> — span 전체를 다시 박아 넣음
+      (<code>src/ingest/otel.rs</code>의 write), (3) <code>telemetry</code> facet — 추출된
+      <code>{span_name, span_kind, status_code, attributes, resource, …}</code>. (2)가 (1)·(3)과 겹치는
+      순수 중복이라 제거했다.
+    </p>
+    <h3>변경</h3>
+    <ul>
+      <li><strong>backend write.</strong> <code>src/ingest/otel.rs</code>의 ingest write를
+        <code>payload: json!({"raw_span": span.raw})</code> → <code>payload: json!({})</code>로 변경.
+        telemetry facet은 <code>merge_payload_with_telemetry</code>가 저장 시 payload 안 <code>telemetry</code> 키로
+        병합하고 read 시 <code>telemetry</code> 필드로 다시 분리하므로, payload를 비워도 span 데이터는
+        facet으로 그대로 전달된다. verbatim span은 여전히 <code>raw_event</code>에 있고
+        <code>/v1/events/:id/raw</code> 엔드포인트가 full fidelity로 서빙한다.</li>
+      <li><strong>frontend consumers를 telemetry facet으로 마이그레이션.</strong> 이벤트 DTO는
+        <code>observed_to_dto</code>가 <code>telemetry</code>를 <code>payload</code>의 <em>형제 필드</em>로 내보낸다.
+        주의: facet의 <code>attributes</code>는 backend <code>flatten_kv</code>가 OTLP 배열
+        <code>[{key,value:{stringValue|intValue|…}}]</code>을 <strong>flat 객체</strong>
+        <code>{ "input_tokens": 6, … }</code>로 풀어준 형태라, <code>parseLlmRequestSpan</code>의 파싱 로직을
+        flat 형태로 재작성했다(OTLP-array unwrap 헬퍼 제거).
+        <ul>
+          <li><code>llmRequestMetrics.ts</code> — <code>parseLlmRequestSpan</code>이 이벤트(<code>event.telemetry.span_name</code>
+            + flat <code>telemetry.attributes</code>)를 읽도록 변경. 입력을 payload → event로 교체.</li>
+          <li><code>nodeLabel.ts</code> — span <code>secondary</code>를 <code>telemetry.span_name</code>에서 읽음(facet
+            부재 시 빈 문자열로 graceful fallback). 호출부(<code>ActivityStack.tsx</code>·<code>InsightTab.tsx</code>)가
+            <code>telemetry</code>를 넘기도록 수정.</li>
+          <li><code>eventMetrics.ts</code>·<code>rawBlocks.ts</code> — <code>parseLlmRequestSpan(e)</code>로 호출 갱신.
+            Raw 탭의 correlated <code>llm_request_span</code> 블록은 record로 telemetry facet을 싣는다
+            (payload가 비었으므로). full verbatim은 raw_event 라우트로.</li>
+          <li><code>api/types.ts</code> — <code>ObservedEventDto.telemetry</code> 필드 + <code>TelemetryFacetDto</code> 타입 추가.</li>
+        </ul>
+      </li>
+      <li><strong>real-data anchoring.</strong> facet의 flat-attributes 형태는 frozen fixture
+        <code>tests/fixtures/otel/real/traces_v01.json</code>(<code>claude_code.llm_request</code> span:
+        <code>duration_ms</code>/<code>input_tokens</code>/<code>output_tokens</code>/<code>cache_*_tokens</code>/<code>ttft_ms</code>/
+        <code>stop_reason</code>/<code>attempt</code>/<code>success</code>/<code>model</code>/<code>request_id</code> 모두 존재)로 확인.
+        <code>cost_usd</code>는 span attribute에 없고 <code>api_request</code> log facet에서 caller가 병합한다(기존과 동일).</li>
+    </ul>
+    <h3>테스트</h3>
+    <ul>
+      <li>frontend: <code>llmRequestMetrics</code>·<code>eventMetrics</code>·<code>nodeLabel</code>·<code>buildStreamModel</code> 테스트를
+        flat telemetry-facet 형태로 갱신, <code>rawBlocksFromEvents</code>에 llm_request span 블록 regression 추가.
+        <code>vitest</code> 392 green, <code>tsc --noEmit</code> clean.</li>
+      <li>backend: <code>tests/repo_observed.rs</code>·<code>tests/repo_window.rs</code>의 <code>raw_span</code> seed를
+        빈 payload <code>{}</code>로 갱신(상관은 인덱스 컬럼 매칭이라 payload 무관). repo round-trip 테스트에
+        "read-back payload == <code>{}</code> (telemetry 분리됨)" assertion 추가. <code>cargo test</code> green,
+        <code>init-db</code> 재생성.</li>
+    </ul>
+    <h3>커밋</h3>
+    <p>
+      <code>502121f</code>(webui: telemetry facet에서 span name/metrics 읽기) →
+      backend(raw_span re-embed 제거 + repo 테스트 갱신 + 본 노트).
+    </p>
+  </section>
+
   <footer class="footer">
     <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · facet correlation + 지표 중심 insight · telemetry fold Slice 1–2 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>

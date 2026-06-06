@@ -105,7 +105,11 @@ async fn round_trip_preserves_telemetry_facet() {
             scope_name: Some("wimcc.test".into()),
             scope_version: Some("0.1.0".into()),
         }),
-        payload: serde_json::json!({"raw_span": {"name": "tool.invoke"}}),
+        // Tier 3-1: otel_span events no longer re-embed the span under
+        // `payload.raw_span`; the span data is carried solely by the telemetry
+        // facet (merged into the stored payload on insert, split back out on
+        // read). The ingest path now stores an empty payload object.
+        payload: serde_json::json!({}),
         parser_version: "otel@0.1.0".into(),
         ..Default::default()
     };
@@ -126,4 +130,8 @@ async fn round_trip_preserves_telemetry_facet() {
     assert_eq!(tel.span_name, "tool.invoke");
     assert_eq!(tel.span_kind.as_deref(), Some("client"));
     assert_eq!(tel.scope_name.as_deref(), Some("wimcc.test"));
+    // Tier 3-1: the read-back payload is the empty object we stored — telemetry
+    // was split back into its own field, NOT left inside payload, and no
+    // `raw_span` re-embed remains.
+    assert_eq!(got.payload, serde_json::json!({}));
 }

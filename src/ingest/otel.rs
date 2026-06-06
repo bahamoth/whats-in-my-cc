@@ -375,7 +375,13 @@ pub async fn store(
             tool_use_id: span_tool_use_id,
             request_id: span_request_id,
             telemetry: Some(telemetry),
-            payload: serde_json::json!({"raw_span": span.raw}),
+            // Tier 3-1: do NOT re-embed the whole span here. The extracted span
+            // data is carried by the telemetry facet above (merged into the
+            // stored payload as `telemetry` by `merge_payload_with_telemetry`,
+            // split back into the `telemetry` field on read). The verbatim span
+            // stays in `raw_event` (served by /v1/events/:id/raw) for full
+            // fidelity. Storing `{}` here ends the triple-store of the span.
+            payload: serde_json::json!({}),
             parser_version: PARSER_VERSION_OTEL.into(),
             ..Default::default()
         };

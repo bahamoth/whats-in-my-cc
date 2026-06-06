@@ -516,14 +516,14 @@ async fn events_correlated_by_request_id_matches_api_log_and_span() {
     seed_payload_with_cols(&pool, &run_id, sess, 0, EventKind::LogRecord, "apilog",
         json!({"event_name":"api_request","attributes":{"request_id":"r1","output_tokens":"2300"}}),
         None, Some("r1")).await;
+    // Tier 3-1: otel_span events no longer re-embed `payload.raw_span`; the
+    // span data lives in the telemetry facet and request_id is matched by the
+    // INDEXED column (set here), not by payload JSON — so the stored payload is
+    // the empty object the ingest path now produces.
     seed_payload_with_cols(&pool, &run_id, sess, 1, EventKind::OtelSpan, "span",
-        json!({"raw_span":{"name":"claude_code.llm_request","attributes":[
-            {"key":"request_id","value":{"stringValue":"r1"}}]}}),
-        None, Some("r1")).await;
+        json!({}), None, Some("r1")).await;
     seed_payload_with_cols(&pool, &run_id, sess, 2, EventKind::OtelSpan, "otherspan",
-        json!({"raw_span":{"name":"claude_code.llm_request","attributes":[
-            {"key":"request_id","value":{"stringValue":"r2"}}]}}),
-        None, Some("r2")).await;
+        json!({}), None, Some("r2")).await;
     let rows = repo_observed::events_correlated(&pool, sess, None, Some("r1"))
         .await
         .unwrap();
