@@ -16,7 +16,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createQueryClient } from '../queryClient';
 import {
   useSessionDetailQuery,
-  useSessionGraphQuery,
   useFindingsQuery,
   useUsageBaselineQuery,
   sessionKeys,
@@ -54,7 +53,6 @@ afterEach(() => {
 describe('sessionKeys', () => {
   it('produces stable, hierarchical query keys', () => {
     expect(sessionKeys.detail('S1')).toEqual(['session', 'S1', 'detail']);
-    expect(sessionKeys.graph('S1')).toEqual(['session', 'S1', 'graph']);
     expect(sessionKeys.findings('S1')).toEqual(['session', 'S1', 'findings']);
   });
 });
@@ -67,17 +65,6 @@ describe('useSessionDetailQuery', () => {
     const { result } = renderHook(() => useSessionDetailQuery('S1'), { wrapper: wrap(qc) });
     await waitFor(() => expect(result.current.data).toEqual(payload));
     expect(qc.getQueryData(sessionKeys.detail('S1'))).toEqual(payload);
-  });
-});
-
-describe('useSessionGraphQuery', () => {
-  it('caches the graph payload under sessionKeys.graph(id)', async () => {
-    const payload = { nodes: [], edges: [] };
-    fetchSpy.mockResolvedValue(mockOk(ENVELOPE(payload)));
-    const qc = createQueryClient();
-    const { result } = renderHook(() => useSessionGraphQuery('S1'), { wrapper: wrap(qc) });
-    await waitFor(() => expect(result.current.data).toEqual(payload));
-    expect(qc.getQueryData(sessionKeys.graph('S1'))).toEqual(payload);
   });
 });
 

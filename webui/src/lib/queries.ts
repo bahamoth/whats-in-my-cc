@@ -1,7 +1,7 @@
 /**
  * PR-2 — read-only React Query hooks for every session-scoped resource the
  * UI needs. Keys are arranged hierarchically so PR-3+ can invalidate at any
- * level (the whole session subtree, or just `graph`).
+ * level (the whole session subtree, or just `findings`).
  *
  * Evidence-linked invariant: `useFindingsQuery` drops findings whose
  * `evidence_refs` array is empty. Per CLAUDE.md "Finding/RootCauseHypothesis/
@@ -10,7 +10,6 @@
 import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
 import {
   getSession,
-  getGraph,
   getFindings,
   getFindingEvidence,
   getSessionUsage,
@@ -23,7 +22,6 @@ import {
 } from '../api/client';
 import type {
   SessionDetail,
-  GraphPayload,
   FindingDto,
   SessionUsageDto,
   UsageBaselineDto,
@@ -40,7 +38,6 @@ export const sessionKeys = {
    *  (used on SSE `resync`). */
   session: (id: string) => ['session', id] as const,
   detail: (id: string) => ['session', id, 'detail'] as const,
-  graph: (id: string) => ['session', id, 'graph'] as const,
   events: (id: string) => ['session', id, 'events'] as const,
   findings: (id: string) => ['session', id, 'findings'] as const,
   toolFailures: (id: string) => ['session', id, 'tool-failures'] as const,
@@ -61,15 +58,6 @@ export function useSessionDetailQuery(id: string, opts?: QOpts<SessionDetail>) {
   return useQuery<SessionDetail>({
     queryKey: sessionKeys.detail(id),
     queryFn: () => getSession(id),
-    enabled: !!id,
-    ...opts,
-  });
-}
-
-export function useSessionGraphQuery(id: string, opts?: QOpts<GraphPayload>) {
-  return useQuery<GraphPayload>({
-    queryKey: sessionKeys.graph(id),
-    queryFn: () => getGraph(id),
     enabled: !!id,
     ...opts,
   });
