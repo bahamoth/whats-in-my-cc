@@ -10,28 +10,32 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
 - 외부 접근: Pull API / MCP Streamable HTTP — **read-only**
 - 기본 네트워크: `127.0.0.1` binding
 
-### 현시점 설계 결정 — view / graph 분리 (as of 2026-06-04, 폐기·대체 가능)
+### 설계 결정 — graph 레이어 삭제 (2026-06-07, `refactor/drop-judge-graph`)
 
-위 "OTel-first 실행 그래프"는 graph가 **모든 뷰의 backing model이라는 뜻이 아니다.**
-메세지·디테일·raw **뷰**는 `ObservedEvent` + correlation 키로 직접 그리고, graph는
-**causal-edge inference + `/graph` Pull API/MCP 전용**이다. 사양서(00~04)는 옛
-graph-backed 모델을 서술하므로 그대로 따르지 말 것.
+위 "OTel-first 실행 그래프"의 graph 레이어는 **완전히 삭제됐다.** 메세지·디테일·raw 뷰는
+이미 `ObservedEvent` + correlation 키로 직접 그렸고(event-first), graph node/edge는 어떤
+뷰의 backing도, finding의 근거도 아니었다(extractor는 `view.events`만 사용). 따라서
+`graph_node`/`graph_edge` 테이블·`src/graph/`·`edge_inference`·`/graph` Pull API·MCP
+`get_session_graph`/`explain_node`를 모두 제거했다. ingest는 graph rebuild 대신
+insight 파이프라인을 직접 호출한다. 사양서(00~04)의 graph-backed 서술은 따르지 말 것.
 
-> **현시점 결정**이며(이전 episode 분류·graph-backed 뷰가 폐기됐듯) 폐기·대체될 수 있다.
-> 상세·근거·glossary·영향 사양·재설계 시 갱신 지점: **`docs/implementation-notes.html#event-first-redesign`**.
+> 동시에 **LLM judge 서브시스템도 삭제**됐다(기본 비활성으로 3/4 extractor가 휴면이었고,
+> 비결정·비로컬 LLM이 deterministic·local-first 철학과 충돌). 모든 extractor가 deterministic
+> L1으로 직접 승격한다. 상세·근거: **`docs/implementation-notes.html#judge-removal`,
+> `#graph-removal`, `#span-dedup`** + `docs/superpowers/plans/2026-06-06-drop-judge-graph-layers.md`.
 
 ## Status
 
 - **단계: MVP EXIT (2026-05-27). slice-1~19 완료, M3·M5·M6·M7 closed, AC-1~7 green.** slice별 구현 상세·이력은 `docs/implementation-notes.html`(§33~36 + `#event-first-redesign` + `#episode-removal`)와 git history.
 - **남은 계획:** UX 재설계 epic (`2026-05-27-wimcc-ux-redesign-epic.md`) — 마일스톤 밖 별도 트랙.
 - **인증 default = `--auth off`** (단일 사용자 dev, DEV-S19-08) — 브라우저로 그대로 접속. 켜려면 `wimcc serve --auth on`: 모든 `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요. Token 위치 macOS `~/Library/Application Support/wimcc/token` · Linux `~/.config/wimcc/token` (0600). retention sweep는 `wimcc serve --retention-profile default`.
-- **dev DB 재생성 규칙:** migration 변경(현재 최신 `0017`) 시 `wimcc init-db` + 재ingest 필요. payload 필드(`tool_call.tool_name`, `assistant_message.model` 등)도 JSON BLOB이라 schema migration 없이 추가되므로 기존 이벤트엔 없음 — 재ingest해야 채워진다.
+- **dev DB 재생성 규칙:** migration 변경(현재 최신 `0020` — 0018 judge·0019 graph 테이블 drop, 0020 `request_id` 인덱스) 시 `wimcc init-db` + 재ingest 필요. payload 필드(`tool_call.tool_name`, `assistant_message.model` 등)도 JSON BLOB이라 schema migration 없이 추가되므로 기존 이벤트엔 없음 — 재ingest해야 채워진다.
 
 ## Document Map
 
 작업 시작 전 관련 사양서를 먼저 읽는다. 모두 자기완결 HTML(외부 JS/CSS 없음).
 
-> **⚠ event-first 뷰 재설계(2026-06-04, PR #33) 반영 주의:** 아래 01/02/03/04 문서는 메세지/디테일/raw 뷰가 **graph node/facet 기반**이라고 서술하지만, 실제 구현은 **`ObservedEvent` + correlation 키 기반**으로 바뀌었다. 각 문서에 해당 지점 callout이 있으며, 정식 기록은 `docs/implementation-notes.html#event-first-redesign`. 뷰/window/events-API/facet 관련 작업 전 반드시 이 섹션을 먼저 읽을 것.
+> **⚠ event-first 뷰 재설계(2026-06-04, PR #33) + graph·judge 삭제(2026-06-07) 반영 주의:** 아래 01/02/03/04 문서는 메세지/디테일/raw 뷰가 **graph node/facet 기반**이고 graph·LLM judge가 존재한다고 서술하지만, 실제 구현은 **`ObservedEvent` + correlation 키 기반**이며 **graph 레이어와 judge 서브시스템은 삭제됐다**. 정식 기록은 `docs/implementation-notes.html`의 `#event-first-redesign` · `#graph-removal` · `#judge-removal` · `#span-dedup`. 뷰/window/events-API/finding/correlation 관련 작업 전 반드시 이 섹션들을 먼저 읽을 것.
 
 | 작업 영역 | 먼저 읽을 문서 |
 |----------|--------------|
