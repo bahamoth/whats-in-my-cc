@@ -387,9 +387,11 @@ pub async fn list_session_window(
 ///   **request_id arm** — scoped to OTel kinds only (`log_record`, `otel_span`,
 ///     `metric_sample`) to preserve the semantics of the original query, which
 ///     matched only `attributes.request_id` (OTel logs) and `raw_span.attributes`
-///     (OTel spans). Transcript `assistant_message` / `thinking` / `tool_call`
-///     also carry `request_id` in the column (set by `mapping.rs`), but they
-///     were NOT matched by the old payload-path query and must remain excluded.
+///     (OTel spans — that `payload.raw_span` re-embed was since removed in
+///     Tier 3-1; request_id now lives in the indexed column). Transcript
+///     `assistant_message` / `thinking` / `tool_call` also carry `request_id` in
+///     the column (set by `mapping.rs`), but they were NOT matched by the old
+///     payload-path query and must remain excluded.
 pub async fn events_correlated(
     pool: &SqlitePool,
     session_id: &str,
