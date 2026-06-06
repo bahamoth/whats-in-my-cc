@@ -1,11 +1,7 @@
-//! Phase A — TDD red test for L1-only deterministic promotion.
-//!
-//! On CURRENT code: `risky_action` uses `PromotionPolicy::IfAbove(1.0)`, so
-//! confidence_l1 (0.7) never exceeds 1.0, the candidate always routes to the
-//! noop judge, and ends up in `findings_pending_judge` forever — 0 active findings.
-//!
-//! After A2+A3 (PromotionPolicy removed, pipeline rewritten to L1-only):
-//! `risky_action` promotes directly; this test passes.
+//! Locks L1-only deterministic promotion: `risky_action` (confidence 0.7)
+//! surfaces as an active finding with provenance layer "L1" straight from
+//! `run_extractors`, with no judge involved. Guards against regressing back to
+//! a judge-gated path that would leave such candidates unsurfaced.
 
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::db::migrate;
