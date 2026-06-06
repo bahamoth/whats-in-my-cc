@@ -8,7 +8,6 @@ use wimcc::db::repo_verification_run::VerificationRunRow;
 use wimcc::insight::extractor::InsightExtractor;
 use wimcc::insight::extractors::final_state_mismatch::FinalStateMismatch;
 use wimcc::insight::view::SessionInsightView;
-use wimcc::model::graph::{GraphEdge, GraphNode};
 use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 fn base_event(i: usize, actor: Actor, kind: EventKind) -> ObservedEvent {
@@ -91,8 +90,6 @@ fn view_with_runs<'a>(
         events,
         diff_hunks: &[],
         verification_runs,
-        nodes: &[],
-        edges: &[],
     }
 }
 
