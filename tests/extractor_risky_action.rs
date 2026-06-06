@@ -8,7 +8,6 @@ use wimcc::db::repo_verification_run::VerificationRunRow;
 use wimcc::insight::extractor::InsightExtractor;
 use wimcc::insight::extractors::risky_action::RiskyAction;
 use wimcc::insight::view::SessionInsightView;
-use wimcc::model::graph::{GraphEdge, GraphNode};
 use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 fn base_event(i: usize, actor: Actor, kind: EventKind) -> ObservedEvent {
@@ -48,8 +47,6 @@ fn synth_view_with_bash<'a>(
         events,
         diff_hunks,
         verification_runs: &[],
-        nodes: &[],
-        edges: &[],
     }
 }
 

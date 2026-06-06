@@ -58,8 +58,6 @@ fn view_from_events(events: &[ObservedEvent]) -> SessionInsightView<'_> {
         events,
         diff_hunks: &[],
         verification_runs: &[],
-        nodes: &[],
-        edges: &[],
     }
 }
 
