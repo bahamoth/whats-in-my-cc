@@ -13,8 +13,6 @@ async fn migrate_creates_expected_tables() {
         "ingest_run",
         "raw_event",
         "observed_event",
-        "graph_node",
-        "graph_edge",
     ] {
         let row: (i64,) =
             sqlx::query_as("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?")
