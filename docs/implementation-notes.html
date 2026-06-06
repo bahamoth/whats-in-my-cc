@@ -3779,6 +3779,38 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="graph-removal">
+    <h2>graph 레이어 삭제 — ingest는 insight 직접 호출 (2026-06-07)</h2>
+    <p>
+      graph_node/graph_edge 테이블·<code>src/graph/</code>·<code>src/insight/edge_inference/</code>·
+      <code>repo_graph</code>·<code>model/graph</code>·<code>/v1/sessions/:id/graph</code> 라우트·MCP
+      <code>get_session_graph</code>/<code>explain_node</code> 도구·<code>.../graph</code> MCP resource·
+      <code>finding_evidence</code>의 subgraph·프론트 graph 쿼리/타입/dead 컴포넌트를 <strong>전부 삭제</strong>했다.
+    </p>
+    <h3>왜 삭제 가능했나</h3>
+    <ul>
+      <li><strong>findings는 graph 독립.</strong> insight extractor 4종은 <code>SessionInsightView.events</code>(+
+        diff_hunks·verification_runs)만 사용하고 <code>view.nodes</code>/<code>view.edges</code>는 0건 참조 —
+        graph는 view에 로드만 되고 소비되지 않는 사장 코드였다(<a href="#event-first-redesign">event-first</a> 이후).</li>
+      <li><strong>live 소비처 없음.</strong> 프론트 <code>useSessionGraphQuery</code>/<code>getGraph</code>/
+        <code>FocusedInsightGraph</code>/<code>useFindingEvidenceQuery</code>는 테스트에서만 참조, 컴포넌트 마운트 0.</li>
+      <li><strong>eager rebuild가 Tier 2-1 낭비의 정체.</strong> <code>rebuild_session</code>이 5개 ingest 경로
+        전부에서 호출되며 insight 파이프라인까지 동반 → metric/log 배치마다 세션 전체 그래프 재구성 + extractor 재실행.</li>
+    </ul>
+    <h3>전환</h3>
+    <ul>
+      <li>ingest 5곳(<code>store/otel/otel_logs/otel_metrics/hook.rs</code>)이
+        <code>graph::build::rebuild_session</code> → <code>insight::pipeline::run_extractors</code> 직접 호출로 교체
+        (Tier 2-1 해소).</li>
+      <li><code>finding_evidence</code>는 subgraph 없이 <code>{ finding, evidence_refs, raw_source_refs }</code> 반환.</li>
+      <li>graph 전용 테스트 삭제, graph를 곁다리로 단언하던 mixed 테스트는 비-graph 단언만 보존하도록 갱신.
+        ingest가 graph 없이 finding을 만든다는 회귀 가드(<code>tests/ingest_findings_no_graph.rs</code>) 추가.</li>
+      <li>테이블 drop: migration <code>0019</code>(graph_edge → graph_node 순, FK).</li>
+    </ul>
+    <p>커밋: <code>5070745</code>(view nodes/edges 제거) → <code>06c25cc</code>(코드·API·MCP·ingest 재배선)
+      → <code>d23d671</code>(테이블 0019) → <code>e06535b</code>/<code>7179d3f</code>(프론트). 전 단계 green.</p>
+  </section>
+
   <section id="span-dedup">
     <h2>otel_span 중복 저장 제거 — raw_span re-embed 삭제 (Tier 3-1, 2026-06-06)</h2>
     <p>
