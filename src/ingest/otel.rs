@@ -344,6 +344,17 @@ pub async fn store(
             scope_version: span.scope_version.clone(),
         };
 
+        // Promote OTel attribute correlation keys to indexed columns.
+        let span_tool_use_id = span
+            .attributes
+            .get("tool_use_id")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let span_request_id = span
+            .attributes
+            .get("request_id")
+            .and_then(|v| v.as_str())
+            .map(String::from);
         let event = ObservedEvent {
             event_id: gen.generate(),
             raw_event_id: raw_id,
@@ -361,6 +372,8 @@ pub async fn store(
             span_id: Some(span.span_id.clone()),
             parent_span_id: span.parent_span_id.clone(),
             latency_ms,
+            tool_use_id: span_tool_use_id,
+            request_id: span_request_id,
             telemetry: Some(telemetry),
             payload: serde_json::json!({"raw_span": span.raw}),
             parser_version: PARSER_VERSION_OTEL.into(),

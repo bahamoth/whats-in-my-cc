@@ -35,6 +35,8 @@ pub struct LogRecordItem {
     pub session_id: String,
     pub trace_id: Option<String>,
     pub span_id: Option<String>,
+    pub tool_use_id: Option<String>,
+    pub request_id: Option<String>,
 }
 
 pub fn parse_request(body: &Value) -> Vec<LogRecordItem> {
@@ -86,6 +88,15 @@ pub fn parse_request(body: &Value) -> Vec<LogRecordItem> {
                     .or_else(|| resource_attrs.get("session.id").and_then(|v| v.as_str()))
                     .unwrap_or("")
                     .to_string();
+                // Promote OTel attribute correlation keys to indexed columns.
+                let tool_use_id = attrs
+                    .get("tool_use_id")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let request_id = attrs
+                    .get("request_id")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
                 let facet = LogFacet {
                     severity_number,
                     severity_text,
@@ -103,6 +114,8 @@ pub fn parse_request(body: &Value) -> Vec<LogRecordItem> {
                     session_id,
                     trace_id,
                     span_id,
+                    tool_use_id,
+                    request_id,
                 });
             }
         }
@@ -190,6 +203,8 @@ pub async fn store_request(
             kind: EventKind::LogRecord,
             trace_id: it.trace_id.clone(),
             span_id: it.span_id.clone(),
+            tool_use_id: it.tool_use_id.clone(),
+            request_id: it.request_id.clone(),
             parser_version: PARSER_VERSION_OTEL_LOGS.into(),
             payload,
             ..Default::default()
