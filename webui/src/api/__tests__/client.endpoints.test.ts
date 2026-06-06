@@ -68,7 +68,7 @@ describe('getFindings', () => {
 
 describe('getFindingEvidence', () => {
   it('hits GET /v1/findings/:id/evidence and unwraps the meta envelope `data`', async () => {
-    const expected = { finding: { finding_id: 'f1' }, subgraph: { nodes: [], edges: [] }, raw_source_refs: [] };
+    const expected = { finding: { finding_id: 'f1' }, evidence_refs: [], raw_source_refs: [] };
     fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
     const out = await getFindingEvidence('f1');
     expect(fetchSpy).toHaveBeenCalledWith('/v1/findings/f1/evidence', expect.any(Object));
