@@ -74,16 +74,14 @@ export type SessionEventsResponse = {
   next_cursor: string | null;
 };
 
-/** Backend serialises evidence refs in two shapes today: bare ULID
- *  strings (the common case, used by slice-14 deterministic extractors)
- *  and structured `{ kind, node_id|edge_id|event_id }` objects (slice-15+
- *  judges). Client code must handle both. */
+/** Backend serialises evidence refs as bare ULID `event_id` strings — the
+ *  deterministic L1 extractors emit only these. (The structured node/edge
+ *  shape was dropped with the graph layer; the object branch is retained
+ *  only as a permissive fallback for forward-tolerance.) */
 export type EvidenceRef =
   | string
   | {
-      kind: 'node' | 'edge' | 'event' | string;
-      node_id?: string;
-      edge_id?: string;
+      kind: 'event' | string;
       event_id?: string;
       [key: string]: unknown;
     };

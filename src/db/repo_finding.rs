@@ -26,7 +26,8 @@ pub struct FindingRow {
     pub evidence_projection: String,
     /// JSON object: `{ extractor, layer, judge, judge_template_version, rule_pack }`.
     pub provenance: String,
-    /// `"active"` | `"pending_judge"` | `"discarded"`.
+    /// `"active"` | `"discarded"`. (All L1 findings are `"active"`; the judge
+    /// layer and its `"pending_judge"` status were removed — see #judge-removal.)
     pub status: String,
     pub created_at: String,
 }
