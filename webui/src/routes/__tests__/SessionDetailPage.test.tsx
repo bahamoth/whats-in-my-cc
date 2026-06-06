@@ -20,12 +20,12 @@ function rendered(sessionId: string) {
   );
 }
 
-// Slice-9 — page fans out three independent fetches on mount (summary,
-// graph, windowed events). Order between them is unspecified by React's
-// useEffect scheduler, so tests dispatch by URL rather than by call order.
+// Slice-9 / event-first redesign — the page fans out independent fetches on
+// mount (summary, windowed events; the graph endpoint is no longer fetched).
+// Order between them is unspecified by React's useEffect scheduler, so tests
+// dispatch by URL rather than by call order.
 type Routes = {
   detail?: Response;
-  graph?: Response;
   events?: Response;
   raw?: Response;
   findings?: Response;
@@ -44,9 +44,6 @@ function setupFetch(routes: Routes) {
       // window endpoint
       const m = url.match(/\/v1\/sessions\/[^/]+\/events/);
       if (m && routes.events) return Promise.resolve(routes.events.clone());
-    }
-    if (url.includes('/graph')) {
-      if (routes.graph) return Promise.resolve(routes.graph.clone());
     }
     if (url.match(/\/v1\/events\//) && url.endsWith('/raw')) {
       if (routes.raw) return Promise.resolve(routes.raw.clone());
@@ -77,32 +74,15 @@ const sessionDetail = {
   },
 };
 
-const graph = {
-  nodes: [
-    { node_id: 'n1', schema_version: '1.0', session_id: 's1', node_kind: 'user_message',
-      started_at: '2026-05-19T10:00:00Z', ended_at: null, merge_keys: {},
-      source_event_ids: ['ev1'], source_uris: [], payload: {} },
-    { node_id: 'n2', schema_version: '1.0', session_id: 's1', node_kind: 'assistant_message',
-      started_at: '2026-05-19T10:00:05Z', ended_at: null, merge_keys: {},
-      source_event_ids: ['ev2'], source_uris: [], payload: {} },
-  ],
-  edges: [
-    { edge_id: 'e1', schema_version: '1.0', session_id: 's1',
-      from_node_id: 'n1', to_node_id: 'n2', edge_kind: 'message_reply',
-      origin: 'deterministic', attributes: {} },
-  ],
-};
-
 const eventsPayload = {
   events: [],
   prev_cursor: null,
   next_cursor: null,
 };
 
-// Real conversation rows whose event_ids match the graph nodes'
-// source_event_ids (n1→ev1, n2→ev2). Used to exercise stream-card selection
-// end-to-end (empty `eventsPayload` mounts zero StreamCards and therefore
-// cannot prove the wiring).
+// Real conversation rows (ev1 = user, ev2 = assistant). Used to exercise
+// stream-card selection end-to-end (empty `eventsPayload` mounts zero
+// StreamCards and therefore cannot prove the wiring).
 const eventsWithRows = {
   events: [
     {
@@ -157,7 +137,7 @@ describe('SessionDetailPage', () => {
   });
 
   it('renders meta strip + DetailPanel empty hint before node selection', async () => {
-    setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
+    setupFetch({ detail: env(sessionDetail), events: env(eventsPayload) });
     rendered('s1');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
     expect(screen.getByText(/select an event to inspect it/i)).toBeInTheDocument();
@@ -166,7 +146,6 @@ describe('SessionDetailPage', () => {
   it('clicking a stream card shows the DetailPanel tablist', async () => {
     setupFetch({
       detail: env(sessionDetail),
-      graph: env(graph),
       events: env(eventsWithRows),
       raw: env(raw),
     });
@@ -193,7 +172,6 @@ describe('SessionDetailPage', () => {
   it('syncs selection across stream cards', async () => {
     setupFetch({
       detail: env(sessionDetail),
-      graph: env(graph),
       events: env(eventsWithRows),
       raw: env(raw),
     });
@@ -243,24 +221,22 @@ describe('SessionDetailPage', () => {
   it('shows 404 when session detail missing', async () => {
     setupFetch({
       detail: new Response('{"detail":"session nope not found"}', { status: 404 }),
-      graph: new Response('{"detail":"no graph"}', { status: 404 }),
       events: env(eventsPayload),
     });
     rendered('nope');
     await waitFor(() => expect(screen.getByText(/session not found/i)).toBeInTheDocument());
   });
 
-  it('renders the page (no timeline) when getGraph 404s but getSession succeeds', async () => {
+  it('renders the page without a graph/timeline section', async () => {
     setupFetch({
       detail: env(sessionDetail),
-      graph: new Response('{"detail":"no graph"}', { status: 404 }),
       events: env(eventsPayload),
     });
     const { container } = rendered('s1');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
     expect(screen.queryByText(/session not found/i)).not.toBeInTheDocument();
-    // The stream slot still renders; the bottom timeline view has been removed,
-    // so a graph 404 must not surface any timeline canvas.
+    // The stream slot still renders; the bottom timeline/graph view was removed
+    // (event-first redesign), so no timeline canvas may surface.
     expect(container.querySelector('[data-slot="stream"]')).not.toBeNull();
     expect(container.querySelector('[data-slot="timeline"]')).toBeNull();
     expect(screen.queryByTestId('timeline-canvas')).toBeNull();
@@ -270,13 +246,12 @@ describe('SessionDetailPage', () => {
   // collapses to ONE forward events backfill (`?after=`) — not one per
   // envelope. SSE envelopes carry no payload, so we fetch the real events
   // instead of appending the empty envelope (the "live messages don't appear
-  // until refresh" fix). The views are event-first now: the graph endpoint is
-  // NEVER fetched (no node/graph dependency) and the summary is never re-hit.
-  it('envelope burst triggers one events backfill and never fetches the graph', async () => {
+  // until refresh" fix). The views are event-first: only summary + events are
+  // fetched, and the summary is never re-hit.
+  it('envelope burst triggers one events backfill, summary never re-hit', async () => {
     MockEventSource.install();
     const f = setupFetch({
       detail: env(sessionDetail),
-      graph: env(graph),
       // Non-empty window so the backfill has a tail cursor to page `?after=`.
       events: env(eventsWithRows),
     });
@@ -289,7 +264,6 @@ describe('SessionDetailPage', () => {
     const summaryAtMount = callsOf((u) => /\/v1\/sessions\/[^/]+$/.test(u));
     const eventsAtMount = callsOf((u) => u.includes('/events'));
     expect(summaryAtMount).toBe(1);
-    expect(callsOf((u) => u.includes('/graph'))).toBe(0); // event-first: no graph
     expect(eventsAtMount).toBe(1);
 
     // Fire 5 envelopes in tight succession. They should collapse to exactly
@@ -324,8 +298,7 @@ describe('SessionDetailPage', () => {
     await waitFor(() => {
       expect(callsOf((u) => u.includes('/events') && u.includes('after='))).toBe(1);
     });
-    // The graph endpoint is still never fetched, and summary is never re-hit.
-    expect(callsOf((u) => u.includes('/graph'))).toBe(0);
+    // The summary is never re-hit by the envelope burst.
     expect(callsOf((u) => /\/v1\/sessions\/[^/]+$/.test(u))).toBe(summaryAtMount);
     expect(callsOf((u) => u.includes('/events'))).toBe(eventsAtMount + 1);
   });
@@ -340,7 +313,6 @@ describe('SessionDetailPage', () => {
     MockEventSource.install();
     const f = setupFetch({
       detail: env(sessionDetail),
-      graph: env(graph),
       events: env({
         events: eventsWithRows.events, // non-empty → loadNewer has a tail cursor
         prev_cursor: '2026-05-19T10:00:00Z|01J',
@@ -377,7 +349,6 @@ describe('SessionDetailPage', () => {
     MockEventSource.install();
     const f = setupFetch({
       detail: env(sessionDetail),
-      graph: env(graph),
       events: env({
         events: eventsWithRows.events,
         prev_cursor: '2026-05-19T10:00:00Z|01J',
@@ -409,7 +380,6 @@ describe('SessionDetailPage', () => {
   it('a near-top user scroll pages the next older window (?before=)', async () => {
     const f = setupFetch({
       detail: env(sessionDetail),
-      graph: env(graph),
       events: env({
         events: eventsWithRows.events, // real rows → the stream scroller mounts
         prev_cursor: '2026-05-19T10:00:00Z|01J', // older history remains
@@ -459,7 +429,7 @@ describe('R1 layout shell', () => {
   });
 
   it('renders exactly one link to /sessions (no duplicate header link)', async () => {
-    setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
+    setupFetch({ detail: env(sessionDetail), events: env(eventsPayload) });
     rendered('aac68973');
     await waitFor(() => {
       const sessionLinks = screen
@@ -470,7 +440,7 @@ describe('R1 layout shell', () => {
   });
 
   it('exposes named grid slots for kpi, stream, and detail (timeline removed)', async () => {
-    setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
+    setupFetch({ detail: env(sessionDetail), events: env(eventsPayload) });
     const { container } = rendered('aac68973');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
     expect(container.querySelector('[data-slot="kpi"]')).not.toBeNull();
@@ -480,7 +450,7 @@ describe('R1 layout shell', () => {
   });
 
   it('does not render the Waterfall/Graph ViewToggle', async () => {
-    setupFetch({ detail: env(sessionDetail), graph: env(graph), events: env(eventsPayload) });
+    setupFetch({ detail: env(sessionDetail), events: env(eventsPayload) });
     rendered('aac68973');
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /graph/i })).toBeNull();
