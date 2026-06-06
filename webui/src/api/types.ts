@@ -50,36 +50,6 @@ export type SessionEventsResponse = {
   next_cursor: string | null;
 };
 
-export type GraphNodeDto = {
-  node_id: string;
-  schema_version: string;
-  session_id: string;
-  node_kind: string;
-  started_at: string;
-  ended_at: string | null;
-  merge_keys: Record<string, unknown>;
-  source_event_ids: string[];
-  source_uris: string[];
-  payload: unknown;
-};
-
-export type GraphEdgeDto = {
-  edge_id: string;
-  schema_version: string;
-  session_id: string;
-  from_node_id: string;
-  to_node_id: string;
-  edge_kind: 'message_reply' | 'tool_call_to_result' | string;
-  origin: 'deterministic' | 'inferred' | string;
-  attributes: Record<string, unknown>;
-  /** slice-13. Non-null iff origin === 'inferred'. */
-  inference_rule_id?: string | null;
-  /** slice-13. 0.0–1.0 confidence for inferred edges. */
-  confidence?: number | null;
-};
-
-export type GraphPayload = { nodes: GraphNodeDto[]; edges: GraphEdgeDto[] };
-
 /** Backend serialises evidence refs in two shapes today: bare ULID
  *  strings (the common case, used by slice-14 deterministic extractors)
  *  and structured `{ kind, node_id|edge_id|event_id }` objects (slice-15+
@@ -159,7 +129,8 @@ export type DiffHunkDto = {
 
 export type FindingEvidenceResponse = {
   finding: FindingDto;
-  subgraph: { nodes: unknown[]; edges: unknown[] };
+  /** Event IDs cited by the finding (parsed from finding.evidence_refs). */
+  evidence_refs: string[];
   raw_source_refs: Array<{
     event_id: string;
     source_type: string;

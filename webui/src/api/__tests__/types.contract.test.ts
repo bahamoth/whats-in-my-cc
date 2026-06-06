@@ -4,9 +4,6 @@
  * surfaces as a vitest failure as well as a `tsc -b` failure.
  *
  * The locked invariants:
- *  - `GraphEdgeDto.origin` is the union "deterministic" | "inferred"
- *  - `GraphEdgeDto.inference_rule_id` is `string | null | undefined`
- *  - `GraphEdgeDto.confidence` is `number | null | undefined`
  *  - `FindingDto.evidence_refs` is an array (cannot be omitted)
  *  - `VerificationRunDto.covered_diff_hunk_ids` is `string[]`
  *
@@ -14,50 +11,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import type {
-  GraphEdgeDto,
   FindingDto,
   VerificationRunDto,
   DiffHunkDto,
 } from '../types';
 
-// Type-level assertion helper. Resolves to `never` if `T` extends `Expected`
-// or to a string literal otherwise (which then fails an `equals true` check).
-type AssertExtends<T, Expected> = T extends Expected ? true : false;
-
-// Exported so `noUnusedLocals` does not strip the type-level check.
-export type _OriginExtendsContract = AssertExtends<'deterministic' | 'inferred', GraphEdgeDto['origin']>;
-
 describe('types.ts contract', () => {
-  it('GraphEdgeDto.origin is the deterministic|inferred union', () => {
-    // Runtime sanity: an actual fixture row must satisfy the type.
-    const det: GraphEdgeDto = {
-      edge_id: 'e1',
-      schema_version: 'v1',
-      session_id: 'S1',
-      from_node_id: 'n1',
-      to_node_id: 'n2',
-      edge_kind: 'tool_call_to_result',
-      origin: 'deterministic',
-      attributes: {},
-    };
-    const inf: GraphEdgeDto = {
-      edge_id: 'e2',
-      schema_version: 'v1',
-      session_id: 'S1',
-      from_node_id: 'n1',
-      to_node_id: 'n2',
-      edge_kind: 'causes',
-      origin: 'inferred',
-      inference_rule_id: 'rule-1',
-      confidence: 0.7,
-      attributes: {},
-    };
-    expect(det.origin).toBe('deterministic');
-    expect(inf.origin).toBe('inferred');
-    expect(inf.inference_rule_id).toBe('rule-1');
-    expect(inf.confidence).toBeCloseTo(0.7);
-  });
-
   it('FindingDto.evidence_refs is a non-omittable array', () => {
     const f: FindingDto = {
       finding_id: 'f1',

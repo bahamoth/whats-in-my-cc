@@ -3,7 +3,6 @@ import type {
   SessionListItem,
   SessionDetail,
   SessionEventsResponse,
-  GraphPayload,
   RawEventResponse,
   FindingDto,
   VerificationRunDto,
@@ -40,7 +39,6 @@ export const listSessions = () => jsonGet<SessionListItem[]>('/v1/sessions');
  *  gone; pages call {@link getSessionEvents} for the actual event window. */
 export const getSession   = (id: string) => jsonGet<SessionDetail>(`/v1/sessions/${encodeURIComponent(id)}`);
 
-export const getGraph     = (id: string) => jsonGet<GraphPayload>(`/v1/sessions/${encodeURIComponent(id)}/graph`);
 export const getEventRaw  = (eventId: string) =>
   jsonGet<RawEventResponse>(`/v1/events/${encodeURIComponent(eventId)}/raw`);
 

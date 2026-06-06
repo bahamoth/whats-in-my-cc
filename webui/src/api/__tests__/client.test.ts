@@ -2,7 +2,6 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
   listSessions,
   getSession,
-  getGraph,
   getEventRaw,
   getSessionEvents,
   ApiError,
@@ -66,10 +65,4 @@ describe('api client', () => {
     await expect(getEventRaw('x')).rejects.toBeInstanceOf(ApiError);
   });
 
-  it('getGraph uses /v1/sessions/:id/graph', async () => {
-    const f = fetch as unknown as ReturnType<typeof vi.fn>;
-    f.mockResolvedValueOnce(ok({ meta: {generated_at:'n'}, data: { nodes: [], edges: [] } }));
-    await getGraph('abc');
-    expect(f).toHaveBeenCalledWith('/v1/sessions/abc/graph', expect.any(Object));
-  });
 });

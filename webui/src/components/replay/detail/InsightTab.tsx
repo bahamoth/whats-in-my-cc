@@ -1,10 +1,9 @@
 // webui/src/components/replay/detail/InsightTab.tsx
 //
-// Metrics-led Insight tab (UX option A): for the selected graph node, show a
+// Metrics-led Insight tab (UX option A): for the selected event, show a
 // compact header + the entity's COLLECTED metrics (EntityMetricsPanel, with
-// plain-language ⓘ tooltips) + that node's Findings. The old FocusedInsightGraph
-// subgraph and the shallow per-kind NodeDetail sections were removed — the full
-// raw payload still lives in the Raw tab.
+// plain-language ⓘ tooltips) + that event's Findings. The full raw payload
+// lives in the Raw tab.
 import type { FindingDto, ObservedEventDto } from '../../../api/types';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import { nodeLabel } from '../stream/nodeLabel';
