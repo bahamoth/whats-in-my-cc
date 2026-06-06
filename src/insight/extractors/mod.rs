@@ -1,12 +1,10 @@
-//! Extractor implementations, one module per category.
-//! Slice-14: `tool_failure` L1 deterministic extractor:
+//! Extractor implementations, one module per category. All are deterministic
+//! L1: a candidate whose confidence >= its floor promotes directly to an active
+//! finding (no judge, no pending queue).
+//!
+//! Slice-14:
 //!   - `tool_failure`: is_error=true with no compensating retry within 5 events.
-//!
-//! Slice-15: `noop_test` extractor added under `cfg(test)` — exercises the full
-//! L2 code path (pending queue, cache, budget) without introducing a production
-//! finding category.
-//!
-//! Slice-16: three L1+L2 extractors (always-judge):
+//! Slice-16:
 //!   - `risky_action`: destructive Bash command or user_modified diff_hunk.
 //!   - `context_bloat`: large tool_result not reused in subsequent turn.
 //!   - `final_state_mismatch`: user goal not corroborated in final state.

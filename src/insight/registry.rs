@@ -13,13 +13,13 @@ use crate::insight::extractors::{
 };
 
 /// All currently registered extractors (4 MVP categories), in stable order.
-/// Slice-14: ToolFailure (L1/Always).
-/// Slice-16: RiskyAction, ContextBloat, FinalStateMismatch (L1+L2/IfAbove(1.0)).
+/// All deterministic L1: every candidate >= its floor promotes directly.
+/// Slice-14: ToolFailure. Slice-16: RiskyAction, ContextBloat, FinalStateMismatch.
 pub fn all_extractors() -> Vec<Box<dyn InsightExtractor>> {
     vec![
-        Box::new(ToolFailure),           // slice-14 — L1/Always
-        Box::new(RiskyAction),           // slice-16 — L1+L2/IfAbove(1.0)
-        Box::new(ContextBloat),          // slice-16 — L1+L2/IfAbove(1.0)
-        Box::new(FinalStateMismatch),    // slice-16 — L1+L2/IfAbove(1.0)
+        Box::new(ToolFailure),           // slice-14 — L1
+        Box::new(RiskyAction),           // slice-16 — L1
+        Box::new(ContextBloat),          // slice-16 — L1
+        Box::new(FinalStateMismatch),    // slice-16 — L1
     ]
 }
