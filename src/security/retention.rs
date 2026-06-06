@@ -12,9 +12,9 @@ use sqlx::SqlitePool;
 pub enum Profile {
     /// No deletion (default). Capability ships off by default.
     None,
-    /// Default profile: raw 30d, normalized 180d, graph/insight 180d, audit 90d, judge_cache 30d.
+    /// Default profile: raw 30d, normalized 180d, graph/insight 180d, audit 90d.
     Default,
-    /// Strict profile: raw 7d, normalized 30d, graph/insight 30d, audit 30d, judge_cache 7d.
+    /// Strict profile: raw 7d, normalized 30d, graph/insight 30d, audit 30d.
     Strict,
 }
 
@@ -52,15 +52,6 @@ impl Profile {
             Profile::None => None,
             Profile::Default => Some(90),
             Profile::Strict => Some(30),
-        }
-    }
-
-    /// Judge cache retention in days (by last_hit_at).
-    pub fn judge_cache_days(&self) -> Option<i64> {
-        match self {
-            Profile::None => None,
-            Profile::Default => Some(30),
-            Profile::Strict => Some(7),
         }
     }
 
