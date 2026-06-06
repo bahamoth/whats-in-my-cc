@@ -1,4 +1,4 @@
-//! `ContextBloat` L1+L2 extractor (slice-16).
+//! `ContextBloat` L1 extractor (slice-16).
 //!
 //! Rule (spec §4):
 //! Fires when ALL of:
@@ -7,7 +7,7 @@
 //! 3. There is NO later `tool_call` within M events that references content from the
 //!    bloated `tool_result` (lexical overlap of ≥ 3 stems).
 //!
-//! L1 confidence: 0.5. Promotion: IfAbove(1.0) — always judge.
+//! L1 confidence: 0.5 — promotes directly (deterministic L1).
 //! Severity: low.
 //!
 //! Thresholds T=50KB, M=3, overlap≥3 are constants (DEV-S16-02).
