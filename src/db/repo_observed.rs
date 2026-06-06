@@ -371,14 +371,25 @@ pub async fn list_session_window(
     Ok(events)
 }
 
-/// On-demand correlated telemetry for the detail view: the events whose payload
-/// carries the given `tool_use_id` / `request_id`, used when an entity's
-/// correlated telemetry falls outside the loaded message window. The
-/// correlation keys live in payload JSON (NOT columns):
-///   - tool_result / tool_decision / api_request log_record → `attributes.{tool_use_id|request_id}`
-///   - transcript tool_result event → `tool_result.tool_use_id` (a tool call rejected
-///     at validation has NO OTel log, only this — its only `success` signal)
-///   - llm_request otel_span → `request_id` inside the OTLP `raw_span.attributes[]` array
+/// On-demand correlated telemetry for the detail view: the events whose indexed
+/// `tool_use_id` / `request_id` columns match the given keys, used when an
+/// entity's correlated telemetry falls outside the loaded message window.
+///
+/// Correlation uses the INDEXED columns (not payload JSON) introduced in C2:
+///
+///   **tool_use_id arm** — `kind != 'tool_call'` guard is intentional:
+///     - OTel `log_record` / `metric_sample` events: column set by C2 ingest
+///     - transcript `tool_result`: column set by `mapping.rs` (line 75-78)
+///     - transcript `tool_call`: column set, but deliberately EXCLUDED — the
+///       caller already holds the tool_call; returning it again would duplicate
+///       it in the detail view.
+///
+///   **request_id arm** — scoped to OTel kinds only (`log_record`, `otel_span`,
+///     `metric_sample`) to preserve the semantics of the original query, which
+///     matched only `attributes.request_id` (OTel logs) and `raw_span.attributes`
+///     (OTel spans). Transcript `assistant_message` / `thinking` / `tool_call`
+///     also carry `request_id` in the column (set by `mapping.rs`), but they
+///     were NOT matched by the old payload-path query and must remain excluded.
 pub async fn events_correlated(
     pool: &SqlitePool,
     session_id: &str,
@@ -387,22 +398,13 @@ pub async fn events_correlated(
 ) -> Result<Vec<ObservedEvent>> {
     let rows = sqlx::query(
         "SELECT * FROM observed_event WHERE session_id = ? AND ( \
-           (? IS NOT NULL AND json_extract(payload, '$.attributes.tool_use_id') = ?) \
-           OR (? IS NOT NULL AND json_extract(payload, '$.tool_result.tool_use_id') = ?) \
-           OR (? IS NOT NULL AND json_extract(payload, '$.attributes.request_id') = ?) \
-           OR (? IS NOT NULL AND kind = 'otel_span' AND EXISTS ( \
-                 SELECT 1 FROM json_each(json_extract(payload, '$.raw_span.attributes')) je \
-                 WHERE json_extract(je.value, '$.key') = 'request_id' \
-                   AND json_extract(je.value, '$.value.stringValue') = ?)) \
+           (? IS NOT NULL AND tool_use_id = ? AND kind != 'tool_call') \
+           OR (? IS NOT NULL AND request_id = ? AND kind IN ('log_record','otel_span','metric_sample')) \
          ) ORDER BY observed_at ASC, event_id ASC LIMIT 500",
     )
     .bind(session_id)
     .bind(tool_use_id)
     .bind(tool_use_id)
-    .bind(tool_use_id)
-    .bind(tool_use_id)
-    .bind(request_id)
-    .bind(request_id)
     .bind(request_id)
     .bind(request_id)
     .fetch_all(pool)
