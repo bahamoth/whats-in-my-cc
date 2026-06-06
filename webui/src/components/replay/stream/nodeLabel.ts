@@ -64,7 +64,13 @@ function toolArg(input: unknown): string {
   return '';
 }
 
-export function nodeLabel(node: { node_kind: string; payload: unknown }): NodeLabel {
+export function nodeLabel(node: {
+  node_kind: string;
+  payload: unknown;
+  // C4 (Tier 3-1): span name lives in the telemetry facet (a sibling of
+  // payload), no longer re-embedded under payload.raw_span.
+  telemetry?: unknown;
+}): NodeLabel {
   const p = asObj(node.payload);
   switch (node.node_kind) {
     case 'tool_call':
@@ -106,7 +112,7 @@ export function nodeLabel(node: { node_kind: string; payload: unknown }): NodeLa
       return {
         kind: 'span',
         primary: 'span',
-        secondary: (asObj(p.raw_span).name as string) ?? '',
+        secondary: (asObj(node.telemetry).span_name as string) ?? '',
       };
     case 'verification_run':
       return {

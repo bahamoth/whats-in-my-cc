@@ -10,6 +10,25 @@ export type SessionListItem = {
   by_kind?: Record<string, number>;
 };
 
+/** The telemetry facet, extracted from an OTel span at ingest (`TelemetryFacet`
+ *  in `src/model/observed.rs`). Delivered as a SIBLING field of `payload` on the
+ *  events DTO (`observed_to_dto` in `src/api/routes.rs`), not nested inside it.
+ *  `attributes`/`resource` are FLAT key→value objects: the backend's `flatten_kv`
+ *  unwraps the OTLP `[{key,value:{stringValue|intValue|…}}]` array into
+ *  `{ "duration_ms": 7521, "input_tokens": 6, … }`. */
+export type TelemetryFacetDto = {
+  span_name?: string;
+  span_kind?: string | null;
+  status_code?: string | null;
+  status_message?: string | null;
+  start_unix_nano?: number;
+  end_unix_nano?: number;
+  attributes?: Record<string, unknown>;
+  resource?: Record<string, unknown>;
+  scope_name?: string | null;
+  scope_version?: string | null;
+};
+
 export type ObservedEventDto = {
   event_id: string;
   raw_event_id: string;
@@ -27,6 +46,11 @@ export type ObservedEventDto = {
   turn_id: string | null;
   is_sidechain: boolean | number;
   is_meta: boolean | number;
+  /** OTel span events carry their extracted span data here (span_name +
+   *  flat attributes). Absent on non-span events. C4 (Tier 3-1): span name
+   *  and llm-request metrics are read from this facet, not `payload.raw_span`
+   *  (which was the removed double-store). */
+  telemetry?: TelemetryFacetDto | null;
   payload: unknown;
 };
 

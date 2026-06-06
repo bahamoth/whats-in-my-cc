@@ -9,26 +9,20 @@ function ev(p: Partial<ObservedEventDto> & { event_id: string; kind: string }): 
     tool_name: null, turn_id: null, is_sidechain: false, is_meta: false, payload: {}, ...p } as ObservedEventDto;
 }
 
-/** A claude_code.llm_request OTel span event in the real OTLP attribute shape
- *  (`attributes: [{ key, value: { stringValue | intValue } }]`). */
+/** A claude_code.llm_request OTel span event. C4 (Tier 3-1): span name +
+ *  metrics live in the telemetry facet (a SIBLING of payload), whose
+ *  `attributes` is the FLAT key→value object the backend's `flatten_kv`
+ *  produces — NOT the OTLP array, and NOT re-embedded under payload.raw_span. */
 function llmRequestSpan(
   eventId: string,
   attrs: Record<string, string | number | boolean>,
 ): ObservedEventDto {
-  const attributes = Object.entries(attrs).map(([key, v]) => {
-    const value =
-      typeof v === 'number'
-        ? Number.isInteger(v) ? { intValue: String(v) } : { doubleValue: v }
-        : typeof v === 'boolean'
-        ? { boolValue: v }
-        : { stringValue: v };
-    return { key, value };
-  });
   return ev({
     event_id: eventId,
     kind: 'otel_span',
     actor: 'system',
-    payload: { raw_span: { name: 'claude_code.llm_request', attributes } },
+    telemetry: { span_name: 'claude_code.llm_request', attributes: attrs },
+    payload: {},
   });
 }
 
@@ -110,7 +104,7 @@ describe('buildStreamModel — classify refinement (#7)', () => {
   it('drops telemetry/facet events from the stream but keeps state-change logs', () => {
     const items = buildStreamModel([
       ev({ event_id: '1', kind: 'metric_sample', actor: 'system', payload: { instrument_name: 'claude_code.token.usage' } }),
-      ev({ event_id: '2', kind: 'otel_span', actor: 'system', payload: { raw_span: { name: 'claude_code.tool' } } }),
+      ev({ event_id: '2', kind: 'otel_span', actor: 'system', telemetry: { span_name: 'claude_code.tool' }, payload: {} }),
       ev({ event_id: '3', kind: 'log_record', actor: 'system', payload: { event_name: 'tool_result', attributes: {} } }),
       ev({ event_id: '4', kind: 'log_record', actor: 'system', payload: { event_name: 'compaction', attributes: {} } }),
     ]);

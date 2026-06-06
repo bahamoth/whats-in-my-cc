@@ -59,9 +59,17 @@ export function buildRawBlocksFromEvents(
       if (!match) continue;
       extra.push({ source: `${name}_log`, label: name, record: e.payload });
     } else if (e.kind === 'otel_span' && event.request_id != null) {
-      const m = parseLlmRequestSpan(e.payload);
+      // C4 (Tier 3-1): span data lives in the telemetry facet (payload.raw_span
+      // was removed). Match by the facet and carry the facet as the block record
+      // so the span's name + attributes stay visible in Raw. (Full verbatim
+      // fidelity remains available via the raw_event /v1/events/:id/raw route.)
+      const m = parseLlmRequestSpan(e);
       if (!m || m.requestId !== event.request_id) continue;
-      extra.push({ source: 'llm_request_span', label: 'claude_code.llm_request', record: e.payload });
+      extra.push({
+        source: 'llm_request_span',
+        label: 'claude_code.llm_request',
+        record: e.telemetry ?? e.payload,
+      });
     }
   }
 

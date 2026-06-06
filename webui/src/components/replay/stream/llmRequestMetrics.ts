@@ -4,9 +4,14 @@
 // `request_id`. A `thinking` (or assistant_message) event and its
 // `claude_code.llm_request` OTel span share the same request_id — the span
 // carries the only honest "how long / how much" signals (the thinking
-// plaintext is recorded nowhere). We read those metrics from the span
-// attributes that live in the windowed events.
-import type { ObservedEventDto } from '../../../api/types';
+// plaintext is recorded nowhere). We read those metrics from the span's
+// telemetry facet that lives in the windowed events.
+//
+// C4 (Tier 3-1): the span used to be re-embedded under `payload.raw_span` (an
+// OTLP `attributes: [{key,value:{stringValue|intValue}}]` array). That
+// double-store was removed; span name + attributes now come from the telemetry
+// facet, whose `attributes` is a FLAT key→value object (backend `flatten_kv`).
+import type { ObservedEventDto, TelemetryFacetDto } from '../../../api/types';
 
 export interface LlmRequestMetrics {
   requestId: string;
@@ -35,19 +40,6 @@ export interface LlmRequestMetrics {
   querySource?: string | null;
 }
 
-type OtlpAttrValue =
-  | { stringValue?: string; intValue?: string | number; doubleValue?: number; boolValue?: boolean }
-  | undefined;
-
-function attrVal(v: OtlpAttrValue): string | number | boolean | null {
-  if (!v || typeof v !== 'object') return null;
-  if (typeof v.stringValue === 'string') return v.stringValue;
-  if (v.intValue != null) return typeof v.intValue === 'string' ? Number(v.intValue) : v.intValue;
-  if (typeof v.doubleValue === 'number') return v.doubleValue;
-  if (typeof v.boolValue === 'boolean') return v.boolValue;
-  return null;
-}
-
 function num(x: unknown): number | null {
   const n = typeof x === 'number' ? x : typeof x === 'string' ? Number(x) : NaN;
   return Number.isFinite(n) ? n : null;
@@ -64,22 +56,21 @@ function str(x: unknown): string | null {
   return typeof x === 'string' && x.length > 0 ? x : null;
 }
 
-type LlmRequestSpanPayload = {
-  raw_span?: { name?: string; attributes?: Array<{ key: string; value: OtlpAttrValue }> };
-} | null;
+/** The shape parseLlmRequestSpan reads: an otel_span event carrying its
+ *  telemetry facet. We accept the whole event (or anything with a `telemetry`
+ *  field) so callers pass the event, not its (now-empty) payload. */
+type SpanFacetCarrier = { telemetry?: TelemetryFacetDto | null } | null | undefined;
 
-/** Parse a single `claude_code.llm_request` span payload into LlmRequestMetrics.
- *  Accepts either a windowed otel_span event payload or a folded
- *  `llm_request_span` facet's `data` — both carry the same
- *  `raw_span.attributes[]` OTLP shape. Returns null if the payload is not a
- *  `claude_code.llm_request` span or has no resolvable request_id. */
-export function parseLlmRequestSpan(payload: unknown): LlmRequestMetrics | null {
-  const span = (payload as LlmRequestSpanPayload)?.raw_span;
-  if (!span || span.name !== 'claude_code.llm_request') return null;
+/** Parse a `claude_code.llm_request` span's telemetry facet into
+ *  LlmRequestMetrics. Reads the facet's `span_name` + FLAT `attributes`
+ *  (backend `flatten_kv` already unwrapped the OTLP array). Returns null if the
+ *  event is not a `claude_code.llm_request` span or has no resolvable
+ *  request_id. C4 (Tier 3-1): replaces the removed `payload.raw_span` read. */
+export function parseLlmRequestSpan(event: unknown): LlmRequestMetrics | null {
+  const facet = (event as SpanFacetCarrier)?.telemetry;
+  if (!facet || facet.span_name !== 'claude_code.llm_request') return null;
 
-  const attrs: Record<string, string | number | boolean | null> = {};
-  for (const a of span.attributes ?? []) attrs[a.key] = attrVal(a.value);
-
+  const attrs = facet.attributes ?? {};
   const rid = str(attrs['request_id']) ?? str(attrs['gen_ai.response.id']);
   if (!rid) return null;
 
@@ -101,11 +92,11 @@ export function parseLlmRequestSpan(payload: unknown): LlmRequestMetrics | null 
   };
 }
 
-/** Parse the folded `api_request_log` facet's `data`. Unlike the OTLP span,
- *  its `attributes` is a plain key→value record, and it carries Claude Code's
- *  own measured per-request `cost_usd` (the authoritative cost, distinct from
- *  the WebUI's token×public-rate estimate). Returns null when the payload is
- *  not an api_request_log with an attributes record. */
+/** Parse the `api_request` log_record's payload. Its `attributes` is a plain
+ *  key→value record, and it carries Claude Code's own measured per-request
+ *  `cost_usd` (the authoritative cost, distinct from the WebUI's
+ *  token×public-rate estimate). Returns null when the payload is not an
+ *  api_request log with an attributes record. */
 export function parseApiRequestLog(
   payload: unknown,
 ): { costUsd: number | null; querySource: string | null } | null {
@@ -121,7 +112,7 @@ export function buildLlmRequestMetrics(events: ObservedEventDto[]): Map<string, 
   const map = new Map<string, LlmRequestMetrics>();
   for (const e of events) {
     if (e.kind !== 'otel_span') continue;
-    const m = parseLlmRequestSpan(e.payload);
+    const m = parseLlmRequestSpan(e);
     if (m) map.set(m.requestId, m);
   }
   return map;
