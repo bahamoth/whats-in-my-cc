@@ -1,4 +1,3 @@
-pub mod edge_inference;
 pub mod extractor;
 pub mod extractors;
 pub mod pipeline;

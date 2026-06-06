@@ -18,11 +18,10 @@ fn load(path: &str) -> Value {
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
-// Slice 2 (telemetry fold): hook_event is orphan telemetry and is dropped from
-// the graph. The three hooks are still accepted into observed_event (SSOT) —
-// only the graph_node projection drops them.
+// The three hook events are accepted into observed_event (SSOT) and remain
+// observable via the events endpoint.
 #[tokio::test]
-async fn batch_three_ingests_all_but_graph_has_no_hook_nodes() {
+async fn batch_three_ingests_all_to_observed_event() {
     let s = setup().await;
     let body = load("tests/fixtures/hook/batch_three.json");
     let resp = s.post("/hooks/v1/events").json(&body).await;
@@ -41,16 +40,6 @@ async fn batch_three_ingests_all_but_graph_has_no_hook_nodes() {
         .filter(|e| e["kind"] == "hook_event")
         .count();
     assert_eq!(hook_events, 3, "hook events remain in observed_event (SSOT)");
-
-    // Graph: hook_event nodes are dropped (orphan telemetry).
-    let graph: Value = s.get("/v1/sessions/sess_fix_B/graph").await.json();
-    let hook_count = graph["data"]["nodes"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|n| n["node_kind"] == "hook_event")
-        .count();
-    assert_eq!(hook_count, 0, "Slice 2: hook_event dropped from graph");
 }
 
 #[tokio::test]

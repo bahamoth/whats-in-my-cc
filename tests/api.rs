@@ -2,7 +2,6 @@ use axum_test::TestServer;
 use serde_json::Value;
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::db::migrate;
-use wimcc::graph::build;
 use wimcc::ingest::store;
 
 async fn make_pool() -> sqlx::SqlitePool {
@@ -19,7 +18,6 @@ async fn make_pool() -> sqlx::SqlitePool {
     )
     .await
     .unwrap();
-    build::rebuild_session(&pool, "sess-A").await.unwrap();
     pool
 }
 
@@ -58,38 +56,19 @@ async fn sessions_list_contains_sess_a() {
 }
 
 #[tokio::test]
-async fn session_detail_and_graph() {
+async fn session_detail_reports_event_count() {
     let s = setup().await;
     let detail: Value = s.get("/v1/sessions/sess-A").await.json();
     assert!(detail["data"]["summary"]["event_count"].as_i64().unwrap() >= 6);
-    let graph: Value = s.get("/v1/sessions/sess-A/graph").await.json();
-    let nodes = graph["data"]["nodes"].as_array().unwrap();
-    let edges = graph["data"]["edges"].as_array().unwrap();
-    assert!(!nodes.is_empty());
-    assert!(!edges.is_empty());
 }
 
-/// Slice-8 — session_graph now always returns 200 (empty graph is a valid
-/// transient state during ingest's rebuild_session race). Use session_detail
-/// for the "session not found" path instead — that handler still 404s when
-/// no observed_event rows exist for the id.
+/// session_detail 404s when no observed_event rows exist for the id.
 #[tokio::test]
 async fn missing_session_detail_is_404() {
     let s = setup().await;
     s.get("/v1/sessions/missing")
         .await
         .assert_status(axum::http::StatusCode::NOT_FOUND);
-}
-
-/// session_graph returns 200 + empty graph for unknown sessions (slice-8).
-#[tokio::test]
-async fn missing_session_graph_is_200_empty() {
-    let s = setup().await;
-    let resp = s.get("/v1/sessions/missing/graph").await;
-    resp.assert_status_ok();
-    let v: Value = resp.json();
-    assert!(v["data"]["nodes"].as_array().unwrap().is_empty());
-    assert!(v["data"]["edges"].as_array().unwrap().is_empty());
 }
 
 #[tokio::test]

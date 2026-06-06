@@ -97,12 +97,6 @@ pub struct SessionSummary {
     pub last_observed_at: String,
 }
 
-#[derive(Serialize)]
-pub struct GraphPayload {
-    pub nodes: Vec<Value>,
-    pub edges: Vec<Value>,
-}
-
 /// Slice-10a follow-up — JSON shape returned by
 /// `GET /v1/sessions/{id}/diff-hunks`. Fields mirror the SQLite `diff_hunk`
 /// row 1:1 so reviewers can verify transcript-derived attribution from the
@@ -309,14 +303,9 @@ pub struct FindingEvidenceResponse {
 #[derive(Serialize)]
 pub struct FindingEvidenceData {
     pub finding: FindingDto,
-    pub subgraph: EvidenceSubgraph,
+    /// Event IDs cited by the finding (parsed from `finding.evidence_refs`).
+    pub evidence_refs: Vec<String>,
     pub raw_source_refs: Vec<RawSourceRef>,
-}
-
-#[derive(Serialize)]
-pub struct EvidenceSubgraph {
-    pub nodes: Vec<serde_json::Value>,
-    pub edges: Vec<serde_json::Value>,
 }
 
 #[derive(Serialize)]

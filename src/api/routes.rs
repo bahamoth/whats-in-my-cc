@@ -11,7 +11,7 @@ use sqlx::SqlitePool;
 use crate::api::dto::*;
 use crate::api::AppState;
 use crate::db::{
-    repo_audit, repo_diff_hunk, repo_finding, repo_graph,
+    repo_audit, repo_diff_hunk, repo_finding,
     repo_observed, repo_raw, repo_retention, repo_usage_facet, repo_verification_run,
 };
 use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
@@ -267,35 +267,6 @@ pub async fn session_events(
             events,
             prev_cursor,
             next_cursor,
-        },
-    }))
-}
-
-pub async fn session_graph(
-    State(pool): State<SqlitePool>,
-    Path(id): Path<String>,
-) -> Result<Json<Envelope<GraphPayload>>, (StatusCode, Json<serde_json::Value>)> {
-    let (nodes, edges) = repo_graph::load_session(&pool, &id).await.expect("db");
-    // Empty graph_node is a VALID transient state — rebuild_session uses a
-    // DELETE-then-INSERT pattern (not in a transaction), and a SELECT that
-    // races between those two statements observes zero rows even though the
-    // session has thousands of events. Returning 404 here caused the WebUI
-    // SessionDetailPage to flicker its Timeline to "no observations" on
-    // every transcript line landing during active sessions. Now we always
-    // return 200 with whatever rows exist; the client decides how to render
-    // an empty graph (no flicker, just an empty timeline until the rebuild
-    // finishes and the next refetch lands).
-    Ok(Json(Envelope {
-        meta: ResponseMeta::now(),
-        data: GraphPayload {
-            nodes: nodes
-                .iter()
-                .map(|n| serde_json::to_value(n).unwrap())
-                .collect(),
-            edges: edges
-                .iter()
-                .map(|e| serde_json::to_value(e).unwrap())
-                .collect(),
         },
     }))
 }
@@ -764,12 +735,12 @@ pub async fn finding_detail(
     }
 }
 
-/// `GET /v1/findings/:id/evidence` — finding + subgraph + raw source refs.
+/// `GET /v1/findings/:id/evidence` — finding + its evidence event IDs + raw
+/// source refs.
 ///
-/// The subgraph includes graph nodes whose `source_event_ids` contain any
-/// event_id in the finding's `evidence_refs`. Edges connecting those nodes
-/// are also included. `raw_source_refs` contains the raw event provenance for
-/// each evidenced event.
+/// `evidence_refs` are the event IDs cited by the finding. `raw_source_refs`
+/// resolves the raw-event provenance (source_type / source_uri) for each cited
+/// event via the observed_event → raw_event join.
 pub async fn finding_evidence(
     State(pool): State<SqlitePool>,
     Path(finding_id): Path<String>,
@@ -793,40 +764,9 @@ pub async fn finding_evidence(
         }
     };
 
-    let session_id = row.session_id.clone();
-
     // Parse evidence_refs
     let evidence_refs: Vec<String> = serde_json::from_str(&row.evidence_refs).unwrap_or_default();
     let finding_dto = finding_row_to_dto(row);
-
-    // Load graph nodes/edges for the session
-    let (nodes, edges) = repo_graph::load_session(&pool, &session_id)
-        .await
-        .unwrap_or_else(|_| (vec![], vec![]));
-
-    // Filter nodes whose source_event_ids overlap with evidence_refs
-    let relevant_node_ids: std::collections::HashSet<String> = nodes
-        .iter()
-        .filter(|n| {
-            n.source_event_ids.iter().any(|id| evidence_refs.contains(id))
-        })
-        .map(|n| n.node_id.clone())
-        .collect();
-
-    let subgraph_nodes: Vec<serde_json::Value> = nodes
-        .iter()
-        .filter(|n| relevant_node_ids.contains(&n.node_id))
-        .map(|n| serde_json::to_value(n).unwrap_or(serde_json::Value::Null))
-        .collect();
-
-    let subgraph_edges: Vec<serde_json::Value> = edges
-        .iter()
-        .filter(|e| {
-            relevant_node_ids.contains(&e.from_node_id)
-                || relevant_node_ids.contains(&e.to_node_id)
-        })
-        .map(|e| serde_json::to_value(e).unwrap_or(serde_json::Value::Null))
-        .collect();
 
     // Build raw_source_refs from observed_event → raw_event joins
     let mut raw_source_refs: Vec<RawSourceRef> = Vec::new();
@@ -844,10 +784,7 @@ pub async fn finding_evidence(
     Json(FindingEvidenceResponse {
         data: FindingEvidenceData {
             finding: finding_dto,
-            subgraph: EvidenceSubgraph {
-                nodes: subgraph_nodes,
-                edges: subgraph_edges,
-            },
+            evidence_refs,
             raw_source_refs,
         },
     })

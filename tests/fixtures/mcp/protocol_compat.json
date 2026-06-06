@@ -19,10 +19,8 @@
   },
   "tools_list_result": {
     "tools": [
-      { "name": "whats_in_my_cc.get_session_graph" },
       { "name": "whats_in_my_cc.search_sessions" },
       { "name": "whats_in_my_cc.search_findings" },
-      { "name": "whats_in_my_cc.explain_node" },
       { "name": "whats_in_my_cc.get_file_lineage" },
       { "name": "whats_in_my_cc.get_otel_trace" }
     ]
@@ -30,7 +28,6 @@
   "resource_templates_result": {
     "resourceTemplates": [
       { "uriTemplate": "whats-in-my-cc://sessions/{session_id}", "name": "Session summary", "mimeType": "application/json" },
-      { "uriTemplate": "whats-in-my-cc://sessions/{session_id}/graph", "name": "Session graph", "mimeType": "application/json" },
       { "uriTemplate": "whats-in-my-cc://sessions/{session_id}/findings", "name": "Session findings", "mimeType": "application/json" },
       { "uriTemplate": "whats-in-my-cc://findings/{finding_id}", "name": "Finding detail", "mimeType": "application/json" },
       { "uriTemplate": "whats-in-my-cc://file-lineage/{session_id}", "name": "File lineage", "mimeType": "application/json" },

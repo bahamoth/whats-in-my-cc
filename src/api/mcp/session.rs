@@ -100,7 +100,7 @@ impl SessionRegistry {
         }
     }
 
-    /// Broadcast a notification to ALL sessions (e.g., on rebuild_session).
+    /// Broadcast a notification to ALL sessions (e.g., after ingest).
     pub async fn broadcast_all(&self, notif: McpNotification) {
         let map = self.inner.read().await;
         for session in map.values() {

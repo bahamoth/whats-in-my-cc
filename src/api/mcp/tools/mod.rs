@@ -8,10 +8,8 @@ use sqlx::SqlitePool;
 
 pub mod get_file_lineage;
 pub mod get_otel_trace;
-pub mod get_session_graph;
 pub mod search_findings;
 pub mod search_sessions;
-pub mod explain_node;
 
 /// Wrap a JSON value as an MCP `tools/call` success result.
 pub fn tool_success(data: Value) -> Value {
@@ -31,17 +29,6 @@ pub fn tool_error(msg: impl Into<String>) -> Value {
 }
 
 /// Canonical tool input schema definitions (for tools/list).
-fn get_session_graph_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "session_id": { "type": "string", "description": "Session ID" },
-            "include_sources": { "type": "boolean", "default": true, "description": "Include source event IDs on nodes" }
-        },
-        "required": ["session_id"]
-    })
-}
-
 fn search_sessions_schema() -> Value {
     json!({
         "type": "object",
@@ -62,17 +49,6 @@ fn search_findings_schema() -> Value {
             "limit": { "type": "integer", "default": 50 }
         },
         "required": []
-    })
-}
-
-fn explain_node_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "session_id": { "type": "string", "description": "Session ID" },
-            "node_id": { "type": "string", "description": "Graph node ID" }
-        },
-        "required": ["session_id", "node_id"]
     })
 }
 
@@ -102,11 +78,6 @@ pub fn tools_list_response() -> Value {
     json!({
         "tools": [
             {
-                "name": "whats_in_my_cc.get_session_graph",
-                "description": "Return the execution graph (nodes + edges) for a Claude Code session.",
-                "inputSchema": get_session_graph_schema()
-            },
-            {
                 "name": "whats_in_my_cc.search_sessions",
                 "description": "List recent Claude Code sessions observed locally.",
                 "inputSchema": search_sessions_schema()
@@ -115,11 +86,6 @@ pub fn tools_list_response() -> Value {
                 "name": "whats_in_my_cc.search_findings",
                 "description": "Search for insight findings (tool failures, missing verification, risky actions, etc.).",
                 "inputSchema": search_findings_schema()
-            },
-            {
-                "name": "whats_in_my_cc.explain_node",
-                "description": "Explain a specific graph node: what it is, what findings it relates to.",
-                "inputSchema": explain_node_schema()
             },
             {
                 "name": "whats_in_my_cc.get_file_lineage",
@@ -138,17 +104,11 @@ pub fn tools_list_response() -> Value {
 /// Dispatch a tools/call request to the appropriate handler.
 pub async fn dispatch(name: &str, args: &Value, pool: &SqlitePool) -> Value {
     match name {
-        "whats_in_my_cc.get_session_graph" => {
-            get_session_graph::call(args, pool).await
-        }
         "whats_in_my_cc.search_sessions" => {
             search_sessions::call(args, pool).await
         }
         "whats_in_my_cc.search_findings" => {
             search_findings::call(args, pool).await
-        }
-        "whats_in_my_cc.explain_node" => {
-            explain_node::call(args, pool).await
         }
         "whats_in_my_cc.get_file_lineage" => {
             get_file_lineage::call(args, pool).await

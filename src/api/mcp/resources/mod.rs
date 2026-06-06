@@ -11,21 +11,16 @@ pub mod parse;
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
 
-use crate::db::{repo_diff_hunk, repo_finding, repo_graph, repo_observed, repo_raw};
+use crate::db::{repo_diff_hunk, repo_finding, repo_observed, repo_raw};
 use crate::model::meta::SCHEMA_VERSION;
 
-/// The six resource URI templates per design §7.
+/// The resource URI templates per design §7.
 pub fn resource_templates() -> Value {
     json!({
         "resourceTemplates": [
             {
                 "uriTemplate": "whats-in-my-cc://sessions/{session_id}",
                 "name": "Session summary",
-                "mimeType": "application/json"
-            },
-            {
-                "uriTemplate": "whats-in-my-cc://sessions/{session_id}/graph",
-                "name": "Session graph",
                 "mimeType": "application/json"
             },
             {
@@ -66,11 +61,6 @@ pub async fn resources_list(pool: &SqlitePool) -> Value {
             "mimeType": "application/json"
         }));
         resources.push(json!({
-            "uri": format!("whats-in-my-cc://sessions/{}/graph", s.session_id),
-            "name": format!("Graph for {}", s.session_id),
-            "mimeType": "application/json"
-        }));
-        resources.push(json!({
             "uri": format!("whats-in-my-cc://sessions/{}/findings", s.session_id),
             "name": format!("Findings for {}", s.session_id),
             "mimeType": "application/json"
@@ -86,7 +76,6 @@ pub async fn read_resource(uri: &str, pool: &SqlitePool) -> Result<Value, String
     let parsed = parse::parse(uri).ok_or_else(|| format!("unknown resource URI: {uri}"))?;
     match parsed {
         ResourceUri::Session(session_id) => read_session(&session_id, uri, pool).await,
-        ResourceUri::SessionGraph(session_id) => read_graph(&session_id, uri, pool).await,
         ResourceUri::SessionFindings(session_id) => read_findings(&session_id, uri, pool).await,
         ResourceUri::Finding(finding_id) => read_finding(&finding_id, uri, pool).await,
         ResourceUri::FileLineage(session_id) => read_file_lineage(&session_id, uri, pool).await,
@@ -146,16 +135,6 @@ async fn read_session(session_id: &str, uri: &str, pool: &SqlitePool) -> Result<
             }), Some(session_id), pool).await)
         }
     }
-}
-
-async fn read_graph(session_id: &str, uri: &str, pool: &SqlitePool) -> Result<Value, String> {
-    let (nodes, edges) = repo_graph::load_session(pool, session_id)
-        .await
-        .map_err(|e| e.to_string())?;
-    Ok(make_contents(uri, json!({
-        "nodes": nodes.iter().map(|n| serde_json::to_value(n).unwrap_or(Value::Null)).collect::<Vec<_>>(),
-        "edges": edges.iter().map(|e| serde_json::to_value(e).unwrap_or(Value::Null)).collect::<Vec<_>>()
-    }), Some(session_id), pool).await)
 }
 
 async fn read_findings(session_id: &str, uri: &str, pool: &SqlitePool) -> Result<Value, String> {

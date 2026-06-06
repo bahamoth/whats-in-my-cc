@@ -6,8 +6,8 @@
 //! `run_extractors` is idempotent: re-running produces the same `finding_id`s;
 //! `INSERT OR REPLACE` keeps the last writer's version (same content).
 //!
-//! Per DEV-S14-06: runs **after** the graph rebuild transaction commits, not
-//! inside it.
+//! Called directly from each ingest path (transcript / OTel traces·logs·metrics
+//! / hook) once observed events for a session have been committed.
 
 use sqlx::SqlitePool;
 

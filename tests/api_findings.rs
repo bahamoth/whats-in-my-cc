@@ -46,8 +46,7 @@ async fn pool_with_seeded_findings() -> sqlx::SqlitePool {
     pool
 }
 
-async fn pool_with_seeded_findings_and_graph() -> sqlx::SqlitePool {
-    use wimcc::graph::build;
+async fn pool_with_seeded_findings_and_events() -> sqlx::SqlitePool {
     use wimcc::ingest::store;
 
     // Use ingest_file for a real session so raw_event + observed_event are properly seeded.
@@ -65,9 +64,8 @@ async fn pool_with_seeded_findings_and_graph() -> sqlx::SqlitePool {
     )
     .await
     .unwrap();
-    build::rebuild_session(&pool, "sess-A").await.unwrap();
 
-    // Get a user_message event_id that definitely appears as a graph node's source_event_ids.
+    // Get a real user_message event_id from the ingested session to cite as evidence.
     let ev_id: String = sqlx::query_scalar(
         "SELECT event_id FROM observed_event WHERE session_id='sess-A' AND kind='user_message' LIMIT 1"
     )
@@ -156,17 +154,17 @@ async fn finding_detail_404_for_unknown_id() {
 }
 
 #[tokio::test]
-async fn evidence_endpoint_returns_subgraph_and_raw_refs() {
-    let pool = pool_with_seeded_findings_and_graph().await;
+async fn evidence_endpoint_returns_evidence_refs_and_raw_refs() {
+    let pool = pool_with_seeded_findings_and_events().await;
     let server = build_server(pool);
     let r = server.get("/v1/findings/find_demo_001/evidence").await;
     r.assert_status_ok();
     let body: Value = r.json();
     let d = &body["data"];
-    let nodes = d["subgraph"]["nodes"].as_array().unwrap();
+    let evidence_refs = d["evidence_refs"].as_array().unwrap();
     assert!(
-        !nodes.is_empty(),
-        "subgraph.nodes must be non-empty; got 0"
+        !evidence_refs.is_empty(),
+        "evidence_refs must be non-empty; got 0"
     );
     let refs = d["raw_source_refs"].as_array().unwrap();
     assert!(

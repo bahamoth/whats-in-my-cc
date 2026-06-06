@@ -241,12 +241,10 @@ async fn ingest_cmd(
     }
     for f in files {
         tracing::info!(?f, "ingesting");
+        // `ingest_file` runs the deterministic L1 insight pipeline per touched
+        // session internally, so findings are refreshed without an extra call.
         let stats = wimcc::ingest::store::ingest_file(&pool, &f, &wimcc::live::NoopSink).await?;
         tracing::info!(?stats, "ingest done");
-        for sid in &stats.sessions_touched {
-            let g = wimcc::graph::build::rebuild_session(&pool, sid).await?;
-            tracing::info!(session_id=%sid, nodes=g.0, edges=g.1, "graph rebuilt");
-        }
     }
     Ok(())
 }

@@ -5,8 +5,6 @@
 pub enum ResourceUri {
     /// whats-in-my-cc://sessions/{session_id}
     Session(String),
-    /// whats-in-my-cc://sessions/{session_id}/graph
-    SessionGraph(String),
     /// whats-in-my-cc://sessions/{session_id}/findings
     SessionFindings(String),
     /// whats-in-my-cc://findings/{finding_id}
@@ -26,10 +24,6 @@ pub fn parse(uri: &str) -> Option<ResourceUri> {
         // sessions/{session_id}
         ["sessions", session_id] if !session_id.is_empty() => {
             Some(ResourceUri::Session(session_id.to_string()))
-        }
-        // sessions/{session_id}/graph
-        ["sessions", session_id, "graph"] => {
-            Some(ResourceUri::SessionGraph(session_id.to_string()))
         }
         // sessions/{session_id}/findings
         ["sessions", session_id, "findings"] => {
@@ -60,14 +54,6 @@ mod tests {
         assert_eq!(
             parse("whats-in-my-cc://sessions/sess-A"),
             Some(ResourceUri::Session("sess-A".into()))
-        );
-    }
-
-    #[test]
-    fn parses_graph() {
-        assert_eq!(
-            parse("whats-in-my-cc://sessions/sess-A/graph"),
-            Some(ResourceUri::SessionGraph("sess-A".into()))
         );
     }
 

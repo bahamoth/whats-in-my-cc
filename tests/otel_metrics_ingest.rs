@@ -102,11 +102,9 @@ async fn observed_metric_sample_count(pool: &sqlx::SqlitePool) -> i64 {
     row.0
 }
 
-// Slice 2 (telemetry fold): metric_sample is orphan telemetry — data points are
-// normalised into observed_event (SSOT) but dropped from the graph. (metric →
-// session-facet + a metric view is a deferred separate slice.)
+// metric_sample data points are normalised into observed_event (SSOT).
 #[tokio::test]
-async fn post_metrics_real_fixture_normalises_data_points_to_observed_event_not_graph() {
+async fn post_metrics_real_fixture_normalises_data_points_to_observed_event() {
     let (s, pool) = http_setup().await;
     let body = fixture_bytes("tests/fixtures/otel/real/metrics_v01.json");
     let resp = s
@@ -120,20 +118,9 @@ async fn post_metrics_real_fixture_normalises_data_points_to_observed_event_not_
     assert!(accepted >= 3, "real fixture has ≥3 data points; got {accepted}");
     let touched = v["data"]["sessions_touched"].as_array().unwrap();
     assert_eq!(touched.len(), 1, "real fixture has one session");
-    let session_id = touched[0].as_str().unwrap().to_string();
 
     // SSOT: every accepted data point is an observed_event row.
     assert_eq!(observed_metric_sample_count(&pool).await, accepted as i64);
-
-    // Graph: zero metric_sample nodes after the Slice-2 drop.
-    let graph_row: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM graph_node WHERE session_id = ? AND node_kind = 'metric_sample'",
-    )
-    .bind(&session_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(graph_row.0, 0, "Slice 2: metric_sample dropped from graph");
 }
 
 #[tokio::test]

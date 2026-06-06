@@ -174,7 +174,7 @@ pub async fn store(
         .await?;
 
         // Self-heal (DEV-S3-07): mark session touched BEFORE the dedup check so a
-        // re-POST after stale graph state still triggers rebuild.
+        // re-POST still re-runs the insight pipeline for the session.
         touched.insert(ev.session_id.clone());
 
         if !inserted {
@@ -213,7 +213,7 @@ pub async fn store(
     }
 
     for session_id in &touched {
-        crate::graph::build::rebuild_session(pool, session_id).await?;
+        crate::insight::pipeline::run_extractors(pool, session_id).await?;
     }
 
     repo_runs::finish(
