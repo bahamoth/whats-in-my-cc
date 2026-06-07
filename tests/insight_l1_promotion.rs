@@ -1,7 +1,7 @@
-//! Locks L1-only deterministic promotion: `risky_action` (confidence 0.7)
-//! surfaces as an active finding with provenance layer "L1" straight from
-//! `run_extractors`, with no judge involved. Guards against regressing back to
-//! a judge-gated path that would leave such candidates unsurfaced.
+//! Locks deterministic promotion: `risky_action` surfaces as a `signal` row
+//! with provenance `version="L1"` straight from `run_detectors`, no judge
+//! involved. Guards against regressing back to a judge-gated path that would
+//! leave such candidates unsurfaced.
 
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::db::migrate;
@@ -86,23 +86,19 @@ async fn pool_with_destructive_bash() -> sqlx::SqlitePool {
 async fn risky_action_promotes_without_judge() {
     let pool = pool_with_destructive_bash().await;
 
-    let rows = wimcc::insight::pipeline::run_extractors(&pool, "sess_l1")
+    let rows = wimcc::insight::pipeline::run_detectors(&pool, "sess_l1")
         .await
         .unwrap();
 
-    let risky: Vec<_> = rows.iter().filter(|r| r.category == "risky_action").collect();
+    let risky: Vec<_> = rows.iter().filter(|r| r.detector == "risky_action").collect();
     assert!(
         !risky.is_empty(),
-        "risky_action must promote at L1 without a judge; got 0 active findings (rows={:?})",
-        rows.iter().map(|r| &r.category).collect::<Vec<_>>()
-    );
-    assert_eq!(
-        risky[0].status, "active",
-        "risky_action finding must have status=active"
+        "risky_action must promote without a judge; got 0 signals (rows={:?})",
+        rows.iter().map(|r| &r.detector).collect::<Vec<_>>()
     );
     assert!(
-        risky[0].provenance.contains("\"layer\":\"L1\""),
-        "risky_action finding must have provenance.layer=L1, got: {}",
+        risky[0].provenance.contains("\"version\":\"L1\""),
+        "risky_action signal must have provenance.version=L1, got: {}",
         risky[0].provenance
     );
 }

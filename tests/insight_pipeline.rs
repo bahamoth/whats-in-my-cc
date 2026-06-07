@@ -1,10 +1,10 @@
-//! Slice-14 — integration tests for the extractor pipeline.
-//! Tests that `run_extractors` writes Finding rows and that re-running is
-//! idempotent (deduplication via finding_id).
+//! Integration tests for the signal detector pipeline (Plan 1: finding →
+//! signal). Tests that `run_detectors` writes `signal` rows and that re-running
+//! is idempotent (deduplication via `signal_id`).
 //!
 //! We disable foreign_keys for the test pool since we directly INSERT synthetic
 //! raw_event/observed_event rows without all required FK columns. This is
-//! intentional: the pipeline tests verify finding generation, not ingest FK
+//! intentional: the pipeline tests verify signal generation, not ingest FK
 //! integrity (which is covered by ingest_store.rs).
 
 use sqlx::sqlite::SqlitePoolOptions;
@@ -131,41 +131,46 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
 }
 
 #[tokio::test]
-async fn pipeline_writes_finding_rows() {
+async fn pipeline_writes_signal_rows() {
     let pool = seeded_pool_with_failing_session().await;
-    let findings = wimcc::insight::pipeline::run_extractors(&pool, "sess_t")
+    let signals = wimcc::insight::pipeline::run_detectors(&pool, "sess_t")
         .await
         .unwrap();
     assert!(
-        !findings.is_empty(),
-        "pipeline must write at least one finding row; got 0"
+        !signals.is_empty(),
+        "pipeline must write at least one signal row; got 0"
     );
 }
 
 #[tokio::test]
-async fn pipeline_dedupes_via_finding_id() {
+async fn pipeline_dedupes_via_signal_id() {
     let pool = seeded_pool_with_failing_session().await;
 
-    wimcc::insight::pipeline::run_extractors(&pool, "sess_t").await.unwrap();
-    let count_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM finding")
+    wimcc::insight::pipeline::run_detectors(&pool, "sess_t").await.unwrap();
+    let count_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM signal")
         .fetch_one(&pool).await.unwrap();
 
-    wimcc::insight::pipeline::run_extractors(&pool, "sess_t").await.unwrap();
-    let count_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM finding")
+    wimcc::insight::pipeline::run_detectors(&pool, "sess_t").await.unwrap();
+    let count_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM signal")
         .fetch_one(&pool).await.unwrap();
 
     assert_eq!(
         count_before, count_after,
-        "re-running pipeline must not create duplicate finding rows (INSERT OR REPLACE)"
+        "re-running pipeline must not create duplicate signal rows (INSERT OR REPLACE)"
     );
 }
 
 #[tokio::test]
-async fn pipeline_drops_below_confidence_floor() {
+async fn pipeline_signals_carry_facts_not_severity() {
     let pool = seeded_pool_with_failing_session().await;
-    wimcc::insight::pipeline::run_extractors(&pool, "sess_t").await.unwrap();
-    let below: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM finding WHERE confidence < 0.5")
-            .fetch_one(&pool).await.unwrap();
-    assert_eq!(below, 0, "no finding must have confidence < 0.5 (floor violation)");
+    wimcc::insight::pipeline::run_detectors(&pool, "sess_t").await.unwrap();
+    // The signal schema has no severity/confidence columns: facts is the only
+    // detector-specific projection. Assert every row has non-empty facts JSON.
+    let bad: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM signal WHERE facts IS NULL OR facts = '' OR evidence_refs = '[]'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(bad, 0, "every signal must carry facts + non-empty evidence_refs");
 }

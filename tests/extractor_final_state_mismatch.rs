@@ -4,7 +4,8 @@
 use chrono::{TimeZone, Utc};
 use serde_json::json;
 use wimcc::db::repo_verification_run::VerificationRunRow;
-use wimcc::insight::extractor::InsightExtractor;
+use wimcc::insight::config::DetectorConfig;
+use wimcc::insight::extractor::Detector;
 use wimcc::insight::extractors::final_state_mismatch::FinalStateMismatch;
 use wimcc::insight::view::SessionInsightView;
 use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
@@ -106,12 +107,14 @@ fn fires_when_goal_unmet_and_no_completion_marker() {
     let vr = failed_verification_run("sess_t", "ev_001");
     let runs = vec![vr];
     let view = view_with_runs(&events, &runs);
-    let cands = FinalStateMismatch.extract(&view);
+    let cands = FinalStateMismatch.detect(&view, &DetectorConfig::default());
     assert_eq!(cands.len(), 1, "fix goal + failed verification must fire");
     let c = &cands[0];
-    assert_eq!(c.category, "final_state_mismatch");
-    assert!((c.confidence_l1 - 0.6).abs() < f32::EPSILON, "confidence must be 0.6");
-    assert_eq!(c.severity, "medium");
+    assert_eq!(c.detector, "final_state_mismatch");
+    assert!(c.subkind.is_none());
+    // No severity/confidence judgment leaks into the facts.
+    assert!(c.facts.get("severity").is_none());
+    assert!(c.facts["goal"]["matched_verbs"].is_array());
 }
 
 /// "implement a feature" goal + failed final verification → fires.
@@ -124,7 +127,7 @@ fn fires_on_implement_goal_with_failed_verification() {
     let vr = failed_verification_run("sess_t", "ev_001");
     let runs = vec![vr];
     let view = view_with_runs(&events, &runs);
-    let cands = FinalStateMismatch.extract(&view);
+    let cands = FinalStateMismatch.detect(&view, &DetectorConfig::default());
     assert_eq!(cands.len(), 1, "implement goal + failed verification must fire");
 }
 
@@ -138,7 +141,7 @@ fn does_not_fire_when_closing_verification_passed() {
     let vr = passed_verification_run("sess_t", "ev_001");
     let runs = vec![vr];
     let view = view_with_runs(&events, &runs);
-    let cands = FinalStateMismatch.extract(&view);
+    let cands = FinalStateMismatch.detect(&view, &DetectorConfig::default());
     assert!(cands.is_empty(), "passed verification must not fire final_state_mismatch");
 }
 
@@ -151,7 +154,7 @@ fn does_not_fire_when_final_message_has_completion_marker_done() {
     ];
     // No verification run
     let view = view_with_runs(&events, &[]);
-    let cands = FinalStateMismatch.extract(&view);
+    let cands = FinalStateMismatch.detect(&view, &DetectorConfig::default());
     assert!(cands.is_empty(), "completion marker 'done' must suppress firing");
 }
 
@@ -165,7 +168,7 @@ fn does_not_fire_when_no_goal_verb() {
     let vr = failed_verification_run("sess_t", "ev_001");
     let runs = vec![vr];
     let view = view_with_runs(&events, &runs);
-    let cands = FinalStateMismatch.extract(&view);
+    let cands = FinalStateMismatch.detect(&view, &DetectorConfig::default());
     assert!(cands.is_empty(), "no goal verb must not fire");
 }
 
@@ -183,7 +186,7 @@ fn fires_at_most_once_per_session() {
     vr2.verification_run_id = "vr_002".into();
     let runs = vec![vr1, vr2];
     let view = view_with_runs(&events, &runs);
-    let cands = FinalStateMismatch.extract(&view);
+    let cands = FinalStateMismatch.detect(&view, &DetectorConfig::default());
     assert!(cands.len() <= 1, "at most 1 finding per session, got {}", cands.len());
 }
 
@@ -191,16 +194,16 @@ fn fires_at_most_once_per_session() {
 #[test]
 fn does_not_fire_on_empty_session() {
     let view = view_with_runs(&[], &[]);
-    let cands = FinalStateMismatch.extract(&view);
+    let cands = FinalStateMismatch.detect(&view, &DetectorConfig::default());
     assert!(cands.is_empty());
 }
 
 // ---------------------------------------------------------------------------
-// Evidence projection fields
+// Facts fields
 // ---------------------------------------------------------------------------
 
 #[test]
-fn projection_includes_required_fields() {
+fn facts_include_required_fields() {
     let events = vec![
         user_message_with_goal(0, "fix the tests and make them pass"),
         assistant_message(1, "working on it"),
@@ -208,10 +211,9 @@ fn projection_includes_required_fields() {
     let vr = failed_verification_run("sess_t", "ev_001");
     let runs = vec![vr];
     let view = view_with_runs(&events, &runs);
-    let cands = FinalStateMismatch.extract(&view);
+    let cands = FinalStateMismatch.detect(&view, &DetectorConfig::default());
     assert_eq!(cands.len(), 1);
-    let proj = &cands[0].evidence_projection;
-    assert_eq!(proj["category"], "final_state_mismatch");
+    let proj = &cands[0].facts;
     assert!(proj["goal"]["user_message_event_id"].is_string());
     assert!(proj["goal"]["matched_verbs"].is_array());
     assert!(proj["final_state"]["last_verification_run"]["status"].is_string());

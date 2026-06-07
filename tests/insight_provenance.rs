@@ -1,15 +1,14 @@
-//! Slice-14 / judge-removal — locks the L1 finding provenance shape: an
-//! `<extractor>@v1` stamp, `layer="L1"`, and NO judge fields. The judge
-//! subsystem was deleted, so `judge` / `judge_template_version` are no longer
-//! emitted at all (not present-as-null). `.get(k).is_none()` distinguishes an
-//! absent key from a present-null one — `value[k].is_null()` would pass for
-//! both and so would not lock the removal.
+//! Locks the signal provenance shape (Plan 1: finding → signal): a
+//! `<detector>@v1` stamp, `version="L1"`, and NO judge fields. The judge
+//! subsystem was deleted, so `judge` / `judge_template_version` are never
+//! emitted. `.get(k).is_none()` distinguishes an absent key from a present-null
+//! one — `value[k].is_null()` would pass for both and so would not lock removal.
 
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::db::migrate;
 
 #[tokio::test]
-async fn l1_finding_provenance_shape_has_no_judge_fields() {
+async fn signal_provenance_shape_has_no_judge_fields() {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect("sqlite::memory:")
@@ -17,64 +16,54 @@ async fn l1_finding_provenance_shape_has_no_judge_fields() {
         .unwrap();
     migrate(&pool).await.unwrap();
 
-    // Insert a finding directly with the canonical post-judge provenance shape.
-    // No FK checking needed (finding table has no FKs).
+    // Insert a signal directly with the canonical provenance shape.
     let provenance = serde_json::json!({
-        "extractor": "missing_verification@v1",
-        "layer": "L1",
+        "detector": "tool_failure@v1",
+        "version": "L1",
         "rule_pack": null
     });
     sqlx::query(
-        "INSERT INTO finding \
-         (finding_id, session_id, category, severity, confidence, summary, \
-          evidence_refs, evidence_projection, provenance, status) \
-         VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO signal \
+         (signal_id, session_id, detector, summary, evidence_refs, facts, provenance) \
+         VALUES (?,?,?,?,?,?,?)",
     )
-    .bind("find_demo_001")
+    .bind("sig_demo_001")
     .bind("sess_x")
-    .bind("missing_verification")
-    .bind("medium")
-    .bind(0.9_f64)
+    .bind("tool_failure")
     .bind("test")
     .bind(r#"["ev_001"]"#)
     .bind("{}")
     .bind(provenance.to_string())
-    .bind("active")
     .execute(&pool)
     .await
     .unwrap();
 
-    let row: (String,) = sqlx::query_as(
-        "SELECT provenance FROM finding WHERE finding_id='find_demo_001'",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let row: (String,) =
+        sqlx::query_as("SELECT provenance FROM signal WHERE signal_id='sig_demo_001'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     let prov: serde_json::Value = serde_json::from_str(&row.0).unwrap();
-    assert_eq!(prov["layer"].as_str().unwrap(), "L1");
+    assert_eq!(prov["version"].as_str().unwrap(), "L1");
     assert!(
         prov.get("judge").is_none(),
-        "judge field must be absent for L1 finding (judge subsystem removed), got: {prov}"
+        "judge field must be absent (judge subsystem removed), got: {prov}"
     );
     assert!(
         prov.get("judge_template_version").is_none(),
-        "judge_template_version field must be absent for L1 finding, got: {prov}"
+        "judge_template_version field must be absent, got: {prov}"
     );
-    assert_eq!(
-        prov["extractor"].as_str().unwrap(),
-        "missing_verification@v1"
-    );
+    assert_eq!(prov["detector"].as_str().unwrap(), "tool_failure@v1");
 }
 
-/// Pipeline-generated L1 findings must carry the right provenance: layer="L1",
-/// NO judge fields, and an `<extractor>@v1` stamp matching the firing extractor.
+/// Pipeline-generated signals must carry the right provenance: version="L1",
+/// NO judge fields, and a `<detector>@v1` stamp matching the firing detector.
 ///
-/// We drive the deterministic `tool_failure` extractor: a Bash tool_call whose
-/// paired tool_result has `is_error=true` and no compensating successful retry
-/// (`tool_failure` is L1/Always → confidence 1.0, judge never consulted).
+/// We drive the deterministic `tool_failure` detector: a Bash tool_call whose
+/// paired tool_result has `is_error=true` (judge never consulted).
 #[tokio::test]
-async fn pipeline_l1_findings_omit_judge_fields() {
+async fn pipeline_signals_omit_judge_fields() {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect("sqlite::memory:")
@@ -142,31 +131,31 @@ async fn pipeline_l1_findings_omit_judge_fields() {
     .bind(r#"{"tool_result":{"tool_use_id":"tid_p0","is_error":true,"content":"compile error E0001"}}"#)
     .execute(&pool).await.unwrap();
 
-    wimcc::insight::pipeline::run_extractors(&pool, sess).await.unwrap();
+    wimcc::insight::pipeline::run_detectors(&pool, sess).await.unwrap();
 
     let provenance_rows: Vec<(String,)> =
-        sqlx::query_as("SELECT provenance FROM finding WHERE session_id = ?")
+        sqlx::query_as("SELECT provenance FROM signal WHERE session_id = ?")
             .bind(sess)
             .fetch_all(&pool)
             .await
             .unwrap();
 
-    assert!(!provenance_rows.is_empty(), "pipeline must produce at least one finding");
+    assert!(!provenance_rows.is_empty(), "pipeline must produce at least one signal");
 
-    // The deterministic tool_failure finding must be present with correct provenance.
+    // The deterministic tool_failure signal must be present with correct provenance.
     let mut saw_tool_failure = false;
     for (prov_str,) in &provenance_rows {
         let prov: serde_json::Value = serde_json::from_str(prov_str).unwrap();
-        assert_eq!(prov["layer"].as_str().unwrap(), "L1",
-            "all pipeline-generated findings must have layer=L1");
+        assert_eq!(prov["version"].as_str().unwrap(), "L1",
+            "all pipeline-generated signals must have version=L1");
         assert!(prov.get("judge").is_none(),
-            "pipeline L1 findings must omit the judge field entirely, got: {prov}");
+            "pipeline signals must omit the judge field entirely, got: {prov}");
         assert!(prov.get("judge_template_version").is_none(),
-            "pipeline L1 findings must omit judge_template_version, got: {prov}");
-        if prov["extractor"].as_str() == Some("tool_failure@v1") {
+            "pipeline signals must omit judge_template_version, got: {prov}");
+        if prov["detector"].as_str() == Some("tool_failure@v1") {
             saw_tool_failure = true;
         }
     }
     assert!(saw_tool_failure,
-        "expected a finding stamped with extractor=tool_failure@v1 in provenance");
+        "expected a signal stamped with detector=tool_failure@v1 in provenance");
 }

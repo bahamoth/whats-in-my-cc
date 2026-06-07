@@ -3,7 +3,8 @@
 
 use chrono::{TimeZone, Utc};
 use serde_json::json;
-use wimcc::insight::extractor::InsightExtractor;
+use wimcc::insight::config::DetectorConfig;
+use wimcc::insight::extractor::Detector;
 use wimcc::insight::extractors::context_bloat::ContextBloat;
 use wimcc::insight::view::SessionInsightView;
 use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
@@ -81,12 +82,14 @@ fn fires_on_large_tool_result_with_no_downstream_use() {
         short_assistant_msg(1),
     ];
     let view = empty_view(&events);
-    let cands = ContextBloat.extract(&view);
+    let cands = ContextBloat.detect(&view, &DetectorConfig::default());
     assert_eq!(cands.len(), 1, "100KB bloat with short assistant reply must fire");
     let c = &cands[0];
-    assert_eq!(c.category, "context_bloat");
-    assert!((c.confidence_l1 - 0.5).abs() < f32::EPSILON, "confidence must be 0.5");
-    assert_eq!(c.severity, "low");
+    assert_eq!(c.detector, "context_bloat");
+    assert!(c.subkind.is_none());
+    // No severity/confidence judgment leaks into the facts.
+    assert!(c.facts.get("severity").is_none());
+    assert!(c.facts["tool_result"]["payload_size_bytes"].is_number());
 }
 
 /// Below the 50KB threshold → no fire.
@@ -97,7 +100,7 @@ fn does_not_fire_below_threshold() {
         short_assistant_msg(1),
     ];
     let view = empty_view(&events);
-    let cands = ContextBloat.extract(&view);
+    let cands = ContextBloat.detect(&view, &DetectorConfig::default());
     assert!(cands.is_empty(), "10KB output must not fire context_bloat");
 }
 
@@ -125,7 +128,7 @@ fn does_not_fire_when_downstream_uses_content() {
 
     let events = vec![result_ev, assistant_ev, downstream_call];
     let view = empty_view(&events);
-    let cands = ContextBloat.extract(&view);
+    let cands = ContextBloat.detect(&view, &DetectorConfig::default());
     assert!(cands.is_empty(), "downstream use with ≥3 stems must not fire");
 }
 
@@ -141,7 +144,7 @@ fn does_not_fire_without_following_assistant_message() {
     ];
     let view = empty_view(&events);
     // No assistant_message in next 3 events → does not fire per spec §4.3
-    let cands = ContextBloat.extract(&view);
+    let cands = ContextBloat.detect(&view, &DetectorConfig::default());
     // The bloat has no following assistant_message in M=3, so no candidate
     assert!(cands.is_empty(), "no assistant message in next 3 events → no fire");
 }
@@ -150,27 +153,51 @@ fn does_not_fire_without_following_assistant_message() {
 #[test]
 fn does_not_fire_on_empty_session() {
     let view = empty_view(&[]);
-    let cands = ContextBloat.extract(&view);
+    let cands = ContextBloat.detect(&view, &DetectorConfig::default());
     assert!(cands.is_empty());
 }
 
 // ---------------------------------------------------------------------------
-// Evidence projection fields
+// Facts fields
 // ---------------------------------------------------------------------------
 
 #[test]
-fn projection_includes_required_fields() {
+fn facts_include_required_fields() {
     let events = vec![
         large_tool_result(0, 100_000),
         short_assistant_msg(1),
     ];
     let view = empty_view(&events);
-    let cands = ContextBloat.extract(&view);
+    let cands = ContextBloat.detect(&view, &DetectorConfig::default());
     assert_eq!(cands.len(), 1);
-    let proj = &cands[0].evidence_projection;
-    assert_eq!(proj["category"], "context_bloat");
+    let proj = &cands[0].facts;
     assert!(proj["tool_result"]["event_id"].is_string());
     assert!(proj["tool_result"]["payload_size_bytes"].is_number());
     assert!(proj["next_assistant"]["event_id"].is_string());
     assert!(proj["downstream_usage_signal"]["lexical_overlap_with_next_tool_calls"].is_number());
+}
+
+// ---------------------------------------------------------------------------
+// Config-driven threshold
+// ---------------------------------------------------------------------------
+
+/// The byte threshold is config-driven: a 10KB result is below the default 50KB
+/// (no fire) but a config that lowers `threshold_bytes` to 5KB makes it fire.
+#[test]
+fn threshold_bytes_from_config() {
+    let events = vec![
+        large_tool_result(0, 10_000),
+        short_assistant_msg(1),
+    ];
+    let view = empty_view(&events);
+    assert!(
+        ContextBloat.detect(&view, &DetectorConfig::default()).is_empty(),
+        "10KB is below default 50KB threshold"
+    );
+    let cfg = DetectorConfig::from_toml_str("[detector.context_bloat]\nthreshold_bytes = 5000\n");
+    assert_eq!(
+        ContextBloat.detect(&view, &cfg).len(),
+        1,
+        "lowering threshold_bytes to 5000 makes 10KB fire"
+    );
 }

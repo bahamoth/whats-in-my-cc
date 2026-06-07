@@ -1,13 +1,19 @@
-//! Slice-16 — unit tests for the `RiskyAction` L1 extractor.
+//! Unit tests for the `RiskyAction` detector (Plan 1: finding → signal).
 //! All tests use synthetic `SessionInsightView` data — no DB, no I/O.
+//! Facts only: `trigger.kind` / `command_redacted`. NO severity (judgment).
 
 use chrono::{TimeZone, Utc};
 use serde_json::json;
 use wimcc::db::repo_diff_hunk::DiffHunkRow;
-use wimcc::insight::extractor::InsightExtractor;
+use wimcc::insight::config::DetectorConfig;
+use wimcc::insight::extractor::Detector;
 use wimcc::insight::extractors::risky_action::RiskyAction;
 use wimcc::insight::view::SessionInsightView;
 use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
+
+fn detect(view: &SessionInsightView<'_>) -> Vec<wimcc::insight::types::SignalCandidate> {
+    RiskyAction.detect(view, &DetectorConfig::default())
+}
 
 fn base_event(i: usize, actor: Actor, kind: EventKind) -> ObservedEvent {
     ObservedEvent {
@@ -81,20 +87,22 @@ fn diff_hunk_not_user_modified(id: &str, by_event: &str) -> DiffHunkRow {
 fn fires_on_rm_rf() {
     let events = vec![bash_tool_call(0, "rm -rf /tmp/foo")];
     let view = synth_view_with_bash(&events, &[]);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert_eq!(cands.len(), 1, "rm -rf must fire risky_action");
     let c = &cands[0];
-    assert_eq!(c.category, "risky_action");
-    assert!((c.confidence_l1 - 0.7).abs() < f32::EPSILON, "confidence_l1 must be 0.7");
-    assert_eq!(c.severity, "high");
+    assert_eq!(c.detector, "risky_action");
     assert!(!c.evidence_refs.is_empty(), "evidence_refs must be non-empty");
+    assert!(c.subkind.is_none());
+    // No severity/confidence judgment leaks into the facts.
+    assert!(c.facts.get("severity").is_none());
+    assert_eq!(c.facts["trigger"]["kind"], json!("destructive_bash"));
 }
 
 #[test]
 fn fires_on_git_push_force() {
     let events = vec![bash_tool_call(0, "git push --force origin main")];
     let view = synth_view_with_bash(&events, &[]);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert_eq!(cands.len(), 1, "git push --force must fire");
 }
 
@@ -102,7 +110,7 @@ fn fires_on_git_push_force() {
 fn fires_on_git_push_dash_f() {
     let events = vec![bash_tool_call(0, "git push -f")];
     let view = synth_view_with_bash(&events, &[]);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert_eq!(cands.len(), 1, "git push -f must fire");
 }
 
@@ -110,7 +118,7 @@ fn fires_on_git_push_dash_f() {
 fn fires_on_git_reset_hard() {
     let events = vec![bash_tool_call(0, "git reset --hard HEAD~1")];
     let view = synth_view_with_bash(&events, &[]);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert_eq!(cands.len(), 1, "git reset --hard must fire");
 }
 
@@ -118,7 +126,7 @@ fn fires_on_git_reset_hard() {
 fn fires_on_sudo_rm() {
     let events = vec![bash_tool_call(0, "sudo rm -rf /var/log")];
     let view = synth_view_with_bash(&events, &[]);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert_eq!(cands.len(), 1, "sudo rm must fire");
 }
 
@@ -126,7 +134,7 @@ fn fires_on_sudo_rm() {
 fn does_not_fire_on_safe_bash_ls() {
     let events = vec![bash_tool_call(0, "ls -la")];
     let view = synth_view_with_bash(&events, &[]);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert!(cands.is_empty(), "ls -la must not fire");
 }
 
@@ -134,7 +142,7 @@ fn does_not_fire_on_safe_bash_ls() {
 fn does_not_fire_on_safe_bash_grep() {
     let events = vec![bash_tool_call(0, "grep -r 'todo' .")];
     let view = synth_view_with_bash(&events, &[]);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert!(cands.is_empty(), "grep must not fire");
 }
 
@@ -150,7 +158,7 @@ fn does_not_fire_on_non_bash_tool() {
     });
     let events = vec![ev];
     let view = synth_view_with_bash(&events, &[]);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert!(cands.is_empty(), "non-Bash tool with destructive text must not fire");
 }
 
@@ -163,11 +171,11 @@ fn fires_on_user_modified_hunk() {
     let events = vec![base_event(0, Actor::Assistant, EventKind::ToolCall)];
     let diff_hunks = vec![diff_hunk_user_modified("dh_001", "ev_000")];
     let view = synth_view_with_bash(&events, &diff_hunks);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert_eq!(cands.len(), 1, "user_modified hunk must fire");
     let c = &cands[0];
-    assert_eq!(c.category, "risky_action");
-    assert!((c.confidence_l1 - 0.7).abs() < f32::EPSILON);
+    assert_eq!(c.detector, "risky_action");
+    assert_eq!(c.facts["trigger"]["kind"], json!("user_modified_hunk"));
 }
 
 #[test]
@@ -175,7 +183,7 @@ fn does_not_fire_on_non_user_modified_hunk() {
     let events = vec![base_event(0, Actor::Assistant, EventKind::ToolCall)];
     let diff_hunks = vec![diff_hunk_not_user_modified("dh_001", "ev_000")];
     let view = synth_view_with_bash(&events, &diff_hunks);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert!(cands.is_empty(), "non-user-modified hunk must not fire");
 }
 
@@ -186,34 +194,32 @@ fn does_not_fire_on_non_user_modified_hunk() {
 #[test]
 fn does_not_fire_on_empty_session() {
     let view = synth_view_with_bash(&[], &[]);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert!(cands.is_empty());
 }
 
 // ---------------------------------------------------------------------------
-// Evidence projection fields
+// Facts fields
 // ---------------------------------------------------------------------------
 
 #[test]
-fn projection_includes_required_fields_for_destructive_bash() {
+fn facts_include_required_fields_for_destructive_bash() {
     let events = vec![bash_tool_call(0, "rm -rf /tmp/foo")];
     let view = synth_view_with_bash(&events, &[]);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert_eq!(cands.len(), 1);
-    let proj = &cands[0].evidence_projection;
-    assert_eq!(proj["category"], "risky_action");
+    let proj = &cands[0].facts;
     assert!(proj["trigger"]["kind"].is_string());
     assert!(proj["trigger"]["command_redacted"].is_string());
 }
 
 #[test]
-fn projection_includes_required_fields_for_user_modified() {
+fn facts_include_required_fields_for_user_modified() {
     let events = vec![base_event(0, Actor::Assistant, EventKind::ToolCall)];
     let diff_hunks = vec![diff_hunk_user_modified("dh_001", "ev_000")];
     let view = synth_view_with_bash(&events, &diff_hunks);
-    let cands = RiskyAction.extract(&view);
+    let cands = detect(&view);
     assert_eq!(cands.len(), 1);
-    let proj = &cands[0].evidence_projection;
-    assert_eq!(proj["category"], "risky_action");
+    let proj = &cands[0].facts;
     assert_eq!(proj["trigger"]["kind"], "user_modified_hunk");
 }
