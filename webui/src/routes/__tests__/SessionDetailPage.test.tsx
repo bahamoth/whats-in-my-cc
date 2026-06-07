@@ -29,6 +29,7 @@ type Routes = {
   events?: Response;
   raw?: Response;
   signals?: Response;
+  metrics?: Response;
 };
 
 function setupFetch(routes: Routes) {
@@ -50,6 +51,11 @@ function setupFetch(routes: Routes) {
     }
     if (url.includes('/signals')) {
       if (routes.signals) return Promise.resolve(routes.signals.clone());
+    }
+    if (url.endsWith('/metrics')) {
+      if (routes.metrics) return Promise.resolve(routes.metrics.clone());
+      // Default empty-ish metrics to avoid 404 noise when not under test
+      return Promise.resolve(new Response('{}', { status: 404 }));
     }
     if (url.match(/\/v1\/sessions\/[^/]+$/)) {
       if (routes.detail) return Promise.resolve(routes.detail.clone());
@@ -455,5 +461,98 @@ describe('R1 layout shell', () => {
     await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /graph/i })).toBeNull();
     expect(screen.queryByRole('tab', { name: /graph/i })).toBeNull();
+  });
+});
+
+describe('Analysis surface', () => {
+  const metricsPayload = {
+    session_id: 's1',
+    tool_call_total: 10,
+    tool_failure_count: 2,
+    tool_failure_rate: 0.2,
+    verification_total: 4,
+    verification_passed: 3,
+    verification_pass_rate: 0.75,
+    context_bloat_count: 1,
+    cache_hit_ratio: 0.6,
+    detector_firing: { tool_failure: 2, context_bloat: 1 },
+  };
+
+  beforeEach(() => {
+    if (!(globalThis as { EventSource?: unknown }).EventSource) {
+      (globalThis as Record<string, unknown>).EventSource = class FakeES {
+        url: string;
+        readyState = 0;
+        onmessage: ((ev: MessageEvent) => void) | null = null;
+        constructor(u: string) { this.url = u; }
+        addEventListener() {}
+        close() {}
+      };
+    }
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it('shows analysis toggle button when page is loaded', async () => {
+    setupFetch({
+      detail: env(sessionDetail),
+      events: env(eventsPayload),
+      metrics: env(metricsPayload),
+    });
+    rendered('s1');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /분석/i })).toBeInTheDocument();
+  });
+
+  it('clicking analysis toggle fetches metrics and shows AnalysisPanel metrics', async () => {
+    setupFetch({
+      detail: env(sessionDetail),
+      events: env(eventsPayload),
+      metrics: env(metricsPayload),
+    });
+    rendered('s1');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+
+    const toggleBtn = screen.getByRole('button', { name: /분석/i });
+    fireEvent.click(toggleBtn);
+
+    // After clicking, AnalysisPanel should render with the metrics data
+    await waitFor(() => {
+      // tool_failure_rate = 0.2 → 20%
+      expect(screen.getByText(/20%/)).toBeInTheDocument();
+    });
+    // verification_pass_rate = 0.75 → 75%
+    expect(screen.getByText(/75%/)).toBeInTheDocument();
+    // detector name
+    expect(screen.getByText(/tool_failure/)).toBeInTheDocument();
+  });
+
+  it('analysis panel is separate from replay stream (not inside detail slot)', async () => {
+    setupFetch({
+      detail: env(sessionDetail),
+      events: env(eventsPayload),
+      metrics: env(metricsPayload),
+    });
+    const { container } = rendered('s1');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /분석/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/20%/)).toBeInTheDocument();
+    });
+
+    // AnalysisPanel should NOT be inside the detail slot
+    const detailSlot = container.querySelector('[data-slot="detail"]');
+    expect(detailSlot?.querySelector('[data-testid="analysis-panel"]')).toBeNull();
+
+    // AnalysisPanel should NOT be inside the stream slot
+    const streamSlot = container.querySelector('[data-slot="stream"]');
+    expect(streamSlot?.querySelector('[data-testid="analysis-panel"]')).toBeNull();
+
+    // AnalysisPanel IS in the analysis slot
+    expect(container.querySelector('[data-slot="analysis"]')).not.toBeNull();
   });
 });

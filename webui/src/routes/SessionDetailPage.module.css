@@ -27,7 +27,52 @@
   flex: 1 1 auto;
   min-height: 0;
 }
+
+/* When analysis panel is open, insert an analysis row between kpi and stream/detail */
+.gridWithAnalysis {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "kpi      kpi"
+    "analysis analysis"
+    "stream   detail";
+  gap: 16px;
+  margin-top: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .kpi { grid-area: kpi; }
+
+/* Analysis toggle button — small, neutral, floats at the end of the kpi strip */
+.analysisToggle {
+  align-self: flex-end;
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--wimcc-border-strong, #2a3040);
+  background: var(--wimcc-surface-2, #161a23);
+  color: var(--wimcc-fg-muted, #aab0bd);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-top: 8px;
+}
+.analysisToggle:hover,
+.analysisToggle[aria-pressed="true"] {
+  background: var(--wimcc-surface-3, #1b202a);
+  color: var(--wimcc-fg, #e6e8ee);
+  border-color: var(--wimcc-accent, #4f8cff);
+}
+
+/* Analysis panel — spans full grid width, separate from stream/detail */
+.analysis {
+  grid-area: analysis;
+  border: 1px solid var(--wimcc-border, #1d212c);
+  border-radius: 6px;
+  background: var(--wimcc-surface-1, #0f1219);
+  overflow: auto;
+  max-height: 400px;
+}
 /* min-height:0 lets this grid child shrink below its content so its CHILD (the
    virtualizer `.scroll`) owns the overflow. The slot itself must NOT scroll —
    `overflow:auto` here made it a SECOND scroll container the moment `.scroll`

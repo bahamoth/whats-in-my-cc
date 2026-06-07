@@ -5,6 +5,7 @@ import { MetaStrip } from '../components/MetaStrip';
 import { DetailPanel } from '../components/replay/detail/DetailPanel';
 import { TopBar } from '../components/layout/TopBar';
 import { InsightStrip } from '../components/replay/insight-strip/InsightStrip';
+import { AnalysisPanel } from '../components/replay/analysis/AnalysisPanel';
 import {
   ReplaySelectionProvider,
   useReplaySelection,
@@ -18,6 +19,7 @@ import {
   useUsageBaselineQuery,
   useEventRawQuery,
   useCorrelatedEventsQuery,
+  useSessionMetricsQuery,
 } from '../lib/queries';
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
@@ -44,6 +46,10 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const verificationRuns = useVerificationRunsQuery(sessionId);
   const usage = useSessionUsageQuery(sessionId);
   const baseline = useUsageBaselineQuery();
+
+  // Analysis surface — separate from replay (spec §8.3, 원칙 7)
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const metricsQuery = useSessionMetricsQuery(sessionId, { enabled: analysisOpen && !!sessionId });
 
   const window_ = useSessionWindow(sessionId);
 
@@ -243,7 +249,10 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
       )}
 
       {!isLoading && !is404 && detail.data && (
-        <div className={styles.grid} data-wimcc-detail-grid>
+        <div
+          className={analysisOpen ? styles.gridWithAnalysis : styles.grid}
+          data-wimcc-detail-grid
+        >
           <div className={styles.kpi} data-slot="kpi">
             <InsightStrip
               usage={usage.data}
@@ -256,7 +265,23 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               }
             />
             <MetaStrip session={detail.data} events={window_.events} />
+            <button
+              className={styles.analysisToggle}
+              aria-pressed={analysisOpen}
+              onClick={() => setAnalysisOpen((v) => !v)}
+            >
+              분석
+            </button>
           </div>
+
+          {analysisOpen && (
+            <div className={styles.analysis} data-slot="analysis">
+              <AnalysisPanel
+                metrics={metricsQuery.data ?? null}
+                data-testid="analysis-panel"
+              />
+            </div>
+          )}
 
           <div className={styles.stream} data-slot="stream">
             {window_.loading === 'older' && (

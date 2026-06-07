@@ -10,16 +10,18 @@ import styles from './AnalysisPanel.module.css';
 
 interface AnalysisPanelProps {
   metrics: SessionMetricsDto | null;
+  /** Forwarded to root div for test selection (e.g. data-testid). */
+  'data-testid'?: string;
 }
 
 function pct(rate: number): string {
   return Math.round(rate * 100) + '%';
 }
 
-export function AnalysisPanel({ metrics }: AnalysisPanelProps) {
+export function AnalysisPanel({ metrics, 'data-testid': testId }: AnalysisPanelProps) {
   if (!metrics) {
     return (
-      <div className={styles.root}>
+      <div className={styles.root} data-testid={testId}>
         <p className={styles.empty}>분석할 지표가 없습니다.</p>
       </div>
     );
@@ -34,7 +36,7 @@ export function AnalysisPanel({ metrics }: AnalysisPanelProps) {
     : 1;
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} data-testid={testId}>
       {/* --- Core metrics table --- */}
       <div>
         <div className={styles.sectionTitle}>세션 지표</div>
