@@ -407,7 +407,7 @@ mod tests {
         assert_eq!(a.session_id, "sess_uf_other");
         // Session B denom = 0+0+10 = 10, cache_read 0 -> ratio 0.0.
         assert_eq!(a.cache_hit_ratio, Some(0.0));
-        assert_eq!(a.billed_tokens, 10 + 0 + 50);
+        assert_eq!(a.billed_tokens, 10 + 50);
         assert_eq!(a.turns, 1);
         assert_eq!(a.output_tokens, 50);
 

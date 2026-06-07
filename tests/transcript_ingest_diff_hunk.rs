@@ -87,8 +87,8 @@ fn write_synth_transcript() -> NamedTempFile {
     });
 
     let mut f = NamedTempFile::new().unwrap();
-    writeln!(f, "{}", assistant).unwrap();
-    writeln!(f, "{}", tool_result).unwrap();
+    writeln!(f, "{assistant}").unwrap();
+    writeln!(f, "{tool_result}").unwrap();
     f
 }
 
@@ -189,8 +189,8 @@ async fn write_tool_result_produces_no_hunks() {
         }
     });
     let mut f = NamedTempFile::new().unwrap();
-    writeln!(f, "{}", assistant).unwrap();
-    writeln!(f, "{}", result).unwrap();
+    writeln!(f, "{assistant}").unwrap();
+    writeln!(f, "{result}").unwrap();
     let pool = fresh_pool().await;
     store::ingest_file(&pool, f.path(), &NoopSink).await.unwrap();
     let n = repo_diff_hunk::count_by_session(&pool, session_id).await.unwrap();

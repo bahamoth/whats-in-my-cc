@@ -20,7 +20,7 @@ fn allowlist_has_expected_pattern_count() {
 #[test]
 fn every_pattern_compiles_as_regex() {
     for (re, _kind) in allowlist_patterns() {
-        regex::Regex::new(re).unwrap_or_else(|_| panic!("invalid regex: {}", re));
+        regex::Regex::new(re).unwrap_or_else(|_| panic!("invalid regex: {re}"));
     }
 }
 
@@ -62,10 +62,9 @@ fn classify_matches_curated_commands() {
     for (cmd, want_kind) in samples {
         let got = classify(cmd);
         assert_eq!(
-            got.as_deref(),
+            got,
             Some(*want_kind),
-            "command {:?} should classify as {:?}, got {:?}",
-            cmd, want_kind, got
+            "command {cmd:?} should classify as {want_kind:?}, got {got:?}"
         );
     }
 }

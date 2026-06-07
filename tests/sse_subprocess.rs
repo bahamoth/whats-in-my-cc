@@ -43,7 +43,7 @@ fn spawn_serve_with(
     cmd.env("WIMCC_CONFIG_DIR", config_dir.path())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    let child = cmd.spawn().expect("spawn wimcc serve");
+    let mut child = cmd.spawn().expect("spawn wimcc serve");
     let host = format!("127.0.0.1:{port}");
 
     // Poll /v1/health to confirm readiness.
@@ -62,6 +62,8 @@ fn spawn_serve_with(
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+    let _ = child.kill();
+    let _ = child.wait();
     panic!("server did not come up at {host}");
 }
 
@@ -89,12 +91,10 @@ fn open_sse(host: &str, query: &str) -> TcpStream {
         .expect("connect for SSE");
     s.set_read_timeout(Some(Duration::from_secs(5))).ok();
     let request = format!(
-        "GET /v1/stream{q} HTTP/1.1\r\n\
+        "GET /v1/stream{query} HTTP/1.1\r\n\
          Host: {host}\r\n\
          Accept: text/event-stream\r\n\
          Connection: close\r\n\r\n",
-        q = query,
-        host = host,
     );
     s.write_all(request.as_bytes()).expect("write request");
     s

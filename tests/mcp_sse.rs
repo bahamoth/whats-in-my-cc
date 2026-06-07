@@ -78,8 +78,7 @@ async fn read_sse_until(body: axum::body::Body, expected: &str) -> String {
                 collected
             ),
             Ok(None) => panic!(
-                "SSE stream closed before seeing {:?}. Got: {:?}",
-                expected, collected
+                "SSE stream closed before seeing {expected:?}. Got: {collected:?}"
             ),
             Ok(Some(Err(e))) => panic!("SSE body error: {e}"),
             Ok(Some(Ok(frame))) => {
@@ -146,8 +145,7 @@ async fn mcp_sse_emits_notifications_initialized_on_connect() {
     let got = read_sse_until(body, "notifications/initialized").await;
     assert!(
         got.contains("notifications/initialized"),
-        "first SSE event must contain notifications/initialized. Got: {:?}",
-        got
+        "first SSE event must contain notifications/initialized. Got: {got:?}"
     );
 }
 

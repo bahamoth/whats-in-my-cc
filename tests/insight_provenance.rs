@@ -80,7 +80,7 @@ async fn pipeline_signals_omit_judge_fields() {
     migrate(&pool).await.unwrap();
 
     let sess = "sess_prov";
-    let ts = |i: usize| format!("2026-01-01T00:00:{:02}Z", i);
+    let ts = |i: usize| format!("2026-01-01T00:00:{i:02}Z");
 
     // Seed minimal raw rows for the two events below.
     for i in 0..2usize {
@@ -98,7 +98,7 @@ async fn pipeline_signals_omit_judge_fields() {
         .bind(0i64)
         .bind(format!("sha_{i}"))
         .bind(b"{}" as &[u8])
-        .bind(&ts(i))
+        .bind(ts(i))
         .execute(&pool).await.unwrap();
     }
 

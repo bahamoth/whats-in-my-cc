@@ -20,7 +20,7 @@ static COMPILED: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
         .iter()
         .map(|(re, kind)| {
             (
-                Regex::new(re).unwrap_or_else(|e| panic!("invalid regex {:?}: {}", re, e)),
+                Regex::new(re).unwrap_or_else(|e| panic!("invalid regex {re:?}: {e}")),
                 *kind,
             )
         })
@@ -146,7 +146,7 @@ fn is_dry_run(segment: &str) -> bool {
         return true;
     }
     // `--list` is dry-run for cargo test / nextest (lists test names).
-    if tokens.iter().any(|t| *t == "--list") {
+    if tokens.contains(&"--list") {
         return true;
     }
     // `cargo nextest list` (subcommand form, no leading dash).
@@ -164,6 +164,7 @@ fn is_dry_run(segment: &str) -> bool {
 ///   - `2>&1`, `>&2`, `1>&2`           (fd duplication)
 ///   - `> file`, `2> file`, `&> file`  (truncating redirect to a target)
 ///   - `>> file`, `2>> file`           (appending redirect)
+///
 /// A `cmd 2>&1` → `cmd`. A `cmd > out.log` → `cmd`. Only contiguous trailing
 /// redirect tokens are removed; a redirect in the middle is left intact (these
 /// segments are already pipe-split, so a trailing redirect is the common case).

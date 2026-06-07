@@ -35,7 +35,7 @@ pub async fn require_token(
 
     let authorized = match header_val {
         Some(s) if s.starts_with("Bearer ") => {
-            let provided = s["Bearer ".len()..].as_bytes();
+            let provided = &s.as_bytes()["Bearer ".len()..];
             let expected = state.token.as_bytes();
             // Constant-time comparison (subtle::ConstantTimeEq).
             let same_len = provided.len() == expected.len();

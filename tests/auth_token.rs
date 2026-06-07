@@ -41,7 +41,7 @@ async fn token_file_has_mode_0600() {
     let _token = wimcc::security::token::ensure_token().unwrap();
     let tf = dir.path().join("token");
     let perm = std::fs::metadata(&tf).unwrap().permissions().mode() & 0o777;
-    assert_eq!(perm, 0o600, "token file should be mode 0600, got {:o}", perm);
+    assert_eq!(perm, 0o600, "token file should be mode 0600, got {perm:o}");
     std::env::remove_var("WIMCC_CONFIG_DIR");
 }
 

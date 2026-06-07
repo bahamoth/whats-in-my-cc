@@ -113,7 +113,7 @@ fn extract_hunks_from_real_edit_fixture() {
     assert_eq!(r.introduced_by_event_id, uuid);
     assert_eq!(r.introduced_by_tool_use_id.as_deref(), tuid);
     assert_eq!(r.session_id, "test_session");
-    assert_eq!(r.user_modified, false);
+    assert!(!r.user_modified);
     assert_eq!(r.change_type, "modified");
     assert!(r.line_range_after.is_some());
     assert!(r.lines_added > 0 || r.lines_removed > 0);

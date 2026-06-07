@@ -39,14 +39,12 @@ fn main() -> error::Result<()> {
             } => {
                 // Slice-19: --print-token and --rotate-token short-circuit server start.
                 if print_token {
-                    let token = wimcc::security::token::ensure_token()
-                        .map_err(anyhow::Error::from)?;
+                    let token = wimcc::security::token::ensure_token()?;
                     eprintln!("{token}");
                     return Ok(());
                 }
                 if rotate_token {
-                    let token = wimcc::security::token::rotate_token()
-                        .map_err(anyhow::Error::from)?;
+                    let token = wimcc::security::token::rotate_token()?;
                     eprintln!("{token}");
                     return Ok(());
                 }
@@ -164,8 +162,7 @@ async fn serve_cmd(
             String::new()
         }
         cli::AuthMode::On => {
-            let t = wimcc::security::token::ensure_token()
-                .map_err(anyhow::Error::from)?;
+            let t = wimcc::security::token::ensure_token()?;
             eprintln!("wimcc: serving with token {t}");
             t
         }
@@ -173,8 +170,7 @@ async fn serve_cmd(
 
     // Slice-19: Parse retention profile and spawn sweep if enabled.
     let profile: wimcc::security::retention::Profile = retention_profile
-        .parse()
-        .map_err(anyhow::Error::from)?;
+        .parse()?;
     if profile != wimcc::security::retention::Profile::None {
         let pool_cl = pool.clone();
         let policy = wimcc::security::retention::RetentionPolicy { profile: profile.clone() };

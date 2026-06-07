@@ -12,8 +12,7 @@ async fn migration_adds_redaction_manifest_column() {
             .unwrap();
     assert!(
         cols.iter().any(|c| c == "redaction_manifest"),
-        "raw_event must have redaction_manifest column; columns: {:?}",
-        cols
+        "raw_event must have redaction_manifest column; columns: {cols:?}"
     );
 }
 

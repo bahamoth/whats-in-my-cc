@@ -84,9 +84,7 @@ async fn resources_templates_list_contains_required_uri_templates() {
     for uri in &required {
         assert!(
             uris.contains(uri),
-            "resourceTemplates missing URI '{}', got: {:?}",
-            uri,
-            uris
+            "resourceTemplates missing URI '{uri}', got: {uris:?}"
         );
     }
 }

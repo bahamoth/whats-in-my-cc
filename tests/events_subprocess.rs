@@ -39,7 +39,7 @@ async fn seed_db(path: &Path) {
     let run_id = repo_runs::start(&pool).await.unwrap();
     let base: DateTime<Utc> = Utc.with_ymd_and_hms(2026, 5, 21, 0, 0, 0).unwrap();
     for i in 0..SEED_N {
-        let event_id = format!("01J{:023}", i);
+        let event_id = format!("01J{i:023}");
         let raw_id = format!("raw_{i:06}");
         repo_raw::insert_dedup(
             &pool,
@@ -84,7 +84,7 @@ fn spawn_serve(db_path: &Path) -> (Child, String, String, tempfile::TempDir) {
     let bin = env!("CARGO_BIN_EXE_wimcc");
     // Slice-19: isolated config dir so tests don't touch ~/.config/wimcc.
     let config_dir = tempfile::tempdir().expect("config tempdir");
-    let child = Command::new(bin)
+    let mut child = Command::new(bin)
         .args([
             "--db-path",
             db_path.to_str().unwrap(),
@@ -115,6 +115,8 @@ fn spawn_serve(db_path: &Path) -> (Child, String, String, tempfile::TempDir) {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+    let _ = child.kill();
+    let _ = child.wait();
     panic!("server did not come up at {host}");
 }
 
@@ -130,9 +132,6 @@ fn http_get(host: &str, path: &str, token: Option<&str>) -> String {
         .unwrap_or_default();
     let req = format!(
         "GET {path} HTTP/1.1\r\nHost: {host}\r\n{auth_header}Connection: close\r\n\r\n",
-        path = path,
-        host = host,
-        auth_header = auth_header,
     );
     s.write_all(req.as_bytes()).expect("write");
     let mut buf = Vec::new();
@@ -147,11 +146,7 @@ fn json_body(resp: &str) -> Value {
     if resp.to_lowercase().contains("transfer-encoding: chunked") {
         let mut out = String::new();
         let mut lines = body.split("\r\n");
-        loop {
-            let size_line = match lines.next() {
-                Some(s) => s,
-                None => break,
-            };
+        while let Some(size_line) = lines.next() {
             let size = match usize::from_str_radix(size_line.trim(), 16) {
                 Ok(n) => n,
                 Err(_) => break,

@@ -10,6 +10,7 @@
 //!     calls out as reading verification 0%; is_error=false).
 //!   - `npx tsc -b 2>&1 | tail -20` is a real line from session eb70234e
 //!     (is_error=false) — documents the honest gap that `tsc` is not detected.
+//!
 //! The keyword-tier (`./scripts/run_smoke_test.sh`) and dry-run
 //! (`cargo test --no-run`) lines are SYNTHETIC curated cases (no genuine
 //! sample exists in this user's transcripts); their semantics are also locked

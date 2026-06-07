@@ -45,7 +45,7 @@ fn write_line(path: &std::path::Path, line: &str) {
         .append(true)
         .open(path)
         .unwrap();
-    writeln!(f, "{}", line).unwrap();
+    writeln!(f, "{line}").unwrap();
     f.sync_all().unwrap();
 }
 

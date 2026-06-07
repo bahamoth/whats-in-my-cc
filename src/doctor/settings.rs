@@ -4,7 +4,7 @@
 //! merges in this order (highest → lowest precedence):
 //!
 //!   1. Managed       — `/Library/Application Support/ClaudeCode/managed-settings.json`
-//!                      + `managed-settings.d/*.json` (alphabetical merge)
+//!      + `managed-settings.d/*.json` (alphabetical merge)
 //!   2. CLI flags     — not visible from outside Claude Code; doctor doesn't see them.
 //!   3. Local         — `<project>/.claude/settings.local.json`
 //!   4. Project       — `<project>/.claude/settings.json`

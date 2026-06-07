@@ -60,26 +60,22 @@ async fn otel_log_record_attributes_tool_use_id_and_request_id_land_in_columns()
     assert_eq!(
         tool_use_id.as_deref(),
         Some("toolu_abc123"),
-        "tool_use_id column must be populated from attributes; got {:?}",
-        tool_use_id
+        "tool_use_id column must be populated from attributes; got {tool_use_id:?}"
     );
     assert_eq!(
         request_id.as_deref(),
         Some("req_xyz789"),
-        "request_id column must be populated from attributes; got {:?}",
-        request_id
+        "request_id column must be populated from attributes; got {request_id:?}"
     );
 
     // Second record carries neither — columns must stay NULL (no clobbering).
     let (tool_use_id2, request_id2) = &rows[1];
     assert!(
         tool_use_id2.is_none(),
-        "log record without tool_use_id attribute must have NULL column; got {:?}",
-        tool_use_id2
+        "log record without tool_use_id attribute must have NULL column; got {tool_use_id2:?}"
     );
     assert!(
         request_id2.is_none(),
-        "log record without request_id attribute must have NULL column; got {:?}",
-        request_id2
+        "log record without request_id attribute must have NULL column; got {request_id2:?}"
     );
 }
