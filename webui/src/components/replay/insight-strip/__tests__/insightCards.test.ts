@@ -3,8 +3,7 @@ import { buildInsightCards, type InsightInputs } from '../insightCards';
 import type {
   SessionUsageDto,
   VerificationRunDto,
-  FindingDto,
-  ToolFailureSummaryDto,
+  SignalDto,
 } from '../../../../api/types';
 
 // Real SessionUsageDto shape (slice-5 added estimated_cost_usd / cost_basis /
@@ -74,19 +73,17 @@ function vr(
   };
 }
 
-function finding(category: string, severity: FindingDto['severity']): FindingDto {
+function signal(detector: string, subkind: string | null = null, summary = 's'): SignalDto {
   return {
-    finding_id: `f_${category}`,
+    signal_id: `sig_${detector}_${subkind ?? 'none'}`,
     schema_version: '1',
     session_id: 's1',
-    category,
-    severity,
-    confidence: 0.8,
-    summary: 's',
-    evidence_refs: ['n1'],
-    evidence_projection: {},
+    detector,
+    subkind,
+    summary,
+    evidence_refs: ['ev1'],
+    facts: {},
     provenance: {},
-    status: 'open',
     created_at: '',
   };
 }
@@ -94,7 +91,7 @@ function finding(category: string, severity: FindingDto['severity']): FindingDto
 const EMPTY: InsightInputs = {
   usage: undefined,
   verificationRuns: undefined,
-  findings: undefined,
+  signals: undefined,
 };
 
 function byId(inputs: InsightInputs) {
@@ -176,40 +173,38 @@ describe('buildInsightCards — verification guards (Q4)', () => {
   });
 });
 
-describe('buildInsightCards — user-visible tool failures (Q1/Q2)', () => {
-  it('prefers the slice-3 tool-failure summary (측정) for the user_visible count', () => {
-    const summary: ToolFailureSummaryDto = {
-      session_id: 's1',
-      user_visible: 3,
-      internal_retry: 9,
-      benign_nonzero_exit: 2,
-      unclassified: 0,
-      total: 14,
-      user_visible_findings: [finding('tool_failure', 'high')],
-    };
-    const c = byId({ ...EMPTY, toolFailures: summary }).get('tool_failure')!;
-    expect(c.value).toBe('3');
+describe('buildInsightCards — tool_failure card (signal-based)', () => {
+  it('counts signals with detector=tool_failure and badges measured', () => {
+    const sigs = [
+      signal('tool_failure', 'non_zero_exit', 'exit 1'),
+      signal('context_bloat', null, 'context growing'), // not a tool failure
+      signal('tool_failure', 'permission_denied', 'mkdir failed'),
+    ];
+    const c = byId({ ...EMPTY, signals: sigs }).get('tool_failure')!;
+    expect(c.value).toBe('2');
     expect(c.provenance).toBe('measured');
   });
 
-  it('counts tool_failure-category findings and badges 추정 when only findings present', () => {
-    const fs = [
-      finding('tool_failure', 'high'),
-      finding('risky_action', 'high'), // not a tool failure → excluded
-      finding('tool_failure', 'medium'),
-    ];
-    const c = byId({ ...EMPTY, findings: fs }).get('tool_failure')!;
-    expect(c.value).toBe('2');
-    expect(c.provenance).toBe('estimated');
-  });
-  it('is 미수집·예정 when neither summary nor findings are present (not loaded yet)', () => {
+  it('is 미수집·예정 when signals are not loaded (undefined)', () => {
     const c = byId(EMPTY).get('tool_failure')!;
     expect(c.provenance).toBe('uncollected');
+    expect(c.value).toBe('—');
   });
-  it('shows 0 (추정) when findings loaded but none match', () => {
-    const c = byId({ ...EMPTY, findings: [finding('context_bloat', 'low')] }).get('tool_failure')!;
+
+  it('shows 0 (측정) when signals loaded but none are tool_failure', () => {
+    const c = byId({ ...EMPTY, signals: [signal('context_bloat')] }).get('tool_failure')!;
     expect(c.value).toBe('0');
-    expect(c.provenance).toBe('estimated');
+    expect(c.provenance).toBe('measured');
+  });
+
+  it('drill lines show subkind · summary', () => {
+    const c = byId({ ...EMPTY, signals: [signal('tool_failure', 'non_zero_exit', 'exit 1')] }).get('tool_failure')!;
+    expect(c.drill?.lines).toEqual(['non_zero_exit · exit 1']);
+  });
+
+  it('drill lines fall back to detector when subkind is null', () => {
+    const c = byId({ ...EMPTY, signals: [signal('tool_failure', null, 'something broke')] }).get('tool_failure')!;
+    expect(c.drill?.lines).toEqual(['tool_failure · something broke']);
   });
 });
 

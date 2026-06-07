@@ -1,23 +1,22 @@
 /**
- * slice-7 — pure view-model builder for the insight strip (design spec §3/§5).
+ * Pure view-model builder for the insight strip (design spec §3/§5).
  * Turns the already-fetched query DTOs into typed cards with provenance and
  * drill payloads. ALL derivation logic lives here so it is unit-testable in
  * jsdom; the component only renders. Degrades gracefully: when a backend slice
  * has not landed, the relevant card is badged `uncollected` (미수집·예정).
  *
- * Consumes the REAL APIs landed by earlier slices in this run:
- *  - slice-2: VerificationRunDto.detection_basis / status_basis drive the 검증
+ * Consumes the REAL APIs:
+ *  - VerificationRunDto.detection_basis / status_basis drive the 검증
  *    card's badge (measured when all runs are known_tool + exit, else mixed).
- *  - slice-3: ToolFailureSummaryDto.user_visible is the measured headline for
- *    the 도구 실패(사용자) card; the findings heuristic is only a 추정 fallback.
- *  - slice-5: SessionUsageDto.estimated_cost_usd / cost_basis is the cost 추정.
- *  - slice-6: an optional baseline (cache_hit_ratio) renders a "vs median" delta.
+ *  - SignalDto(detector=tool_failure) count drives the 도구 실패 card
+ *    (deterministic L1 extractor count).
+ *  - SessionUsageDto.estimated_cost_usd / cost_basis is the cost 추정.
+ *  - An optional baseline (cache_hit_ratio) renders a "vs median" delta.
  */
 import type {
   SessionUsageDto,
   VerificationRunDto,
-  FindingDto,
-  ToolFailureSummaryDto,
+  SignalDto,
 } from '../../../api/types';
 import { formatPct, formatTokens, formatUsd } from '../../../lib/format';
 import type { Provenance } from './provenance';
@@ -30,9 +29,7 @@ export interface InsightBaseline {
 export interface InsightInputs {
   usage: SessionUsageDto | undefined;
   verificationRuns: VerificationRunDto[] | undefined;
-  findings: FindingDto[] | undefined;
-  /** slice-3 — measured user-visible tool-failure summary, when loaded. */
-  toolFailures?: ToolFailureSummaryDto | undefined;
+  signals: SignalDto[] | undefined;
   baseline?: InsightBaseline;
 }
 
@@ -74,10 +71,6 @@ const GUARD_KIND: Record<string, 'test' | 'build' | 'lint' | 'format'> = {
   lint: 'lint',
   format_check: 'format',
 };
-
-/** Findings categories that represent a user-visible tool failure. Used only as
- *  the 추정 fallback when the slice-3 summary is not loaded. */
-const TOOL_FAILURE_CATEGORIES = new Set(['tool_failure', 'failed_tool_call']);
 
 function contextCard(inputs: InsightInputs): InsightCardModel {
   const tip =
@@ -179,43 +172,18 @@ function verificationCard(inputs: InsightInputs): InsightCardModel {
 }
 
 function toolFailureCard(inputs: InsightInputs): InsightCardModel {
-  const tip =
-    '사용자에게 보였던 도구 실패. 슬라이스 3 백엔드가 user_visible / internal_retry / benign_nonzero_exit를 ' +
-    '분류하므로 요약이 있으면 측정으로 표시. 요약이 없으면 finding category 기반 추정으로 대체. ' +
-    '펼치면 해당 finding으로 이동합니다(설계 §3 Q1/Q2).';
-  // Prefer the slice-3 measured summary when loaded.
-  const summary = inputs.toolFailures;
-  if (summary) {
-    return {
-      id: 'tool_failure', title: '도구 실패(사용자)',
-      value: `${summary.user_visible}`,
-      detail: summary.user_visible === 0 ? '사용자 표시 실패 없음' : '펼쳐서 증거 확인',
-      provenance: 'measured', tooltip: tip,
-      drill: {
-        lines: [
-          `사용자 표시 ${summary.user_visible}`,
-          `내부 재시도 ${summary.internal_retry}`,
-          `정상 비정상-종료 ${summary.benign_nonzero_exit}`,
-          ...(summary.unclassified > 0 ? [`미분류 ${summary.unclassified}`] : []),
-          ...summary.user_visible_findings.map((f) => `${f.severity} · ${f.summary}`),
-        ],
-      },
-    };
+  const tip = '도구 실패 signal 수(detector=tool_failure). 결정적 카운트이며 심각도 판단은 포함하지 않습니다.';
+  const sigs = inputs.signals;
+  if (!sigs) {
+    return { id: 'tool_failure', title: '도구 실패', value: '—', detail: '로딩 중', provenance: 'uncollected', tooltip: tip };
   }
-  const fs = inputs.findings;
-  if (!fs) {
-    return {
-      id: 'tool_failure', title: '도구 실패(사용자)', value: '—',
-      detail: '로딩 중', provenance: 'uncollected', tooltip: tip,
-    };
-  }
-  const failures = fs.filter((f) => TOOL_FAILURE_CATEGORIES.has(f.category));
+  const failures = sigs.filter((s) => s.detector === 'tool_failure');
   return {
-    id: 'tool_failure', title: '도구 실패(사용자)',
+    id: 'tool_failure', title: '도구 실패',
     value: `${failures.length}`,
-    detail: failures.length === 0 ? '사용자 표시 실패 없음' : '펼쳐서 증거 확인',
-    provenance: 'estimated', tooltip: tip,
-    drill: { lines: failures.map((f) => `${f.severity} · ${f.summary}`) },
+    detail: failures.length === 0 ? '도구 실패 없음' : '펼쳐서 확인',
+    provenance: 'measured', tooltip: tip,
+    drill: { lines: failures.map((s) => `${s.subkind ?? s.detector} · ${s.summary}`) },
   };
 }
 

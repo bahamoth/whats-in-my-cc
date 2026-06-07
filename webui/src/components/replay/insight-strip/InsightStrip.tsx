@@ -1,5 +1,5 @@
 /**
- * slice-7 — the redesigned insight surface (design spec §5 "Direction A").
+ * The redesigned insight surface (design spec §5 "Direction A").
  * Replaces the 6-tile KpiStrip. Compact cards organized around the five
  * diagnostic questions, each with a provenance badge and a `?` tooltip;
  * clicking a card toggles an inline drill-down (single-open). The removed
@@ -12,8 +12,7 @@ import { useState } from 'react';
 import type {
   SessionUsageDto,
   VerificationRunDto,
-  FindingDto,
-  ToolFailureSummaryDto,
+  SignalDto,
 } from '../../../api/types';
 import { buildInsightCards, type InsightBaseline, type InsightCardId } from './insightCards';
 import { ProvenanceBadge } from './ProvenanceBadge';
@@ -23,10 +22,7 @@ import styles from './InsightStrip.module.css';
 interface InsightStripProps {
   usage: SessionUsageDto | undefined;
   verificationRuns: VerificationRunDto[] | undefined;
-  findings: FindingDto[] | undefined;
-  /** slice-3 — measured user-visible tool-failure summary; preferred over the
-   *  findings heuristic when supplied. */
-  toolFailures?: ToolFailureSummaryDto | undefined;
+  signals: SignalDto[] | undefined;
   /** slice 6 — optional cross-session baseline; omitted today. */
   baseline?: InsightBaseline;
 }
@@ -35,8 +31,7 @@ export function InsightStrip(props: InsightStripProps) {
   const cards = buildInsightCards({
     usage: props.usage,
     verificationRuns: props.verificationRuns,
-    findings: props.findings,
-    toolFailures: props.toolFailures,
+    signals: props.signals,
     baseline: props.baseline,
   });
   const [openId, setOpenId] = useState<InsightCardId | null>(null);
