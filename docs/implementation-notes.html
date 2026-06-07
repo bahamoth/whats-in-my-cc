@@ -3695,6 +3695,62 @@ vitest: 69 passed
     </ul>
   </section>
 
+  <section id="detector-improvement-loop">
+    <h2>Detector 개선 루프 — manifest+config+predicate, LLM 워크플로우 (2026-06-07, Plan 4)</h2>
+    <p>
+      각 deterministic detector는 세 레이어로 분해된다(spec §6.4):
+    </p>
+    <ul>
+      <li><strong>predicate</strong> = Rust <code>detect()</code> 코드 — 권위적 진실. 코드가 바뀌면 manifest도 같이 바꿔야 한다.</li>
+      <li><strong>config</strong> = <code>DetectorConfig</code>(TOML rule pack) — 파라미터 조정. <code>config_keys</code>에 선언된 키는 코드에서 <code>cfg.usize_param()</code>으로 실제 읽는 것과 일치해야 한다.</li>
+      <li><strong>manifest</strong> = <code>DetectorManifest</code> 구조체 — LLM이 읽는 선언. <code>inputs</code>는 predicate가 실제로 읽는 raw payload 필드 경로여야 한다(추정 금지).</li>
+    </ul>
+    <h3>LLM 개선 루프 (spec §6.5)</h3>
+    <p>
+      LLM(또는 에이전트)이 detector 개선을 제안하는 표준 워크플로우:
+    </p>
+    <ol>
+      <li><strong>현황 조회</strong>: <code>GET /v1/detectors</code>(또는 MCP <code>list_detectors</code>)로 manifest 카탈로그 조회.
+        필요 시 <code>detectors.toml</code>(config)과 <code>/v1/sessions/:id/signals</code>(신호 분포)도 확인.</li>
+      <li><strong>개선안 제안</strong>: manifest의 <code>rule</code>/<code>inputs</code>/<code>config_keys</code>를 보고 config 파라미터 조정(예: <code>retry_window</code> 값 변경) 또는 새 detector 규칙 제안.</li>
+      <li><strong>TDD 잠금</strong>: 제안 전에 실패하는 fixture 테스트를 먼저 작성 — predicate가 특정 입력에 어떤 signal을 내야 하는지 어서션. <strong>이것이 manifest↔predicate 일치를 보장한다.</strong></li>
+      <li><strong>구현 + 재ingest</strong>: 코드/config 변경 후 <code>cargo test</code> green. 재ingest(<code>wimcc ingest --all</code>)로 신호 분포 변화 확인.</li>
+    </ol>
+    <p>
+      이 루프는 <a href="#untagged-bash-loop">eventTags untagged-bash 루프</a>의 일반화이다:
+      "분류 안 된 패턴을 보고 → 규칙 추가/조정 → 분류 재실행 → 커버리지 확인."
+    </p>
+    <h3>manifest↔predicate 일치 보장</h3>
+    <p>
+      <code>tests/detector_manifest.rs</code>가 각 detector의 manifest를 잠근다:
+    </p>
+    <ul>
+      <li><code>tool_failure.inputs</code>에 <code>is_error</code> 포함 여부를 assert.</li>
+      <code>config_keys</code>가 <code>detect()</code>의 실제 <code>cfg.usize_param</code> 호출과 일치하는지 assert.</li>
+      <li>모든 manifest가 JSON serialize 가능하고 <code>manifest.id == detector.id()</code> 인지 assert.</li>
+    </ul>
+    <h3>API 노출</h3>
+    <ul>
+      <li><code>GET /v1/detectors</code> — HTTP Pull API, 인증 게이트. <code>{"data":[...]}</code> 형태로 4개 manifest 반환.</li>
+      <li>MCP <code>whats_in_my_cc.list_detectors</code> — 인자 없음, 같은 카탈로그 반환. 총 4개 tool(3 기존 + 1 신규).</li>
+    </ul>
+    <h3>config 파일 로드</h3>
+    <p>
+      현재(Plan 4) <code>DetectorConfig::default()</code>만 사용 — TOML 파일 로드는 미구현.
+      manifest의 <code>config_keys</code>는 "어떤 키가 존재하는지"를 선언할 뿐이며, 파일 로드는 후속 Plan에서 추가.
+    </p>
+    <h3>구현 파일</h3>
+    <ul>
+      <li><code>src/insight/manifest.rs</code> — <code>DetectorManifest</code> struct</li>
+      <li><code>src/insight/extractor.rs</code> — <code>Detector::manifest()</code> trait method</li>
+      <li>4 detectors — 각 <code>manifest()</code> 구현 (inputs/rule/config_keys는 코드 확인 후 작성)</li>
+      <li><code>src/api/routes.rs</code> — <code>list_detectors</code> handler</li>
+      <li><code>src/api/mod.rs</code> — <code>/v1/detectors</code> route 등록</li>
+      <li><code>src/api/mcp/tools/list_detectors.rs</code> + <code>tools/mod.rs</code> — MCP tool</li>
+      <li><code>tests/detector_manifest.rs</code>, <code>tests/api_detectors.rs</code> — TDD 잠금 테스트</li>
+    </ul>
+  </section>
+
   <section id="tool-metrics-transcript-fallback">
     <h2>tool_call "지표 미수집" 오탐 — transcript tool_result 폴백 (2026-06-04)</h2>
     <p>
