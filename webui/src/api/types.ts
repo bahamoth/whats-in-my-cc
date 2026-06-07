@@ -184,6 +184,19 @@ export type UsageBaselineDto = {
   output_tokens: BaselineStat;
 };
 
+export type SessionMetricsDto = {
+  session_id: string;
+  tool_call_total: number;
+  tool_failure_count: number;
+  tool_failure_rate: number;
+  verification_total: number;
+  verification_passed: number;
+  verification_pass_rate: number;
+  context_bloat_count: number;
+  cache_hit_ratio: number;
+  detector_firing: Record<string, number>;
+};
+
 export type RawEventResponse = {
   schema_version: string;
   event_id: string;

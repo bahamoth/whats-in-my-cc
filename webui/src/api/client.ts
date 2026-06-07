@@ -9,6 +9,7 @@ import type {
   DiffHunkDto,
   SessionUsageDto,
   UsageBaselineDto,
+  SessionMetricsDto,
 } from './types';
 
 export class ApiError extends Error {
@@ -93,3 +94,6 @@ export const getDiffHunks = (id: string): Promise<DiffHunkDto[]> =>
   jsonGet<{ hunks: DiffHunkDto[] }>(`/v1/sessions/${encodeURIComponent(id)}/diff-hunks`).then(
     (r) => r.hunks,
   );
+
+export const getSessionMetrics = (id: string): Promise<SessionMetricsDto> =>
+  jsonGet<SessionMetricsDto>(`/v1/sessions/${encodeURIComponent(id)}/metrics`);

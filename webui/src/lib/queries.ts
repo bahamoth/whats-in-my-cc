@@ -17,6 +17,7 @@ import {
   getDiffHunks,
   getEventRaw,
   getCorrelatedEvents,
+  getSessionMetrics,
 } from '../api/client';
 import type {
   SessionDetail,
@@ -27,6 +28,7 @@ import type {
   DiffHunkDto,
   RawEventResponse,
   SessionEventsResponse,
+  SessionMetricsDto,
 } from '../api/types';
 
 export const sessionKeys = {
@@ -39,6 +41,7 @@ export const sessionKeys = {
   diffHunks: (id: string) => ['session', id, 'diff-hunks'] as const,
   verificationRuns: (id: string) => ['session', id, 'verification-runs'] as const,
   usage: (id: string) => ['session', id, 'usage'] as const,
+  metrics: (id: string) => ['session', id, 'metrics'] as const,
 };
 
 /** insight-redesign #6 — store-wide usage baseline (not session-scoped). */
@@ -112,6 +115,15 @@ export function useEventRawQuery(eventId: string | null) {
     queryFn: () => getEventRaw(eventId as string),
     enabled: !!eventId,
     staleTime: 60_000,
+  });
+}
+
+export function useSessionMetricsQuery(id: string, opts?: QOpts<SessionMetricsDto>) {
+  return useQuery<SessionMetricsDto>({
+    queryKey: sessionKeys.metrics(id),
+    queryFn: () => getSessionMetrics(id),
+    enabled: !!id,
+    ...opts,
   });
 }
 
