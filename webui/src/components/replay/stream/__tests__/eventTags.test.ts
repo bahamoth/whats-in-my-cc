@@ -6,6 +6,10 @@ const bash = (command: string): ObservedEventDto =>
   ({ event_id: command, kind: 'tool_call', tool_name: 'Bash', observed_at: '2026-05-31T00:00:00Z', payload: { input: { command } } } as unknown as ObservedEventDto);
 const read = (file_path: string): ObservedEventDto =>
   ({ event_id: file_path, kind: 'tool_call', tool_name: 'Read', observed_at: '2026-05-31T00:00:00Z', payload: { input: { file_path } } } as unknown as ObservedEventDto);
+const edit = (file_path: string): ObservedEventDto =>
+  ({ event_id: file_path, kind: 'tool_call', tool_name: 'Edit', observed_at: '2026-05-31T00:00:00Z', payload: { input: { file_path } } } as unknown as ObservedEventDto);
+const write = (file_path: string): ObservedEventDto =>
+  ({ event_id: file_path, kind: 'tool_call', tool_name: 'Write', observed_at: '2026-05-31T00:00:00Z', payload: { input: { file_path } } } as unknown as ObservedEventDto);
 
 describe('tagForEvent — verb.object taxonomy', () => {
   it('read.file — search/inspect files', () => {
@@ -135,6 +139,8 @@ describe('tagForEvent — Read by extension', () => {
     expect(tagForEvent(read('README.md')).tag).toBe('read.docs');
     expect(tagForEvent(read('Cargo.toml')).tag).toBe('read.config');
     expect(tagForEvent(read('data.json')).tag).toBe('read.data');
+    expect(tagForEvent(read('tasks/run.output')).tag).toBe('read.data'); // CC task/log output
+    expect(tagForEvent(read('scripts/fetch.py')).tag).toBe('read.code'); // Python source
   });
 });
 
@@ -156,11 +162,26 @@ describe('tagVerb', () => {
   });
 });
 
-describe('tagForEvent — other tools get no chip', () => {
-  it('Edit/Agent → control disposition (no chip)', () => {
-    const edit = { event_id: 'e', kind: 'tool_call', tool_name: 'Edit', observed_at: '2026-05-31T00:00:00Z', payload: {} } as unknown as ObservedEventDto;
-    expect(tagForEvent(edit).disposition).toBe('control');
-    expect(tagForEvent(edit).tag).toBeNull();
+describe('tagForEvent — Edit/Write by extension (write.object)', () => {
+  it('classifies write.code/docs/config/data by file_path extension', () => {
+    expect(tagForEvent(edit('src/a.rs')).tag).toBe('write.code');
+    expect(tagForEvent(edit('webui/x.tsx')).tag).toBe('write.code');
+    expect(tagForEvent(edit('README.md')).tag).toBe('write.docs');
+    expect(tagForEvent(edit('Cargo.toml')).tag).toBe('write.config');
+    expect(tagForEvent(write('out/data.json')).tag).toBe('write.data');
+    expect(tagForEvent(write('tasks/run.output')).tag).toBe('write.data');
+    expect(tagForEvent(edit('scripts/fetch.py')).tag).toBe('write.code'); // Python source
+  });
+  it('Edit with an unknown/absent extension is unmatched (surfaced by the loop)', () => {
+    expect(tagForEvent(edit('Makefile')).disposition).toBe('unmatched');
+  });
+});
+
+describe('tagForEvent — non-file tools get no chip', () => {
+  it('Task/Agent → control disposition (no chip)', () => {
+    const agent = { event_id: 'a', kind: 'tool_call', tool_name: 'Task', observed_at: '2026-05-31T00:00:00Z', payload: {} } as unknown as ObservedEventDto;
+    expect(tagForEvent(agent).disposition).toBe('control');
+    expect(tagForEvent(agent).tag).toBeNull();
   });
 });
 
