@@ -1,11 +1,15 @@
-//! Slice-14 — locks that L1 findings always have null judge, layer="L1",
-//! and the correct extractor version stamp.
+//! Slice-14 / judge-removal — locks the L1 finding provenance shape: an
+//! `<extractor>@v1` stamp, `layer="L1"`, and NO judge fields. The judge
+//! subsystem was deleted, so `judge` / `judge_template_version` are no longer
+//! emitted at all (not present-as-null). `.get(k).is_none()` distinguishes an
+//! absent key from a present-null one — `value[k].is_null()` would pass for
+//! both and so would not lock the removal.
 
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::db::migrate;
 
 #[tokio::test]
-async fn l1_finding_has_null_judge_and_l1_layer() {
+async fn l1_finding_provenance_shape_has_no_judge_fields() {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect("sqlite::memory:")
@@ -13,13 +17,11 @@ async fn l1_finding_has_null_judge_and_l1_layer() {
         .unwrap();
     migrate(&pool).await.unwrap();
 
-    // Insert a finding directly with the expected provenance shape.
+    // Insert a finding directly with the canonical post-judge provenance shape.
     // No FK checking needed (finding table has no FKs).
     let provenance = serde_json::json!({
         "extractor": "missing_verification@v1",
         "layer": "L1",
-        "judge": null,
-        "judge_template_version": null,
         "rule_pack": null
     });
     sqlx::query(
@@ -51,7 +53,14 @@ async fn l1_finding_has_null_judge_and_l1_layer() {
 
     let prov: serde_json::Value = serde_json::from_str(&row.0).unwrap();
     assert_eq!(prov["layer"].as_str().unwrap(), "L1");
-    assert!(prov["judge"].is_null(), "judge must be null for L1 finding");
+    assert!(
+        prov.get("judge").is_none(),
+        "judge field must be absent for L1 finding (judge subsystem removed), got: {prov}"
+    );
+    assert!(
+        prov.get("judge_template_version").is_none(),
+        "judge_template_version field must be absent for L1 finding, got: {prov}"
+    );
     assert_eq!(
         prov["extractor"].as_str().unwrap(),
         "missing_verification@v1"
@@ -59,13 +68,13 @@ async fn l1_finding_has_null_judge_and_l1_layer() {
 }
 
 /// Pipeline-generated L1 findings must carry the right provenance: layer="L1",
-/// null judge, and an `<extractor>@v1` stamp matching the firing extractor.
+/// NO judge fields, and an `<extractor>@v1` stamp matching the firing extractor.
 ///
 /// We drive the deterministic `tool_failure` extractor: a Bash tool_call whose
 /// paired tool_result has `is_error=true` and no compensating successful retry
 /// (`tool_failure` is L1/Always → confidence 1.0, judge never consulted).
 #[tokio::test]
-async fn pipeline_l1_findings_have_null_judge() {
+async fn pipeline_l1_findings_omit_judge_fields() {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect("sqlite::memory:")
@@ -150,8 +159,10 @@ async fn pipeline_l1_findings_have_null_judge() {
         let prov: serde_json::Value = serde_json::from_str(prov_str).unwrap();
         assert_eq!(prov["layer"].as_str().unwrap(), "L1",
             "all pipeline-generated findings must have layer=L1");
-        assert!(prov["judge"].is_null(),
-            "all pipeline-generated L1 findings must have null judge");
+        assert!(prov.get("judge").is_none(),
+            "pipeline L1 findings must omit the judge field entirely, got: {prov}");
+        assert!(prov.get("judge_template_version").is_none(),
+            "pipeline L1 findings must omit judge_template_version, got: {prov}");
         if prov["extractor"].as_str() == Some("tool_failure@v1") {
             saw_tool_failure = true;
         }

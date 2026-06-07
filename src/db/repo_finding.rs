@@ -24,7 +24,8 @@ pub struct FindingRow {
     pub evidence_refs: String,
     /// JSON object — the L1-side evidence projection.
     pub evidence_projection: String,
-    /// JSON object: `{ extractor, layer, judge, judge_template_version, rule_pack }`.
+    /// JSON object: `{ extractor, layer, rule_pack }`. (The judge subsystem was
+    /// removed — no `judge` / `judge_template_version` keys; see #judge-removal.)
     pub provenance: String,
     /// `"active"` | `"discarded"`. (All L1 findings are `"active"`; the judge
     /// layer and its `"pending_judge"` status were removed — see #judge-removal.)
