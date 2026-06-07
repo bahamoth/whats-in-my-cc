@@ -52,12 +52,12 @@ pub async fn run_extractors(pool: &SqlitePool, session_id: &str) -> Result<Vec<F
 }
 
 fn build_l1_row(session_id: &str, c: &FindingCandidate) -> FindingRow {
-    let extractor_id = format!("{}@v1", c.category);
     let prov = Provenance {
-        extractor: Box::leak(extractor_id.into_boxed_str()),
+        // Owned String — no `Box::leak`. `run_extractors` runs once per ingest
+        // (per OTLP batch for a live session), so leaking a `&'static str` here
+        // would grow unbounded over a long-lived `serve`.
+        extractor: format!("{}@v1", c.category),
         layer: "L1",
-        judge: None,
-        judge_template_version: None,
         rule_pack: None,
     };
     let finding_id = derive_finding_id(c.category, session_id, &c.evidence_refs);

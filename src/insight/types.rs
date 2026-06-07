@@ -28,16 +28,19 @@ pub struct FindingCandidate {
 }
 
 /// Provenance carried by every stored Finding.
+///
+/// The judge subsystem was removed (see #judge-removal), so this carries no
+/// `judge` / `judge_template_version` fields — every finding is deterministic
+/// L1. `extractor` is owned (`String`): it is built per finding as
+/// `"<category>@v1"` and serialized once, so a `&'static str` here would have
+/// forced a per-finding `Box::leak` — an unbounded leak across the per-ingest
+/// `run_extractors` re-runs of a long-lived `serve`.
 #[derive(Debug, Clone)]
 pub struct Provenance {
     /// Version-stamped extractor name, e.g. `"missing_verification@v1"`.
-    pub extractor: &'static str,
-    /// `"L1"` for deterministic; `"L2"` for judge-gated.
+    pub extractor: String,
+    /// Deterministic layer tag; always `"L1"` now that the judge layer is gone.
     pub layer: &'static str,
-    /// `None` for L1 findings. `Some("model_id")` when a judge ran.
-    pub judge: Option<String>,
-    /// `None` for L1 findings.
-    pub judge_template_version: Option<String>,
     /// `None` for L1 findings (slice-18 adds redaction rule_pack).
     pub rule_pack: Option<String>,
 }
@@ -48,8 +51,6 @@ impl Provenance {
         serde_json::json!({
             "extractor": self.extractor,
             "layer": self.layer,
-            "judge": self.judge,
-            "judge_template_version": self.judge_template_version,
             "rule_pack": self.rule_pack,
         })
         .to_string()
