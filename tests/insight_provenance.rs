@@ -61,7 +61,8 @@ async fn signal_provenance_shape_has_no_judge_fields() {
 /// NO judge fields, and a `<detector>@v1` stamp matching the firing detector.
 ///
 /// We drive the deterministic `tool_failure` detector: a Bash tool_call whose
-/// paired tool_result has `is_error=true` (judge never consulted).
+/// paired tool_result resolves to Failed (Plan 6: via the explicit "exit code: 1"
+/// in content → Tier-3 structural parse, Measured). Judge never consulted.
 #[tokio::test]
 async fn pipeline_signals_omit_judge_fields() {
     let pool = SqlitePoolOptions::new()
@@ -117,6 +118,9 @@ async fn pipeline_signals_omit_judge_fields() {
     .execute(&pool).await.unwrap();
 
     // ev_p1: failing tool_result for the same tool_use_id (no successful retry follows).
+    // Plan 6: ToolFailure fires on resolve_outcome==Failed. The "exit code: 1" in
+    // content drives Tier-3 (structural parse) → Failed/Measured. is_error=true is
+    // retained as a tool-execution fact but is no longer the trigger.
     sqlx::query(
         "INSERT OR IGNORE INTO observed_event \
          (event_id, raw_event_id, schema_version, session_id, observed_at, \
@@ -128,7 +132,7 @@ async fn pipeline_signals_omit_judge_fields() {
     .bind(ts(1))
     .bind("tool").bind("tool_result").bind("tid_p0")
     .bind("test")
-    .bind(r#"{"tool_result":{"tool_use_id":"tid_p0","is_error":true,"content":"compile error E0001"}}"#)
+    .bind(r#"{"tool_result":{"tool_use_id":"tid_p0","is_error":true,"content":"compile error E0001\nexit code: 1"}}"#)
     .execute(&pool).await.unwrap();
 
     wimcc::insight::pipeline::run_detectors(&pool, sess).await.unwrap();

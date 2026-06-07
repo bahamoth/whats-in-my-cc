@@ -8,9 +8,10 @@
 //! `cargo build` failure and assert that `repo_signal::list_by_session` returns
 //! a non-empty set including a `tool_failure` signal.
 //!
-//! Fixture payload shape (tool_use / tool_result with `is_error`) is the frozen
-//! real transcript shape verified against real fixture
-//! aac68973-729e-4014-a02b-28a556f5ff29 (see `tests/extractor_tool_failure.rs`).
+//! Plan 6: `tool_failure` fires when `resolve_outcome` returns Failed. The fixture
+//! now includes "exit code: 1" in the tool_result content so Step 3 of the chain
+//! (structural parse) detects the failure (Measured provenance). is_error=true is
+//! preserved in the fixture for historical accuracy but is NOT the trigger.
 
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::db::{migrate, repo_signal};

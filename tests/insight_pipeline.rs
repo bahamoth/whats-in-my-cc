@@ -59,8 +59,12 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
     ] {
         let payload = if kind == "tool_result" {
             // Nested shape matching the real-fixture structure the tool_failure
-            // extractor reads via pointer("/tool_result/is_error").
-            r#"{"tool_result":{"tool_use_id":"tid_0","is_error":true,"content":"FAILED"}}"#.to_string()
+            // extractor reads. Plan 6: ToolFailure now fires on
+            // resolve_outcome==Failed (NOT is_error alone). The content carries an
+            // explicit "exit code: 1" so the structural-parse tier (Tier-3) of
+            // resolve_outcome returns Failed/Measured. is_error=true is retained as
+            // a tool-execution fact but is no longer the trigger.
+            r#"{"tool_result":{"tool_use_id":"tid_0","is_error":true,"content":"FAILED\nexit code: 1"}}"#.to_string()
         } else if kind == "tool_call" {
             r#"{"tool_use_id":"tid_0","name":"Bash","input":{"command":"cargo test"}}"#.to_string()
         } else {
