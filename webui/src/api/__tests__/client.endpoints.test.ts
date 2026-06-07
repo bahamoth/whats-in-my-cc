@@ -1,16 +1,13 @@
 /**
- * PR-2 RED — new Pull API endpoint helpers. We assert that each helper hits
- * the exact URL the backend exposes (per `docs/04_api_mcp_spec.html`) and
- * returns the envelope's `data` field unwrapped, so callers never accidentally
- * forget the `.data` indirection. See plan §10.1 PR-2 (revised).
+ * Pull API endpoint helpers. We assert that each helper hits the exact URL
+ * the backend exposes and returns the envelope's `data` field unwrapped, so
+ * callers never accidentally forget the `.data` indirection.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getDiffHunks,
-  getFindings,
-  getFindingEvidence,
+  getSignals,
   getSessionUsage,
-  getToolFailureSummary,
   getUsageBaseline,
   getVerificationRuns,
 } from '../client';
@@ -47,31 +44,12 @@ describe('getDiffHunks', () => {
   });
 });
 
-describe('getFindings', () => {
-  it('hits GET /v1/sessions/:id/findings (no meta envelope; evidence_refs may be ULID strings)', async () => {
-    const expected = [
-      {
-        finding_id: 'f1',
-        category: 'risky_action',
-        severity: 'high',
-        confidence: 0.9,
-        // Slice-14 deterministic extractors emit bare ULIDs here, not objects.
-        evidence_refs: ['01KSQKD5CT8BHH1DAS4YNKJBVB'],
-      },
-    ];
+describe('getSignals', () => {
+  it('hits GET /v1/sessions/:id/signals and unwraps `data`', async () => {
+    const expected = [{ signal_id: 'sig1', detector: 'tool_failure', evidence_refs: ['ev1'], facts: {}, summary: 's' }];
     fetchSpy.mockImplementation(mockJson({ data: expected }));
-    const out = await getFindings('SES-3');
-    expect(fetchSpy).toHaveBeenCalledWith('/v1/sessions/SES-3/findings', expect.any(Object));
-    expect(out).toEqual(expected);
-  });
-});
-
-describe('getFindingEvidence', () => {
-  it('hits GET /v1/findings/:id/evidence and unwraps the meta envelope `data`', async () => {
-    const expected = { finding: { finding_id: 'f1' }, evidence_refs: [], raw_source_refs: [] };
-    fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
-    const out = await getFindingEvidence('f1');
-    expect(fetchSpy).toHaveBeenCalledWith('/v1/findings/f1/evidence', expect.any(Object));
+    const out = await getSignals('SES-1');
+    expect(fetchSpy).toHaveBeenCalledWith('/v1/sessions/SES-1/signals', expect.any(Object));
     expect(out).toEqual(expected);
   });
 });
@@ -126,30 +104,12 @@ describe('getUsageBaseline', () => {
   });
 });
 
-describe('getToolFailureSummary', () => {
-  it('hits GET /v1/sessions/:id/tool-failures and unwraps `data`', async () => {
-    const expected = {
-      session_id: 's1', user_visible: 28, internal_retry: 1941,
-      benign_nonzero_exit: 12, unclassified: 0, total: 1981, user_visible_findings: [],
-    };
-    fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
-    const out = await getToolFailureSummary('s1');
-    expect(out).toEqual(expected);
-    expect(fetchSpy).toHaveBeenCalledWith(
-      expect.stringContaining('/v1/sessions/s1/tool-failures'),
-      expect.any(Object),
-    );
-  });
-});
-
 describe('getVerificationRuns', () => {
   it('hits GET /v1/sessions/:id/verification-runs and unwraps `data` (single-wrapped array)', async () => {
     const expected = [{ verification_run_id: 'vr1', status: 'passed', covered_diff_hunk_ids: ['dh1'] }];
     // The backend returns { meta, data: [...] } — `data` IS the array, NOT a
     // further { data: [...] } wrapper. Verified against the running server:
     // `GET /v1/sessions/:id/verification-runs` → top keys [meta, data], data is a list.
-    // The previous test mocked the double-wrapped shape, hiding a real bug where
-    // the client over-unwrapped and returned undefined (broke KPI coverage).
     fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
     const out = await getVerificationRuns('SES-4');
     expect(fetchSpy).toHaveBeenCalledWith(

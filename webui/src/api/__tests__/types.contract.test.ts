@@ -1,38 +1,34 @@
 /**
- * PR-2 RED — type-level contract checks. These are compile-time-only checks
- * (the test runtime body is trivial) wired so a regression in `types.ts`
- * surfaces as a vitest failure as well as a `tsc -b` failure.
+ * Type-level contract checks. These are compile-time-only checks (the test
+ * runtime body is trivial) wired so a regression in `types.ts` surfaces as a
+ * vitest failure as well as a `tsc -b` failure.
  *
- * The locked invariants:
- *  - `FindingDto.evidence_refs` is an array (cannot be omitted)
+ * Locked invariants:
+ *  - `SignalDto.evidence_refs` is a non-omittable array
  *  - `VerificationRunDto.covered_diff_hunk_ids` is `string[]`
- *
- * See plan §10.1 PR-2.
  */
 import { describe, expect, it } from 'vitest';
 import type {
-  FindingDto,
+  SignalDto,
   VerificationRunDto,
   DiffHunkDto,
 } from '../types';
 
 describe('types.ts contract', () => {
-  it('FindingDto.evidence_refs is a non-omittable array', () => {
-    const f: FindingDto = {
-      finding_id: 'f1',
-      schema_version: 'v1',
+  it('SignalDto.evidence_refs is a non-omittable array', () => {
+    const s: SignalDto = {
+      signal_id: 'sig1',
+      schema_version: '1',
       session_id: 'S1',
-      category: 'risky_action',
-      severity: 'high',
-      confidence: 0.9,
-      summary: '',
-      evidence_refs: [{ kind: 'node', node_id: 'n1' }],
-      evidence_projection: {},
+      detector: 'tool_failure',
+      subkind: null,
+      summary: 'exit code 1',
+      evidence_refs: ['01KSQKD5CT8BHH1DAS4YNKJBVB'],
+      facts: {},
       provenance: {},
-      status: 'active',
-      created_at: '2026-05-29T00:00:00Z',
+      created_at: '2026-06-07T00:00:00Z',
     };
-    expect(Array.isArray(f.evidence_refs)).toBe(true);
+    expect(Array.isArray(s.evidence_refs)).toBe(true);
   });
 
   it('VerificationRunDto and DiffHunkDto wire fields', () => {

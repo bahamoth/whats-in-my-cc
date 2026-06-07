@@ -86,33 +86,17 @@ export type EvidenceRef =
       [key: string]: unknown;
     };
 
-export type FindingDto = {
-  finding_id: string;
+export type SignalDto = {
+  signal_id: string;
   schema_version: string;
   session_id: string;
-  category: string;
-  subkind?: string | null;
-  severity: 'low' | 'medium' | 'high' | 'info' | string;
-  confidence: number;
+  detector: string;
+  subkind: string | null;
   summary: string;
   evidence_refs: EvidenceRef[];
-  evidence_projection: Record<string, unknown>;
+  facts: Record<string, unknown>;
   provenance: Record<string, unknown>;
-  status: string;
   created_at: string;
-};
-
-/** insight-redesign #3 — tool_failure class breakdown for a session. Only
- *  `user_visible` is headline-eligible; the other two classes are surfaced
- *  for transparency but never lumped into a `severity=high` headline. */
-export type ToolFailureSummaryDto = {
-  session_id: string;
-  user_visible: number;
-  internal_retry: number;
-  benign_nonzero_exit: number;
-  unclassified: number;
-  total: number;
-  user_visible_findings: FindingDto[];
 };
 
 export type VerificationRunDto = {
@@ -149,17 +133,6 @@ export type DiffHunkDto = {
   user_modified: boolean;
 };
 
-export type FindingEvidenceResponse = {
-  finding: FindingDto;
-  /** Event IDs cited by the finding (parsed from finding.evidence_refs). */
-  evidence_refs: string[];
-  raw_source_refs: Array<{
-    event_id: string;
-    source_type: string;
-    source_uri: string;
-    redaction_state: string;
-  }>;
-};
 
 export type ModelUsageDto = {
   model: string;

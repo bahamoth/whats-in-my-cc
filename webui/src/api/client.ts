@@ -4,13 +4,11 @@ import type {
   SessionDetail,
   SessionEventsResponse,
   RawEventResponse,
-  FindingDto,
+  SignalDto,
   VerificationRunDto,
   DiffHunkDto,
-  FindingEvidenceResponse,
   SessionUsageDto,
   UsageBaselineDto,
-  ToolFailureSummaryDto,
 } from './types';
 
 export class ApiError extends Error {
@@ -74,25 +72,10 @@ export function getCorrelatedEvents(
   );
 }
 
-// ---- PR-2/PR-6: read-only Pull API helpers ---------------------------
-// Backend response shapes are NOT consistent today:
-//   /findings   -> { data: [...] }                  (no meta envelope)
-//   /verification-runs -> { meta, data: [...] }      (data IS the array)
-//   /diff-hunks        -> { meta, data: { hunks: [...] } }
-//   /findings/:id/evidence -> { meta, data: { ... } }   (envelope envelope)
-//
-// `jsonGet` already returns `body.data` for us, so the *one* unwrap below
-// targets the inner shape only. PR-6 fixed the original PR-2 helpers
-// that assumed every endpoint was double-wrapped.
+// ---- Pull API helpers ------------------------------------------
 
-export const getFindings = (id: string): Promise<FindingDto[]> =>
-  jsonGet<FindingDto[]>(`/v1/sessions/${encodeURIComponent(id)}/findings`);
-
-export const getToolFailureSummary = (id: string): Promise<ToolFailureSummaryDto> =>
-  jsonGet<ToolFailureSummaryDto>(`/v1/sessions/${encodeURIComponent(id)}/tool-failures`);
-
-export const getFindingEvidence = (findingId: string): Promise<FindingEvidenceResponse> =>
-  jsonGet<FindingEvidenceResponse>(`/v1/findings/${encodeURIComponent(findingId)}/evidence`);
+export const getSignals = (id: string): Promise<SignalDto[]> =>
+  jsonGet<SignalDto[]>(`/v1/sessions/${encodeURIComponent(id)}/signals`);
 
 export const getVerificationRuns = (id: string): Promise<VerificationRunDto[]> =>
   // jsonGet already returns the envelope's `data`, which here IS the array.
