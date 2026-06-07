@@ -1,9 +1,8 @@
 //! `verification_run` side-table repo (slice-11).
 //!
 //! Mirrors the shape of `repo_diff_hunk`: insert, list_session, get.
-//! The graph builder reads from this repo via `list_session` to materialise
-//! `verification_run` nodes and `triggered_verification` / `covers_diff_hunk`
-//! edges.
+//! Read via `list_session` by the insight view loader (`src/insight/view.rs`)
+//! and the verification-run API (`GET /v1/sessions/:id/verification-runs`).
 
 use sqlx::{Row, SqlitePool};
 

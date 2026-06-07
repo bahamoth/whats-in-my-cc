@@ -8,7 +8,7 @@
 //! 2.1.145 emitted three counter instruments — `claude_code.cost.usage`,
 //! `claude_code.token.usage`, `claude_code.active_time.total`). The parser is
 //! permissive about unknown fields: every original byte stays in
-//! `raw_event.payload`; this layer only extracts what the graph / UI need.
+//! `raw_event.payload`; this layer only extracts what the UI / insight pipeline need.
 
 use crate::db::repo_observed;
 use crate::error::Result;
@@ -316,7 +316,8 @@ fn canonical_json(value: &Value) -> String {
     norm(value).to_string()
 }
 
-/// Persist parsed `MetricSample` records and rebuild touched sessions' graphs.
+/// Persist parsed `MetricSample` records and run the insight pipeline for
+/// touched sessions (graph rebuild was removed — see #graph-removal).
 pub async fn store_request(
     pool: &SqlitePool,
     raw_event_id: &str,
