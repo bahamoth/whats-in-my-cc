@@ -9,6 +9,8 @@ import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import { nodeLabel } from '../stream/nodeLabel';
 import type { ToolMetrics } from './toolMetrics';
 import { EntityMetricsPanel } from './EntityMetricsPanel';
+import { eventProvenance } from './eventProvenance';
+import { WhatSection } from './WhatSection';
 import styles from './InsightTab.module.css';
 
 interface InsightTabProps {
@@ -16,6 +18,8 @@ interface InsightTabProps {
   event: ObservedEventDto | null;
   toolMetrics: ToolMetrics | null;
   llmMetrics: LlmRequestMetrics | null;
+  /** The matching tool_result event when the selected event is a tool_call. */
+  matchedResult?: ObservedEventDto | null;
 }
 
 const KIND_ICON: Record<string, string> = {
@@ -46,7 +50,7 @@ function SignalsList({ signals }: { signals: SignalDto[] }) {
   );
 }
 
-export function InsightTab({ signals, event, toolMetrics, llmMetrics }: InsightTabProps) {
+export function InsightTab({ signals, event, toolMetrics, llmMetrics, matchedResult }: InsightTabProps) {
   if (!event && signals.length === 0) {
     return (
       <div className={styles.root}>
@@ -57,31 +61,68 @@ export function InsightTab({ signals, event, toolMetrics, llmMetrics }: InsightT
 
   const label = event ? nodeLabel({ node_kind: event.kind, payload: event.payload, telemetry: event.telemetry }) : null;
   const icon = label ? KIND_ICON[label.kind] ?? KIND_ICON.other : null;
+  const prov = event ? eventProvenance(event.kind) : null;
 
   return (
     <div className={styles.root}>
       {event && (
         <>
+          {/* H: header + provenance badge + correlation chips */}
           <div className={styles.nodeHeader}>
             <span className={styles.nodeIcon} aria-hidden="true">{icon}</span>
             <span className={styles.nodePrimary}>{label?.primary}</span>
-            {/* For a tool call, surface WHAT it did (the operation summary) right
-                in the header — the metrics below say how long/how big, but not
-                what the call actually operated on. */}
-            {label?.kind === 'tool' && label.secondary && (
-              <span className={styles.nodeSecondary}>{label.secondary}</span>
+            {prov && (
+              <span
+                className={prov.kind === 'native' ? styles.badgeNative : styles.badgeDerived}
+                title={prov.kind === 'native' ? 'Claude Code 원본 관측' : 'wimcc 파생 데이터'}
+              >
+                {prov.label}
+              </span>
             )}
             <span className={styles.nodeId}>{event.event_id}</span>
           </div>
-          <EntityMetricsPanel
-            kind={event.kind}
-            toolMetrics={toolMetrics}
-            llmMetrics={llmMetrics}
-            payload={event.payload}
-          />
+
+          {/* Correlation chips (tool_use_id / request_id / turn_id) — display-only */}
+          {(event.tool_use_id || event.request_id || event.turn_id) && (
+            <div className={styles.corrChips}>
+              {event.tool_use_id && (
+                <span className={styles.corrChip} title="tool_use_id">
+                  tool <code>{event.tool_use_id}</code>
+                </span>
+              )}
+              {event.request_id && (
+                <span className={styles.corrChip} title="request_id">
+                  req <code>{event.request_id}</code>
+                </span>
+              )}
+              {event.turn_id && (
+                <span className={styles.corrChip} title="turn_id">
+                  turn <code>{event.turn_id}</code>
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* ① WHAT: what this event did */}
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>What — 한 일</div>
+            <WhatSection event={event} matchedResult={matchedResult ?? null} />
+          </div>
+
+          {/* ② HOW: execution metrics */}
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>How — 지표</div>
+            <EntityMetricsPanel
+              kind={event.kind}
+              toolMetrics={toolMetrics}
+              llmMetrics={llmMetrics}
+              payload={event.payload}
+            />
+          </div>
         </>
       )}
 
+      {/* ③ SIGNALS */}
       {signals.length > 0 && (
         <div className={styles.signalsSection}>
           <div className={styles.sectionTitle}>Signals</div>
