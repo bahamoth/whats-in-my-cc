@@ -45,6 +45,61 @@ async fn store_single_span_inserts_one_observed_event() {
     assert_eq!(row.1.as_deref(), Some("051581bf3cb55c13"));
 }
 
+/// Tier 3-1 anti-regression (PR #37): the ingest path must NOT re-embed the
+/// verbatim span under `payload.raw_span`. The verbatim span lives once in
+/// `raw_event.payload`; `observed_event` carries only the extracted telemetry
+/// facet. The repo merges that facet into the stored payload column under a
+/// `telemetry` key and splits it back out on read — so the stored column may
+/// contain `telemetry` but must never contain `raw_span`, and the read-back
+/// `ObservedEvent.payload` must be the empty object the ingest path produces.
+///
+/// `round_trip_preserves_telemetry_facet` (tests/repo_observed.rs) locks the
+/// repo merge/split with a hand-built event; THIS test locks the actual
+/// `otel::store` ingest path, which that test does not exercise — reverting
+/// `src/ingest/otel.rs` to `payload: json!({"raw_span": span.raw})` fails here.
+#[tokio::test]
+async fn store_does_not_re_embed_raw_span_in_payload() {
+    let pool = make_pool().await;
+    let body = fixture("tests/fixtures/otel/single_span.json");
+    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink)
+        .await
+        .unwrap();
+
+    // Raw stored payload column: may carry the merged `telemetry` facet, but
+    // never the verbatim-span re-embed.
+    let raw: (String,) = sqlx::query_as(
+        "SELECT payload FROM observed_event WHERE kind = 'otel_span' LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let stored: serde_json::Value = serde_json::from_str(&raw.0).unwrap();
+    assert!(
+        stored.get("raw_span").is_none(),
+        "otel_span stored payload must not re-embed raw_span (Tier 3-1); got: {stored}"
+    );
+
+    // Read-back via the repo splits the telemetry facet back out: payload is the
+    // empty object the ingest path stores, and the facet is populated.
+    let events = wimcc::db::repo_observed::list_session(&pool, "sess-otel-A", 10)
+        .await
+        .unwrap();
+    let span = events
+        .iter()
+        .find(|e| e.kind == wimcc::model::observed::EventKind::OtelSpan)
+        .expect("one otel_span event");
+    assert_eq!(
+        span.payload,
+        serde_json::json!({}),
+        "read-back otel_span payload must be empty (telemetry split out, no raw_span); got: {}",
+        span.payload
+    );
+    assert!(
+        span.telemetry.is_some(),
+        "telemetry facet must be populated from the ingested span"
+    );
+}
+
 #[tokio::test]
 async fn store_is_idempotent() {
     let pool = make_pool().await;

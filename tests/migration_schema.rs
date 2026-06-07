@@ -88,6 +88,32 @@ async fn file_event_and_commit_tables_are_absent() {
     }
 }
 
+/// Quantitative guard for the judge + graph layer removals (PR #37): the four
+/// dropped tables must be absent from a freshly-migrated DB. Migrations 0018
+/// (judge) and 0019 (graph) `DROP TABLE` these; reverting either — or a future
+/// migration re-creating one — makes this fail. Pairs with #judge-removal /
+/// #graph-removal in the implementation notes.
+#[tokio::test]
+async fn judge_and_graph_tables_are_absent() {
+    let pool = fresh_pool().await;
+    for table in [
+        "judge_verdict_cache",
+        "findings_pending_judge",
+        "graph_node",
+        "graph_edge",
+    ] {
+        let row = sqlx::query("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
+            .bind(table)
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
+        assert!(
+            row.is_none(),
+            "table `{table}` must not exist after the judge/graph removal migrations (0018/0019)"
+        );
+    }
+}
+
 #[tokio::test]
 async fn diff_hunk_indexes_present() {
     let pool = fresh_pool().await;
