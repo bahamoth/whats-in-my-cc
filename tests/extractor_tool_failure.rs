@@ -125,28 +125,34 @@ fn is_error_true_without_otlp_does_not_fire() {
     );
 }
 
-/// `retried` is a FACT: a later success for the same tool_use_id within the
-/// window sets `retried=true` but the signal STILL fires (no suppression).
-/// Uses OTLP success=false to confirm the failure.
+/// `retried` is a FACT, not a suppression: when a DISTINCT later tool_call
+/// re-runs the same operation and Passes, `retried=true` but the original
+/// failure signal STILL fires (no suppression).
+///
+/// A retry is a NEW tool call (new tool_use_id) — NOT the same id. Re-using the
+/// same tool_use_id is the SAME invocation, which can never both Fail (the fire
+/// condition) and Pass, so retry detection matches a distinct id with the same
+/// (tool_name, input).
 #[test]
 fn retried_is_a_fact_not_a_suppression() {
     let events = vec![
-        tool_call_ev(0, "tid_0", "Bash"),
-        tool_result_ev(1, "tid_0", false),
-        otlp_success(2, "tid_0", false), // failure confirmed by OTLP
+        tool_call_ev(0, "tid_fail", "Bash"),
+        tool_result_ev(1, "tid_fail", false),
+        otlp_success(2, "tid_fail", false), // failure confirmed by OTLP
         base_filler(3),
-        tool_result_ev(4, "tid_0", false), // later success result (no is_error)
-        otlp_success(5, "tid_0", true),    // OTLP confirms later success
+        tool_call_ev(4, "tid_retry", "Bash"), // distinct id, same op (input {})
+        tool_result_ev(5, "tid_retry", false),
+        otlp_success(6, "tid_retry", true), // OTLP confirms the retry Passed
     ];
     let view = view_from_events(&events);
     let cands = ToolFailure.detect(&view, &DetectorConfig::default());
-    // Note: retried logic uses resolve_outcome on all events, so the later
-    // success OTLP changes the whole-session resolve → retried=true.
-    // The signal still fires because the initial failure is confirmed.
-    assert_eq!(cands.len(), 1, "signal fires even when retry success exists");
-    // Retried state depends on whether later Passed resolve is within window.
-    // (Implementation detail — we just assert it's a bool fact.)
-    assert!(cands[0].facts["retried"].is_boolean());
+    // The original failure still fires (no suppression); the Passed retry does not.
+    assert_eq!(cands.len(), 1, "signal fires even when a retry succeeds");
+    assert_eq!(
+        cands[0].facts["retried"],
+        json!(true),
+        "a distinct later call re-running the same op that Passed → retried=true"
+    );
 }
 
 /// `retried` reflects the configured window.

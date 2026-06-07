@@ -12,9 +12,12 @@
 //! `outcome_provenance` ("measured" | "estimated") is added to facts so callers
 //! can distinguish OTLP-confirmed failures from Tier-4 content estimates.
 //!
-//! Forward window (config `retry_window`, default 5): if a later `tool_result`
-//! for the same `tool_use_id` resolves to Passed, expose `retried=true`
-//! as a FACT (not a suppression judgment).
+//! Forward window (config `retry_window`, default 5): if a DISTINCT later
+//! `tool_call` (a new `tool_use_id`) re-runs the same operation — same
+//! `tool_name` AND same `/input` — and that re-run resolves to Passed, expose
+//! `retried=true` as a FACT (not a suppression judgment). Re-using the same
+//! `tool_use_id` is the SAME invocation, never a retry — and since we only fire
+//! when an id resolves Failed, a same-id check could never resolve Passed.
 //!
 //! Facts: `is_error` (tool-execution), `outcome_provenance`, `retried`,
 //! `tool_name`, `tool_use_id`, `error_excerpt`, event ids.
@@ -57,7 +60,7 @@ impl Detector for ToolFailure {
                 "tool_call.tool_use_id",
                 "tool_call.tool_name",
             ],
-            rule: "resolve_outcome(events, tool_use_id).status==Failed이면 발화(Unknown은 미발화). retry_window 이내에 동일 tool_use_id의 Passed resolve가 있으면 retried=true FACT로 표면화(억제 없음).",
+            rule: "resolve_outcome(events, tool_use_id).status==Failed이면 발화(Unknown은 미발화). retry_window 이내에 동일 (tool_name, input)을 가진 '다른' tool_use_id의 후속 tool_call이 Passed로 resolve되면 retried=true FACT로 표면화(같은 tool_use_id는 같은 호출이라 retry 아님; 억제 없음).",
             output: "{is_error, outcome_provenance, retried, tool_name, tool_use_id, error_excerpt, tool_result_event_id, paired_call_event_id}",
             // Verified: cfg.usize_param("tool_failure", "retry_window", RETRY_WINDOW_DEFAULT)
             config_keys: vec!["retry_window"],
@@ -110,25 +113,7 @@ impl Detector for ToolFailure {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
-            // Forward window: same tool_use_id with Passed outcome → retried (a FACT,
-            // not a suppression). We surface it; "is this benign?" is a judgment.
-            let retried = tid
-                .as_ref()
-                .map(|t| {
-                    let end = (i + 1 + window).min(events.len());
-                    events[i + 1..end].iter().any(|e2| {
-                        if e2.kind != EventKind::ToolResult {
-                            return false;
-                        }
-                        if e2.tool_use_id.as_deref() != Some(t.as_str()) {
-                            return false;
-                        }
-                        resolve_outcome(events, t).status == OutcomeStatus::Passed
-                    })
-                })
-                .unwrap_or(false);
-
-            // Find the paired tool_call event; tool_name lives on the call event.
+            // Find the paired tool_call event; tool_name + input live on the call.
             let call = events[..i]
                 .iter()
                 .rev()
@@ -137,6 +122,38 @@ impl Detector for ToolFailure {
                 .and_then(|e| e.tool_name.as_deref())
                 .or(ev.tool_name.as_deref())
                 .unwrap_or("unknown");
+
+            // Forward window: did the agent RE-RUN this operation and succeed?
+            // A retry is a DISTINCT later tool_call (new tool_use_id) with the same
+            // (tool_name, /input) whose own outcome resolves to Passed. Re-using the
+            // SAME tool_use_id is the same invocation — never a retry — and since we
+            // only reach here when this id resolves Failed, a same-id check could
+            // never resolve Passed. retried is a FACT (no suppression).
+            let failing_input = call.and_then(|c| c.payload.pointer("/input"));
+            let retried = match (call.and_then(|c| c.tool_name.as_deref()), tid.as_deref()) {
+                (Some(failing_tool), Some(failing_tid)) => {
+                    let end = (i + 1 + window).min(events.len());
+                    events[i + 1..end].iter().any(|c2| {
+                        if c2.kind != EventKind::ToolCall {
+                            return false;
+                        }
+                        let Some(c2_tid) = c2.tool_use_id.as_deref() else {
+                            return false;
+                        };
+                        if c2_tid == failing_tid {
+                            return false; // same invocation, not a retry
+                        }
+                        if c2.tool_name.as_deref() != Some(failing_tool) {
+                            return false;
+                        }
+                        if c2.payload.pointer("/input") != failing_input {
+                            return false;
+                        }
+                        resolve_outcome(events, c2_tid).status == OutcomeStatus::Passed
+                    })
+                }
+                _ => false,
+            };
 
             let error_excerpt: String = ev
                 .payload
