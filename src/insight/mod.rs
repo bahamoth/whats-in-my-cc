@@ -4,7 +4,6 @@ pub mod extractors;
 pub mod pipeline;
 pub mod pricing;
 pub mod redaction_shim;
-pub mod registry;
 pub mod types;
 pub mod verification_allowlist;
 pub mod view;

@@ -258,10 +258,10 @@ pub async fn ingest_file(
             }
         }
 
-        // Run the deterministic L1 insight pipeline for each touched session so
-        // findings are refreshed immediately after ingest. (Previously this was
-        // a side effect of the now-removed graph rebuild.)
-        crate::insight::pipeline::run_extractors(pool, session_id).await?;
+        // Run the deterministic signal detector pipeline for each touched
+        // session so signals are refreshed immediately after ingest. (Previously
+        // this was a side effect of the now-removed graph rebuild.)
+        crate::insight::pipeline::run_detectors(pool, session_id).await?;
     }
 
     repo_runs::finish(

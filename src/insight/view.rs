@@ -1,5 +1,5 @@
 //! `SessionInsightView` — the single read-only context object handed to every
-//! extractor in a `run_extractors` cycle. Constructed once, used by all.
+//! detector in a `run_detectors` cycle. Constructed once, used by all.
 
 use sqlx::SqlitePool;
 

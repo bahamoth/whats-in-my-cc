@@ -213,7 +213,7 @@ pub async fn store(
     }
 
     for session_id in &touched {
-        crate::insight::pipeline::run_extractors(pool, session_id).await?;
+        crate::insight::pipeline::run_detectors(pool, session_id).await?;
     }
 
     repo_runs::finish(

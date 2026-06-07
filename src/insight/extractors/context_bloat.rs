@@ -1,48 +1,53 @@
-//! `ContextBloat` L1 extractor (slice-16).
+//! `ContextBloat` detector (Plan 1: finding → signal).
 //!
 //! Rule (spec §4):
 //! Fires when ALL of:
-//! 1. A `tool_result.payload` whose serialised content size > T = 50 * 1024 bytes.
-//! 2. The next `assistant_message` (within M = 3 events) exists.
-//! 3. There is NO later `tool_call` within M events that references content from the
-//!    bloated `tool_result` (lexical overlap of ≥ 3 stems).
+//! 1. A `tool_result.payload` whose serialised content size > T bytes
+//!    (config `threshold_bytes`, default 50 * 1024).
+//! 2. The next `assistant_message` (within M events, config `next_event_window`,
+//!    default 3) exists.
+//! 3. There is NO later `tool_call` within M events that references content from
+//!    the bloated `tool_result` (lexical overlap ≥ config `min_overlap_stems`,
+//!    default 3).
 //!
-//! L1 confidence: 0.5 — promotes directly (deterministic L1).
-//! Severity: low.
-//!
-//! Thresholds T=50KB, M=3, overlap≥3 are constants (DEV-S16-02).
+//! Facts only: payload size + redacted excerpts + downstream overlap count.
+//! NO severity — "how bad?" is a judgment left to LLM/human (spec §6.3).
 
 use serde_json::json;
 
-use crate::insight::extractor::InsightExtractor;
+use crate::insight::config::DetectorConfig;
+use crate::insight::extractor::Detector;
 use crate::insight::redaction_shim;
-use crate::insight::types::FindingCandidate;
+use crate::insight::types::SignalCandidate;
 use crate::insight::view::SessionInsightView;
 use crate::model::observed::EventKind;
 
-/// Payload size threshold in bytes (spec §4).
+/// Default payload size threshold in bytes (spec §4).
 pub const BLOAT_THRESHOLD_BYTES: usize = 50 * 1024;
 
-/// Number of events forward to look for the next assistant_message (spec §4).
+/// Default number of events forward to look for the next assistant_message.
 pub const NEXT_EVENT_WINDOW: usize = 3;
 
-/// Minimum number of stem matches to consider the bloat "reused" downstream.
+/// Default minimum stem matches to consider the bloat "reused" downstream.
 pub const MIN_OVERLAP_STEMS: usize = 3;
 
 pub struct ContextBloat;
 
-impl InsightExtractor for ContextBloat {
-    fn category(&self) -> &'static str {
+impl Detector for ContextBloat {
+    fn id(&self) -> &'static str {
         "context_bloat"
     }
 
-    fn floor(&self) -> f32 {
-        0.5
-    }
+    fn detect(&self, view: &SessionInsightView<'_>, cfg: &DetectorConfig) -> Vec<SignalCandidate> {
+        let threshold_bytes =
+            cfg.usize_param("context_bloat", "threshold_bytes", BLOAT_THRESHOLD_BYTES);
+        let next_window =
+            cfg.usize_param("context_bloat", "next_event_window", NEXT_EVENT_WINDOW);
+        let min_overlap =
+            cfg.usize_param("context_bloat", "min_overlap_stems", MIN_OVERLAP_STEMS);
 
-    fn extract(&self, view: &SessionInsightView<'_>) -> Vec<FindingCandidate> {
         let events = view.events;
-        let mut candidates: Vec<FindingCandidate> = Vec::new();
+        let mut candidates: Vec<SignalCandidate> = Vec::new();
 
         for (i, ev) in events.iter().enumerate() {
             if ev.kind != EventKind::ToolResult {
@@ -57,12 +62,12 @@ impl InsightExtractor for ContextBloat {
                 .unwrap_or("");
             let content_size = content.len();
 
-            if content_size <= BLOAT_THRESHOLD_BYTES {
+            if content_size <= threshold_bytes {
                 continue;
             }
 
             // Condition 2: find the next assistant_message within M events.
-            let window_end = (i + 1 + NEXT_EVENT_WINDOW).min(events.len());
+            let window_end = (i + 1 + next_window).min(events.len());
             let next_assistant = events[i + 1..window_end]
                 .iter()
                 .enumerate()
@@ -76,7 +81,7 @@ impl InsightExtractor for ContextBloat {
 
             // Condition 3: check downstream lexical overlap.
             let bloat_stems = extract_stems(content);
-            let next_end = (asst_idx + 1 + NEXT_EVENT_WINDOW).min(events.len());
+            let next_end = (asst_idx + 1 + next_window).min(events.len());
             let downstream_tool_inputs: Vec<String> = events[asst_idx + 1..next_end]
                 .iter()
                 .filter(|ev2| ev2.kind == EventKind::ToolCall)
@@ -91,12 +96,12 @@ impl InsightExtractor for ContextBloat {
 
             let overlap_count = count_stem_overlap(&bloat_stems, &downstream_tool_inputs);
 
-            if overlap_count >= MIN_OVERLAP_STEMS {
+            if overlap_count >= min_overlap {
                 // Bloat was reused — do not fire.
                 continue;
             }
 
-            // Build projection
+            // Build facts.
             let payload_excerpt = redaction_shim::apply_text_truncated(content, 512);
             let payload_tail = if content.len() > 256 {
                 redaction_shim::apply_text_truncated(&content[content.len() - 256..], 256)
@@ -116,8 +121,7 @@ impl InsightExtractor for ContextBloat {
                 })
                 .collect();
 
-            let projection = json!({
-                "category": "context_bloat",
+            let facts = json!({
                 "session_id": view.session_id,
                 "tool_result": {
                     "event_id": ev.event_id,
@@ -142,14 +146,12 @@ impl InsightExtractor for ContextBloat {
                 ev.tool_name.as_deref().unwrap_or("unknown")
             );
 
-            candidates.push(FindingCandidate {
-                category: "context_bloat",
+            candidates.push(SignalCandidate {
+                detector: "context_bloat",
                 subkind: None,
-                confidence_l1: 0.5,
-                severity: "low",
                 summary,
                 evidence_refs: vec![ev.event_id.clone(), asst_ev.event_id.clone()],
-                evidence_projection: projection,
+                facts,
             });
         }
 

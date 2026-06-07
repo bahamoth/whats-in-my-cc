@@ -1,4 +1,4 @@
-//! `RiskyAction` L1 extractor (slice-16).
+//! `RiskyAction` detector (Plan 1: finding → signal).
 //!
 //! Rule (spec §3):
 //! Fires when ANY of:
@@ -6,17 +6,18 @@
 //!     destructive pattern allowlist.
 //! (b) Any `diff_hunk` row with `user_modified == true`.
 //!
-//! L1 confidence: 0.7 for both branches — promotes directly (deterministic L1).
-//! Severity: high.
+//! Facts only: trigger kind + redacted command/file context. NO severity —
+//! "how risky?" is a judgment left to LLM/human (spec §6.3).
 //!
-//! Evidence projection goes through the redaction shim (DEV-S16-05).
+//! `facts` go through the redaction shim (DEV-S16-05).
 
 use regex::Regex;
 use serde_json::json;
 
-use crate::insight::extractor::InsightExtractor;
+use crate::insight::config::DetectorConfig;
+use crate::insight::extractor::Detector;
 use crate::insight::redaction_shim;
-use crate::insight::types::FindingCandidate;
+use crate::insight::types::SignalCandidate;
 use crate::insight::view::SessionInsightView;
 use crate::model::observed::EventKind;
 
@@ -37,22 +38,18 @@ pub const DESTRUCTIVE_PATTERNS: &[&str] = &[
 
 pub struct RiskyAction;
 
-impl InsightExtractor for RiskyAction {
-    fn category(&self) -> &'static str {
+impl Detector for RiskyAction {
+    fn id(&self) -> &'static str {
         "risky_action"
     }
 
-    fn floor(&self) -> f32 {
-        0.7
-    }
-
-    fn extract(&self, view: &SessionInsightView<'_>) -> Vec<FindingCandidate> {
+    fn detect(&self, view: &SessionInsightView<'_>, _cfg: &DetectorConfig) -> Vec<SignalCandidate> {
         let patterns: Vec<Regex> = DESTRUCTIVE_PATTERNS
             .iter()
             .map(|p| Regex::new(p).expect("destructive pattern must compile"))
             .collect();
 
-        let mut candidates: Vec<FindingCandidate> = Vec::new();
+        let mut candidates: Vec<SignalCandidate> = Vec::new();
         let mut emitted_events: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         // --- Branch (a): destructive Bash tool_call ---
@@ -82,12 +79,11 @@ impl InsightExtractor for RiskyAction {
 
             let command_redacted = redaction_shim::apply_text(command);
 
-            // Find the preceding user message for context
+            // Find the preceding user / assistant message for context.
             let preceding_user_excerpt = find_preceding_user_excerpt(view, &ev.event_id);
             let preceding_assistant_excerpt = find_preceding_assistant_excerpt(view, &ev.event_id);
 
-            let projection = json!({
-                "category": "risky_action",
+            let facts = json!({
                 "session_id": view.session_id,
                 "trigger": {
                     "kind": "destructive_bash",
@@ -108,14 +104,12 @@ impl InsightExtractor for RiskyAction {
                 &command[..command.len().min(80)]
             );
 
-            candidates.push(FindingCandidate {
-                category: "risky_action",
+            candidates.push(SignalCandidate {
+                detector: "risky_action",
                 subkind: None,
-                confidence_l1: 0.7,
-                severity: "high",
                 summary,
                 evidence_refs: vec![ev.event_id.clone()],
-                evidence_projection: projection,
+                facts,
             });
         }
 
@@ -133,8 +127,7 @@ impl InsightExtractor for RiskyAction {
 
             let file_path_redacted = redaction_shim::apply_text(&hunk.file_path);
 
-            let projection = json!({
-                "category": "risky_action",
+            let facts = json!({
                 "session_id": view.session_id,
                 "trigger": {
                     "kind": "user_modified_hunk",
@@ -160,14 +153,12 @@ impl InsightExtractor for RiskyAction {
                 hunk.file_path, hunk.lines_removed
             );
 
-            candidates.push(FindingCandidate {
-                category: "risky_action",
+            candidates.push(SignalCandidate {
+                detector: "risky_action",
                 subkind: None,
-                confidence_l1: 0.7,
-                severity: "high",
                 summary,
                 evidence_refs: vec![hunk.introduced_by_event_id.clone()],
-                evidence_projection: projection,
+                facts,
             });
         }
 

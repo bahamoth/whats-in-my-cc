@@ -398,10 +398,10 @@ pub async fn store(
         result.accepted_spans += 1;
     }
 
-    // Run the deterministic L1 insight pipeline for each touched session so
-    // findings stay fresh after OTel ingest.
+    // Run the deterministic signal detector pipeline for each touched session so
+    // signals stay fresh after OTel ingest.
     for session_id in &touched {
-        crate::insight::pipeline::run_extractors(pool, session_id).await?;
+        crate::insight::pipeline::run_detectors(pool, session_id).await?;
     }
 
     repo_runs::finish(

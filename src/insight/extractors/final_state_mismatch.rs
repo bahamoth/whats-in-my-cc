@@ -1,24 +1,25 @@
-//! `FinalStateMismatch` L1 extractor (slice-16).
+//! `FinalStateMismatch` detector (Plan 1: finding → signal).
 //!
 //! Rule (spec §5):
 //! Fires when ALL of:
 //! 1. The opening `user_message` contains a goal verb from the frozen lexicon.
-//! 2. The session ends with a `verification_run` whose `status == "failed"`, OR
-//!    the final `assistant_message` does NOT contain explicit completion markers.
+//! 2. The session's final `verification_run` has `status == "failed"` (or
+//!    `"error"`).
 //! 3. The final `assistant_message` does not contain completion markers.
 //!
-//! Emits at most ONE finding per session (session-level grain, DEV-S16-06).
+//! Emits at most ONE signal per session (session-level grain, DEV-S16-06).
 //!
-//! L1 confidence: 0.6 — promotes directly (deterministic L1).
-//! Severity: medium.
+//! Facts only: goal verbs + redacted final state. NO severity — "did it really
+//! fail?" is a judgment left to LLM/human (spec §6.3).
 //!
 //! Goal verb lexicon and completion marker lexicon are frozen (DEV-S16-03).
 
 use serde_json::json;
 
-use crate::insight::extractor::InsightExtractor;
+use crate::insight::config::DetectorConfig;
+use crate::insight::extractor::Detector;
 use crate::insight::redaction_shim;
-use crate::insight::types::FindingCandidate;
+use crate::insight::types::SignalCandidate;
 use crate::insight::view::SessionInsightView;
 use crate::model::observed::{Actor, EventKind};
 
@@ -53,16 +54,12 @@ pub const COMPLETION_MARKERS: &[&str] = &[
 
 pub struct FinalStateMismatch;
 
-impl InsightExtractor for FinalStateMismatch {
-    fn category(&self) -> &'static str {
+impl Detector for FinalStateMismatch {
+    fn id(&self) -> &'static str {
         "final_state_mismatch"
     }
 
-    fn floor(&self) -> f32 {
-        0.6
-    }
-
-    fn extract(&self, view: &SessionInsightView<'_>) -> Vec<FindingCandidate> {
+    fn detect(&self, view: &SessionInsightView<'_>, _cfg: &DetectorConfig) -> Vec<SignalCandidate> {
         let events = view.events;
         if events.is_empty() {
             return vec![];
@@ -86,7 +83,7 @@ impl InsightExtractor for FinalStateMismatch {
             return vec![];
         };
 
-        // --- Condition 3: find the final assistant_message and check for completion markers ---
+        // --- Condition 3: final assistant_message + completion-marker check ---
         let last_assistant = events
             .iter()
             .rev()
@@ -105,7 +102,7 @@ impl InsightExtractor for FinalStateMismatch {
             return vec![];
         }
 
-        // --- Condition 2: final verification run status, OR trailing tool failure ---
+        // --- Condition 2: final verification run status ---
         let last_verification = view.verification_runs.last();
         let final_verification_failed = last_verification
             .map(|vr| vr.status == "failed" || vr.status == "error")
@@ -117,7 +114,7 @@ impl InsightExtractor for FinalStateMismatch {
             return vec![];
         }
 
-        // Build projection
+        // Build facts.
         let goal_excerpt = redaction_shim::apply_text_truncated(&goal_text, 512);
         let last_asst_excerpt = redaction_shim::apply_text_truncated(&last_assistant_text, 1024);
 
@@ -131,8 +128,7 @@ impl InsightExtractor for FinalStateMismatch {
             })
         });
 
-        let projection = json!({
-            "category": "final_state_mismatch",
+        let facts = json!({
             "session_id": view.session_id,
             "goal": {
                 "user_message_event_id": goal_event_id,
@@ -164,15 +160,13 @@ impl InsightExtractor for FinalStateMismatch {
             evidence_refs.push(vr.trigger_event_id.clone());
         }
 
-        // Session-level grain: at most one finding.
-        vec![FindingCandidate {
-            category: "final_state_mismatch",
+        // Session-level grain: at most one signal.
+        vec![SignalCandidate {
+            detector: "final_state_mismatch",
             subkind: None,
-            confidence_l1: 0.6,
-            severity: "medium",
             summary,
             evidence_refs,
-            evidence_projection: projection,
+            facts,
         }]
     }
 }

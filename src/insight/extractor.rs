@@ -1,18 +1,16 @@
-//! `InsightExtractor` trait — the contract every L1 category must implement.
-//! Pure CPU work; no DB calls, no I/O, no side effects inside `extract()`.
+//! `Detector` trait — the contract every deterministic detector implements.
+//! Pure CPU work; no DB calls, no I/O, no side effects inside `detect()`.
 
-use crate::insight::types::FindingCandidate;
+use crate::insight::config::DetectorConfig;
+use crate::insight::types::SignalCandidate;
 use crate::insight::view::SessionInsightView;
 
-/// Implemented by each L1 extractor category.
-pub trait InsightExtractor: Send + Sync {
-    /// Stable category string — appears in `Finding.category`.
-    fn category(&self) -> &'static str;
+/// Implemented by each deterministic detector (구 L1 extractor category).
+pub trait Detector: Send + Sync {
+    /// Stable detector id (구 category) — appears in `signal.detector`.
+    fn id(&self) -> &'static str;
 
-    /// L1 confidence floor — finding confidence never stored below this.
-    fn floor(&self) -> f32;
-
-    /// Pure CPU extraction against the loaded session view.
+    /// Pure CPU detection. Deterministic. No severity/confidence — facts only.
     /// Same input always produces the same output (idempotent).
-    fn extract(&self, view: &SessionInsightView<'_>) -> Vec<FindingCandidate>;
+    fn detect(&self, view: &SessionInsightView<'_>, cfg: &DetectorConfig) -> Vec<SignalCandidate>;
 }

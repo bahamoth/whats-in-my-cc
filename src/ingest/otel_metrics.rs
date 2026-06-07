@@ -367,7 +367,7 @@ pub async fn store_request(
     }
 
     for sid in &touched {
-        crate::insight::pipeline::run_extractors(pool, sid).await?;
+        crate::insight::pipeline::run_detectors(pool, sid).await?;
     }
     result.sessions_touched = touched.into_iter().collect();
     Ok(result)
