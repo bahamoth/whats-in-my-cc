@@ -501,7 +501,6 @@ fn row_to_observed(r: sqlx::sqlite::SqliteRow) -> ObservedEvent {
             "session_state" => EventKind::SessionState,
             "attachment_meta" => EventKind::AttachmentMeta,
             "otel_span" => EventKind::OtelSpan,
-            "diff_hunk" => EventKind::DiffHunk,
             "metric_sample" => EventKind::MetricSample,
             "log_record" => EventKind::LogRecord,
             _ => EventKind::Unknown,

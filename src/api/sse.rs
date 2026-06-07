@@ -229,7 +229,6 @@ fn parse_event_kind(s: &str) -> EventKind {
         "session_state" => EventKind::SessionState,
         "attachment_meta" => EventKind::AttachmentMeta,
         "otel_span" => EventKind::OtelSpan,
-        "diff_hunk" => EventKind::DiffHunk,
         "metric_sample" => EventKind::MetricSample,
         "log_record" => EventKind::LogRecord,
         _ => EventKind::Unknown,
@@ -242,7 +241,6 @@ fn derive_source_type(kind: EventKind) -> String {
         EventKind::MetricSample => "otel-metrics".into(),
         EventKind::LogRecord => "otel-logs".into(),
         EventKind::HookEvent => "hook".into(),
-        EventKind::DiffHunk => "transcript".into(),
         _ => "transcript".into(),
     }
 }

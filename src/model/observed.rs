@@ -38,7 +38,6 @@ pub enum EventKind {
     SessionState,
     AttachmentMeta,
     OtelSpan,
-    DiffHunk,
     MetricSample,
     LogRecord,
     #[default]
@@ -58,7 +57,6 @@ impl EventKind {
             EventKind::SessionState => "session_state",
             EventKind::AttachmentMeta => "attachment_meta",
             EventKind::OtelSpan => "otel_span",
-            EventKind::DiffHunk => "diff_hunk",
             EventKind::MetricSample => "metric_sample",
             EventKind::LogRecord => "log_record",
             EventKind::Unknown => "unknown",
