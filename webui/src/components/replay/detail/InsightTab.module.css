@@ -18,16 +18,20 @@
 }
 .nodeId { font-size: 11px; color: var(--wimcc-fg-subtle, #6a7180); font-family: var(--wimcc-mono, ui-monospace, monospace); margin-left: auto; }
 
-/* Findings section */
-.findingsSection { border-top: 1px solid var(--wimcc-border, #1d212c); padding-top: 10px; }
+/* Signals section */
+.signalsSection { border-top: 1px solid var(--wimcc-border, #1d212c); padding-top: 10px; }
 .sectionTitle { font-size: 11px; text-transform: uppercase; color: var(--wimcc-fg-subtle, #6a7180); letter-spacing: 0.06em; margin-bottom: 8px; }
 .list { list-style: none; margin: 0; padding: 0; }
 .item { border: 1px solid var(--wimcc-border, #1d212c); border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; }
 .head { display: flex; align-items: center; gap: 8px; font-size: 11px; }
-.sev { padding: 1px 6px; border-radius: 3px; text-transform: uppercase; font-weight: 600; }
-.sevHigh { background: var(--wimcc-danger, #ef4747); color: #fff; }
-.sevMed { background: var(--wimcc-warning, #f0b429); color: #14181f; }
-.sevLow { background: var(--wimcc-surface-3, #1b202a); color: var(--wimcc-fg-muted, #aab0bd); }
-.category { color: var(--wimcc-fg-muted, #aab0bd); font-family: var(--wimcc-mono, ui-monospace, monospace); }
-.confidence { margin-left: auto; color: var(--wimcc-fg-subtle, #6a7180); }
+/* detector chip — reuses the same look as the old .category */
+.detector { color: var(--wimcc-fg-muted, #aab0bd); font-family: var(--wimcc-mono, ui-monospace, monospace); }
+/* subkind — muted secondary chip */
+.subkind {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--wimcc-surface-3, #1b202a);
+  color: var(--wimcc-fg-subtle, #6a7180);
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+}
 .summary { margin: 6px 0 0; color: var(--wimcc-fg, #e6e8ee); }

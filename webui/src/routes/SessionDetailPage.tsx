@@ -12,9 +12,8 @@ import {
 import { useLiveStreamBridge } from '../lib/sse';
 import {
   useSessionDetailQuery,
-  useFindingsQuery,
+  useSignalsQuery,
   useVerificationRunsQuery,
-  useToolFailureSummaryQuery,
   useSessionUsageQuery,
   useUsageBaselineQuery,
   useEventRawQuery,
@@ -41,9 +40,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const sel = useReplaySelection();
 
   const detail = useSessionDetailQuery(sessionId);
-  const findings = useFindingsQuery(sessionId);
+  const signals = useSignalsQuery(sessionId);
   const verificationRuns = useVerificationRunsQuery(sessionId);
-  const toolFailures = useToolFailureSummaryQuery(sessionId);
   const usage = useSessionUsageQuery(sessionId);
   const baseline = useUsageBaselineQuery();
 
@@ -114,13 +112,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     },
   });
 
-  // Older history is paged by ConversationStream's own near-top scroll (see its
-  // onLoadOlder). The previous IntersectionObserver sentinel lived in this
-  // (non-scrolling) container and re-fired on every render, auto-loading the
-  // whole session — so it has been removed.
-
-  // Findings drive the stream highlight + DetailPanel cross-reference (below).
-  const findingsData = findings.data ?? [];
+  // Signals drive the stream highlight + DetailPanel cross-reference (below).
+  const signalsData = signals.data ?? [];
 
   // Per-response (LLM request) metrics, joined to thinking events by
   // request_id — the marker shows duration+tokens, selecting shows the rest.
@@ -134,18 +127,18 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     [window_.events, metricsByReq],
   );
 
-  // event ids that have a finding. evidence_refs are event ids (bare-string
+  // event ids that have a signal. evidence_refs are event ids (bare-string
   // ULID or { event_id }) — resolved directly, no graph node mapping.
-  const findingEventIds = useMemo(() => {
+  const signalEventIds = useMemo(() => {
     const eids = new Set<string>();
-    for (const f of findingsData) {
-      for (const ref of f.evidence_refs) {
+    for (const s of signalsData) {
+      for (const ref of s.evidence_refs) {
         if (typeof ref === 'string') eids.add(ref);
         else if (typeof ref.event_id === 'string') eids.add(ref.event_id);
       }
     }
     return eids;
-  }, [findingsData]);
+  }, [signalsData]);
 
   // The views are event-first: selection IS the event id (no graph node).
   const selectedEventId = sel.selectedNodeId;
@@ -178,16 +171,16 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     [window_.events, correlated.data],
   );
 
-  // Findings for the selected event. evidence_refs are event ids (L1/L2
+  // Signals for the selected event. evidence_refs are event ids (L1
   // extractors emit event_id refs); bare-string and {event_id} refs both match.
-  const selectedNodeFindings = useMemo(() => {
+  const selectedNodeSignals = useMemo(() => {
     if (!selectedEventId) return [];
-    return findingsData.filter((f) =>
-      f.evidence_refs.some((ref) =>
+    return signalsData.filter((s) =>
+      s.evidence_refs.some((ref) =>
         typeof ref === 'string' ? ref === selectedEventId : ref.event_id === selectedEventId,
       ),
     );
-  }, [selectedEventId, findingsData]);
+  }, [selectedEventId, signalsData]);
 
   // Tool-execution metrics for a selected tool_call, found among the loaded
   // events by tool_use_id (no facet fold).
@@ -241,8 +234,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
             <InsightStrip
               usage={usage.data}
               verificationRuns={verificationRuns.data}
-              findings={findings.data}
-              toolFailures={toolFailures.data}
+              signals={signals.data}
               baseline={
                 baseline.data
                   ? { cache_hit_ratio: baseline.data.cache_hit_ratio.median }
@@ -262,7 +254,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
             <ConversationStream
               items={streamItems}
               selectedEventId={selectedStreamEventId}
-              findingEventIds={findingEventIds}
+              findingEventIds={signalEventIds}
               onSelect={selectStreamCard}
               onLoadOlder={window_.loadOlder}
               canLoadOlder={window_.oldest !== null}
@@ -278,7 +270,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
             <DetailPanel
               event={selectedEvent}
               record={rawQuery.data?.record ?? null}
-              findings={selectedNodeFindings}
+              signals={selectedNodeSignals}
               toolMetrics={selectedToolMetrics}
               llmMetrics={selectedLlmMetrics}
               rawBlocks={rawBlocks}

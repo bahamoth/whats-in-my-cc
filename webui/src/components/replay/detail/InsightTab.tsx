@@ -2,9 +2,9 @@
 //
 // Metrics-led Insight tab (UX option A): for the selected event, show a
 // compact header + the entity's COLLECTED metrics (EntityMetricsPanel, with
-// plain-language ⓘ tooltips) + that event's Findings. The full raw payload
+// plain-language ⓘ tooltips) + that event's Signals. The full raw payload
 // lives in the Raw tab.
-import type { FindingDto, ObservedEventDto } from '../../../api/types';
+import type { SignalDto, ObservedEventDto } from '../../../api/types';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import { nodeLabel } from '../stream/nodeLabel';
 import type { ToolMetrics } from './toolMetrics';
@@ -12,7 +12,7 @@ import { EntityMetricsPanel } from './EntityMetricsPanel';
 import styles from './InsightTab.module.css';
 
 interface InsightTabProps {
-  findings: FindingDto[];
+  signals: SignalDto[];
   event: ObservedEventDto | null;
   toolMetrics: ToolMetrics | null;
   llmMetrics: LlmRequestMetrics | null;
@@ -30,29 +30,24 @@ const KIND_ICON: Record<string, string> = {
   other: '·',
 };
 
-const SEV_CLASS: Record<string, string> = { high: 'sevHigh', medium: 'sevMed', low: 'sevLow' };
-
-function FindingsList({ findings }: { findings: FindingDto[] }) {
+function SignalsList({ signals }: { signals: SignalDto[] }) {
   return (
     <ul className={styles.list}>
-      {findings.map((f) => (
-        <li key={f.finding_id} className={styles.item}>
+      {signals.map((s) => (
+        <li key={s.signal_id} className={styles.item}>
           <div className={styles.head}>
-            <span className={`${styles.sev} ${styles[SEV_CLASS[f.severity] ?? 'sevLow']}`}>
-              {f.severity}
-            </span>
-            <span className={styles.category}>{f.category}</span>
-            <span className={styles.confidence}>{Math.round(f.confidence * 100)}%</span>
+            <span className={styles.detector}>{s.detector}</span>
+            {s.subkind && <span className={styles.subkind}>{s.subkind}</span>}
           </div>
-          <p className={styles.summary}>{f.summary}</p>
+          <p className={styles.summary}>{s.summary}</p>
         </li>
       ))}
     </ul>
   );
 }
 
-export function InsightTab({ findings, event, toolMetrics, llmMetrics }: InsightTabProps) {
-  if (!event && findings.length === 0) {
+export function InsightTab({ signals, event, toolMetrics, llmMetrics }: InsightTabProps) {
+  if (!event && signals.length === 0) {
     return (
       <div className={styles.root}>
         <p className={styles.empty}>No insights for this event.</p>
@@ -87,10 +82,10 @@ export function InsightTab({ findings, event, toolMetrics, llmMetrics }: Insight
         </>
       )}
 
-      {findings.length > 0 && (
-        <div className={styles.findingsSection}>
-          <div className={styles.sectionTitle}>Findings</div>
-          <FindingsList findings={findings} />
+      {signals.length > 0 && (
+        <div className={styles.signalsSection}>
+          <div className={styles.sectionTitle}>Signals</div>
+          <SignalsList signals={signals} />
         </div>
       )}
     </div>

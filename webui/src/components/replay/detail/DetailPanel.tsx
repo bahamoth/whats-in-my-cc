@@ -1,7 +1,7 @@
 // webui/src/components/replay/detail/DetailPanel.tsx
 import { useState } from 'react';
 import { Braces } from 'lucide-react';
-import type { FindingDto, ObservedEventDto } from '../../../api/types';
+import type { SignalDto, ObservedEventDto } from '../../../api/types';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import type { ToolMetrics } from './toolMetrics';
 import { InsightTab } from './InsightTab';
@@ -15,7 +15,7 @@ interface DetailPanelProps {
    *  node. thinking, hook, tool_call, etc. are all just events here. */
   event: ObservedEventDto | null;
   record: unknown;
-  findings: FindingDto[];
+  signals: SignalDto[];
   /** Tool-execution metrics for a selected `tool_call` (Insight tab), derived
    *  from events by tool_use_id. */
   toolMetrics?: ToolMetrics | null;
@@ -27,7 +27,7 @@ interface DetailPanelProps {
   rawBlocks?: RawBlock[];
 }
 
-export function DetailPanel({ event, record, findings, toolMetrics, llmMetrics, rawBlocks }: DetailPanelProps) {
+export function DetailPanel({ event, record, signals, toolMetrics, llmMetrics, rawBlocks }: DetailPanelProps) {
   const [chosen, setChosen] = useState<TabId | null>(null);
   const active = chosen ?? 'insight';
 
@@ -75,7 +75,7 @@ export function DetailPanel({ event, record, findings, toolMetrics, llmMetrics, 
       <div className={styles.body} role="tabpanel">
         {active === 'insight' && (
           <InsightTab
-            findings={findings}
+            signals={signals}
             event={event}
             toolMetrics={toolMetrics ?? null}
             llmMetrics={llmMetrics ?? null}

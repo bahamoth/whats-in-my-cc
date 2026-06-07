@@ -1,13 +1,13 @@
 // webui/src/components/replay/detail/__tests__/DetailPanel.test.tsx
 /**
- * 2-tab DetailPanel: Insight / Raw — now EVENT-first (no graph node). Selecting
+ * 2-tab DetailPanel: Insight / Raw — EVENT-first (no graph node). Selecting
  * any ObservedEvent (incl. thinking) drives the panel; the Insight tab hosts a
- * header + EntityMetricsPanel + Findings, the Raw tab the source record/blocks.
+ * header + EntityMetricsPanel + Signals, the Raw tab the source record/blocks.
  */
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { DetailPanel } from '../DetailPanel';
-import type { FindingDto, ObservedEventDto } from '../../../../api/types';
+import type { SignalDto, ObservedEventDto } from '../../../../api/types';
 
 function ev(id: string, kind = 'tool_call', payload: unknown = {}): ObservedEventDto {
   return {
@@ -20,43 +20,46 @@ function ev(id: string, kind = 'tool_call', payload: unknown = {}): ObservedEven
 const someEvent = ev('n1', 'tool_call', { tool_name: 'Read', input: {} });
 const toolEvent = ev('n2', 'tool_call', { tool_name: 'Bash', input: { command: 'ls' } });
 
-function finding(): FindingDto {
-  return { finding_id: 'f1', schema_version: '1', session_id: 's', category: 'c', severity: 'high', confidence: 0.5, summary: 's', evidence_refs: [], evidence_projection: {}, provenance: {}, status: 'open', created_at: '' };
+function signal(): SignalDto {
+  return {
+    signal_id: 'sig1', schema_version: '1', session_id: 's', detector: 'tool_failure',
+    subkind: null, summary: 'exit 1', evidence_refs: ['n1'], facts: {}, provenance: {}, created_at: '',
+  };
 }
 
 describe('DetailPanel', () => {
   it('shows only Insight and Raw tabs (Detail tab removed)', () => {
-    render(<DetailPanel event={someEvent} record={null} findings={[]} />);
+    render(<DetailPanel event={someEvent} record={null} signals={[]} />);
     expect(screen.getByRole('tab', { name: /insight/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /raw/i })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /^detail$/i })).toBeNull();
   });
 
   it('Insight tab shows the header label', () => {
-    render(<DetailPanel event={toolEvent} record={{ tool_result: { is_error: false } }} findings={[]} />);
+    render(<DetailPanel event={toolEvent} record={{ tool_result: { is_error: false } }} signals={[]} />);
     expect(screen.getAllByText(/Bash|Read/).length).toBeGreaterThan(0);
   });
 
   it('defaults to the Insight tab', () => {
-    render(<DetailPanel event={someEvent} record={null} findings={[finding()]} />);
+    render(<DetailPanel event={someEvent} record={null} signals={[signal()]} />);
     expect(screen.getByRole('tab', { name: /insight/i })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('switches tab on click and keeps it across a re-render', () => {
-    const { rerender } = render(<DetailPanel event={someEvent} record={{ a: 1 }} findings={[finding()]} />);
+    const { rerender } = render(<DetailPanel event={someEvent} record={{ a: 1 }} signals={[signal()]} />);
     fireEvent.click(screen.getByRole('tab', { name: /raw/i }));
     expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('aria-selected', 'true');
-    rerender(<DetailPanel event={someEvent} record={{ a: 1 }} findings={[finding()]} />);
+    rerender(<DetailPanel event={someEvent} record={{ a: 1 }} signals={[signal()]} />);
     expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('emphasizes the Raw tab when a raw record is available (#2 discoverability)', () => {
-    render(<DetailPanel event={someEvent} record={{ actor: 'user', is_sidechain: true }} findings={[]} />);
+    render(<DetailPanel event={someEvent} record={{ actor: 'user', is_sidechain: true }} signals={[]} />);
     expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('data-has-record', 'true');
   });
 
   it('does not emphasize the Raw tab when there is no raw record', () => {
-    render(<DetailPanel event={someEvent} record={null} findings={[]} />);
+    render(<DetailPanel event={someEvent} record={null} signals={[]} />);
     expect(screen.getByRole('tab', { name: /raw/i })).toHaveAttribute('data-has-record', 'false');
   });
 
@@ -65,7 +68,7 @@ describe('DetailPanel', () => {
       <DetailPanel
         event={someEvent}
         record={null}
-        findings={[]}
+        signals={[]}
         rawBlocks={[{ source: 'transcript', label: 'tool_call', record: { tool_name: 'Bash' } }]}
       />,
     );
@@ -73,7 +76,7 @@ describe('DetailPanel', () => {
   });
 
   it('shows an empty hint when no event is selected', () => {
-    render(<DetailPanel event={null} record={null} findings={[]} />);
+    render(<DetailPanel event={null} record={null} signals={[]} />);
     expect(screen.getByText(/select an event/i)).toBeInTheDocument();
   });
 
@@ -84,7 +87,7 @@ describe('DetailPanel', () => {
       outputTokens: 2300, cacheReadTokens: 290000, cacheCreationTokens: 2200,
       stopReason: 'tool_use', attempt: 1, success: true, model: 'claude-opus-4-8', costUsd: null,
     };
-    render(<DetailPanel event={thinking} record={null} findings={[]} llmMetrics={metrics} />);
+    render(<DetailPanel event={thinking} record={null} signals={[]} llmMetrics={metrics} />);
     expect(screen.getByTestId('entity-metrics')).toBeInTheDocument();
     expect(screen.queryByText(/select an event/i)).toBeNull();
   });

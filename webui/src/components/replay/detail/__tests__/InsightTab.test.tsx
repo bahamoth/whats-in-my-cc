@@ -1,19 +1,19 @@
 // webui/src/components/replay/detail/__tests__/InsightTab.test.tsx
 /**
- * Metrics-led Insight tab — now EVENT-first (no graph node): a compact header
+ * Metrics-led Insight tab — EVENT-first (no graph node): a compact header
  * (from the event's kind + payload) + EntityMetricsPanel + that event's
- * Findings. Drives entirely off an ObservedEvent.
+ * Signals. Drives entirely off an ObservedEvent.
  */
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { InsightTab } from '../InsightTab';
-import type { FindingDto, ObservedEventDto } from '../../../../api/types';
+import type { SignalDto, ObservedEventDto } from '../../../../api/types';
 
-function finding(p: Partial<FindingDto>): FindingDto {
+function signal(p: Partial<SignalDto>): SignalDto {
   return {
-    finding_id: 'f1', schema_version: '1', session_id: 's', category: 'risky_action',
-    severity: 'high', confidence: 0.8, summary: 'risky rm -rf', evidence_refs: [],
-    evidence_projection: {}, provenance: {}, status: 'open', created_at: '', ...p,
+    signal_id: 'sig1', schema_version: '1', session_id: 's', detector: 'tool_failure',
+    subkind: null, summary: 'command exited with code 1', evidence_refs: ['ev1'],
+    facts: {}, provenance: {}, created_at: '', ...p,
   };
 }
 
@@ -33,29 +33,36 @@ const toolMetrics = {
 };
 
 describe('InsightTab', () => {
-  it('renders findings (summary, category, severity visible)', () => {
+  it('renders signals (summary and detector visible; no severity/confidence)', () => {
     render(
-      <InsightTab findings={[finding({})]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />,
+      <InsightTab signals={[signal({})]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />,
     );
-    expect(screen.getByText('risky rm -rf')).toBeInTheDocument();
-    expect(screen.getByText(/risky_action/)).toBeInTheDocument();
-    expect(screen.getByText(/high/i)).toBeInTheDocument();
+    expect(screen.getByText('command exited with code 1')).toBeInTheDocument();
+    expect(screen.getByText(/tool_failure/)).toBeInTheDocument();
+    // severity and confidence must NOT appear (signal has neither)
+    expect(screen.queryByText(/high|medium|low/i)).toBeNull();
+    expect(screen.queryByText(/%/)).toBeNull();
   });
 
-  it('renders confidence as a percentage', () => {
+  it('renders optional subkind when present', () => {
     render(
-      <InsightTab findings={[finding({ confidence: 0.8 })]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />,
+      <InsightTab
+        signals={[signal({ subkind: 'non_zero_exit' })]}
+        event={toolEvent}
+        toolMetrics={toolMetrics}
+        llmMetrics={null}
+      />,
     );
-    expect(screen.getByText('80%')).toBeInTheDocument();
+    expect(screen.getByText('non_zero_exit')).toBeInTheDocument();
   });
 
-  it('shows an empty hint when no event and no findings', () => {
-    render(<InsightTab findings={[]} event={null} toolMetrics={null} llmMetrics={null} />);
-    expect(screen.getByText(/no insights|no findings/i)).toBeInTheDocument();
+  it('shows an empty hint when no event and no signals', () => {
+    render(<InsightTab signals={[]} event={null} toolMetrics={null} llmMetrics={null} />);
+    expect(screen.getByText(/no insights/i)).toBeInTheDocument();
   });
 
   it('renders the header (tool name) when an event is provided', () => {
-    render(<InsightTab findings={[]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />);
+    render(<InsightTab signals={[]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />);
     expect(screen.getByText('Bash')).toBeInTheDocument();
   });
 
@@ -64,13 +71,20 @@ describe('InsightTab', () => {
       tool_name: 'mcp__claude-in-chrome__computer',
       input: { action: 'left_click', coordinate: [638, 220] },
     });
-    render(<InsightTab findings={[]} event={computer} toolMetrics={toolMetrics} llmMetrics={null} />);
+    render(<InsightTab signals={[]} event={computer} toolMetrics={toolMetrics} llmMetrics={null} />);
     expect(screen.getByText('left_click (638, 220)')).toBeInTheDocument();
   });
 
   it('renders the entity metrics panel for the selected event', () => {
-    render(<InsightTab findings={[]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />);
+    render(<InsightTab signals={[]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />);
     expect(screen.getByTestId('entity-metrics')).toBeInTheDocument();
     expect(screen.getByText(/결정 출처/)).toBeInTheDocument();
+  });
+
+  it('renders the Signals section title when signals are present', () => {
+    render(
+      <InsightTab signals={[signal({})]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />,
+    );
+    expect(screen.getByText('Signals')).toBeInTheDocument();
   });
 });
