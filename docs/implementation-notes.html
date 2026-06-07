@@ -3937,6 +3937,50 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="behavioral-metrics-plan3a">
+    <h2>on-demand 세션 행동 지표 — behavioral_metrics (Plan 3a, 2026-06-07)</h2>
+    <p>
+      <code>src/insight/metrics.rs</code> — <code>SessionMetrics</code> 구조체 +
+      <code>compute_session_metrics(pool, session_id) -&gt; Result&lt;SessionMetrics&gt;</code>.
+      저장 테이블 없음; 호출 시 4개 side-table을 단일 패스로 집계 (spec §10.1 온디맨드).
+    </p>
+    <h3>집계 소스 및 실제 repo 함수 (plan 추정 vs 실제)</h3>
+    <ul>
+      <li><code>repo_observed::list_session(pool, id, 100_000)</code> — plan 추정과 일치. tool_call 이벤트 카운트 목적.</li>
+      <li><code>repo_signal::list_by_session(pool, id)</code> — plan 추정과 일치 (Plan 1). <code>SignalRow.detector</code> 필드명 확인.</li>
+      <li><code>repo_verification_run::list_session(pool, id)</code> — plan 추정과 일치. <code>VerificationRunRow.status == "passed"</code> 확인.</li>
+      <li><strong>repo_usage_facet:</strong> plan은 <code>list_session</code>을 추정했으나 해당 함수 없음.
+        기존 <code>session_aggregate(pool, id) -&gt; UsageAggregate</code>를 재사용.
+        <code>UsageAggregate.{input_tokens, cache_read_input_tokens, cache_creation_input_tokens}</code>로
+        <code>cache_hit_ratio = cache_read / (input + cache_read + cache_creation)</code> 계산.</li>
+    </ul>
+    <h3>지표 목록 (facts/counts/ratios — severity/judgment 없음)</h3>
+    <ul>
+      <li><code>tool_call_total</code> — EventKind::ToolCall 이벤트 수.</li>
+      <li><code>tool_failure_count</code> / <code>tool_failure_rate</code> — detector="tool_failure" signal 수 / tool_call_total 비율.</li>
+      <li><code>verification_total</code> / <code>verification_passed</code> / <code>verification_pass_rate</code>.</li>
+      <li><code>context_bloat_count</code> — detector="context_bloat" signal 수.</li>
+      <li><code>cache_hit_ratio</code> — usage_facet에서 0-denominator 시 0.0.</li>
+      <li><code>detector_firing: BTreeMap&lt;String, i64&gt;</code> — 신호분포 (spec §6.6).</li>
+    </ul>
+    <h3>API</h3>
+    <p>
+      <code>GET /v1/sessions/:id/metrics</code> → <code>{ "data": SessionMetrics }</code>.
+      authed 라우터에 등록. <code>SessionMetricsResponse</code> DTO wrapper는
+      <code>src/api/dto.rs</code>에 추가.
+    </p>
+    <h3>테스트</h3>
+    <ul>
+      <li><code>tests/metrics_compute.rs</code> — 6개 단위 테스트 (tool_failure rate, zero-denom, multi-detector, vrun pass rate, cache ratio, empty session).</li>
+      <li><code>tests/api_metrics.rs</code> — 3개 통합 테스트 (200 shape, detector_firing map, empty zeros).</li>
+    </ul>
+    <p>
+      <strong>설계 결정:</strong> tool_call_total은 SQL COUNT(kind='tool_call') 대신
+      <code>list_session</code>으로 이벤트 전체를 로드해 Rust에서 필터링. 로드 비용이 크면
+      <code>session_kind_counts(pool, id)</code>(기존 함수)로 교체 가능 — 후속 최적화 후보.
+    </p>
+  </section>
+
   <footer class="footer">
     <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · facet correlation + 지표 중심 insight · telemetry fold Slice 1–2 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
