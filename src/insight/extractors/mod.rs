@@ -22,6 +22,7 @@ pub mod tool_failure;
 pub mod noop_test {
     use crate::insight::config::DetectorConfig;
     use crate::insight::extractor::Detector;
+    use crate::insight::manifest::DetectorManifest;
     use crate::insight::types::SignalCandidate;
     use crate::insight::view::SessionInsightView;
 
@@ -31,6 +32,19 @@ pub mod noop_test {
         fn id(&self) -> &'static str {
             "noop_test"
         }
+
+        fn manifest(&self) -> DetectorManifest {
+            DetectorManifest {
+                id: "noop_test",
+                intent: "테스트 전용 noop detector — 항상 synthetic signal 1건을 발화한다.",
+                inputs: vec![],
+                rule: "항상 발화(test-helpers feature 전용).",
+                output: "{synthetic: true}",
+                config_keys: vec![],
+                rationale: "test helper only — no real detection logic",
+            }
+        }
+
         fn detect(
             &self,
             _view: &SessionInsightView<'_>,

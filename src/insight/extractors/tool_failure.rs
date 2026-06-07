@@ -16,6 +16,7 @@ use serde_json::json;
 
 use crate::insight::config::DetectorConfig;
 use crate::insight::extractor::Detector;
+use crate::insight::manifest::DetectorManifest;
 use crate::insight::types::SignalCandidate;
 use crate::insight::view::SessionInsightView;
 use crate::model::observed::EventKind;
@@ -28,6 +29,28 @@ pub struct ToolFailure;
 impl Detector for ToolFailure {
     fn id(&self) -> &'static str {
         "tool_failure"
+    }
+
+    fn manifest(&self) -> DetectorManifest {
+        DetectorManifest {
+            id: "tool_failure",
+            intent: "도구 실행이 is_error=true로 끝나고 retry_window 내에 같은 tool_use_id로 성공한 결과가 없는 경우를 탐지한다.",
+            // Verified against detect(): reads /tool_result/is_error (bool),
+            // ev.tool_use_id (correlation), /tool_result/content (error_excerpt),
+            // paired tool_call for /tool_use/... fields (tool_name).
+            inputs: vec![
+                "tool_result.is_error",
+                "tool_result.tool_use_id",
+                "tool_result.content",
+                "tool_call.tool_use_id",
+                "tool_call.tool_name",
+            ],
+            rule: "tool_result.is_error==true이고, 이후 retry_window개 이벤트 안에 동일 tool_use_id를 가진 is_error==false tool_result가 없으면 발화. 성공 retry가 존재하면 retried=true FACT로 표면화(억제하지 않음).",
+            output: "{is_error, retried, tool_name, tool_use_id, error_excerpt, tool_result_event_id, paired_call_event_id}",
+            // Verified: cfg.usize_param("tool_failure", "retry_window", RETRY_WINDOW_DEFAULT)
+            config_keys: vec!["retry_window"],
+            rationale: "tests/fixtures/transcripts/real/tool_failure_v01.jsonl + spec §6.3",
+        }
     }
 
     fn detect(&self, view: &SessionInsightView<'_>, cfg: &DetectorConfig) -> Vec<SignalCandidate> {

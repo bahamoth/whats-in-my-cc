@@ -17,6 +17,7 @@ use serde_json::json;
 
 use crate::insight::config::DetectorConfig;
 use crate::insight::extractor::Detector;
+use crate::insight::manifest::DetectorManifest;
 use crate::insight::redaction_shim;
 use crate::insight::types::SignalCandidate;
 use crate::insight::view::SessionInsightView;
@@ -36,6 +37,27 @@ pub struct ContextBloat;
 impl Detector for ContextBloat {
     fn id(&self) -> &'static str {
         "context_bloat"
+    }
+
+    fn manifest(&self) -> DetectorManifest {
+        DetectorManifest {
+            id: "context_bloat",
+            intent: "tool_result의 content 크기가 threshold_bytes를 초과하고, next_event_window 내 assistant_message가 있으며, 이후 tool_call에서 해당 content의 어휘적 재사용(lexical overlap)이 min_overlap_stems 미만인 경우를 탐지한다.",
+            // Verified against detect():
+            // reads /tool_result/content (as_str, len for size check + stem extraction)
+            // reads assistant_message content array for asst_text
+            // reads downstream tool_call /tool_use/input/command for stem overlap
+            inputs: vec![
+                "tool_result.content",
+                "assistant_message.content",
+                "tool_call.tool_use.input.command",
+            ],
+            rule: "tool_result.content.len() > threshold_bytes AND 이후 next_event_window 내 assistant_message 존재 AND 그 이후 next_event_window 내 tool_call들과의 lexical overlap < min_overlap_stems. 셋 다 true일 때 발화.",
+            output: "{tool_result: {event_id, tool_name, payload_size_bytes, payload_excerpt_redacted, payload_tail_excerpt_redacted}, next_assistant: {event_id, estimated_tokens, excerpt_redacted}, downstream_usage_signal: {lexical_overlap_with_next_tool_calls, next_three_tool_call_inputs_redacted}}",
+            // Verified: all three cfg.usize_param calls in detect()
+            config_keys: vec!["threshold_bytes", "next_event_window", "min_overlap_stems"],
+            rationale: "spec §4.2 B",
+        }
     }
 
     fn detect(&self, view: &SessionInsightView<'_>, cfg: &DetectorConfig) -> Vec<SignalCandidate> {

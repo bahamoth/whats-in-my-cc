@@ -16,6 +16,7 @@ use serde_json::json;
 
 use crate::insight::config::DetectorConfig;
 use crate::insight::extractor::Detector;
+use crate::insight::manifest::DetectorManifest;
 use crate::insight::redaction_shim;
 use crate::insight::types::SignalCandidate;
 use crate::insight::view::SessionInsightView;
@@ -41,6 +42,27 @@ pub struct RiskyAction;
 impl Detector for RiskyAction {
     fn id(&self) -> &'static str {
         "risky_action"
+    }
+
+    fn manifest(&self) -> DetectorManifest {
+        DetectorManifest {
+            id: "risky_action",
+            intent: "Bash tool_call에서 파괴적 명령 패턴(DESTRUCTIVE_PATTERNS)이 일치하거나, user_modified==true인 diff_hunk가 존재하는 경우를 탐지한다.",
+            // Verified against detect():
+            // Branch (a): ev.tool_name=='Bash', reads /tool_use/input/command
+            // Branch (b): diff_hunk.user_modified (view.diff_hunks)
+            inputs: vec![
+                "tool_use.input.command",
+                "diff_hunk.user_modified",
+                "diff_hunk.file_path",
+                "diff_hunk.lines_removed",
+            ],
+            rule: "(a) tool_name==\"Bash\" AND /tool_use/input/command가 DESTRUCTIVE_PATTERNS 중 하나에 매칭; OR (b) diff_hunk.user_modified==true. 두 브랜치 모두 독립적으로 발화.",
+            output: "{trigger: {kind, command_redacted, tool_use_id, introduced_diff_hunks}, context: {preceding_user_message_excerpt, preceding_assistant_message_excerpt}}",
+            // Verified: _cfg not used; no usize_param calls in detect()
+            config_keys: vec![],
+            rationale: "DESTRUCTIVE_PATTERNS 상수 + spec §4.2 C",
+        }
     }
 
     fn detect(&self, view: &SessionInsightView<'_>, _cfg: &DetectorConfig) -> Vec<SignalCandidate> {

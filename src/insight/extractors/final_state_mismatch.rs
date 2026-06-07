@@ -18,6 +18,7 @@ use serde_json::json;
 
 use crate::insight::config::DetectorConfig;
 use crate::insight::extractor::Detector;
+use crate::insight::manifest::DetectorManifest;
 use crate::insight::redaction_shim;
 use crate::insight::types::SignalCandidate;
 use crate::insight::view::SessionInsightView;
@@ -57,6 +58,28 @@ pub struct FinalStateMismatch;
 impl Detector for FinalStateMismatch {
     fn id(&self) -> &'static str {
         "final_state_mismatch"
+    }
+
+    fn manifest(&self) -> DetectorManifest {
+        DetectorManifest {
+            id: "final_state_mismatch",
+            intent: "사용자 메시지에 GOAL_VERBS가 포함되고, 마지막 검증 실행이 failed/error이며, 최종 assistant_message에 COMPLETION_MARKERS가 없는 경우를 탐지한다(세션 단위 최대 1 signal).",
+            // Verified against detect():
+            // Condition 1: user_message content → extract_message_text → find_goal_verbs (GOAL_VERBS)
+            // Condition 2: view.verification_runs.last().status
+            // Condition 3: last assistant_message content → has_any_completion_marker (COMPLETION_MARKERS)
+            inputs: vec![
+                "user_message.content",
+                "assistant_message.content",
+                "verification_run.status",
+                "verification_run.failure_summary",
+            ],
+            rule: "user_message.content에 GOAL_VERBS 어휘가 존재 AND view.verification_runs.last().status in [\"failed\",\"error\"] AND last assistant_message.content에 COMPLETION_MARKERS 없음. 셋 다 true일 때 세션당 최대 1회 발화.",
+            output: "{goal: {user_message_event_id, matched_verbs, excerpt_redacted}, final_state: {last_assistant_message_event_id, last_assistant_excerpt_redacted, last_verification_run: {verification_run_id, status, failure_summary_redacted}, trailing_tool_failure}}",
+            // Verified: _cfg not used; no usize_param calls in detect()
+            config_keys: vec![],
+            rationale: "spec §4.2 D",
+        }
     }
 
     fn detect(&self, view: &SessionInsightView<'_>, _cfg: &DetectorConfig) -> Vec<SignalCandidate> {
