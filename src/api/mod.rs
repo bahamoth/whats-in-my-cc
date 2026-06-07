@@ -120,6 +120,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/signals/:id", get(routes::signal_detail))
         .route("/v1/events/:event_id/raw", get(routes::event_raw))
         .route("/v1/audit", get(routes::list_audit))
+        .route("/v1/detectors", get(routes::list_detectors))
         .layer(axum_mw::from_fn_with_state(
             auth_state,
             middleware::auth::require_token,

@@ -733,6 +733,23 @@ pub async fn signal_detail(
 }
 
 // ---------------------------------------------------------------------------
+// Plan 4 — Detector catalog endpoint
+// ---------------------------------------------------------------------------
+
+/// `GET /v1/detectors` — LLM-readable detector manifest catalog.
+///
+/// Returns the manifest for every registered detector: id, intent, inputs,
+/// rule, output, config_keys, rationale. Read-only; no DB access.
+/// Spec §6.4: manifest=declaration, config=rule pack, predicate=code.
+pub async fn list_detectors() -> impl IntoResponse {
+    let catalog: Vec<_> = crate::insight::pipeline::all_detectors()
+        .iter()
+        .map(|d| d.manifest())
+        .collect();
+    Json(json!({ "data": catalog }))
+}
+
+// ---------------------------------------------------------------------------
 // Slice-19 — Audit endpoint
 // ---------------------------------------------------------------------------
 

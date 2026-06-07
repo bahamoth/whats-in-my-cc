@@ -76,7 +76,8 @@ fn build_signal_row(session_id: &str, c: &SignalCandidate) -> SignalRow {
 }
 
 /// Returns all detectors for the pipeline, in stable order.
-fn all_detectors() -> Vec<Box<dyn crate::insight::extractor::Detector>> {
+/// `pub(crate)` so the API layer can collect manifests without duplicating the list.
+pub(crate) fn all_detectors() -> Vec<Box<dyn crate::insight::extractor::Detector>> {
     use crate::insight::extractors::{
         context_bloat::ContextBloat, final_state_mismatch::FinalStateMismatch,
         risky_action::RiskyAction, tool_failure::ToolFailure,
