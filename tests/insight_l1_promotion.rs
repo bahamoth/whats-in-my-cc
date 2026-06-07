@@ -46,13 +46,13 @@ async fn pool_with_destructive_bash() -> sqlx::SqlitePool {
     .unwrap();
 
     // observed_event: assistant tool_call for Bash with `rm -rf /tmp/foo`
-    // Payload shape mirrors what `risky_action` extractor reads via
-    // `payload.pointer("/tool_use/input/command")`.
+    // Payload shape mirrors mapping.rs:193 (real transcript shape):
+    // {"content_ordinal": N, "tool_name": ..., "input": {...}}
+    // Command is at /input/command — the pointer risky_action reads.
     let call_payload = serde_json::to_string(&serde_json::json!({
-        "tool_use": {
-            "name": "Bash",
-            "input": { "command": "rm -rf /tmp/foo" }
-        }
+        "content_ordinal": 0,
+        "tool_name": "Bash",
+        "input": { "command": "rm -rf /tmp/foo" }
     }))
     .unwrap();
 

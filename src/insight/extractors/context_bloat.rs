@@ -43,14 +43,15 @@ impl Detector for ContextBloat {
         DetectorManifest {
             id: "context_bloat",
             intent: "tool_result의 content 크기가 threshold_bytes를 초과하고, next_event_window 내 assistant_message가 있으며, 이후 tool_call에서 해당 content의 어휘적 재사용(lexical overlap)이 min_overlap_stems 미만인 경우를 탐지한다.",
-            // Verified against detect():
+            // Verified against detect() and mapping.rs:193:
             // reads /tool_result/content (as_str, len for size check + stem extraction)
             // reads assistant_message content array for asst_text
-            // reads downstream tool_call /tool_use/input/command for stem overlap
+            // reads downstream tool_call /input/command for stem overlap
+            // (ToolCall payload shape: {"content_ordinal": N, "tool_name": ..., "input": {...}})
             inputs: vec![
                 "tool_result.content",
                 "assistant_message.content",
-                "tool_call.tool_use.input.command",
+                "tool_call.input.command",
             ],
             rule: "tool_result.content.len() > threshold_bytes AND 이후 next_event_window 내 assistant_message 존재 AND 그 이후 next_event_window 내 tool_call들과의 lexical overlap < min_overlap_stems. 셋 다 true일 때 발화.",
             output: "{tool_result: {event_id, tool_name, payload_size_bytes, payload_excerpt_redacted, payload_tail_excerpt_redacted}, next_assistant: {event_id, estimated_tokens, excerpt_redacted}, downstream_usage_signal: {lexical_overlap_with_next_tool_calls, next_three_tool_call_inputs_redacted}}",
@@ -104,12 +105,15 @@ impl Detector for ContextBloat {
             // Condition 3: check downstream lexical overlap.
             let bloat_stems = extract_stems(content);
             let next_end = (asst_idx + 1 + next_window).min(events.len());
+            // ToolCall payload shape per mapping.rs:193:
+            // {"content_ordinal": N, "tool_name": ..., "input": {"command": ...}}
+            // Command is at /input/command — NOT /tool_use/input/command.
             let downstream_tool_inputs: Vec<String> = events[asst_idx + 1..next_end]
                 .iter()
                 .filter(|ev2| ev2.kind == EventKind::ToolCall)
                 .map(|ev2| {
                     ev2.payload
-                        .pointer("/tool_use/input/command")
+                        .pointer("/input/command")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string()

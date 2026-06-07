@@ -48,17 +48,24 @@ fn short_assistant_msg(i: usize) -> ObservedEvent {
 }
 
 /// Build a tool_call event at index `i` with specific input (for overlap testing).
+/// Uses the REAL mapping.rs:193 payload shape:
+/// `{"content_ordinal": N, "tool_name": "Bash", "input": {"command": ...}}`.
+/// Command is at /input/command — the pointer context_bloat reads.
 fn tool_call_with_input(i: usize, input_text: &str) -> ObservedEvent {
     let mut ev = base_event(i, Actor::Assistant, EventKind::ToolCall);
     ev.tool_name = Some("Bash".into());
     ev.tool_use_id = Some(format!("tu_{i:03}"));
     ev.payload = json!({
-        "tool_use": {
-            "name": "Bash",
-            "input": { "command": input_text }
-        }
+        "content_ordinal": 0,
+        "tool_name": "Bash",
+        "input": { "command": input_text }
     });
     ev
+}
+
+/// Alias with an explicit name for real-shape new tests (same shape as tool_call_with_input).
+fn tool_call_real_shape(i: usize, input_text: &str) -> ObservedEvent {
+    tool_call_with_input(i, input_text)
 }
 
 fn empty_view<'a>(events: &'a [ObservedEvent]) -> SessionInsightView<'a> {
@@ -238,4 +245,53 @@ fn threshold_bytes_from_config() {
         1,
         "lowering threshold_bytes to 5000 makes 10KB fire"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Real payload shape — TDD guard for downstream overlap pointer bug fix
+// Downstream tool_call command is at /input/command (NOT /tool_use/input/command).
+// These tests use the mapping.rs:193 shape and must be RED before the fix,
+// GREEN after.
+// ---------------------------------------------------------------------------
+
+/// Large bloat + short assistant + downstream tool_call using REAL shape with
+/// ≥3 stem overlap → downstream use detected, must NOT fire (overlap suppresses).
+/// Before the fix the real-shape pointer is missed → fires incorrectly.
+#[test]
+fn does_not_fire_when_downstream_real_shape_overlaps() {
+    let big_content = "alpha_word beta_word gamma_word ".repeat(3200); // ~100KB
+    let mut result_ev = base_event(0, Actor::Tool, EventKind::ToolResult);
+    result_ev.tool_name = Some("Grep".into());
+    result_ev.tool_use_id = Some("tu_000".into());
+    result_ev.payload = json!({
+        "tool_result": {
+            "tool_use_id": "tu_000",
+            "content": big_content,
+            "is_error": false
+        }
+    });
+    let assistant_ev = short_assistant_msg(1);
+    // Real payload shape: /input/command (not /tool_use/input/command)
+    let downstream_call = tool_call_real_shape(2, "process alpha_word beta_word gamma_word data");
+    let events = vec![result_ev, assistant_ev, downstream_call];
+    let view = empty_view(&events);
+    // With the buggy pointer the real-shape downstream input reads as "" →
+    // overlap = 0 → fires. After fix overlap = 3 → no fire.
+    let cands = ContextBloat.detect(&view, &DetectorConfig::default());
+    assert!(cands.is_empty(), "real-shape downstream use with ≥3 stems must suppress context_bloat");
+}
+
+/// Large bloat + short assistant + downstream tool_call using REAL shape with
+/// NO overlap → must fire (same as no-downstream case but verifying real shape
+/// still triggers properly when there is no reuse).
+#[test]
+fn fires_on_large_bloat_downstream_real_shape_no_overlap() {
+    let events = vec![
+        large_tool_result(0, 100_000),
+        short_assistant_msg(1),
+        tool_call_real_shape(2, "unrelated command here"),
+    ];
+    let view = empty_view(&events);
+    let cands = ContextBloat.detect(&view, &DetectorConfig::default());
+    assert_eq!(cands.len(), 1, "100KB bloat with real-shape downstream (no overlap) must fire");
 }

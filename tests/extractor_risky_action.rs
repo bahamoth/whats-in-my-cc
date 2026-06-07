@@ -30,15 +30,17 @@ fn base_event(i: usize, actor: Actor, kind: EventKind) -> ObservedEvent {
     }
 }
 
+/// Build a Bash ToolCall event using the REAL mapping.rs:193 payload shape:
+/// `{"content_ordinal": N, "tool_name": "Bash", "input": {"command": ...}}`.
+/// This is the shape arriving from actual Claude Code sessions — command at /input/command.
 fn bash_tool_call(i: usize, command: &str) -> ObservedEvent {
     let mut ev = base_event(i, Actor::Assistant, EventKind::ToolCall);
     ev.tool_name = Some("Bash".into());
     ev.tool_use_id = Some(format!("tu_{i:03}"));
     ev.payload = json!({
-        "tool_use": {
-            "name": "Bash",
-            "input": { "command": command }
-        }
+        "content_ordinal": 0,
+        "tool_name": "Bash",
+        "input": { "command": command }
     });
     ev
 }
@@ -77,6 +79,62 @@ fn diff_hunk_not_user_modified(id: &str, by_event: &str) -> DiffHunkRow {
     let mut h = diff_hunk_user_modified(id, by_event);
     h.user_modified = false;
     h
+}
+
+/// Build a Bash ToolCall event using the REAL mapping.rs payload shape:
+/// `{"content_ordinal": N, "tool_name": "Bash", "input": {"command": ...}}`
+/// (per src/ingest/mapping.rs:193, verified against real transcripts).
+/// This is the shape that arrives from actual Claude Code sessions.
+fn bash_tool_call_real_shape(i: usize, command: &str) -> ObservedEvent {
+    let mut ev = base_event(i, Actor::Assistant, EventKind::ToolCall);
+    ev.tool_name = Some("Bash".into());
+    ev.tool_use_id = Some(format!("tu_{i:03}"));
+    ev.payload = json!({
+        "content_ordinal": 0,
+        "tool_name": "Bash",
+        "input": { "command": command }
+    });
+    ev
+}
+
+// ---------------------------------------------------------------------------
+// Real payload shape — TDD guard for pointer bug fix
+// Command is at /input/command (NOT /tool_use/input/command).
+// These tests use the mapping.rs:193 shape and must be RED before the fix,
+// GREEN after.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn fires_on_rm_rf_real_shape() {
+    let events = vec![bash_tool_call_real_shape(0, "rm -rf /tmp/foo")];
+    let view = synth_view_with_bash(&events, &[]);
+    let cands = detect(&view);
+    assert_eq!(cands.len(), 1, "rm -rf (real shape) must fire risky_action");
+    assert_eq!(cands[0].facts["trigger"]["kind"], json!("destructive_bash"));
+}
+
+#[test]
+fn fires_on_git_push_force_real_shape() {
+    let events = vec![bash_tool_call_real_shape(0, "git push --force origin main")];
+    let view = synth_view_with_bash(&events, &[]);
+    let cands = detect(&view);
+    assert_eq!(cands.len(), 1, "git push --force (real shape) must fire");
+}
+
+#[test]
+fn fires_on_git_reset_hard_real_shape() {
+    let events = vec![bash_tool_call_real_shape(0, "git reset --hard HEAD~1")];
+    let view = synth_view_with_bash(&events, &[]);
+    let cands = detect(&view);
+    assert_eq!(cands.len(), 1, "git reset --hard (real shape) must fire");
+}
+
+#[test]
+fn does_not_fire_on_safe_bash_real_shape() {
+    let events = vec![bash_tool_call_real_shape(0, "ls -la")];
+    let view = synth_view_with_bash(&events, &[]);
+    let cands = detect(&view);
+    assert!(cands.is_empty(), "ls -la (real shape) must not fire");
 }
 
 // ---------------------------------------------------------------------------
@@ -148,13 +206,13 @@ fn does_not_fire_on_safe_bash_grep() {
 
 #[test]
 fn does_not_fire_on_non_bash_tool() {
+    // Real mapping.rs:193 payload shape for a Read tool_call
     let mut ev = base_event(0, Actor::Assistant, EventKind::ToolCall);
     ev.tool_name = Some("Read".into());
     ev.payload = json!({
-        "tool_use": {
-            "name": "Read",
-            "input": { "file_path": "/tmp/foo" }
-        }
+        "content_ordinal": 0,
+        "tool_name": "Read",
+        "input": { "file_path": "/tmp/foo" }
     });
     let events = vec![ev];
     let view = synth_view_with_bash(&events, &[]);
