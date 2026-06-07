@@ -12,6 +12,7 @@
 
 pub mod context_bloat;
 pub mod final_state_mismatch;
+pub mod re_read;
 pub mod risky_action;
 pub mod tool_failure;
 
