@@ -92,7 +92,10 @@ fn parse_exit_code(content:&str)->Option<i64>{
 
 ## Task 4: 검증
 - [x] `cargo test` 0 fail (97 그룹 그린), clippy 새 경고 0 (변경 파일 기준).
-- [ ] **(controller 몫)** 재ingest 후 status 분포+provenance, b4196731 빌드실패 재확인. dev DB 재생성 규칙: `wimcc init-db` + 재ingest 필요(migration 0020·payload 필드).
+- [x] DB 삭제 → `init-db` → `ingest --all` 재ingest 후 검증 완료:
+  - **b4196731 tool_failure: 20+건(old, is_error 노이즈, prov NULL) → 1건(measured)**. 살아남은 1건은 `is_error=false`인 `cargo test` 실패(exit≠0)를 measured로 포착 — Plan 6 근본 동기 그대로.
+  - 전역 tool_failure: measured 3건만(Unknown 미발화). verification_run: unknown 990 / failed-estimated 73 / failed-measured 1, **passed 0**(is_error=false→passed 오판 제거).
+  - **트레이드오프 확인**: transcript-only 재ingest(OTLP collector 미연동)면 OTLP `success`·명시적 exit code가 드물어 대부분 unknown. measured 발화는 보수적으로 적다(false positive↓ ↔ false negative↑, self-review대로). OTLP 연동 세션 검증은 별도.
 
 ## Self-Review
 - 라이브 시점차→그 시점 unknown, re-run 갱신. Tier-4는 verification만 estimated. parse_exit_code는 명시 텍스트만(구조적). hook/OTLP 포인터 실제 구조로 확인.
