@@ -25,9 +25,12 @@ interface DetailPanelProps {
   /** Source-split blocks for the Raw tab (entity + correlated sources).
    *  Falls back to the single `record` when absent. */
   rawBlocks?: RawBlock[];
+  /** The matching tool_result event when the selected event is a tool_call.
+   *  Used by WhatSection (① WHAT layer) to show the full tool output. */
+  matchedResult?: ObservedEventDto | null;
 }
 
-export function DetailPanel({ event, record, signals, toolMetrics, llmMetrics, rawBlocks }: DetailPanelProps) {
+export function DetailPanel({ event, record, signals, toolMetrics, llmMetrics, rawBlocks, matchedResult }: DetailPanelProps) {
   const [chosen, setChosen] = useState<TabId | null>(null);
   const active = chosen ?? 'insight';
 
@@ -79,6 +82,7 @@ export function DetailPanel({ event, record, signals, toolMetrics, llmMetrics, r
             event={event}
             toolMetrics={toolMetrics ?? null}
             llmMetrics={llmMetrics ?? null}
+            matchedResult={matchedResult ?? null}
           />
         )}
         {active === 'raw' && <RawTab nodeId={event.event_id} record={record} blocks={rawBlocks} />}

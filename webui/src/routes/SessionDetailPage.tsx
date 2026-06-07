@@ -211,6 +211,20 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     [selectedEvent, window_.events],
   );
 
+  // Matched tool_result event for WhatSection: when the selected event is a
+  // tool_call with a tool_use_id, find the corresponding tool_result event in
+  // the loaded/correlated events (same lookup used by rawBlocks). This is the
+  // event itself (not just the metrics), so WhatSection can show the full output.
+  const matchedToolResult = useMemo(
+    () =>
+      selectedEvent?.kind === 'tool_call' && selectedEvent.tool_use_id
+        ? (metricEvents.find(
+            (e) => e.kind === 'tool_result' && e.tool_use_id === selectedEvent.tool_use_id,
+          ) ?? null)
+        : null,
+    [selectedEvent, metricEvents],
+  );
+
   // --- render branches ---
   const detailError = detail.error as ApiError | null;
   const is404 = detailError instanceof ApiError && detailError.status === 404;
@@ -274,6 +288,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               toolMetrics={selectedToolMetrics}
               llmMetrics={selectedLlmMetrics}
               rawBlocks={rawBlocks}
+              matchedResult={matchedToolResult}
             />
           </div>
         </div>
