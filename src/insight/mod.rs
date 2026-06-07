@@ -3,6 +3,7 @@ pub mod extractor;
 pub mod extractors;
 pub mod manifest;
 pub mod metrics;
+pub mod outcome;
 pub mod pipeline;
 pub mod pricing;
 pub mod redaction_shim;
