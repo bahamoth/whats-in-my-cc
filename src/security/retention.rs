@@ -12,9 +12,9 @@ use sqlx::SqlitePool;
 pub enum Profile {
     /// No deletion (default). Capability ships off by default.
     None,
-    /// Default profile: raw 30d, normalized 180d, graph/insight 180d, audit 90d.
+    /// Default profile: raw 30d, normalized 180d, insight 180d, audit 90d.
     Default,
-    /// Strict profile: raw 7d, normalized 30d, graph/insight 30d, audit 30d.
+    /// Strict profile: raw 7d, normalized 30d, insight 30d, audit 30d.
     Strict,
 }
 
@@ -37,8 +37,9 @@ impl Profile {
         }
     }
 
-    /// Graph & insight retention in days.
-    pub fn graph_insight_days(&self) -> Option<i64> {
+    /// Insight (findings) retention in days. (Was `graph_insight_days` before
+    /// the graph layer was removed — see #graph-removal.)
+    pub fn insight_days(&self) -> Option<i64> {
         match self {
             Profile::None => None,
             Profile::Default => Some(180),

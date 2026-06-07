@@ -3,7 +3,7 @@
 //! Slice-3 scope: traces signal only. Metrics/logs are future work.
 //! The parser is intentionally permissive about unknown fields (source-preserving):
 //! original span JSON is stored verbatim in `raw_event.payload`; we only extract
-//! the fields the graph and UI care about.
+//! the fields the UI and insight pipeline care about.
 
 use crate::db::{repo_observed, repo_raw, repo_runs};
 use crate::error::Result;

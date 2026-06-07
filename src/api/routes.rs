@@ -546,9 +546,8 @@ fn covered_hunk_ids_for_run(
     // Note: full temporal filtering requires the introducing event's timestamp,
     // which is not stored on the diff_hunk row (it's in observed_event). This
     // implementation is conservative: it includes all hunks in the same session
-    // that have a valid run_started. The graph builder has the exact timestamps
-    // (via event_observed_at map); here we approximate for the API.
-    // Slice-12 episode segmentation will refine this with episode scoping.
+    // that have a valid run_started; here we approximate for the API. A precise
+    // version would join observed_event for the introducing event's timestamp.
 }
 
 fn run_to_dto(
