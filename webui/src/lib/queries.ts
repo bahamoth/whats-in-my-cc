@@ -1,20 +1,18 @@
 /**
- * PR-2 — read-only React Query hooks for every session-scoped resource the
- * UI needs. Keys are arranged hierarchically so PR-3+ can invalidate at any
- * level (the whole session subtree, or just `findings`).
+ * Read-only React Query hooks for every session-scoped resource the UI needs.
+ * Keys are arranged hierarchically so invalidation can target any level
+ * (the whole session subtree, or a specific resource).
  *
- * Evidence-linked invariant: `useFindingsQuery` drops findings whose
+ * Evidence-linked invariant: `useSignalsQuery` drops signals whose
  * `evidence_refs` array is empty. Per CLAUDE.md "Finding/RootCauseHypothesis/
  * QualitySummary는 evidence_refs 없이 만들지 않는다."
  */
 import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
 import {
   getSession,
-  getFindings,
-  getFindingEvidence,
+  getSignals,
   getSessionUsage,
   getUsageBaseline,
-  getToolFailureSummary,
   getVerificationRuns,
   getDiffHunks,
   getEventRaw,
@@ -22,13 +20,11 @@ import {
 } from '../api/client';
 import type {
   SessionDetail,
-  FindingDto,
+  SignalDto,
   SessionUsageDto,
   UsageBaselineDto,
-  ToolFailureSummaryDto,
   VerificationRunDto,
   DiffHunkDto,
-  FindingEvidenceResponse,
   RawEventResponse,
   SessionEventsResponse,
 } from '../api/types';
@@ -39,12 +35,10 @@ export const sessionKeys = {
   session: (id: string) => ['session', id] as const,
   detail: (id: string) => ['session', id, 'detail'] as const,
   events: (id: string) => ['session', id, 'events'] as const,
-  findings: (id: string) => ['session', id, 'findings'] as const,
-  toolFailures: (id: string) => ['session', id, 'tool-failures'] as const,
+  signals: (id: string) => ['session', id, 'signals'] as const,
   diffHunks: (id: string) => ['session', id, 'diff-hunks'] as const,
   verificationRuns: (id: string) => ['session', id, 'verification-runs'] as const,
   usage: (id: string) => ['session', id, 'usage'] as const,
-  findingEvidence: (findingId: string) => ['finding', findingId, 'evidence'] as const,
 };
 
 /** insight-redesign #6 — store-wide usage baseline (not session-scoped). */
@@ -63,39 +57,15 @@ export function useSessionDetailQuery(id: string, opts?: QOpts<SessionDetail>) {
   });
 }
 
-export function useFindingsQuery(id: string, opts?: QOpts<FindingDto[]>) {
-  return useQuery<FindingDto[]>({
-    queryKey: sessionKeys.findings(id),
+export function useSignalsQuery(id: string, opts?: QOpts<SignalDto[]>) {
+  return useQuery<SignalDto[]>({
+    queryKey: sessionKeys.signals(id),
     queryFn: async () => {
-      const all = await getFindings(id);
+      const all = await getSignals(id);
       // Evidence-linked invariant: drop empty evidence_refs.
-      return all.filter((f) => Array.isArray(f.evidence_refs) && f.evidence_refs.length > 0);
+      return all.filter((s) => Array.isArray(s.evidence_refs) && s.evidence_refs.length > 0);
     },
     enabled: !!id,
-    ...opts,
-  });
-}
-
-export function useToolFailureSummaryQuery(
-  id: string,
-  opts?: QOpts<ToolFailureSummaryDto>,
-) {
-  return useQuery<ToolFailureSummaryDto>({
-    queryKey: sessionKeys.toolFailures(id),
-    queryFn: () => getToolFailureSummary(id),
-    enabled: !!id,
-    ...opts,
-  });
-}
-
-export function useFindingEvidenceQuery(
-  findingId: string,
-  opts?: QOpts<FindingEvidenceResponse>,
-) {
-  return useQuery<FindingEvidenceResponse>({
-    queryKey: sessionKeys.findingEvidence(findingId),
-    queryFn: () => getFindingEvidence(findingId),
-    enabled: !!findingId,
     ...opts,
   });
 }

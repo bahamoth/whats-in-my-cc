@@ -1,14 +1,12 @@
 /**
- * PR-2 RED — TanStack Query hooks for the read-only viewer.
+ * TanStack Query hooks for the read-only viewer.
  *
  * Each hook must:
  *  - fetch via the existing api/client helpers
- *  - cache by a stable key shape so PR-3+ can read it without re-fetching
- *  - filter out findings with empty `evidence_refs` (Evidence-linked invariant
+ *  - cache by a stable key shape so downstream code can read it without re-fetching
+ *  - filter out signals with empty `evidence_refs` (Evidence-linked invariant
  *    from CLAUDE.md — "Finding/RootCauseHypothesis/QualitySummary는
  *    evidence_refs 없이 만들지 않는다")
- *
- * See plan §10.1 PR-2 (revised).
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -16,7 +14,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createQueryClient } from '../queryClient';
 import {
   useSessionDetailQuery,
-  useFindingsQuery,
+  useSignalsQuery,
   useUsageBaselineQuery,
   sessionKeys,
   usageKeys,
@@ -53,7 +51,7 @@ afterEach(() => {
 describe('sessionKeys', () => {
   it('produces stable, hierarchical query keys', () => {
     expect(sessionKeys.detail('S1')).toEqual(['session', 'S1', 'detail']);
-    expect(sessionKeys.findings('S1')).toEqual(['session', 'S1', 'findings']);
+    expect(sessionKeys.signals('S1')).toEqual(['session', 'S1', 'signals']);
   });
 });
 
@@ -68,38 +66,39 @@ describe('useSessionDetailQuery', () => {
   });
 });
 
-describe('useFindingsQuery', () => {
-  it('drops findings with empty evidence_refs (evidence-linked invariant)', async () => {
+describe('useSignalsQuery', () => {
+  it('drops signals with empty evidence_refs (evidence-linked invariant)', async () => {
     const payload = [
       {
-        finding_id: 'good',
-        category: 'risky_action',
-        severity: 'high',
-        confidence: 0.9,
-        // Slice-14 deterministic extractors emit bare ULID strings here.
-        evidence_refs: ['01KSQKD5CT8BHH1DAS4YNKJBVB'],
-        evidence_projection: {},
-        provenance: {},
+        signal_id: 'good',
+        schema_version: '1',
+        session_id: 'S1',
+        detector: 'tool_failure',
+        subkind: null,
         summary: 'ok',
-        status: 'active',
+        evidence_refs: ['01KSQKD5CT8BHH1DAS4YNKJBVB'],
+        facts: {},
+        provenance: {},
+        created_at: '',
       },
       {
-        finding_id: 'bad',
-        category: 'context_bloat',
-        severity: 'low',
-        confidence: 0.5,
-        evidence_refs: [],
-        evidence_projection: {},
-        provenance: {},
+        signal_id: 'bad',
+        schema_version: '1',
+        session_id: 'S1',
+        detector: 'context_bloat',
+        subkind: null,
         summary: 'no evidence',
-        status: 'active',
+        evidence_refs: [],
+        facts: {},
+        provenance: {},
+        created_at: '',
       },
     ];
     fetchSpy.mockResolvedValue(mockOk({ data: payload }));
     const qc = createQueryClient();
-    const { result } = renderHook(() => useFindingsQuery('S1'), { wrapper: wrap(qc) });
+    const { result } = renderHook(() => useSignalsQuery('S1'), { wrapper: wrap(qc) });
     await waitFor(() => expect(result.current.data?.length).toBe(1));
-    expect(result.current.data?.[0]?.finding_id).toBe('good');
+    expect(result.current.data?.[0]?.signal_id).toBe('good');
   });
 });
 
