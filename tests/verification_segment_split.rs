@@ -64,7 +64,10 @@ async fn cd_npx_vitest_is_detected_as_known_tool_test_suite_js() {
     );
     // `… 2>&1 | tail` is an output-capture idiom (tail is a pager) → exit basis.
     assert_eq!(m.status_basis, "exit");
-    assert_eq!(m.status, "passed"); // is_error=false
+    // Plan 6: no OTLP/hook/exit-code in this transcript-only fixture →
+    // status is "unknown" (is_error=false is no longer used for pass/fail).
+    // Content is just a tail fragment: no failure pattern, no "exit code:" text.
+    assert_eq!(m.status, "unknown");
 }
 
 #[tokio::test]

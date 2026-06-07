@@ -20,6 +20,7 @@ pub struct VerificationRunRow {
     pub trigger_event_id: String,
     pub trigger_tool_use_id: Option<String>,
     pub status: String,
+    pub status_provenance: Option<String>,
     pub detection_basis: String,
     pub status_basis: String,
     pub started_at: String,
@@ -41,9 +42,10 @@ pub async fn insert(pool: &SqlitePool, row: &NewVerificationRun) -> Result<()> {
         "INSERT OR REPLACE INTO verification_run(
             verification_run_id, schema_version, session_id, source, command,
             command_kind, trigger_event_id, trigger_tool_use_id, status,
+            status_provenance,
             started_at, ended_at, exit_code, failure_summary,
             raw_event_id, parser_version, detection_basis, status_basis)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     )
     .bind(&row.verification_run_id)
     .bind(&row.schema_version)
@@ -54,6 +56,7 @@ pub async fn insert(pool: &SqlitePool, row: &NewVerificationRun) -> Result<()> {
     .bind(&row.trigger_event_id)
     .bind(&row.trigger_tool_use_id)
     .bind(&row.status)
+    .bind(&row.status_provenance)
     .bind(&row.started_at)
     .bind(&row.ended_at)
     .bind(row.exit_code.map(|x| x as i64))
@@ -75,6 +78,7 @@ pub async fn list_session(
     let rows = sqlx::query(
         "SELECT verification_run_id, schema_version, session_id, source, command,
                 command_kind, trigger_event_id, trigger_tool_use_id, status,
+                status_provenance,
                 started_at, ended_at, exit_code, failure_summary,
                 raw_event_id, parser_version, detection_basis, status_basis
          FROM verification_run
@@ -95,6 +99,7 @@ pub async fn get(
     let row = sqlx::query(
         "SELECT verification_run_id, schema_version, session_id, source, command,
                 command_kind, trigger_event_id, trigger_tool_use_id, status,
+                status_provenance,
                 started_at, ended_at, exit_code, failure_summary,
                 raw_event_id, parser_version, detection_basis, status_basis
          FROM verification_run
@@ -117,6 +122,7 @@ fn map_row(r: sqlx::sqlite::SqliteRow) -> VerificationRunRow {
         trigger_event_id: r.get("trigger_event_id"),
         trigger_tool_use_id: r.get("trigger_tool_use_id"),
         status: r.get("status"),
+        status_provenance: r.get("status_provenance"),
         detection_basis: r.get("detection_basis"),
         status_basis: r.get("status_basis"),
         started_at: r.get("started_at"),
@@ -145,6 +151,7 @@ mod tests {
             trigger_event_id: "ev_001".into(),
             trigger_tool_use_id: Some("toolu_001".into()),
             status: "passed".into(),
+            status_provenance: Some("measured".into()),
             detection_basis: "known_tool".into(),
             status_basis: "exit".into(),
             started_at: "2026-05-27T10:00:00Z".into(),

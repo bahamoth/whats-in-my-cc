@@ -213,6 +213,7 @@ pub async fn ingest_file(
                         trigger_event_id: rec.trigger_event_id,
                         trigger_tool_use_id: rec.trigger_tool_use_id,
                         status: rec.status,
+                        status_provenance: rec.status_provenance,
                         detection_basis: rec.detection_basis,
                         status_basis: rec.status_basis,
                         started_at: rec.started_at,

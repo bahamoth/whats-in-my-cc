@@ -564,6 +564,7 @@ fn run_to_dto(
         trigger_event_id: r.trigger_event_id,
         trigger_tool_use_id: r.trigger_tool_use_id,
         status: r.status,
+        status_provenance: r.status_provenance,
         detection_basis: r.detection_basis,
         status_basis: r.status_basis,
         started_at: r.started_at,

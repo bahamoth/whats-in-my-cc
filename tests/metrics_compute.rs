@@ -86,6 +86,7 @@ fn make_vrun(session_id: &str, id: &str, status: &str) -> VerificationRunRow {
         trigger_event_id: format!("ev_{id}"),
         trigger_tool_use_id: None,
         status: status.into(),
+        status_provenance: Some("measured".into()),
         detection_basis: "known_tool".into(),
         status_basis: "exit".into(),
         started_at: "2026-06-07T00:00:01Z".into(),

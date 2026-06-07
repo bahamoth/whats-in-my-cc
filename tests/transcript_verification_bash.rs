@@ -54,10 +54,30 @@ async fn extracts_verification_runs_from_real_bash_fixture() {
         evs.len()
     );
 
-    let passed = runs.iter().filter(|r| r.status == "passed").count();
+    // Plan 6: status is OTLP-first; without OTLP/hook the chain falls through
+    // to Tier-4 content rules. is_error is NOT used for pass/fail.
+    //
+    // Real fixture (aac68973) inspection:
+    // - Run 1 (cargo test --test api): content has "FAILED" + "error: test failed"
+    //   → Tier-4 estimated → Failed.
+    // - Run 2 (cargo test 2>&1 | tail -40): same content format with "FAILED"
+    //   + "error: test failed" → Tier-4 estimated → Failed.
+    // - Run 3 (cargo build --release): content is "Compiled … Finished" only
+    //   → no failure pattern → Unknown.
+    //
+    // Pre-Plan-6 all 3 were "passed" (is_error=false) — that was the bug.
     let failed = runs.iter().filter(|r| r.status == "failed").count();
-    assert_eq!(passed, 3, "all 3 real-fixture runs should be passed (no failures in aac68973)");
-    assert_eq!(failed, 0, "no failed runs in real fixture");
+    let unknown = runs.iter().filter(|r| r.status == "unknown").count();
+    assert_eq!(
+        failed,
+        2,
+        "2 real-fixture test runs have failure content (Tier-4 estimated)"
+    );
+    assert_eq!(
+        unknown,
+        1,
+        "1 real-fixture build run has no failure content → unknown"
+    );
 
     // Validate common fields on every run
     for r in &runs {

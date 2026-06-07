@@ -33,6 +33,7 @@ async fn migration_creates_verification_run_table_with_expected_columns() {
         "trigger_event_id",
         "trigger_tool_use_id",
         "status",
+        "status_provenance",
         "started_at",
         "ended_at",
         "exit_code",

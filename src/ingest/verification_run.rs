@@ -17,6 +17,7 @@
 
 use sha2::{Digest, Sha256};
 
+use crate::insight::outcome::{resolve_outcome, OutcomeProvenance, OutcomeStatus};
 use crate::insight::verification_allowlist::classify_segment;
 use crate::model::observed::{EventKind, ObservedEvent};
 
@@ -29,15 +30,16 @@ pub struct VerificationRunRecord {
     pub verification_run_id: String,
     pub schema_version: &'static str,
     pub session_id: String,
-    pub source: String,          // "bash" | "hook" | "otel"
+    pub source: String,              // "bash" | "hook" | "otel"
     pub command: String,
     pub command_kind: String,
     pub trigger_event_id: String,
     pub trigger_tool_use_id: Option<String>,
-    pub status: String,          // "passed" | "failed" | "unknown"
-    pub detection_basis: String, // "known_tool" | "test_keyword"
-    pub status_basis: String,    // "exit" | "piped"
-    pub started_at: String,      // ISO 8601 UTC
+    pub status: String,              // "passed" | "failed" | "unknown"
+    pub status_provenance: Option<String>, // "measured" | "estimated" | "unknown"
+    pub detection_basis: String,     // "known_tool" | "test_keyword"
+    pub status_basis: String,        // "exit" | "piped"
+    pub started_at: String,          // ISO 8601 UTC
     pub ended_at: Option<String>,
     pub exit_code: Option<i32>,
     pub failure_summary: Option<String>,
@@ -52,8 +54,10 @@ pub struct VerificationRunRecord {
 /// - Walks `ToolCall` events with `tool_name == "Bash"`. If the command
 ///   (at `payload["input"]["command"]`) matches the allowlist, looks for the
 ///   paired `ToolResult` (matched by `tool_use_id`).
-/// - Derives status from `tool_result["is_error"]`: `false` → "passed",
-///   `true` → "failed". If no result found → "unknown".
+/// - Derives status via `resolve_outcome` (Plan 6 OTLP-first chain).
+///   `is_error` is NOT used for pass/fail — it only signals tool-execution.
+///   If the chain returns Unknown and the command_kind is test/build/lint,
+///   a content failure rule (Tier-4, estimated) may upgrade to Failed.
 /// - IDs are deterministic — calling this function twice over the same events
 ///   produces identical rows.
 pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRecord> {
@@ -105,37 +109,66 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
         // Find paired tool_result
         let result_ev = result_by_tid.get(tid).copied();
 
-        let (status, is_error, failure_summary) = if let Some(r) = result_ev {
-            let tr_payload = r.payload.pointer("/tool_result");
-            let is_err = tr_payload
-                .and_then(|p| p.get("is_error"))
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let summary = if is_err {
-                tr_payload
-                    .and_then(|p| p.get("content"))
+        // ── Plan 6: resolve_outcome (OTLP-first chain) ───────────────────────
+        // Pass ALL session events so OTLP log_record / hook events are also
+        // considered, not just the paired tool_result.
+        // is_error is intentionally ignored for status — it reflects only
+        // whether the tool executor accepted the call, not the command exit.
+        let resolved = resolve_outcome(evs, tid);
+
+        // Tier-4: for verification kinds (test/build/lint/format), when the
+        // chain returns Unknown, apply a content failure rule (estimated).
+        // This catches "error[" / "FAILED" in cargo output without OTLP.
+        let (resolved_status, resolved_prov) = if resolved.status == OutcomeStatus::Unknown
+            && is_verification_kind(command_kind)
+        {
+            if let Some(r) = result_ev {
+                let content = r
+                    .payload
+                    .pointer("/tool_result/content")
                     .and_then(|v| v.as_str())
-                    .map(|s| truncate(s, 512))
+                    .unwrap_or("");
+                if looks_like_failure(content) {
+                    (OutcomeStatus::Failed, OutcomeProvenance::Estimated)
+                } else {
+                    (resolved.status, resolved.provenance)
+                }
             } else {
-                None
-            };
-            if is_err {
-                ("failed", true, summary)
-            } else {
-                ("passed", false, None)
+                (resolved.status, resolved.provenance)
             }
         } else {
-            ("unknown", false, None)
+            (resolved.status, resolved.provenance)
         };
-        let _ = is_error; // suppressed; status string is the canonical output
+
+        let failure_summary = if resolved_status == OutcomeStatus::Failed {
+            result_ev
+                .and_then(|r| r.payload.pointer("/tool_result/content"))
+                .and_then(|v| v.as_str())
+                .map(|s| truncate(s, 512))
+        } else {
+            None
+        };
+
+        let status = match resolved_status {
+            OutcomeStatus::Passed => "passed",
+            OutcomeStatus::Failed => "failed",
+            OutcomeStatus::Unknown => "unknown",
+        };
+        let status_provenance_str: &str = match resolved_prov {
+            OutcomeProvenance::Measured => "measured",
+            OutcomeProvenance::Estimated => "estimated",
+            OutcomeProvenance::Unknown => "unknown",
+        };
 
         // status_basis: when the matched segment is piped to a non-pager,
         // the exit code is masked → force status to "unknown" (design §6.2).
-        let (status, failure_summary) = if m.status_basis == "piped" {
-            ("unknown", None)
+        let (status, status_provenance) = if m.status_basis == "piped" {
+            ("unknown", "unknown".to_string())
         } else {
-            (status, failure_summary)
+            (status, status_provenance_str.to_string())
         };
+        let status_provenance = Some(status_provenance);
+        let failure_summary = if status == "failed" { failure_summary } else { None };
 
         // trigger_event_id = the tool_result event (or the tool_call if no result)
         let trigger_event_id = result_ev
@@ -162,6 +195,7 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             trigger_event_id: trigger_event_id.to_string(),
             trigger_tool_use_id: Some(tid.to_string()),
             status: status.into(),
+            status_provenance,
             detection_basis: m.detection_basis.to_string(),
             status_basis: m.status_basis.to_string(),
             started_at,
@@ -215,6 +249,19 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
         seen_trigger_ids.insert(trigger_event_id.to_string());
         let started_at = ev.observed_at.to_rfc3339();
         let vr_id = derive_id(&ev.session_id, trigger_event_id, &started_at);
+        // Hook branch: apply resolve_outcome with all session events.
+        // Hook post_tool_use carries exit_code → measured if present.
+        let hook_resolved = resolve_outcome(evs, ev.tool_use_id.as_deref().unwrap_or(""));
+        let hook_status = match hook_resolved.status {
+            OutcomeStatus::Passed => "passed",
+            OutcomeStatus::Failed => "failed",
+            OutcomeStatus::Unknown => "unknown",
+        };
+        let hook_status_provenance = Some(match hook_resolved.provenance {
+            OutcomeProvenance::Measured => "measured".to_string(),
+            OutcomeProvenance::Estimated => "estimated".to_string(),
+            OutcomeProvenance::Unknown => "unknown".to_string(),
+        });
         out.push(VerificationRunRecord {
             verification_run_id: vr_id,
             schema_version: SCHEMA_VERSION,
@@ -224,10 +271,9 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             command_kind: _command_kind.to_string(),
             trigger_event_id: trigger_event_id.to_string(),
             trigger_tool_use_id: ev.tool_use_id.clone(),
-            status: "unknown".into(), // hook events don't carry exit status directly
+            status: hook_status.into(),
+            status_provenance: hook_status_provenance,
             detection_basis: m.detection_basis.to_string(),
-            // hook events never carry an exit code; basis is the matched
-            // segment's pipe state but status is unknown regardless.
             status_basis: m.status_basis.to_string(),
             started_at,
             ended_at: None,
@@ -280,6 +326,7 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             trigger_event_id: trigger_event_id.to_string(),
             trigger_tool_use_id: None,
             status: "unknown".into(),
+            status_provenance: Some("unknown".to_string()),
             // OTel spans are detected by attribute, not command parsing →
             // known_tool with exit-derived status semantics.
             detection_basis: "known_tool".to_string(),
@@ -439,6 +486,46 @@ fn normalise_command(cmd: &str) -> &str {
     } else {
         cmd.trim_end()
     }
+}
+
+/// Returns true when the `command_kind` is a verification kind for which
+/// Tier-4 (estimated) failure content rules are meaningful.
+fn is_verification_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "test_suite_rust"
+            | "test_suite_js"
+            | "test_suite_py"
+            | "test_suite_go"
+            | "test_suite_java"
+            | "test_suite_other"
+            | "build"
+            | "build_check"
+            | "lint"
+            | "format_check"
+    )
+}
+
+/// Tier-4 estimated failure heuristic: checks for common failure patterns in
+/// tool output when no OTLP/hook/exit-code signal is available.
+///
+/// NOT used when a measured signal (OTLP/hook/exit-code) exists. Only
+/// fires when the chain returned Unknown and command_kind is a known
+/// verification kind.
+fn looks_like_failure(content: &str) -> bool {
+    // cargo test / cargo build common failure indicators
+    content.contains("error[")
+        || content.contains("\nerror:")
+        || content.starts_with("error:")
+        || content.contains("FAILED")
+        // npm/vitest/jest
+        || content.contains("Tests failed")
+        || content.contains("test failures")
+        // pytest
+        || content.contains("FAILURES")
+        || content.contains("failed,")
+        // cargo clippy
+        || content.contains("aborting due to")
 }
 
 /// Truncate a string to at most `max_bytes` bytes (UTF-8 safe).
