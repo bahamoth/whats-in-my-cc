@@ -11,6 +11,7 @@ export type Tag =
   | 'read.code' | 'read.docs' | 'read.config' | 'read.data'
   | 'read.file' | 'read.proc' | 'read.vcs' | 'read.db' | 'read.web'
   | 'write.file' | 'write.vcs' | 'write.deps'
+  | 'write.code' | 'write.docs' | 'write.config' | 'write.data'
   | 'delete.file'
   | 'build.code' | 'test.code' | 'run.code' | 'lint.code';
 
@@ -24,13 +25,23 @@ export type Disposition = 'tagged' | 'control' | 'unmatched';
 export interface TagResult { tag: Tag | null; disposition: Disposition; }
 
 // ── single source of truth — add a key to extend ──────────────────────────
-// Read tool: file content type by extension.
-export const READ_EXT_TAGS: Record<string, Tag> = {
-  rs: 'read.code', ts: 'read.code', tsx: 'read.code', js: 'read.code', jsx: 'read.code', css: 'read.code',
-  md: 'read.docs', html: 'read.docs', txt: 'read.docs',
-  toml: 'read.config', yaml: 'read.config', yml: 'read.config', ini: 'read.config',
-  json: 'read.data', sql: 'read.data', jsonl: 'read.data', log: 'read.data', csv: 'read.data',
+// File content type by extension — shared by Read (read.*) and Edit/Write
+// (write.*). `output` is a Claude Code task/log capture file (tasks/<id>.output).
+type FileObject = 'code' | 'docs' | 'config' | 'data';
+const EXT_OBJECT: Record<string, FileObject> = {
+  rs: 'code', ts: 'code', tsx: 'code', js: 'code', jsx: 'code', css: 'code', py: 'code',
+  md: 'docs', html: 'docs', txt: 'docs',
+  toml: 'config', yaml: 'config', yml: 'config', ini: 'config',
+  json: 'data', sql: 'data', jsonl: 'data', log: 'data', csv: 'data', output: 'data',
 };
+// Read tool: file content type by extension.
+export const READ_EXT_TAGS: Record<string, Tag> = Object.fromEntries(
+  Object.entries(EXT_OBJECT).map(([e, o]) => [e, `read.${o}` as Tag]),
+) as Record<string, Tag>;
+// Edit/Write tools: same extension → object map, but the verb is `write`.
+export const WRITE_EXT_TAGS: Record<string, Tag> = Object.fromEntries(
+  Object.entries(EXT_OBJECT).map(([e, o]) => [e, `write.${o}` as Tag]),
+) as Record<string, Tag>;
 
 // Bash SINGLE-PURPOSE first tokens → tag. Multiplexers (git/cargo/npm/…) whose
 // subcommand decides the verb live in TOOL_SUBCOMMAND_TAGS; bare path execution
@@ -281,6 +292,12 @@ export function tagForEvent(e: ObservedEventDto): TagResult {
   if (tool === 'Read') {
     const fp = typeof input.file_path === 'string' ? input.file_path : '';
     const tag = READ_EXT_TAGS[ext(fp)];
+    return tag ? { tag, disposition: 'tagged' } : { tag: null, disposition: 'unmatched' };
+  }
+  // Edit/Write/MultiEdit modify a file → write.{object} by the same extension map.
+  if (tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit') {
+    const fp = typeof input.file_path === 'string' ? input.file_path : '';
+    const tag = WRITE_EXT_TAGS[ext(fp)];
     return tag ? { tag, disposition: 'tagged' } : { tag: null, disposition: 'unmatched' };
   }
   if (tool === 'Bash' || tool === 'bash') {
