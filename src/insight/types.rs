@@ -56,3 +56,14 @@ impl Provenance {
         .to_string()
     }
 }
+
+/// A deterministic signal produced by a detector. NO severity/confidence —
+/// those are judgments (spec §6.3). Only facts. evidence_refs must be non-empty.
+#[derive(Debug, Clone)]
+pub struct SignalCandidate {
+    pub detector: &'static str,
+    pub subkind: Option<&'static str>,
+    pub summary: String,
+    pub evidence_refs: Vec<String>,
+    pub facts: serde_json::Value,
+}

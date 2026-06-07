@@ -5,6 +5,7 @@ pub mod repo_observed;
 pub mod repo_raw;
 pub mod repo_retention;
 pub mod repo_runs;
+pub mod repo_signal;
 pub mod repo_usage_facet;
 pub mod repo_verification_run;
 
