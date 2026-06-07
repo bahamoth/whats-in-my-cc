@@ -49,8 +49,7 @@ async fn initialize_returns_protocol_version_and_session_id() {
     let sid = r.header("Mcp-Session-Id");
     assert!(
         sid.to_str().unwrap().starts_with("mcps_"),
-        "Mcp-Session-Id must start with 'mcps_', got: {:?}",
-        sid
+        "Mcp-Session-Id must start with 'mcps_', got: {sid:?}"
     );
 }
 

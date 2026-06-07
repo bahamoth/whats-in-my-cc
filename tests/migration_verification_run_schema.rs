@@ -47,9 +47,7 @@ async fn migration_creates_verification_run_table_with_expected_columns() {
     for c in expected_cols {
         assert!(
             names.contains(&c.to_string()),
-            "missing column '{}'; present columns: {:?}",
-            c,
-            names
+            "missing column '{c}'; present columns: {names:?}"
         );
     }
 
@@ -69,8 +67,8 @@ async fn migration_creates_verification_run_table_with_expected_columns() {
                           "raw_event_id", "parser_version",
                           "detection_basis", "status_basis"] {
         let col = cols.iter().find(|c| c.0 == *notnull_col)
-            .unwrap_or_else(|| panic!("column {} must exist", notnull_col));
-        assert_eq!(col.2, 1, "column '{}' must be NOT NULL", notnull_col);
+            .unwrap_or_else(|| panic!("column {notnull_col} must exist"));
+        assert_eq!(col.2, 1, "column '{notnull_col}' must be NOT NULL");
     }
 }
 
@@ -89,12 +87,10 @@ async fn migration_creates_expected_indexes_on_verification_run() {
     let index_names: Vec<&str> = indexes.iter().map(|(n,)| n.as_str()).collect();
     assert!(
         index_names.contains(&"idx_verification_run_session_started"),
-        "missing session+started index; found: {:?}",
-        index_names
+        "missing session+started index; found: {index_names:?}"
     );
     assert!(
         index_names.contains(&"idx_verification_run_trigger"),
-        "missing trigger_event_id index; found: {:?}",
-        index_names
+        "missing trigger_event_id index; found: {index_names:?}"
     );
 }

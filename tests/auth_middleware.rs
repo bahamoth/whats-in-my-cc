@@ -38,7 +38,7 @@ async fn accepts_request_with_correct_bearer() {
         .get("/v1/health")
         .add_header(
             axum::http::header::AUTHORIZATION,
-            &format!("Bearer {token}"),
+            format!("Bearer {token}"),
         )
         .await;
     r.assert_status_ok();
@@ -61,7 +61,7 @@ async fn health_endpoint_has_security_block() {
         .get("/v1/health")
         .add_header(
             axum::http::header::AUTHORIZATION,
-            &format!("Bearer {token}"),
+            format!("Bearer {token}"),
         )
         .await;
     r.assert_status_ok();
@@ -107,7 +107,7 @@ async fn mcp_endpoint_accepts_correct_bearer() {
         .post("/mcp")
         .add_header(
             axum::http::header::AUTHORIZATION,
-            &format!("Bearer {token}"),
+            format!("Bearer {token}"),
         )
         .json(&json!({
             "jsonrpc": "2.0",

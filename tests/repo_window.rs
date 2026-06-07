@@ -25,7 +25,7 @@ async fn seed_pool() -> SqlitePool {
     // One observed_at per row, monotonic +1 second so ordering is unambiguous.
     let base: DateTime<Utc> = Utc.with_ymd_and_hms(2026, 5, 21, 0, 0, 0).unwrap();
     for i in 0..SEED_N {
-        let event_id = format!("01J{:023}", i); // ULID-like, 26 chars, monotonic
+        let event_id = format!("01J{i:023}"); // ULID-like, 26 chars, monotonic
         let raw_id = format!("raw_{i:06}");
         repo_raw::insert_dedup(
             &pool,
@@ -66,7 +66,7 @@ fn cursor_at(i: usize) -> Cursor {
     let base: DateTime<Utc> = Utc.with_ymd_and_hms(2026, 5, 21, 0, 0, 0).unwrap();
     Cursor {
         observed_at: base + chrono::Duration::seconds(i as i64),
-        event_id: format!("01J{:023}", i),
+        event_id: format!("01J{i:023}"),
     }
 }
 
@@ -351,6 +351,7 @@ async fn no_cursor_anchor_ignores_trailing_non_rendered_kinds() {
 /// Seeds an observed_event with the given payload AND the indexed `tool_use_id`
 /// / `request_id` columns — mirrors what C2 ingest does for OTel events and
 /// what `mapping.rs` does for transcript events.
+#[allow(clippy::too_many_arguments)] // test helper mirrors the ingest column set
 async fn seed_payload_with_cols(
     pool: &SqlitePool,
     run_id: &str,

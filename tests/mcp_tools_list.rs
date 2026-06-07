@@ -85,9 +85,7 @@ async fn tools_list_contains_required_tool_names() {
     for name in &required {
         assert!(
             names.contains(name),
-            "tools/list missing tool '{}', got: {:?}",
-            name,
-            names
+            "tools/list missing tool '{name}', got: {names:?}"
         );
     }
 }

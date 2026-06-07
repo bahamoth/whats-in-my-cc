@@ -97,11 +97,11 @@ async fn extracts_verification_runs_from_real_bash_fixture() {
     // Verify command kinds present
     let kinds: Vec<&str> = runs.iter().map(|r| r.command_kind.as_str()).collect();
     assert!(
-        kinds.iter().any(|k| *k == "test_suite_rust"),
+        kinds.contains(&"test_suite_rust"),
         "expected at least one test_suite_rust run; got {kinds:?}"
     );
     assert!(
-        kinds.iter().any(|k| *k == "build"),
+        kinds.contains(&"build"),
         "expected at least one build run; got {kinds:?}"
     );
 }

@@ -107,7 +107,7 @@ pub async fn stream_handler(
                     ))
                 }
                 Err(BroadcastStreamRecvError::Lagged(n)) => {
-                    let payload = format!(r#"{{"dropped":{}}}"#, n);
+                    let payload = format!(r#"{{"dropped":{n}}}"#);
                     Some(Ok(Event::default().event("gap").data(payload)))
                 }
             }

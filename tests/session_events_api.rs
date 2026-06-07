@@ -25,7 +25,7 @@ async fn seed_pool() -> SqlitePool {
     let run_id = repo_runs::start(&pool).await.unwrap();
     let base: DateTime<Utc> = Utc.with_ymd_and_hms(2026, 5, 21, 0, 0, 0).unwrap();
     for i in 0..SEED_N {
-        let event_id = format!("01J{:023}", i);
+        let event_id = format!("01J{i:023}");
         let raw_id = format!("raw_{i:06}");
         repo_raw::insert_dedup(
             &pool,

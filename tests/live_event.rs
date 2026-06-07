@@ -33,6 +33,6 @@ fn liveevent_from_each_event_kind_compiles_and_serializes() {
             observed_at: "2026-05-21T10:00:00Z".into(),
         };
         let s = serde_json::to_string(&env).unwrap();
-        assert!(s.contains("\"kind\""), "missing kind for {:?}", k);
+        assert!(s.contains("\"kind\""), "missing kind for {k:?}");
     }
 }

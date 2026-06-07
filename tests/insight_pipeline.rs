@@ -29,7 +29,7 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
     let sess = "sess_t";
     let ev_id = |i: usize| format!("ev_{i:03}");
     let raw_id = |i: usize| format!("raw_{i:03}");
-    let ts = |i: usize| format!("2026-01-01T00:00:{:02}Z", i);
+    let ts = |i: usize| format!("2026-01-01T00:00:{i:02}Z");
 
     // Minimal raw_event rows (FK check disabled).
     for i in 0..3usize {
@@ -39,7 +39,7 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
               source_byte_offset, payload_sha256, payload, captured_at) \
              VALUES (?,?,?,?,?,?,?,?,?)"
         )
-        .bind(&raw_id(i))
+        .bind(raw_id(i))
         .bind("run_0")
         .bind("claude_transcript")
         .bind("test.jsonl")
@@ -47,7 +47,7 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
         .bind(0i64)
         .bind(format!("sha256_{i}"))
         .bind(b"{}" as &[u8])
-        .bind(&ts(i))
+        .bind(ts(i))
         .execute(&pool).await.unwrap();
     }
 
@@ -78,9 +78,9 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
                   actor, kind, tool_name, tool_use_id, parser_version, payload) \
                  VALUES (?,?,?,?,?,?,?,?,?,?,?)"
             )
-            .bind(&ev_id(i)).bind(&raw_id(i))
+            .bind(ev_id(i)).bind(raw_id(i))
             .bind("observed_event.v1").bind(sess)
-            .bind(&ts(i))
+            .bind(ts(i))
             .bind(actor).bind(kind).bind("Bash").bind("tid_0")
             .bind("test").bind(&payload)
             .execute(&pool).await.unwrap()
@@ -91,9 +91,9 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
                   actor, kind, tool_use_id, parser_version, payload) \
                  VALUES (?,?,?,?,?,?,?,?,?,?)"
             )
-            .bind(&ev_id(i)).bind(&raw_id(i))
+            .bind(ev_id(i)).bind(raw_id(i))
             .bind("observed_event.v1").bind(sess)
-            .bind(&ts(i))
+            .bind(ts(i))
             .bind(actor).bind(kind).bind("tid_0")
             .bind("test").bind(&payload)
             .execute(&pool).await.unwrap()
@@ -104,9 +104,9 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
                   actor, kind, parser_version, payload) \
                  VALUES (?,?,?,?,?,?,?,?,?)"
             )
-            .bind(&ev_id(i)).bind(&raw_id(i))
+            .bind(ev_id(i)).bind(raw_id(i))
             .bind("observed_event.v1").bind(sess)
-            .bind(&ts(i))
+            .bind(ts(i))
             .bind(actor).bind(kind)
             .bind("test").bind(&payload)
             .execute(&pool).await.unwrap()

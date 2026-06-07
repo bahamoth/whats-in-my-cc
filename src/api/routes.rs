@@ -213,7 +213,7 @@ pub async fn session_events(
         )
         .await
         .expect("db");
-        let events: Vec<serde_json::Value> = evs.iter().map(|e| observed_to_dto(e)).collect();
+        let events: Vec<serde_json::Value> = evs.iter().map(observed_to_dto).collect();
         return Ok(Json(Envelope {
             meta: ResponseMeta::now(),
             data: SessionEventsResponse {
@@ -252,7 +252,7 @@ pub async fn session_events(
     };
 
     let events: Vec<serde_json::Value> =
-        evs.iter().map(|e| observed_to_dto(e)).collect();
+        evs.iter().map(observed_to_dto).collect();
     // Slice-18: aggregate redaction summary for this session's raw events.
     let summary = repo_raw::aggregate_session_summary(&pool, &id)
         .await
