@@ -145,8 +145,8 @@ async fn list_detectors_returns_four_manifests() {
     let env: Value = serde_json::from_str(text).unwrap();
     let data = env["data"].as_array().expect("list_detectors data must be array");
     assert_eq!(
-        data.len(), 4,
-        "list_detectors must return 4 manifests; got {}",
+        data.len(), 5,
+        "list_detectors must return 5 manifests; got {}",
         data.len()
     );
     // Verify each manifest has id and intent.

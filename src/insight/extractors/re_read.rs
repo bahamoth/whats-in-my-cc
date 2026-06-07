@@ -69,8 +69,7 @@ impl Detector for ReRead {
             }
             let read_count = ids.len();
             let summary = format!(
-                "File {} read {} times (re-read, context-loss signal).",
-                path, read_count
+                "File {path} read {read_count} times (re-read, context-loss signal)."
             );
             out.push(SignalCandidate {
                 detector: "re_read",

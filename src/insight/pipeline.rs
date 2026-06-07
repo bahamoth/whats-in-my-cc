@@ -80,12 +80,13 @@ fn build_signal_row(session_id: &str, c: &SignalCandidate) -> SignalRow {
 pub(crate) fn all_detectors() -> Vec<Box<dyn crate::insight::extractor::Detector>> {
     use crate::insight::extractors::{
         context_bloat::ContextBloat, final_state_mismatch::FinalStateMismatch,
-        risky_action::RiskyAction, tool_failure::ToolFailure,
+        re_read::ReRead, risky_action::RiskyAction, tool_failure::ToolFailure,
     };
     vec![
         Box::new(ToolFailure),
         Box::new(RiskyAction),
         Box::new(ContextBloat),
         Box::new(FinalStateMismatch),
+        Box::new(ReRead),
     ]
 }

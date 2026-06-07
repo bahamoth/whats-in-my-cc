@@ -1,6 +1,6 @@
-//! Plan 4 — HTTP route tests for GET /v1/detectors (manifest catalog).
+//! Plan 4/5 — HTTP route tests for GET /v1/detectors (manifest catalog).
 //!
-//! The endpoint must return all 4 registered detectors with their manifests.
+//! The endpoint must return all 5 registered detectors with their manifests.
 //! Each manifest must include id, intent, inputs, rule, output, config_keys,
 //! and rationale — no judgment fields.
 
@@ -29,7 +29,7 @@ async fn detectors_returns_200() {
 }
 
 #[tokio::test]
-async fn detectors_returns_four_manifests() {
+async fn detectors_returns_five_manifests() {
     let server = build_server().await;
     let r = server.get("/v1/detectors").await;
     r.assert_status_ok();
@@ -37,8 +37,8 @@ async fn detectors_returns_four_manifests() {
     let data = body["data"].as_array().expect("response must have a 'data' array");
     assert_eq!(
         data.len(),
-        4,
-        "expected exactly 4 detector manifests, got {n}. data: {data:?}",
+        5,
+        "expected exactly 5 detector manifests, got {n}. data: {data:?}",
         n = data.len(),
     );
 }
@@ -57,6 +57,7 @@ async fn detectors_includes_expected_ids() {
         "risky_action",
         "context_bloat",
         "final_state_mismatch",
+        "re_read",
     ];
     for exp in &expected {
         assert!(
