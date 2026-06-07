@@ -1,6 +1,7 @@
 pub mod config;
 pub mod extractor;
 pub mod extractors;
+pub mod metrics;
 pub mod pipeline;
 pub mod pricing;
 pub mod redaction_shim;
