@@ -1,0 +1,122 @@
+/* AnalysisPanel — session behavioral metrics. Separate surface from replay/detail. */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.empty {
+  color: var(--wimcc-fg-subtle, #6a7180);
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+}
+
+/* Section header */
+.sectionTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wimcc-fg-subtle, #6a7180);
+  margin-bottom: 10px;
+}
+
+/* Metrics table */
+.metricsTable {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0;
+  border: 1px solid var(--wimcc-border, #1d212c);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.metricRow {
+  display: contents;
+}
+
+.metricRow > * {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--wimcc-border, #1d212c);
+  font-size: 13px;
+}
+
+.metricRow:last-child > * {
+  border-bottom: none;
+}
+
+.metricLabel {
+  color: var(--wimcc-fg-muted, #aab0bd);
+}
+
+.metricCount {
+  color: var(--wimcc-fg-subtle, #6a7180);
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 12px;
+  text-align: right;
+}
+
+.metricRate {
+  color: var(--wimcc-fg, #e6e8ee);
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: right;
+  min-width: 48px;
+}
+
+/* Detector distribution */
+.detectorSection {
+  border-top: 1px solid var(--wimcc-border, #1d212c);
+  padding-top: 12px;
+}
+
+.detectorList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detectorRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.detectorName {
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--wimcc-fg-muted, #aab0bd);
+  min-width: 140px;
+  flex-shrink: 0;
+}
+
+.detectorBarTrack {
+  flex: 1;
+  height: 8px;
+  background: var(--wimcc-surface-3, #1b202a);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar {
+  height: 100%;
+  background: var(--wimcc-accent, #4f8cff);
+  border-radius: 4px;
+  opacity: 0.6;
+  transition: width 0.2s ease;
+}
+
+.detectorCount {
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--wimcc-fg-subtle, #6a7180);
+  min-width: 24px;
+  text-align: right;
+}
+
+.noDetectors {
+  color: var(--wimcc-fg-subtle, #6a7180);
+  font-size: 12px;
+}
