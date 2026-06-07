@@ -20,9 +20,9 @@
 ## Task 1: resolve_outcome 헬퍼
 **Files:** `src/insight/outcome.rs`(+mod.rs), `tests/outcome_resolve.rs`
 
-- [ ] **Step 1: 실패 테스트** — (a) OTLP success=false → Failed/Measured (b) is_error=false + OTLP 없음 → Unknown/Unknown (NOT passed) (c) content "exit code: 2" → Failed/Measured.
-- [ ] **Step 2: 실패 확인** `cargo test --test outcome_resolve`.
-- [ ] **Step 3: 구현** `src/insight/outcome.rs`:
+- [x] **Step 1: 실패 테스트** — (a) OTLP success=false → Failed/Measured (b) is_error=false + OTLP 없음 → Unknown/Unknown (NOT passed) (c) content "exit code: 2" → Failed/Measured.
+- [x] **Step 2: 실패 확인** `cargo test --test outcome_resolve`.
+- [x] **Step 3: 구현** `src/insight/outcome.rs`:
 ```rust
 //! Command outcome (Plan 6): OTLP success 최우선 + fallback. is_error(도구 레벨) 미사용.
 use crate::model::observed::{EventKind, ObservedEvent};
@@ -76,21 +76,23 @@ fn parse_exit_code(content:&str)->Option<i64>{
 }
 ```
 실제 hook payload 포인터·tool_result content 포인터는 mapping.rs/hook.rs 구조로 확인·정정.
-- [ ] **Step 4** 통과 + mod 등록. **Commit** `feat(insight): resolve_outcome OTLP-first with fallback`.
+- [x] **Step 4** 통과 + mod 등록. **Commit** `feat(insight): resolve_outcome OTLP-first with fallback`. (commit 80dcdf1)
 
 ## Task 2: verification_run → resolve_outcome
 **Files:** `verification_run.rs`, `repo_verification_run.rs`(+migration status_provenance), dto, 테스트
-- [ ] Bash branch status(108-138행)를 `resolve_outcome`로 교체. is_error 기반 제거. `status_provenance` 추가. command_kind가 test/build/lint면 OTLP/exit 없을 때 content 실패 패턴으로 estimated 보강.
-- [ ] migration `verification_run.status_provenance TEXT`. repo/DTO 반영.
-- [ ] 테스트: 빌드실패 content(is_error=false)가 더 이상 passed 아님. `cargo test` 그린. **Commit.**
+- [x] Bash branch status(108-138행)를 `resolve_outcome`로 교체. is_error 기반 제거. `status_provenance` 추가. command_kind가 test/build/lint면 OTLP/exit 없을 때 content 실패 패턴으로 estimated 보강.
+- [x] migration `verification_run.status_provenance TEXT`. repo/DTO 반영.
+- [x] 테스트: 빌드실패 content(is_error=false)가 더 이상 passed 아님. `cargo test` 그린. **Commit.** (commit b6f0260)
 
 ## Task 3: tool_failure → resolve_outcome
 **Files:** `tool_failure.rs`, 테스트
-- [ ] 발화 기준 `is_error==true` → `resolve_outcome(...).status==Failed`. facts에 `outcome_provenance`. unknown은 발화 안 함. manifest 갱신.
-- [ ] 테스트 갱신. `cargo test` 그린. **Commit.**
+- [x] 발화 기준 `is_error==true` → `resolve_outcome(...).status==Failed`. facts에 `outcome_provenance`. unknown은 발화 안 함. manifest 갱신.
+- [x] 테스트 갱신. `cargo test` 그린. **Commit.** (commit d48d02e)
+  - 회귀 발견·수정: `insight_pipeline.rs`·`insight_provenance.rs` 통합 fixture가 is_error=true 단독으로 발화를 기대했음 → content에 "exit code: 1" 추가(Tier-3 Measured)로 새 규칙에 정합.
 
 ## Task 4: 검증
-- [ ] `cargo test` 0 fail, clippy 새 경고 0. (controller) 재ingest 후 status 분포+provenance, b4196731 빌드실패 재확인.
+- [x] `cargo test` 0 fail (97 그룹 그린), clippy 새 경고 0 (변경 파일 기준).
+- [ ] **(controller 몫)** 재ingest 후 status 분포+provenance, b4196731 빌드실패 재확인. dev DB 재생성 규칙: `wimcc init-db` + 재ingest 필요(migration 0020·payload 필드).
 
 ## Self-Review
 - 라이브 시점차→그 시점 unknown, re-run 갱신. Tier-4는 verification만 estimated. parse_exit_code는 명시 텍스트만(구조적). hook/OTLP 포인터 실제 구조로 확인.
