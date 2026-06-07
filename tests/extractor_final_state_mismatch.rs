@@ -3,7 +3,6 @@
 
 use chrono::{TimeZone, Utc};
 use serde_json::json;
-use wimcc::db::repo_diff_hunk::DiffHunkRow;
 use wimcc::db::repo_verification_run::VerificationRunRow;
 use wimcc::insight::extractor::InsightExtractor;
 use wimcc::insight::extractors::final_state_mismatch::FinalStateMismatch;
