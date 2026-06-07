@@ -613,6 +613,31 @@ fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Val
 
 
 // ---------------------------------------------------------------------------
+// Plan 3a — Behavioral metrics endpoint
+// ---------------------------------------------------------------------------
+
+/// `GET /v1/sessions/:id/metrics` — on-demand deterministic behavioral metrics.
+///
+/// Aggregates events, signals, verification_runs and usage_facet for the
+/// session into counts/ratios. No severity or judgment fields (spec §6.3).
+pub async fn session_metrics(
+    State(pool): State<SqlitePool>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match crate::insight::metrics::compute_session_metrics(&pool, &id).await {
+        Ok(m) => Json(SessionMetricsResponse { data: m }).into_response(),
+        Err(err) => {
+            tracing::error!(session_id = %id, err = %err, "session_metrics failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Plan 1 — Signal endpoints (replaces the slice-14 finding endpoints)
 // ---------------------------------------------------------------------------
 

@@ -1,6 +1,13 @@
 use serde::Serialize;
 use serde_json::Value;
 
+/// Plan 3a — wrapper for `GET /v1/sessions/:id/metrics` response body.
+/// `data` carries `SessionMetrics` which is already `Serialize`.
+#[derive(Serialize)]
+pub struct SessionMetricsResponse {
+    pub data: crate::insight::metrics::SessionMetrics,
+}
+
 #[derive(Debug, Serialize)]
 pub struct OtelIngestResponse {
     pub accepted_spans: u64,
