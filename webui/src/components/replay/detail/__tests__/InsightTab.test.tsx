@@ -1,8 +1,7 @@
 // webui/src/components/replay/detail/__tests__/InsightTab.test.tsx
 /**
- * Metrics-led Insight tab — EVENT-first (no graph node): a compact header
- * (from the event's kind + payload) + EntityMetricsPanel + that event's
- * Signals. Drives entirely off an ObservedEvent.
+ * InsightTab 5-layer skeleton: H(header+badge+chips) → ①WHAT → ②HOW(metrics)
+ * → ③SIGNALS. Fully event-driven (no graph node).
  */
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
@@ -86,5 +85,92 @@ describe('InsightTab', () => {
       <InsightTab signals={[signal({})]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />,
     );
     expect(screen.getByText('Signals')).toBeInTheDocument();
+  });
+});
+
+describe('InsightTab 5-layer skeleton', () => {
+  const toolEvent = ev('b', 'tool_call', { tool_name: 'Bash', input: { command: 'cargo test' } });
+  const toolMetrics = {
+    durationMs: 57, success: true, decisionSource: 'config', decisionType: 'accept',
+    inputBytes: 362, resultBytes: 302, sequence: 763,
+  };
+  const matchedResult = {
+    ...ev('r', 'tool_result', { tool_result: { content: '142 passed', is_error: false } }),
+    tool_use_id: null,
+  } as ObservedEventDto;
+
+  it('(H) shows provenance badge: 원본 for native tool_call', () => {
+    render(
+      <InsightTab signals={[]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} matchedResult={null} />,
+    );
+    expect(screen.getByText('원본')).toBeInTheDocument();
+  });
+
+  it('(H) shows 가공 badge for derived diff_hunk event', () => {
+    const diffEv = ev('d', 'diff_hunk', { file_path: 'src/lib.rs', patch_preview: '@@ -1 +1 @@' });
+    render(
+      <InsightTab signals={[]} event={diffEv} toolMetrics={null} llmMetrics={null} matchedResult={null} />,
+    );
+    expect(screen.getByText('가공')).toBeInTheDocument();
+  });
+
+  it('(①) WHAT section title is rendered', () => {
+    render(
+      <InsightTab signals={[]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} matchedResult={null} />,
+    );
+    expect(screen.getByText(/What — 한 일/i)).toBeInTheDocument();
+  });
+
+  it('(①) WHAT shows tool_call command from WhatSection', () => {
+    render(
+      <InsightTab signals={[]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} matchedResult={null} />,
+    );
+    expect(screen.getByText(/cargo test/)).toBeInTheDocument();
+  });
+
+  it('(①) WHAT shows matched tool_result output', () => {
+    render(
+      <InsightTab signals={[]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} matchedResult={matchedResult} />,
+    );
+    expect(screen.getByText(/142 passed/)).toBeInTheDocument();
+  });
+
+  it('(①) WHAT shows prompt for user_message', () => {
+    const userEv = ev('u', 'user_message', { content: '리팩터링 해주세요' });
+    render(
+      <InsightTab signals={[]} event={userEv} toolMetrics={null} llmMetrics={null} matchedResult={null} />,
+    );
+    expect(screen.getByText(/리팩터링 해주세요/)).toBeInTheDocument();
+  });
+
+  it('(②) HOW section title is rendered', () => {
+    render(
+      <InsightTab signals={[]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} matchedResult={null} />,
+    );
+    expect(screen.getByText(/How — 지표/i)).toBeInTheDocument();
+  });
+
+  it('(③) SIGNALS section title rendered when signals present', () => {
+    const s: SignalDto = {
+      signal_id: 'sig1', schema_version: '1', session_id: 's', detector: 'tool_failure',
+      subkind: null, summary: 'failed', evidence_refs: [], facts: {}, provenance: {}, created_at: '',
+    };
+    render(
+      <InsightTab signals={[s]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} matchedResult={null} />,
+    );
+    expect(screen.getByText('Signals')).toBeInTheDocument();
+  });
+
+  it('does not show old nodeSecondary one-liner (WHAT supersedes it)', () => {
+    // The header should NOT contain the tool arg summary as a nodeSecondary span —
+    // it now lives in the WHAT section instead.
+    render(
+      <InsightTab signals={[]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} matchedResult={null} />,
+    );
+    // The WHAT section will show "cargo test", but the header should not have it as a separate secondary span.
+    // We verify by checking there's no element with class nodeSecondary (it was removed from InsightTab).
+    // Simplest check: 'cargo test' appears exactly once (in WhatSection, not also in the header).
+    const matches = screen.getAllByText(/cargo test/);
+    expect(matches.length).toBe(1);
   });
 });
