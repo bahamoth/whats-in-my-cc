@@ -46,6 +46,7 @@ async-trait        = "0.1"
 rand               = "0.9"
 base64             = "0.22"
 subtle             = "2"
+toml = "1.1.2"
 
 [features]
 # Enables test-helper types (NoopTestExtractor) for integration tests.
