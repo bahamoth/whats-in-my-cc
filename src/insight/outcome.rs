@@ -1,17 +1,18 @@
 //! Command outcome resolution (Plan 6): OTLP-first + fallback chain.
 //!
-//! `is_error` in the transcript is **tool-execution level only** (did the tool
-//! executor accept the call?) — it does NOT reflect the command's exit code.
-//! A `cargo test` that prints "FAILED" and exits 1 has is_error=false because
-//! the Bash tool itself ran successfully.
+//! `is_error` is unreliable for command pass/fail and is NOT used for outcome:
+//! for a piped command like `cargo test 2>&1 | tail` it is false even when the
+//! tests fail, because the shell-reported exit is the pipeline's last stage
+//! (`tail`, which succeeds). A *non-piped* failing command instead surfaces via
+//! Claude Code's "Exit code N" content prepend, parsed in Step 3.
 //!
 //! Fallback chain (first match wins):
 //! 1. OTLP `log_record` (event_name=tool_result, same tool_use_id) → `attributes.success`
 //!    — measured.
 //! 2. Hook `post_tool_use` (same tool_use_id) → `tool_response.exit_code`
 //!    — measured.
-//! 3. Transcript `tool_result` content with explicit "exit code: N" text
-//!    — measured (structural parse, not heuristic).
+//! 3. Transcript `tool_result` content — a line-start "Exit code N" (Claude
+//!    Code's prepend on non-zero exit) or "exit code: N" — measured.
 //! 4. Nothing matched → Unknown (is_error is NOT used for outcome).
 
 use crate::model::observed::{EventKind, ObservedEvent};
@@ -30,7 +31,7 @@ pub enum OutcomeStatus {
 #[serde(rename_all = "snake_case")]
 pub enum OutcomeProvenance {
     /// Derived from a signal that directly reflects the command's exit
-    /// (OTLP success attribute or hook exit_code or explicit "exit code: N").
+    /// (OTLP success attribute, hook exit_code, or a line-start "Exit code N").
     Measured,
     /// Derived from a tool-specific output pattern heuristic (e.g. "FAILED").
     Estimated,
@@ -133,10 +134,11 @@ pub fn resolve_outcome(events: &[ObservedEvent], tool_use_id: &str) -> Outcome {
         }
     }
 
-    // ── Step 3: Transcript tool_result content "exit code: N" ─────────────────
+    // ── Step 3: Transcript tool_result content exit-code line ─────────────────
     // Payload shape: {"tool_result": {"content": "...", ...}}
-    // Only matches explicit "exit code: <digits>" text (structural, not
-    // heuristic — does not match "non-zero exit" or similar prose).
+    // Matches a line-start "Exit code N" (Claude Code prepends this on a non-zero
+    // Bash exit) or "exit code: N" (structural, not heuristic — does not match
+    // "non-zero exit" or similar prose).
     for ev in events {
         if ev.kind != EventKind::ToolResult {
             continue;
@@ -167,24 +169,39 @@ pub fn resolve_outcome(events: &[ObservedEvent], tool_use_id: &str) -> Outcome {
     Outcome::UNKNOWN
 }
 
-/// Parse an explicit "exit code: N" from tool output content.
+/// Parse a command exit code from tool output content.
 ///
-/// Matches case-insensitively. Requires the literal text "exit code:" followed
-/// by optional whitespace and one or more ASCII digits. Returns the parsed
-/// integer if found.
+/// Recognises the line-start form `exit code[:] <N>` case-insensitively — both
+/// Claude Code's `Exit code <N>` prepend (capital E, **no colon**) on a non-zero
+/// Bash exit and an explicit `exit code: <N>` line. The CC prepend form was
+/// confirmed across 215 local sessions / 82 occurrences (CC 2.1.153–2.1.168);
+/// the prior colon-only matcher silently dropped every one of them.
 ///
-/// This is a structural parse, not a heuristic — it does NOT match prose like
-/// "returned non-zero exit status" or "exit status: 1".
+/// The match is anchored at a **line start** (after optional leading whitespace)
+/// so prose mentioning the phrase mid-line is not misread as the command's own
+/// outcome. Still a structural parse, not a heuristic — it does NOT match prose
+/// like "returned non-zero exit status" or "exit status: 1".
 pub fn parse_exit_code(content: &str) -> Option<i64> {
-    let lc = content.to_ascii_lowercase();
-    let needle = "exit code:";
-    let pos = lc.find(needle)?;
-    let after = content[pos + needle.len()..].trim_start();
-    let digits: &str = after
-        .split(|c: char| !c.is_ascii_digit())
-        .next()
-        .filter(|s| !s.is_empty())?;
-    digits.parse().ok()
+    const PREFIX: &str = "exit code";
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        // `get(..)` returns None when PREFIX.len() is not a char boundary or the
+        // line is too short — both mean "no match here", so just keep scanning.
+        let Some(head) = trimmed.get(..PREFIX.len()) else {
+            continue;
+        };
+        if !head.eq_ignore_ascii_case(PREFIX) {
+            continue;
+        }
+        // After "exit code": skip an optional colon and surrounding spaces, then
+        // take leading ASCII digits. "exit code:" with no number falls through.
+        let rest = trimmed[PREFIX.len()..].trim_start_matches([':', ' ', '\t']);
+        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if !digits.is_empty() {
+            return digits.parse().ok();
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -212,5 +229,28 @@ mod tests {
     #[test]
     fn parse_exit_code_with_leading_spaces() {
         assert_eq!(parse_exit_code("exit code:  42"), Some(42));
+    }
+
+    #[test]
+    fn parse_exit_code_claude_code_prepend_format() {
+        // Claude Code prepends "Exit code <N>\n" (capital E, NO colon) to a Bash
+        // tool_result's content when the command exits non-zero. Confirmed across
+        // 215 local sessions / 82 occurrences spanning CC 2.1.153–2.1.168 — exit
+        // values seen: 1, 2, 5, 7, 101, 127, 128, 143. The colon-only parser
+        // silently dropped every one of these (measured failures lost). The parser
+        // MUST recognise the real CC format.
+        assert_eq!(parse_exit_code("Exit code 101\nthread 'main' panicked"), Some(101));
+        assert_eq!(parse_exit_code("Exit code 7\nintentional non-zero exit"), Some(7));
+        assert_eq!(parse_exit_code("Exit code 1"), Some(1));
+    }
+
+    #[test]
+    fn parse_exit_code_anchors_at_line_start() {
+        // Only the structural CC prepend (line start) or an explicit "exit code:"
+        // line counts. Prose mentioning "exit code" mid-line must NOT match, so a
+        // command whose OUTPUT happens to contain the phrase isn't misread as the
+        // command's own outcome (4 such mid-line cases observed in real data).
+        assert_eq!(parse_exit_code("see the returned exit code 5 in the log"), None);
+        assert_eq!(parse_exit_code("the script printed exit code: 9 to stdout"), None);
     }
 }

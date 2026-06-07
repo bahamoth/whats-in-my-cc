@@ -4,6 +4,7 @@
 //! - is_error=false + no OTLP → Unknown, NOT Passed.
 //! - OTLP success=false → Failed/Measured.
 //! - content "exit code: 2" → Failed/Measured.
+//! - content "Exit code 7" (real CC prepend, no colon) → Failed/Measured.
 //! - Hook exit_code=0 → Passed/Measured.
 //! - Fallback order: OTLP > hook > content.
 
@@ -248,6 +249,29 @@ fn content_exit_code_zero_yields_passed_measured() {
     )];
     let outcome = resolve_outcome(&events, "tid_7");
     assert_eq!(outcome.status, OutcomeStatus::Passed);
+    assert_eq!(outcome.provenance, OutcomeProvenance::Measured);
+}
+
+/// REAL Claude Code format: on a non-zero Bash exit, CC prepends "Exit code <N>\n"
+/// (capital E, NO colon) to the tool_result content and sets is_error=true. This
+/// content is frozen verbatim from a real session (c8256e80, command `… ; exit 7`);
+/// the same prepend form was confirmed across 215 local sessions / 82 occurrences
+/// spanning CC 2.1.153–2.1.168. The prior colon-only matcher missed every one of
+/// these, so genuine measured failures silently resolved to Unknown.
+#[test]
+fn content_cc_exit_code_prepend_yields_failed_measured() {
+    let events = vec![tool_result(
+        0,
+        "tid_cc",
+        true, // CC sets is_error=true alongside the "Exit code N" prepend
+        "Exit code 7\nOTLP measured-outcome verification: intentional non-zero exit",
+    )];
+    let outcome = resolve_outcome(&events, "tid_cc");
+    assert_eq!(
+        outcome.status,
+        OutcomeStatus::Failed,
+        "real CC 'Exit code 7' prepend must resolve to Failed, not Unknown"
+    );
     assert_eq!(outcome.provenance, OutcomeProvenance::Measured);
 }
 
