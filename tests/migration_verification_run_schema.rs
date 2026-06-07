@@ -2,7 +2,6 @@
 //! `0005_verification_run` migration creates the expected table + columns.
 //! (TDD red — Phase 1 commit 1.)
 
-use sqlx::Row;
 use sqlx::SqlitePool;
 
 #[tokio::test]
