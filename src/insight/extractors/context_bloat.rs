@@ -103,8 +103,18 @@ impl Detector for ContextBloat {
 
             // Build facts.
             let payload_excerpt = redaction_shim::apply_text_truncated(content, 512);
+            // Collect the trailing 256 *chars* (not raw bytes) so that multibyte
+            // codepoints (e.g. Korean) never cause a byte-boundary panic.
             let payload_tail = if content.len() > 256 {
-                redaction_shim::apply_text_truncated(&content[content.len() - 256..], 256)
+                let tail: String = content
+                    .chars()
+                    .rev()
+                    .take(256)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect();
+                redaction_shim::apply_text_truncated(&tail, 256)
             } else {
                 String::new()
             };

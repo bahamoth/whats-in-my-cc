@@ -3916,6 +3916,27 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="utf8-extractor-fixes">
+    <h2>UTF-8 안전 바이트 슬라이스 수정 — context_bloat / risky_action (Plan 1 Task 9, 2026-06-07)</h2>
+    <p>
+      한국어 등 멀티바이트 UTF-8 페이로드가 두 detector에서 패닉을 일으킬 수 있었다.
+      <code>catch_unwind</code>가 감싸고 있어 실제 크래시 대신 신호가 무음으로 누락되는
+      형태였으므로 로그 없이 탐지 실패가 발생할 수 있었다.
+    </p>
+    <ul>
+      <li><strong>context_bloat.rs line ~107.</strong> <code>&amp;content[content.len() - 256..]</code> —
+        raw 바이트 오프셋으로 <code>&amp;str</code>를 슬라이스 → 멀티바이트 경계 패닉.
+        <code>chars().rev().take(256)...rev().collect()</code>로 <em>char</em> 단위 tail 수집으로 교체.</li>
+      <li><strong>risky_action.rs line ~104.</strong> <code>&amp;command[..command.len().min(80)]</code> —
+        동일 문제. <code>command.chars().take(80).collect::&lt;String&gt;()</code>으로 교체.</li>
+    </ul>
+    <p>
+      TDD: 두 수정 모두 한국어 문자열로 기존 코드의 패닉을 재현하는 실패 테스트를 먼저 작성한 뒤
+      (<code>does_not_panic_on_multibyte_utf8_content</code>,
+      <code>does_not_panic_on_multibyte_utf8_command</code>) 수정 후 green 확인.
+    </p>
+  </section>
+
   <footer class="footer">
     <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · facet correlation + 지표 중심 insight · telemetry fold Slice 1–2 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>

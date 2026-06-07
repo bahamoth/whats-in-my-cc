@@ -98,10 +98,13 @@ impl Detector for RiskyAction {
                 }
             });
 
+            // Truncate by *chars* (not raw bytes) to avoid byte-boundary panics on
+            // multibyte codepoints (e.g. Korean or other non-ASCII input).
+            let command_preview: String = command.chars().take(80).collect();
             let summary = format!(
                 "Destructive Bash command detected (tool_use_id={:?}): {}",
                 ev.tool_use_id,
-                &command[..command.len().min(80)]
+                command_preview
             );
 
             candidates.push(SignalCandidate {

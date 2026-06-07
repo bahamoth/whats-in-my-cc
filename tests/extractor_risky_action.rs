@@ -188,6 +188,31 @@ fn does_not_fire_on_non_user_modified_hunk() {
 }
 
 // ---------------------------------------------------------------------------
+// UTF-8 multibyte safety (fix: byte-slice on &str must not panic on non-ASCII)
+// ---------------------------------------------------------------------------
+
+/// A Bash tool_call whose command contains Korean (multibyte UTF-8) and is
+/// longer than 80 chars so the `&command[..command.len().min(80)]` slice path is
+/// reached.  Before the fix this panics if byte offset 80 lands mid-codepoint.
+/// After the fix it must not panic and must return exactly one signal.
+#[test]
+fn does_not_panic_on_multibyte_utf8_command() {
+    // "rm -rf " is 7 bytes; Korean chars are 3 bytes each.
+    // We want the total > 80 bytes but the 80th byte to land inside a Korean char.
+    // "rm -rf " (7) + "한" (3) * 25 = 7 + 75 = 82 bytes total — 80th byte is
+    // byte 80 which is the 2nd byte of the 25th "한" (0xED 0xED 0x95), i.e. mid-char.
+    let command = format!("rm -rf {}", "한".repeat(25));
+    assert!(command.len() > 80, "command must exceed 80 bytes for the slice to be reached");
+
+    let events = vec![bash_tool_call(0, &command)];
+    let view = synth_view_with_bash(&events, &[]);
+    // Must not panic; must fire exactly one signal.
+    let cands = detect(&view);
+    assert_eq!(cands.len(), 1, "Korean UTF-8 destructive command must fire one signal without panic");
+    assert_eq!(cands[0].facts["trigger"]["kind"], serde_json::json!("destructive_bash"));
+}
+
+// ---------------------------------------------------------------------------
 // Empty session
 // ---------------------------------------------------------------------------
 

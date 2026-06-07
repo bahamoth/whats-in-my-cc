@@ -181,6 +181,44 @@ fn facts_include_required_fields() {
 // Config-driven threshold
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// UTF-8 multibyte safety (fix: byte-slice on &str must not panic on non-ASCII)
+// ---------------------------------------------------------------------------
+
+/// A tool_result whose content contains Korean (multibyte UTF-8) and is large
+/// enough (> 50KB AND > 256 chars) to hit the `payload_tail` slice path.
+/// Before the fix `&content[content.len() - 256..]` would panic on a byte
+/// boundary that splits a multibyte codepoint.  After the fix it must not panic
+/// and must return exactly one signal.
+#[test]
+fn does_not_panic_on_multibyte_utf8_content() {
+    // Each Korean char is 3 UTF-8 bytes. "한국어 테스트 " is 24 bytes but 8 chars.
+    // Repeat enough to exceed 50KB threshold AND ensure content.len() > 256.
+    let korean_chunk = "한국어 테스트 데이터 블로트 감지기 테스트 케이스 ";
+    // ~70 bytes per chunk * 800 reps ≈ 56KB (well above 50KB)
+    let big_content = korean_chunk.repeat(800);
+    // Sanity: len in bytes > 50KB and > 256
+    assert!(big_content.len() > 50_000);
+    assert!(big_content.len() > 256);
+
+    let mut result_ev = base_event(0, Actor::Tool, EventKind::ToolResult);
+    result_ev.tool_name = Some("Bash".into());
+    result_ev.tool_use_id = Some("tu_000".into());
+    result_ev.payload = serde_json::json!({
+        "tool_result": {
+            "tool_use_id": "tu_000",
+            "content": big_content,
+            "is_error": false
+        }
+    });
+
+    let events = vec![result_ev, short_assistant_msg(1)];
+    let view = empty_view(&events);
+    // Must not panic; must fire exactly one signal.
+    let cands = ContextBloat.detect(&view, &DetectorConfig::default());
+    assert_eq!(cands.len(), 1, "Korean UTF-8 bloat must fire one signal without panic");
+}
+
 /// The byte threshold is config-driven: a 10KB result is below the default 50KB
 /// (no fire) but a config that lowers `threshold_bytes` to 5KB makes it fire.
 #[test]

@@ -62,6 +62,9 @@ fn build_signal_row(session_id: &str, c: &SignalCandidate) -> SignalRow {
         signal_id: derive_signal_id(c.detector, session_id, &c.evidence_refs),
         schema_version: "signal.v1".into(),
         session_id: session_id.to_string(),
+        // `SignalRow.detector` stores the bare id (e.g. `tool_failure`) for
+        // simple DB queries/grouping; `Provenance.detector` stores the
+        // version-stamped `"{id}@v1"` for audit trails. Intentional, not a bug.
         detector: c.detector.to_string(),
         subkind: c.subkind.map(|s| s.to_string()),
         summary: c.summary.clone(),
