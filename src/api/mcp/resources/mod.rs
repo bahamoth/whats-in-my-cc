@@ -1,7 +1,8 @@
 //! Slice-17 — MCP resource catalogue.
 //!
-//! Six URI templates. `resources/list` returns concrete URIs from DB.
-//! `resources/read` delegates to per-resource fetchers.
+//! URI templates. `resources/list` returns concrete URIs from DB.
+//! `resources/read` delegates to per-resource fetchers. (Plan 1: finding
+//! resources were removed with the finding subsystem.)
 //!
 //! Slice-18 addition: every `resources/read` content item carries
 //! `annotations.redaction_policy` and `annotations.redaction_summary`.
@@ -11,7 +12,7 @@ pub mod parse;
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
 
-use crate::db::{repo_diff_hunk, repo_finding, repo_observed, repo_raw};
+use crate::db::{repo_diff_hunk, repo_observed, repo_raw};
 use crate::model::meta::SCHEMA_VERSION;
 
 /// The resource URI templates per design §7.
@@ -21,16 +22,6 @@ pub fn resource_templates() -> Value {
             {
                 "uriTemplate": "whats-in-my-cc://sessions/{session_id}",
                 "name": "Session summary",
-                "mimeType": "application/json"
-            },
-            {
-                "uriTemplate": "whats-in-my-cc://sessions/{session_id}/findings",
-                "name": "Session findings",
-                "mimeType": "application/json"
-            },
-            {
-                "uriTemplate": "whats-in-my-cc://findings/{finding_id}",
-                "name": "Finding detail",
                 "mimeType": "application/json"
             },
             {
@@ -60,11 +51,6 @@ pub async fn resources_list(pool: &SqlitePool) -> Value {
             "name": format!("Session {}", s.session_id),
             "mimeType": "application/json"
         }));
-        resources.push(json!({
-            "uri": format!("whats-in-my-cc://sessions/{}/findings", s.session_id),
-            "name": format!("Findings for {}", s.session_id),
-            "mimeType": "application/json"
-        }));
     }
 
     json!({ "resources": resources })
@@ -76,8 +62,6 @@ pub async fn read_resource(uri: &str, pool: &SqlitePool) -> Result<Value, String
     let parsed = parse::parse(uri).ok_or_else(|| format!("unknown resource URI: {uri}"))?;
     match parsed {
         ResourceUri::Session(session_id) => read_session(&session_id, uri, pool).await,
-        ResourceUri::SessionFindings(session_id) => read_findings(&session_id, uri, pool).await,
-        ResourceUri::Finding(finding_id) => read_finding(&finding_id, uri, pool).await,
         ResourceUri::FileLineage(session_id) => read_file_lineage(&session_id, uri, pool).await,
         ResourceUri::OtelTrace(trace_id) => read_otel_trace(&trace_id, uri, pool).await,
     }
@@ -86,7 +70,7 @@ pub async fn read_resource(uri: &str, pool: &SqlitePool) -> Result<Value, String
 /// Build `resources/read` contents with Slice-18 redaction annotations.
 ///
 /// `session_id` is used to aggregate the redaction summary from the DB.
-/// If `None` (e.g., finding or OTel trace resources), no summary is included.
+/// If `None` (e.g., OTel trace resources), no summary is included.
 async fn make_contents(uri: &str, data: Value, session_id: Option<&str>, pool: &SqlitePool) -> Value {
     let text = serde_json::to_string(&json!({
         "meta": { "schema_version": SCHEMA_VERSION },
@@ -133,51 +117,6 @@ async fn read_session(session_id: &str, uri: &str, pool: &SqlitePool) -> Result<
                 "first_observed_at": first_obs,
                 "last_observed_at": last_obs
             }), Some(session_id), pool).await)
-        }
-    }
-}
-
-async fn read_findings(session_id: &str, uri: &str, pool: &SqlitePool) -> Result<Value, String> {
-    let filter = repo_finding::ListFilter {
-        session_id: Some(session_id.to_string()),
-        status: Some("active".into()),
-        limit: 200,
-        ..Default::default()
-    };
-    let rows = repo_finding::list(pool, &filter)
-        .await
-        .map_err(|e| e.to_string())?;
-    let findings: Vec<Value> = rows.into_iter().map(|r| json!({
-        "finding_id": r.finding_id,
-        "category": r.category,
-        "severity": r.severity,
-        "confidence": r.confidence,
-        "summary": r.summary,
-        "status": r.status
-    })).collect();
-    Ok(make_contents(uri, json!({ "findings": findings }), Some(session_id), pool).await)
-}
-
-async fn read_finding(finding_id: &str, uri: &str, pool: &SqlitePool) -> Result<Value, String> {
-    let row = repo_finding::get(pool, finding_id)
-        .await
-        .map_err(|e| e.to_string())?;
-    match row {
-        None => Err(format!("finding not found: {finding_id}")),
-        Some(r) => {
-            let session_id = r.session_id.clone();
-            let evidence_refs: Vec<Value> =
-                serde_json::from_str(&r.evidence_refs).unwrap_or_default();
-            Ok(make_contents(uri, json!({
-                "finding_id": r.finding_id,
-                "session_id": r.session_id,
-                "category": r.category,
-                "severity": r.severity,
-                "confidence": r.confidence,
-                "summary": r.summary,
-                "evidence_refs": evidence_refs,
-                "status": r.status
-            }), Some(&session_id), pool).await)
         }
     }
 }

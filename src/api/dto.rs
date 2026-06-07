@@ -175,56 +175,27 @@ pub struct RawEventResponse {
     pub telemetry: Option<serde_json::Value>,
 }
 
-/// Slice-14 — a single Finding in the Pull API response.
-/// `evidence_refs` and `evidence_projection` and `provenance` are parsed from
-/// JSON columns before serialisation so callers receive typed values.
+/// Plan 1 — a single Signal in the Pull API response. Signals are deterministic
+/// facts: NO severity/confidence/status (those are judgments). `evidence_refs`,
+/// `facts`, and `provenance` are parsed from JSON columns before serialisation
+/// so callers receive typed values.
 #[derive(Serialize)]
-pub struct FindingDto {
-    pub finding_id: String,
+pub struct SignalDto {
+    pub signal_id: String,
     pub schema_version: String,
     pub session_id: String,
-    pub category: String,
+    pub detector: String,
     pub subkind: Option<String>,
-    pub severity: String,
-    pub confidence: f64,
     pub summary: String,
     pub evidence_refs: Vec<serde_json::Value>,
-    pub evidence_projection: serde_json::Value,
+    pub facts: serde_json::Value,
     pub provenance: serde_json::Value,
-    pub status: String,
     pub created_at: String,
 }
 
 #[derive(Serialize)]
-pub struct FindingsResponse {
-    pub data: Vec<FindingDto>,
-}
-
-/// insight-redesign #3 — tool_failure class breakdown for a session.
-/// `user_visible` is the only headline-eligible count; the other two are
-/// internal/benign noise surfaced for transparency, never lumped into a headline.
-#[derive(Serialize)]
-pub struct ToolFailureSummaryDto {
-    pub session_id: String,
-    pub user_visible: i64,
-    pub internal_retry: i64,
-    pub benign_nonzero_exit: i64,
-    /// findings of category tool_failure with NULL subkind (pre-reframe rows
-    /// re-ingested before classification, or the no-tool_use_id early path).
-    pub unclassified: i64,
-    pub total: i64,
-    /// The user-visible drill list (full FindingDto rows, severity=high).
-    pub user_visible_findings: Vec<FindingDto>,
-}
-
-#[derive(Serialize)]
-pub struct ToolFailureSummaryResponse {
-    pub data: ToolFailureSummaryDto,
-}
-
-#[derive(Serialize)]
-pub struct FindingDetailResponse {
-    pub data: FindingDto,
+pub struct SignalsResponse {
+    pub data: Vec<SignalDto>,
 }
 
 /// insight-redesign #1 + #5(cost) — session token-usage aggregate, now with a
@@ -294,24 +265,3 @@ pub struct UsageBaselineDto {
     pub output_tokens: BaselineStat,
 }
 
-/// Response for `GET /v1/findings/:id/evidence`.
-#[derive(Serialize)]
-pub struct FindingEvidenceResponse {
-    pub data: FindingEvidenceData,
-}
-
-#[derive(Serialize)]
-pub struct FindingEvidenceData {
-    pub finding: FindingDto,
-    /// Event IDs cited by the finding (parsed from `finding.evidence_refs`).
-    pub evidence_refs: Vec<String>,
-    pub raw_source_refs: Vec<RawSourceRef>,
-}
-
-#[derive(Serialize)]
-pub struct RawSourceRef {
-    pub event_id: String,
-    pub source_type: String,
-    pub source_uri: String,
-    pub redaction_state: String,
-}

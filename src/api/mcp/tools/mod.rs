@@ -1,14 +1,16 @@
 //! Slice-17 — MCP tool catalogue.
 //!
-//! Six read-only tools. Each delegates to the existing Pull API data layer.
+//! Read-only tools. Each delegates to the existing Pull API data layer.
 //! Tool outputs are wrapped in a single `text` content block (DEV-S17-03).
+//!
+//! Plan 1: the `search_findings` tool was removed with the finding subsystem.
+//! A signal tool is deferred to a later plan (Plan 4).
 
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
 
 pub mod get_file_lineage;
 pub mod get_otel_trace;
-pub mod search_findings;
 pub mod search_sessions;
 
 /// Wrap a JSON value as an MCP `tools/call` success result.
@@ -34,19 +36,6 @@ fn search_sessions_schema() -> Value {
         "type": "object",
         "properties": {
             "limit": { "type": "integer", "default": 20, "description": "Max sessions to return" }
-        },
-        "required": []
-    })
-}
-
-fn search_findings_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "session_id": { "type": "string", "description": "Filter by session ID" },
-            "category": { "type": "string", "description": "Filter by finding category" },
-            "severity": { "type": "string", "description": "Filter by severity" },
-            "limit": { "type": "integer", "default": 50 }
         },
         "required": []
     })
@@ -83,11 +72,6 @@ pub fn tools_list_response() -> Value {
                 "inputSchema": search_sessions_schema()
             },
             {
-                "name": "whats_in_my_cc.search_findings",
-                "description": "Search for insight findings (tool failures, missing verification, risky actions, etc.).",
-                "inputSchema": search_findings_schema()
-            },
-            {
                 "name": "whats_in_my_cc.get_file_lineage",
                 "description": "Return the diff-hunk lineage for a specific file in a session.",
                 "inputSchema": get_file_lineage_schema()
@@ -106,9 +90,6 @@ pub async fn dispatch(name: &str, args: &Value, pool: &SqlitePool) -> Value {
     match name {
         "whats_in_my_cc.search_sessions" => {
             search_sessions::call(args, pool).await
-        }
-        "whats_in_my_cc.search_findings" => {
-            search_findings::call(args, pool).await
         }
         "whats_in_my_cc.get_file_lineage" => {
             get_file_lineage::call(args, pool).await

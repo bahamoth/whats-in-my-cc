@@ -5,10 +5,6 @@
 pub enum ResourceUri {
     /// whats-in-my-cc://sessions/{session_id}
     Session(String),
-    /// whats-in-my-cc://sessions/{session_id}/findings
-    SessionFindings(String),
-    /// whats-in-my-cc://findings/{finding_id}
-    Finding(String),
     /// whats-in-my-cc://file-lineage/{session_id}
     FileLineage(String),
     /// whats-in-my-cc://otel/traces/{trace_id}
@@ -24,14 +20,6 @@ pub fn parse(uri: &str) -> Option<ResourceUri> {
         // sessions/{session_id}
         ["sessions", session_id] if !session_id.is_empty() => {
             Some(ResourceUri::Session(session_id.to_string()))
-        }
-        // sessions/{session_id}/findings
-        ["sessions", session_id, "findings"] => {
-            Some(ResourceUri::SessionFindings(session_id.to_string()))
-        }
-        // findings/{finding_id}
-        ["findings", finding_id] if !finding_id.is_empty() => {
-            Some(ResourceUri::Finding(finding_id.to_string()))
         }
         // file-lineage/{session_id}
         ["file-lineage", session_id] if !session_id.is_empty() => {
@@ -54,22 +42,6 @@ mod tests {
         assert_eq!(
             parse("whats-in-my-cc://sessions/sess-A"),
             Some(ResourceUri::Session("sess-A".into()))
-        );
-    }
-
-    #[test]
-    fn parses_findings() {
-        assert_eq!(
-            parse("whats-in-my-cc://sessions/sess-A/findings"),
-            Some(ResourceUri::SessionFindings("sess-A".into()))
-        );
-    }
-
-    #[test]
-    fn parses_finding() {
-        assert_eq!(
-            parse("whats-in-my-cc://findings/find_001"),
-            Some(ResourceUri::Finding("find_001".into()))
         );
     }
 

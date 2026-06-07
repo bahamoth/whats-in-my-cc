@@ -12,20 +12,6 @@
       }
     },
     {
-      "name": "whats_in_my_cc.search_findings",
-      "description": "Search for insight findings (tool failures, missing verification, risky actions, etc.).",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "session_id": { "type": "string", "description": "Filter by session ID" },
-          "category": { "type": "string", "description": "Filter by finding category" },
-          "severity": { "type": "string", "description": "Filter by severity" },
-          "limit": { "type": "integer", "default": 50 }
-        },
-        "required": []
-      }
-    },
-    {
       "name": "whats_in_my_cc.get_file_lineage",
       "description": "Return the diff-hunk lineage for a specific file in a session.",
       "inputSchema": {

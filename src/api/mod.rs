@@ -115,14 +115,8 @@ pub fn router(state: AppState) -> Router {
             "/v1/verification-runs/:id",
             get(routes::verification_run_detail),
         )
-        .route("/v1/findings", get(routes::list_findings))
-        .route("/v1/findings/:id", get(routes::finding_detail))
-        .route("/v1/findings/:id/evidence", get(routes::finding_evidence))
-        .route("/v1/sessions/:id/findings", get(routes::session_findings))
-        .route(
-            "/v1/sessions/:id/tool-failures",
-            get(routes::session_tool_failures),
-        )
+        .route("/v1/sessions/:id/signals", get(routes::session_signals))
+        .route("/v1/signals/:id", get(routes::signal_detail))
         .route("/v1/events/:event_id/raw", get(routes::event_raw))
         .route("/v1/audit", get(routes::list_audit))
         .layer(axum_mw::from_fn_with_state(

@@ -78,31 +78,6 @@ async fn search_sessions_returns_data_array() {
 }
 
 #[tokio::test]
-async fn search_findings_returns_data_array() {
-    let (server, _pool) = make_server_with_session().await;
-    let sid = init_session(&server).await;
-    let (hk, hv) = sid_header(&sid);
-    let r = server
-        .post("/mcp")
-        .content_type("application/json")
-        .add_header(hk, hv)
-        .json(&json!({
-            "jsonrpc": "2.0", "id": 12, "method": "tools/call",
-            "params": {
-                "name": "whats_in_my_cc.search_findings",
-                "arguments": { "limit": 10 }
-            }
-        }))
-        .await;
-    r.assert_status_ok();
-    let body: Value = r.json();
-    assert_eq!(body["result"]["isError"], false);
-    let text = body["result"]["content"][0]["text"].as_str().unwrap();
-    let env: Value = serde_json::from_str(text).unwrap();
-    assert!(env["data"].is_array());
-}
-
-#[tokio::test]
 async fn get_file_lineage_returns_content_block() {
     let (server, _pool) = make_server_with_session().await;
     let sid = init_session(&server).await;

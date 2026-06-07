@@ -40,7 +40,7 @@ fn sid_header(sid: &str) -> (axum::http::HeaderName, axum::http::HeaderValue) {
 }
 
 #[tokio::test]
-async fn resources_templates_list_has_six_templates() {
+async fn resources_templates_list_has_three_templates() {
     let server = make_server().await;
     let sid = init_session(&server).await;
     let (hk, hv) = sid_header(&sid);
@@ -55,7 +55,7 @@ async fn resources_templates_list_has_six_templates() {
     let templates = body["result"]["resourceTemplates"]
         .as_array()
         .expect("resourceTemplates must be an array");
-    assert_eq!(templates.len(), 5, "expected 5 resource templates, got {}", templates.len());
+    assert_eq!(templates.len(), 3, "expected 3 resource templates, got {}", templates.len());
 }
 
 #[tokio::test]
@@ -78,8 +78,6 @@ async fn resources_templates_list_contains_required_uri_templates() {
 
     let required = [
         "whats-in-my-cc://sessions/{session_id}",
-        "whats-in-my-cc://sessions/{session_id}/findings",
-        "whats-in-my-cc://findings/{finding_id}",
         "whats-in-my-cc://file-lineage/{session_id}",
         "whats-in-my-cc://otel/traces/{trace_id}",
     ];

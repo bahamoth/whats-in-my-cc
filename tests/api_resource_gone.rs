@@ -1,7 +1,8 @@
-//! Slice-19 — Red-locking tests: 410 Gone for tombstoned resources.
+//! Slice-19 (ported to signals, Plan 1) — 410 Gone for tombstoned resources.
 //!
-//! These tests will FAIL until the tombstone check is wired into
-//! finding_detail (and related) handlers.
+//! The signal_detail handler checks the retention tombstone table before the
+//! live row, so callers can distinguish "expired by retention sweep" (410) from
+//! "never existed" (404).
 
 use axum_test::TestServer;
 
@@ -20,19 +21,19 @@ async fn build_auth_server_with_pool() -> (TestServer, sqlx::SqlitePool, String)
 }
 
 #[tokio::test]
-async fn pull_api_returns_410_for_tombstoned_finding() {
+async fn pull_api_returns_410_for_tombstoned_signal() {
     let (server, pool, token) = build_auth_server_with_pool().await;
 
-    // Insert a tombstone for a finding id that doesn't exist as a live row.
+    // Insert a tombstone for a signal id that doesn't exist as a live row.
     sqlx::query(
-        "INSERT INTO retention_tombstone (resource_id, resource_kind) VALUES ('find_demo', 'finding')",
+        "INSERT INTO retention_tombstone (resource_id, resource_kind) VALUES ('sig_demo', 'signal')",
     )
     .execute(&pool)
     .await
     .unwrap();
 
     let r = server
-        .get("/v1/findings/find_demo")
+        .get("/v1/signals/sig_demo")
         .add_header(
             axum::http::header::AUTHORIZATION,
             &format!("Bearer {token}"),
@@ -42,11 +43,11 @@ async fn pull_api_returns_410_for_tombstoned_finding() {
 }
 
 #[tokio::test]
-async fn pull_api_returns_404_for_nonexistent_nontombstoned_finding() {
+async fn pull_api_returns_404_for_nonexistent_nontombstoned_signal() {
     let (server, _pool, token) = build_auth_server_with_pool().await;
 
     let r = server
-        .get("/v1/findings/find_never_existed")
+        .get("/v1/signals/sig_never_existed")
         .add_header(
             axum::http::header::AUTHORIZATION,
             &format!("Bearer {token}"),

@@ -11,8 +11,8 @@ use sqlx::SqlitePool;
 use crate::api::dto::*;
 use crate::api::AppState;
 use crate::db::{
-    repo_audit, repo_diff_hunk, repo_finding,
-    repo_observed, repo_raw, repo_retention, repo_usage_facet, repo_verification_run,
+    repo_audit, repo_diff_hunk, repo_observed, repo_raw, repo_retention, repo_signal,
+    repo_usage_facet, repo_verification_run,
 };
 use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
 
@@ -613,68 +613,44 @@ fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Val
 
 
 // ---------------------------------------------------------------------------
-// Slice-14 — Finding endpoints
+// Plan 1 — Signal endpoints (replaces the slice-14 finding endpoints)
 // ---------------------------------------------------------------------------
 
-/// Query parameters for `GET /v1/findings`.
-#[derive(Deserialize)]
-pub struct FindingsQuery {
-    pub session_id: Option<String>,
-    pub category: Option<String>,
-    pub severity: Option<String>,
-    pub status: Option<String>,
-    pub subkind: Option<String>,
-    pub limit: Option<i64>,
-}
-
-/// Convert a `FindingRow` to the API DTO shape.
-fn finding_row_to_dto(row: repo_finding::FindingRow) -> FindingDto {
-    let evidence_refs: Vec<serde_json::Value> = serde_json::from_str(&row.evidence_refs)
-        .unwrap_or_else(|_| vec![]);
-    let evidence_projection: serde_json::Value = serde_json::from_str(&row.evidence_projection)
-        .unwrap_or(serde_json::Value::Null);
-    let provenance: serde_json::Value = serde_json::from_str(&row.provenance)
-        .unwrap_or(serde_json::Value::Null);
-    FindingDto {
-        finding_id: row.finding_id,
+/// Convert a `SignalRow` to the API DTO shape. JSON columns (`evidence_refs`,
+/// `facts`, `provenance`) are parsed so callers receive typed values.
+fn signal_row_to_dto(row: repo_signal::SignalRow) -> SignalDto {
+    let evidence_refs: Vec<serde_json::Value> =
+        serde_json::from_str(&row.evidence_refs).unwrap_or_default();
+    let facts: serde_json::Value =
+        serde_json::from_str(&row.facts).unwrap_or(serde_json::Value::Null);
+    let provenance: serde_json::Value =
+        serde_json::from_str(&row.provenance).unwrap_or(serde_json::Value::Null);
+    SignalDto {
+        signal_id: row.signal_id,
         schema_version: row.schema_version,
         session_id: row.session_id,
-        category: row.category,
+        detector: row.detector,
         subkind: row.subkind,
-        severity: row.severity,
-        confidence: row.confidence,
         summary: row.summary,
         evidence_refs,
-        evidence_projection,
+        facts,
         provenance,
-        status: row.status,
         created_at: row.created_at,
     }
 }
 
-/// `GET /v1/findings` — list findings with optional filters.
-///
-/// Query params: `session_id`, `category`, `severity`, `status` (default `active`),
-/// `limit` (default 50, max 200).
-pub async fn list_findings(
+/// `GET /v1/sessions/:id/signals` — list all signals for a session.
+pub async fn session_signals(
     State(pool): State<SqlitePool>,
-    Query(q): Query<FindingsQuery>,
+    Path(session_id): Path<String>,
 ) -> impl IntoResponse {
-    let filter = repo_finding::ListFilter {
-        session_id: q.session_id,
-        category: q.category,
-        severity: q.severity,
-        status: q.status,
-        subkind: q.subkind,
-        limit: q.limit.unwrap_or(50).min(200).max(1),
-    };
-    match repo_finding::list(&pool, &filter).await {
+    match repo_signal::list_by_session(&pool, &session_id).await {
         Ok(rows) => {
-            let data: Vec<FindingDto> = rows.into_iter().map(finding_row_to_dto).collect();
-            Json(FindingsResponse { data }).into_response()
+            let data: Vec<SignalDto> = rows.into_iter().map(signal_row_to_dto).collect();
+            Json(SignalsResponse { data }).into_response()
         }
         Err(err) => {
-            tracing::error!(err = %err, "list_findings failed");
+            tracing::error!(err = %err, "session_signals failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "internal server error"})),
@@ -684,47 +660,44 @@ pub async fn list_findings(
     }
 }
 
-/// `GET /v1/findings/:id` — single finding detail.
+/// `GET /v1/signals/:id` — single signal detail.
 ///
-/// Slice-19: if the finding has been deleted by retention sweep, the tombstone
-/// table will have a record for it and this handler returns `410 Gone` instead
-/// of `404 Not Found`, so clients can distinguish "never existed" from "expired".
-pub async fn finding_detail(
+/// If the signal has been deleted by retention sweep, the tombstone table will
+/// have a record for it and this handler returns `410 Gone` instead of `404 Not
+/// Found`, so clients can distinguish "never existed" from "expired".
+pub async fn signal_detail(
     State(pool): State<SqlitePool>,
-    Path(finding_id): Path<String>,
+    Path(signal_id): Path<String>,
 ) -> impl IntoResponse {
-    // Check tombstone first (slice-19).
-    match repo_retention::is_tombstoned(&pool, &finding_id).await {
+    // Check tombstone first.
+    match repo_retention::is_tombstoned(&pool, &signal_id).await {
         Ok(true) => {
             return (
                 StatusCode::GONE,
                 Json(json!({
                     "type": "about:blank",
                     "title": "RESOURCE_GONE",
-                    "detail": format!("finding {finding_id} was deleted by retention sweep"),
-                    "resource_id": finding_id
+                    "detail": format!("signal {signal_id} was deleted by retention sweep"),
+                    "resource_id": signal_id
                 })),
             )
                 .into_response();
         }
         Ok(false) => {}
         Err(err) => {
-            tracing::warn!(finding_id = %finding_id, err = %err, "tombstone check failed");
+            tracing::warn!(signal_id = %signal_id, err = %err, "tombstone check failed");
         }
     }
 
-    match repo_finding::get(&pool, &finding_id).await {
-        Ok(Some(row)) => Json(FindingDetailResponse {
-            data: finding_row_to_dto(row),
-        })
-        .into_response(),
+    match repo_signal::get(&pool, &signal_id).await {
+        Ok(Some(row)) => Json(json!({ "data": signal_row_to_dto(row) })).into_response(),
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(json!({"error": "finding not found", "finding_id": finding_id})),
+            Json(json!({"error": "signal not found", "signal_id": signal_id})),
         )
             .into_response(),
         Err(err) => {
-            tracing::error!(finding_id = %finding_id, err = %err, "finding_detail failed");
+            tracing::error!(signal_id = %signal_id, err = %err, "signal_detail failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "internal server error"})),
@@ -732,149 +705,6 @@ pub async fn finding_detail(
                 .into_response()
         }
     }
-}
-
-/// `GET /v1/findings/:id/evidence` — finding + its evidence event IDs + raw
-/// source refs.
-///
-/// `evidence_refs` are the event IDs cited by the finding. `raw_source_refs`
-/// resolves the raw-event provenance (source_type / source_uri) for each cited
-/// event via the observed_event → raw_event join.
-pub async fn finding_evidence(
-    State(pool): State<SqlitePool>,
-    Path(finding_id): Path<String>,
-) -> impl IntoResponse {
-    let row = match repo_finding::get(&pool, &finding_id).await {
-        Ok(Some(r)) => r,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({"error": "finding not found", "finding_id": finding_id})),
-            )
-                .into_response();
-        }
-        Err(err) => {
-            tracing::error!(err = %err, "finding_evidence failed");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "internal server error"})),
-            )
-                .into_response();
-        }
-    };
-
-    // Parse evidence_refs
-    let evidence_refs: Vec<String> = serde_json::from_str(&row.evidence_refs).unwrap_or_default();
-    let finding_dto = finding_row_to_dto(row);
-
-    // Build raw_source_refs from observed_event → raw_event joins
-    let mut raw_source_refs: Vec<RawSourceRef> = Vec::new();
-    for ev_id in &evidence_refs {
-        if let Ok(Some(raw)) = repo_raw::get_for_event_id(&pool, ev_id).await {
-            raw_source_refs.push(RawSourceRef {
-                event_id: ev_id.clone(),
-                source_type: raw.source_type,
-                source_uri: raw.source_uri,
-                redaction_state: "none".into(),
-            });
-        }
-    }
-
-    Json(FindingEvidenceResponse {
-        data: FindingEvidenceData {
-            finding: finding_dto,
-            evidence_refs,
-            raw_source_refs,
-        },
-    })
-    .into_response()
-}
-
-/// `GET /v1/sessions/:id/findings` — alias for `GET /v1/findings?session_id=:id`.
-pub async fn session_findings(
-    State(pool): State<SqlitePool>,
-    Path(session_id): Path<String>,
-) -> impl IntoResponse {
-    let filter = repo_finding::ListFilter {
-        session_id: Some(session_id),
-        status: Some("active".into()),
-        limit: 200,
-        ..Default::default()
-    };
-    match repo_finding::list(&pool, &filter).await {
-        Ok(rows) => {
-            let data: Vec<FindingDto> = rows.into_iter().map(finding_row_to_dto).collect();
-            Json(FindingsResponse { data }).into_response()
-        }
-        Err(err) => {
-            tracing::error!(err = %err, "session_findings failed");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "internal server error"})),
-            )
-                .into_response()
-        }
-    }
-}
-
-/// `GET /v1/sessions/:id/tool-failures` — tool_failure class breakdown +
-/// user-visible drill list (spec §6.3). Internal retries / benign exits are
-/// counted but kept out of the drill list so they never headline.
-pub async fn session_tool_failures(
-    State(pool): State<SqlitePool>,
-    Path(session_id): Path<String>,
-) -> impl IntoResponse {
-    let counts = match repo_finding::count_by_subkind(&pool, &session_id, "tool_failure").await {
-        Ok(c) => c,
-        Err(err) => {
-            tracing::error!(err = %err, "count_by_subkind failed");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "internal server error"})),
-            )
-                .into_response();
-        }
-    };
-    let mut user_visible = 0i64;
-    let mut internal_retry = 0i64;
-    let mut benign = 0i64;
-    let mut unclassified = 0i64;
-    for (sk, n) in &counts {
-        match sk.as_deref() {
-            Some("user_visible") => user_visible = *n,
-            Some("internal_retry") => internal_retry = *n,
-            Some("benign_nonzero_exit") => benign = *n,
-            _ => unclassified += *n,
-        }
-    }
-    let total = user_visible + internal_retry + benign + unclassified;
-
-    let drill_filter = repo_finding::ListFilter {
-        session_id: Some(session_id.clone()),
-        category: Some("tool_failure".into()),
-        subkind: Some("user_visible".into()),
-        status: Some("active".into()),
-        limit: 200,
-        ..Default::default()
-    };
-    let drill = repo_finding::list(&pool, &drill_filter)
-        .await
-        .unwrap_or_default();
-    let user_visible_findings: Vec<FindingDto> =
-        drill.into_iter().map(finding_row_to_dto).collect();
-
-    Json(ToolFailureSummaryResponse {
-        data: ToolFailureSummaryDto {
-            session_id,
-            user_visible,
-            internal_retry,
-            benign_nonzero_exit: benign,
-            unclassified,
-            total,
-            user_visible_findings,
-        },
-    })
-    .into_response()
 }
 
 // ---------------------------------------------------------------------------
