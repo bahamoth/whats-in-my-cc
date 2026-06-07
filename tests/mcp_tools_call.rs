@@ -122,6 +122,41 @@ async fn get_otel_trace_returns_content_block() {
 }
 
 #[tokio::test]
+async fn list_detectors_returns_four_manifests() {
+    let (server, _pool) = make_server_with_session().await;
+    let sid = init_session(&server).await;
+    let (hk, hv) = sid_header(&sid);
+    let r = server
+        .post("/mcp")
+        .content_type("application/json")
+        .add_header(hk, hv)
+        .json(&json!({
+            "jsonrpc": "2.0", "id": 20, "method": "tools/call",
+            "params": {
+                "name": "whats_in_my_cc.list_detectors",
+                "arguments": {}
+            }
+        }))
+        .await;
+    r.assert_status_ok();
+    let body: Value = r.json();
+    assert_eq!(body["result"]["isError"], false, "list_detectors must not return isError");
+    let text = body["result"]["content"][0]["text"].as_str().unwrap();
+    let env: Value = serde_json::from_str(text).unwrap();
+    let data = env["data"].as_array().expect("list_detectors data must be array");
+    assert_eq!(
+        data.len(), 4,
+        "list_detectors must return 4 manifests; got {}",
+        data.len()
+    );
+    // Verify each manifest has id and intent.
+    for m in data {
+        assert!(m["id"].is_string(), "manifest.id must be a string");
+        assert!(m["intent"].is_string(), "manifest.intent must be a string");
+    }
+}
+
+#[tokio::test]
 async fn unknown_tool_name_returns_is_error_true() {
     let (server, _pool) = make_server_with_session().await;
     let sid = init_session(&server).await;

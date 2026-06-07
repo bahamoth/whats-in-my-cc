@@ -33,6 +33,15 @@
         },
         "required": ["trace_id"]
       }
+    },
+    {
+      "name": "whats_in_my_cc.list_detectors",
+      "description": "Return the manifest catalog for all registered detectors (spec §6.4). Each manifest describes what the detector detects, which raw payload fields it reads, by what rule, and why. Use this before proposing config changes or new detectors.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
     }
   ]
 }

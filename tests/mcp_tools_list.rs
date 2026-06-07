@@ -38,7 +38,7 @@ async fn init_session(server: &TestServer) -> String {
 }
 
 #[tokio::test]
-async fn tools_list_returns_three_tools() {
+async fn tools_list_returns_four_tools() {
     let server = make_server().await;
     let sid = init_session(&server).await;
     let r = server
@@ -53,7 +53,7 @@ async fn tools_list_returns_three_tools() {
     r.assert_status_ok();
     let body: Value = r.json();
     let tools = body["result"]["tools"].as_array().expect("tools must be an array");
-    assert_eq!(tools.len(), 3, "expected exactly 3 tools, got {}", tools.len());
+    assert_eq!(tools.len(), 4, "expected exactly 4 tools (Plan 4: +list_detectors), got {}", tools.len());
 }
 
 #[tokio::test]
@@ -80,6 +80,7 @@ async fn tools_list_contains_required_tool_names() {
         "whats_in_my_cc.get_file_lineage",
         "whats_in_my_cc.get_otel_trace",
         "whats_in_my_cc.search_sessions",
+        "whats_in_my_cc.list_detectors",
     ];
     for name in &required {
         assert!(

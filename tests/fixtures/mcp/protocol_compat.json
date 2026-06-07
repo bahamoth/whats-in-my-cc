@@ -21,7 +21,8 @@
     "tools": [
       { "name": "whats_in_my_cc.search_sessions" },
       { "name": "whats_in_my_cc.get_file_lineage" },
-      { "name": "whats_in_my_cc.get_otel_trace" }
+      { "name": "whats_in_my_cc.get_otel_trace" },
+      { "name": "whats_in_my_cc.list_detectors" }
     ]
   },
   "resource_templates_result": {

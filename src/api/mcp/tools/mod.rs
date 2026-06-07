@@ -11,6 +11,7 @@ use sqlx::SqlitePool;
 
 pub mod get_file_lineage;
 pub mod get_otel_trace;
+pub mod list_detectors;
 pub mod search_sessions;
 
 /// Wrap a JSON value as an MCP `tools/call` success result.
@@ -62,6 +63,14 @@ fn get_otel_trace_schema() -> Value {
     })
 }
 
+fn list_detectors_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {},
+        "required": []
+    })
+}
+
 /// Build the tools/list response body.
 pub fn tools_list_response() -> Value {
     json!({
@@ -80,6 +89,11 @@ pub fn tools_list_response() -> Value {
                 "name": "whats_in_my_cc.get_otel_trace",
                 "description": "Return OTel spans for a trace ID observed in this session.",
                 "inputSchema": get_otel_trace_schema()
+            },
+            {
+                "name": "whats_in_my_cc.list_detectors",
+                "description": "Return the manifest catalog for all registered detectors (spec §6.4). Each manifest describes what the detector detects, which raw payload fields it reads, by what rule, and why. Use this before proposing config changes or new detectors.",
+                "inputSchema": list_detectors_schema()
             }
         ]
     })
@@ -96,6 +110,9 @@ pub async fn dispatch(name: &str, args: &Value, pool: &SqlitePool) -> Value {
         }
         "whats_in_my_cc.get_otel_trace" => {
             get_otel_trace::call(args, pool).await
+        }
+        "whats_in_my_cc.list_detectors" => {
+            list_detectors::call(args, pool).await
         }
         _ => tool_error(format!("unknown tool: {name}")),
     }
