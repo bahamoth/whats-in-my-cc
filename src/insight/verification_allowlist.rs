@@ -121,14 +121,6 @@ const WRAPPER_PREFIXES: &[&[&str]] = &[
     &["time"],
 ];
 
-/// Leading executables that, even when a segment contains the `test`/`spec`
-/// keyword, are NOT verification commands (file/VCS/shell utilities).
-/// Source: design spec §6.2 ("tiny non-exec denylist cat/echo/grep/git/rm/
-/// mkdir/cp/mv/ls/find").
-const KEYWORD_DENYLIST: &[&str] = &[
-    "cat", "echo", "grep", "git", "rm", "mkdir", "cp", "mv", "ls", "find",
-];
-
 /// Dry-run / collect-only / list flags: the segment compiles or enumerates
 /// tests but does NOT run them, so it is not a verification *run*.
 ///
@@ -272,50 +264,30 @@ fn remainder_after(s: &str, n: usize) -> &str {
 /// Returns `Some((command_kind, detection_basis))`:
 ///   - Tier-1: the wrapper-stripped segment matches the allowlist via
 ///     `classify` → `(kind, "known_tool")`.
-///   - Tier-2: the segment contains the `test`/`spec` keyword, its leading
-///     executable is NOT on `KEYWORD_DENYLIST`, and Tier-1 missed →
-///     `("test_suite_other", "test_keyword")`.
 ///   - else `None`.
 ///
-/// Dry-run / collect-only / list segments are denied at both tiers (they
-/// compile or enumerate tests but do not run them — slice directive #6).
+/// Tier-2 keyword fallback ("`test`/`spec` 토큰이 있으면 추정") は **제거됨**.
+/// multi-line Bash(commit 메시지·heredoc)에서 split된 산문이 phantom verification
+/// run을 만들었다. known_tool(결정론 allowlist)만 인정한다.
+/// .wimcc-analysis.sqlite 기준 test_keyword는 13/195건만 담고
+/// false-positive 클래스 전체를 만들었다. spec F2.
+///
+/// Dry-run / collect-only / list segments are denied (they compile or
+/// enumerate tests but do not run them — slice directive #6).
 pub fn classify_segment(segment: &str) -> Option<(&'static str, &'static str)> {
     let stripped = strip_wrappers(strip_redirects(segment));
 
-    // Post-match deny: dry-run / collect-only / list is not a verification run.
+    // Dry-run / collect-only / list 세그먼트는 verification run이 아니다.
     if is_dry_run(stripped) {
         return None;
     }
 
-    // Tier-1: known tool (reuses the closed allowlist + cargo build --doc deny).
-    if let Some(kind) = classify(stripped) {
-        return Some((kind, "known_tool"));
-    }
-
-    // Tier-2: keyword fallback. Token-level match avoids substrings like
-    // "latest" / "fastest" (we check whitespace-delimited tokens, not the
-    // raw string).
-    let lead = stripped.split_whitespace().next().unwrap_or("");
-    if KEYWORD_DENYLIST.contains(&lead) {
-        return None;
-    }
-    // Tokenise on whitespace and the identifier separators `: _ - .` but NOT
-    // `/`. Splitting on `/` would make any argument PATH containing a `tests/`
-    // directory (e.g. the real command
-    // `wimcc ingest tests/fixtures/transcripts/x.jsonl`) a false positive —
-    // observed in this project's own transcripts. Keeping `/` intact means a
-    // bare `tests` token only appears when the EXECUTABLE or a standalone
-    // argument is the keyword (`./run_integration_test.sh`, `make spec`),
-    // which is the intended low-false-positive Tier-2 guess.
-    let has_keyword = stripped
-        .split(|c: char| {
-            c.is_whitespace() || c == ':' || c == '_' || c == '-' || c == '.'
-        })
-        .any(|t| t == "test" || t == "spec" || t == "tests" || t == "specs");
-    if has_keyword {
-        return Some(("test_suite_other", "test_keyword"));
-    }
-    None
+    // Tier-1만: known tool(결정론 allowlist). 과거 Tier-2 keyword fallback
+    // ("세그먼트에 test/spec 토큰이 있으면 테스트일 것")은 제거됨 — multi-line
+    // Bash(commit 메시지·heredoc)에서 split된 산문이 phantom run을 만들었고,
+    // 이는 휴리스틱 추정이다. .wimcc-analysis.sqlite 기준 test_keyword는
+    // measured 13/195건만 담고 false-positive 클래스 전체를 만들었다.
+    classify(stripped).map(|kind| (kind, "known_tool"))
 }
 
 #[cfg(test)]
@@ -360,16 +332,36 @@ mod tests {
     }
 
     #[test]
-    fn classify_segment_tier2_keyword_fallback() {
-        // contains `test`/`spec`, not a known tool, not a denylisted exec.
+    fn classify_segment_drops_prose_false_positives() {
+        // Real-data anchoring (.wimcc-analysis.sqlite): 아래 산문 줄들은 multi-line
+        // Bash(commit -m 본문·heredoc)에서 split돼 제거 대상 Tier-2 keyword fallback에
+        // phantom test run으로 잡혔다. Tier-1(known_tool)에는 매칭되지 않으므로 None이어야.
         assert_eq!(
-            classify_segment("./run_integration_test.sh"),
-            Some(("test_suite_other", "test_keyword"))
+            classify_segment("- CI 회복: scripts/run-tests.mjs 신설 (cross-platform glob)"),
+            None
         );
         assert_eq!(
-            classify_segment("make spec"),
-            Some(("test_suite_other", "test_keyword"))
+            classify_segment("- SA1 Metica activation was previously gated on completion of Airflux test"),
+            None
         );
+        assert_eq!(
+            classify_segment("declare the contract at spec §1.9. Pages live as `<slug>.md`"),
+            None
+        );
+    }
+
+    #[test]
+    fn classify_segment_known_tool_still_matches() {
+        assert_eq!(classify_segment("cargo test"), Some(("test_suite_rust", "known_tool")));
+        assert_eq!(classify_segment("npx vitest run"), Some(("test_suite_js", "known_tool")));
+    }
+
+    #[test]
+    fn classify_segment_non_allowlist_runner_no_longer_matches() {
+        // Tier-2 제거 trade-off(정직): 비-allowlist 실 러너는 더 이상 잡지 않는다.
+        // 거짓 phantom보다 일부 누락이 낫다. 필요 시 allowlist를 결정론적으로 확장.
+        assert_eq!(classify_segment("./run_integration_test.sh"), None);
+        assert_eq!(classify_segment("make spec"), None);
     }
 
     #[test]

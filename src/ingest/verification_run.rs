@@ -640,11 +640,10 @@ mod tests {
     }
 
     #[test]
-    fn matched_segment_keyword_tier() {
-        let m = matched_segment("cd repo && ./run_e2e_test.sh").expect("match");
-        assert_eq!(m.command_kind, "test_suite_other");
-        assert_eq!(m.detection_basis, "test_keyword");
-        assert_eq!(m.status_basis, "exit");
+    fn matched_segment_keyword_tier_no_longer_matches() {
+        // Tier-2 keyword fallback 제거(spec F2): 비-allowlist 실 러너는 더 이상
+        // 잡지 않는다. phantom verification run보다 일부 누락이 낫다.
+        assert!(matched_segment("cd repo && ./run_e2e_test.sh").is_none());
     }
 
     #[test]
