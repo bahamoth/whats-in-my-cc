@@ -518,10 +518,13 @@ fn is_verification_kind(kind: &str) -> bool {
     )
 }
 
-/// 도구 자체가 출력하는 결정론 성공 요약. exit code(measured)가 없을 때 Tier-4에서
-/// provenance=Estimated로 Passed 승격에 쓰인다(looks_like_failure와 대칭). CC는
-/// 성공 시 "Exit code N"을 prepend하지 않으므로 transcript-only 환경에서 성공은
-/// 이 요약으로만 결정 가능하다.
+/// Tier-4 estimated success heuristic: deterministic success summaries emitted
+/// by the tool itself. Used to promote to Passed (Estimated provenance) when no
+/// measured signal (OTLP/hook/exit-code) exists — symmetric to looks_like_failure.
+///
+/// Claude Code does NOT prepend "Exit code N" on success, so in a transcript-only
+/// environment these summaries are the only way to determine success. The result
+/// is Estimated, not Measured, to keep it distinct from exit-code evidence.
 fn looks_like_success(content: &str) -> bool {
     // cargo test / cargo build / cargo nextest
     content.contains("test result: ok")
@@ -631,6 +634,10 @@ mod tests {
         ));
         // 실패/진행중 출력은 success로 보지 않음
         assert!(!looks_like_success("RUN  v2.1.9\nstderr | TopBar ..."));
+        // 단독으로는 혼합 출력에도 true(" passed in " 포함) — Tier-4가 looks_like_failure를
+        // 먼저 검사하므로 실제 경로에선 Failed로 처리된다. 이 의존성을 문서화한다.
+        assert!(looks_like_success("1 failed, 41 passed in 1.20s"));
+        assert!(looks_like_failure("1 failed, 41 passed in 1.20s"));
     }
 
     #[test]
