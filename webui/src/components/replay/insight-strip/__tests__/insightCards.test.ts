@@ -11,13 +11,13 @@ import type {
 // token + price breakdown). See webui/src/api/types.ts.
 const usage: SessionUsageDto = {
   session_id: 's1',
-  turns: 5,
+  assistant_events: 5,
+  user_turns: 5,
   input_tokens: 200_000,
   cache_creation_input_tokens: 3_900_000,
   cache_read_input_tokens: 199_500_000,
   output_tokens: 1_300_000,
   billed_tokens: 5_400_000,
-  cache_hit_ratio: 0.98,
   estimated_cost_usd: 102.5,
   cost_basis: 'estimate_public_pricing',
   pricing_version: 'v1',
@@ -25,7 +25,7 @@ const usage: SessionUsageDto = {
   by_model: [
     {
       model: 'claude-opus-4-8',
-      turns: 3,
+      assistant_events: 3,
       input_tokens: 150_000,
       cache_creation_input_tokens: 3_000_000,
       cache_read_input_tokens: 150_000_000,
@@ -35,7 +35,7 @@ const usage: SessionUsageDto = {
     },
     {
       model: 'claude-haiku-4-5-20251001',
-      turns: 2,
+      assistant_events: 2,
       input_tokens: 50_000,
       cache_creation_input_tokens: 900_000,
       cache_read_input_tokens: 49_500_000,

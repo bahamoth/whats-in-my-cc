@@ -4,13 +4,13 @@ import { InsightStrip } from '../InsightStrip';
 import type { SessionUsageDto, VerificationRunDto, SignalDto } from '../../../../api/types';
 
 const usage: SessionUsageDto = {
-  session_id: 's1', turns: 5, input_tokens: 200_000,
+  session_id: 's1', assistant_events: 5, user_turns: 5, input_tokens: 200_000,
   cache_creation_input_tokens: 3_900_000, cache_read_input_tokens: 199_500_000,
-  output_tokens: 1_300_000, billed_tokens: 5_400_000, cache_hit_ratio: 0.98,
+  output_tokens: 1_300_000, billed_tokens: 5_400_000,
   estimated_cost_usd: 102.5, cost_basis: 'estimate_public_pricing',
   pricing_version: 'v1', models_without_pricing: [],
   by_model: [{
-    model: 'claude-opus-4-8', turns: 5,
+    model: 'claude-opus-4-8', assistant_events: 5,
     input_tokens: 200_000, cache_creation_input_tokens: 3_900_000,
     cache_read_input_tokens: 199_500_000, output_tokens: 1_300_000,
     estimated_cost_usd: 102.5, priced: true,

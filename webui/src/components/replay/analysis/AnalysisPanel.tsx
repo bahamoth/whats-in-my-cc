@@ -41,25 +41,32 @@ export function AnalysisPanel({ metrics, 'data-testid': testId }: AnalysisPanelP
       <div>
         <div className={styles.sectionTitle}>세션 지표</div>
         <div className={styles.metricsTable}>
+          {/* 도구 실패: rate는 count에서 계산 */}
           <div className={styles.metricRow}>
-            <span className={styles.metricLabel}>도구 실패율</span>
+            <span className={styles.metricLabel}>도구 실패</span>
             <span className={styles.metricCount}>
               {metrics.tool_failure_count}/{metrics.tool_call_total}
             </span>
-            <span className={styles.metricRate}>{pct(metrics.tool_failure_rate)}</span>
-          </div>
-          <div className={styles.metricRow}>
-            <span className={styles.metricLabel}>검증 통과율</span>
-            <span className={styles.metricCount}>
-              {metrics.verification_passed}/{metrics.verification_total}
+            <span className={styles.metricRate}>
+              {metrics.tool_call_total > 0
+                ? pct(metrics.tool_failure_count / metrics.tool_call_total)
+                : '—'}
             </span>
-            <span className={styles.metricRate}>{pct(metrics.verification_pass_rate)}</span>
           </div>
+          {/* 검증: 분모는 measured(passed+failed), unknown 별도 노출 */}
           <div className={styles.metricRow}>
-            <span className={styles.metricLabel}>캐시 히트율</span>
-            <span className={styles.metricCount} />
-            <span className={styles.metricRate}>{pct(metrics.cache_hit_ratio)}</span>
+            <span className={styles.metricLabel}>검증 통과 (측정분)</span>
+            <span className={styles.metricCount}>
+              {metrics.verification_passed}/{metrics.verification_passed + metrics.verification_failed}
+              {metrics.verification_unknown > 0 ? ` · 미측정 ${metrics.verification_unknown}` : ''}
+            </span>
+            <span className={styles.metricRate}>
+              {metrics.verification_passed + metrics.verification_failed > 0
+                ? pct(metrics.verification_passed / (metrics.verification_passed + metrics.verification_failed))
+                : '측정 없음'}
+            </span>
           </div>
+          {/* context bloat */}
           <div className={styles.metricRow}>
             <span className={styles.metricLabel}>Context bloat 횟수</span>
             <span className={styles.metricCount}>{metrics.context_bloat_count}</span>

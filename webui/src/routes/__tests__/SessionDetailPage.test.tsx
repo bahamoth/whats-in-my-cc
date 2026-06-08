@@ -469,12 +469,11 @@ describe('Analysis surface', () => {
     session_id: 's1',
     tool_call_total: 10,
     tool_failure_count: 2,
-    tool_failure_rate: 0.2,
     verification_total: 4,
     verification_passed: 3,
-    verification_pass_rate: 0.75,
+    verification_failed: 1,
+    verification_unknown: 0,
     context_bloat_count: 1,
-    cache_hit_ratio: 0.6,
     detector_firing: { tool_failure: 2, context_bloat: 1 },
   };
 

@@ -136,7 +136,7 @@ export type DiffHunkDto = {
 
 export type ModelUsageDto = {
   model: string;
-  turns: number;
+  assistant_events: number;
   input_tokens: number;
   cache_creation_input_tokens: number;
   cache_read_input_tokens: number;
@@ -148,13 +148,13 @@ export type ModelUsageDto = {
 
 export type SessionUsageDto = {
   session_id: string;
-  turns: number;
+  assistant_events: number;
+  user_turns: number;
   input_tokens: number;
   cache_creation_input_tokens: number;
   cache_read_input_tokens: number;
   output_tokens: number;
   billed_tokens: number;
-  cache_hit_ratio: number | null;
   /** Public-pricing ESTIMATE (USD) — NOT actual billing. */
   estimated_cost_usd: number;
   /** "estimate_public_pricing" — drives the 추정 badge. */
@@ -180,7 +180,7 @@ export type UsageBaselineDto = {
   session_count: number;
   cache_hit_ratio: BaselineStat;
   billed_tokens: BaselineStat;
-  turns: BaselineStat;
+  assistant_events: BaselineStat;
   output_tokens: BaselineStat;
 };
 
@@ -188,12 +188,11 @@ export type SessionMetricsDto = {
   session_id: string;
   tool_call_total: number;
   tool_failure_count: number;
-  tool_failure_rate: number;
   verification_total: number;
   verification_passed: number;
-  verification_pass_rate: number;
+  verification_failed: number;
+  verification_unknown: number;
   context_bloat_count: number;
-  cache_hit_ratio: number;
   detector_firing: Record<string, number>;
 };
 

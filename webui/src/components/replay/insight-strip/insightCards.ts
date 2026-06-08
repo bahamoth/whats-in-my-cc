@@ -60,6 +60,12 @@ export interface InsightCardModel {
   baselineDelta?: string;
 }
 
+// /usage 토큰 component에서 cache hit ratio 계산(window=세션 전체)
+function cacheHitRatio(u: SessionUsageDto): number | null {
+  const denom = u.cache_read_input_tokens + u.cache_creation_input_tokens + u.input_tokens;
+  return denom > 0 ? u.cache_read_input_tokens / denom : null;
+}
+
 const GUARD_KIND: Record<string, 'test' | 'build' | 'lint' | 'format'> = {
   test_suite_js: 'test',
   test_suite_rust: 'test',
@@ -84,23 +90,24 @@ function contextCard(inputs: InsightInputs): InsightCardModel {
     };
   }
   const u = inputs.usage;
+  const ratio = cacheHitRatio(u);
   const card: InsightCardModel = {
     id: 'context', title: '컨텍스트 효율',
-    value: formatPct(u.cache_hit_ratio),
+    value: formatPct(ratio),
     detail: `캐시 읽기 ${formatTokens(u.cache_read_input_tokens)}`,
     provenance: 'measured', tooltip: tip,
     drill: {
       lines: [
-        `캐시 적중률 ${formatPct(u.cache_hit_ratio)}`,
+        `캐시 적중률 ${formatPct(ratio)}`,
         `캐시 읽기(무료) ${formatTokens(u.cache_read_input_tokens)}`,
         `캐시 생성 ${formatTokens(u.cache_creation_input_tokens)}`,
-        `턴 수 ${u.turns}`,
+        `사용자 턴 ${u.user_turns}`,
       ],
     },
   };
   const base = inputs.baseline?.cache_hit_ratio;
-  if (typeof base === 'number' && typeof u.cache_hit_ratio === 'number') {
-    const d = Math.round((u.cache_hit_ratio - base) * 100);
+  if (typeof base === 'number' && typeof ratio === 'number') {
+    const d = Math.round((ratio - base) * 100);
     card.baselineDelta = `${d >= 0 ? '+' : ''}${d}%p vs 중앙값`;
   }
   return card;
@@ -127,7 +134,7 @@ function tokensCard(inputs: InsightInputs): InsightCardModel {
         `input ${formatTokens(u.input_tokens)}`,
         `cache_creation ${formatTokens(u.cache_creation_input_tokens)}`,
         `output ${formatTokens(u.output_tokens)}`,
-        ...u.by_model.map((m) => `${m.model}: ${m.turns}턴 · 출력 ${formatTokens(m.output_tokens)}`),
+        ...u.by_model.map((m) => `${m.model}: ${m.assistant_events} 산출 · 출력 ${formatTokens(m.output_tokens)}`),
       ],
     },
   };
