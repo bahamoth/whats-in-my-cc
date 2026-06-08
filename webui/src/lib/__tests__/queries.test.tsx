@@ -108,7 +108,7 @@ describe('useUsageBaselineQuery', () => {
       session_count: 2,
       cache_hit_ratio: { p25: 0.0, median: 0.45, p75: 0.9 },
       billed_tokens: { p25: 200, median: 300, p75: 400 },
-      turns: { p25: 1, median: 1, p75: 1 },
+      assistant_events: { p25: 1, median: 1, p75: 1 },
       output_tokens: { p25: 100, median: 200, p75: 300 },
     };
     fetchSpy.mockResolvedValue(mockOk(ENVELOPE(payload)));

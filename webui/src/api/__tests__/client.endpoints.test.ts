@@ -12,6 +12,11 @@ import {
   getUsageBaseline,
   getVerificationRuns,
 } from '../client';
+import type {
+  SessionMetricsDto,
+  SessionUsageDto,
+  UsageBaselineDto,
+} from '../types';
 
 const ENVELOPE = (data: unknown) => ({ meta: { generated_at: '2026-05-29T00:00:00Z' }, data });
 
@@ -57,15 +62,15 @@ describe('getSignals', () => {
 
 describe('getSessionUsage', () => {
   it('getSessionUsage unwraps the usage envelope', async () => {
-    const expected = {
+    const expected: SessionUsageDto = {
       session_id: 's1',
-      turns: 3,
+      assistant_events: 3,
+      user_turns: 2,
       input_tokens: 10,
       cache_creation_input_tokens: 20,
       cache_read_input_tokens: 900,
       output_tokens: 30,
       billed_tokens: 60,
-      cache_hit_ratio: 0.96,
       estimated_cost_usd: 0.0123,
       cost_basis: 'estimate_public_pricing',
       pricing_version: 'pricing_estimate@v1',
@@ -73,7 +78,7 @@ describe('getSessionUsage', () => {
       by_model: [
         {
           model: 'claude-opus-4-7',
-          turns: 3,
+          assistant_events: 3,
           input_tokens: 10,
           cache_creation_input_tokens: 20,
           cache_read_input_tokens: 900,
@@ -91,11 +96,11 @@ describe('getSessionUsage', () => {
 
 describe('getUsageBaseline', () => {
   it('hits GET /v1/usage/baseline and unwraps the envelope `data`', async () => {
-    const expected = {
+    const expected: UsageBaselineDto = {
       session_count: 2,
       cache_hit_ratio: { p25: 0.0, median: 0.45, p75: 0.9 },
       billed_tokens: { p25: 200, median: 300, p75: 400 },
-      turns: { p25: 1, median: 1, p75: 1 },
+      assistant_events: { p25: 1, median: 1, p75: 1 },
       output_tokens: { p25: 100, median: 200, p75: 300 },
     };
     fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
@@ -107,16 +112,15 @@ describe('getUsageBaseline', () => {
 
 describe('getSessionMetrics', () => {
   it('hits GET /v1/sessions/:id/metrics and unwraps `data`', async () => {
-    const expected = {
+    const expected: SessionMetricsDto = {
       session_id: 's1',
       tool_call_total: 10,
       tool_failure_count: 2,
-      tool_failure_rate: 0.2,
       verification_total: 4,
       verification_passed: 3,
-      verification_pass_rate: 0.75,
+      verification_failed: 1,
+      verification_unknown: 0,
       context_bloat_count: 1,
-      cache_hit_ratio: 0.6,
       detector_firing: { tool_failure: 2, context_bloat: 1 },
     };
     fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));

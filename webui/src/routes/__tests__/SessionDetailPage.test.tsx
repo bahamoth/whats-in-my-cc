@@ -517,12 +517,14 @@ describe('Analysis surface', () => {
     const toggleBtn = screen.getByRole('button', { name: /분석/i });
     fireEvent.click(toggleBtn);
 
-    // After clicking, AnalysisPanel should render with the metrics data
+    // After clicking, AnalysisPanel should render with the metrics data.
+    // Rates are computed client-side from counts (F1: backend dropped the
+    // window-fixed rate scalars).
     await waitFor(() => {
-      // tool_failure_rate = 0.2 → 20%
+      // tool_failure_count(2)/tool_call_total(10) → 20%
       expect(screen.getByText(/20%/)).toBeInTheDocument();
     });
-    // verification_pass_rate = 0.75 → 75%
+    // verification_passed(3)/(passed(3)+failed(1)) → 75%
     expect(screen.getByText(/75%/)).toBeInTheDocument();
     // detector name
     expect(screen.getByText(/tool_failure/)).toBeInTheDocument();
