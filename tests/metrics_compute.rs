@@ -4,12 +4,11 @@
 //! Facts/counts/ratios only — no severity/judgment fields.
 
 use sqlx::sqlite::SqlitePoolOptions;
-use wimcc::db::{migrate, repo_observed, repo_raw, repo_runs, repo_signal, repo_usage_facet, repo_verification_run};
 use wimcc::db::repo_signal::SignalRow;
-use wimcc::db::repo_usage_facet::UsageFacetRow;
 use wimcc::db::repo_verification_run::VerificationRunRow;
-use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
+use wimcc::db::{migrate, repo_observed, repo_raw, repo_runs, repo_signal, repo_verification_run};
 use wimcc::insight::metrics::compute_session_metrics;
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -29,22 +28,33 @@ async fn test_pool() -> sqlx::SqlitePool {
 /// satisfied, then insert the event. One raw row is reused per (pool, event_id)
 /// by using the event_id as the raw_event_id; duplicates are ignored via
 /// `insert_dedup`.
-async fn seed_event(pool: &sqlx::SqlitePool, run_id: &str, session_id: &str, event_id: &str, kind: EventKind) {
+async fn seed_event(
+    pool: &sqlx::SqlitePool,
+    run_id: &str,
+    session_id: &str,
+    event_id: &str,
+    kind: EventKind,
+) {
     let raw_id = format!("raw_{event_id}");
-    repo_raw::insert_dedup(pool, &repo_raw::NewRaw {
-        raw_event_id: raw_id.clone(),
-        ingest_run_id: run_id.into(),
-        source_type: "claude_transcript".into(),
-        source_uri: "/tmp/test.jsonl".into(),
-        source_line_no: 0,
-        source_byte_offset: 0,
-        payload_sha256: format!("sha_{event_id}"),
-        payload: b"{}".to_vec(),
-        parse_error: None,
-        captured_at: chrono::Utc::now(),
-        redaction_state: "not_applicable".into(),
-        redaction_manifest: None,
-    }).await.unwrap();
+    repo_raw::insert_dedup(
+        pool,
+        &repo_raw::NewRaw {
+            raw_event_id: raw_id.clone(),
+            ingest_run_id: run_id.into(),
+            source_type: "claude_transcript".into(),
+            source_uri: "/tmp/test.jsonl".into(),
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: format!("sha_{event_id}"),
+            payload: b"{}".to_vec(),
+            parse_error: None,
+            captured_at: chrono::Utc::now(),
+            redaction_state: "not_applicable".into(),
+            redaction_manifest: None,
+        },
+    )
+    .await
+    .unwrap();
 
     let e = ObservedEvent {
         event_id: event_id.into(),
@@ -98,23 +108,8 @@ fn make_vrun(session_id: &str, id: &str, status: &str) -> VerificationRunRow {
     }
 }
 
-fn make_usage(session_id: &str, raw_id: &str, input: i64, cc: i64, cr: i64) -> UsageFacetRow {
-    UsageFacetRow {
-        raw_event_id: raw_id.into(),
-        schema_version: "usage_facet.v1".into(),
-        session_id: session_id.into(),
-        model: Some("claude-opus-4-8".into()),
-        input_tokens: input,
-        cache_creation_input_tokens: cc,
-        cache_read_input_tokens: cr,
-        output_tokens: 100,
-        observed_at: "2026-06-07T00:00:00Z".into(),
-        parser_version: "usage_facet@v1".into(),
-    }
-}
-
 // ---------------------------------------------------------------------------
-// Tool call total + tool failure count + rate + detector_firing
+// Tool call total + tool failure count + detector_firing
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -125,12 +120,13 @@ async fn aggregates_tool_failure_and_detector_firing() {
 
     seed_event(&pool, &run_id, sid, "tc1", EventKind::ToolCall).await;
     seed_event(&pool, &run_id, sid, "tc2", EventKind::ToolCall).await;
-    repo_signal::insert(&pool, &make_signal(sid, "sig_tf1", "tool_failure")).await.unwrap();
+    repo_signal::insert(&pool, &make_signal(sid, "sig_tf1", "tool_failure"))
+        .await
+        .unwrap();
 
     let m = compute_session_metrics(&pool, sid).await.unwrap();
     assert_eq!(m.tool_call_total, 2);
     assert_eq!(m.tool_failure_count, 1);
-    assert!((m.tool_failure_rate - 0.5).abs() < 1e-9, "rate=0.5 expected, got {}", m.tool_failure_rate);
     assert_eq!(m.detector_firing.get("tool_failure"), Some(&1));
     // no severity field — compile-time: SessionMetrics has no severity field
 }
@@ -146,12 +142,13 @@ async fn rate_is_zero_when_no_tool_calls() {
     let run_id = repo_runs::start(&pool).await.unwrap();
 
     seed_event(&pool, &run_id, sid, "um1", EventKind::UserMessage).await;
-    repo_signal::insert(&pool, &make_signal(sid, "sig_tf2", "tool_failure")).await.unwrap();
+    repo_signal::insert(&pool, &make_signal(sid, "sig_tf2", "tool_failure"))
+        .await
+        .unwrap();
 
     let m = compute_session_metrics(&pool, sid).await.unwrap();
     assert_eq!(m.tool_call_total, 0);
     assert_eq!(m.tool_failure_count, 1);
-    assert_eq!(m.tool_failure_rate, 0.0, "rate must be 0 when denominator is 0");
 }
 
 // ---------------------------------------------------------------------------
@@ -165,9 +162,15 @@ async fn multiple_detectors_all_appear_in_map() {
     let run_id = repo_runs::start(&pool).await.unwrap();
 
     seed_event(&pool, &run_id, sid, "tc_m1", EventKind::ToolCall).await;
-    repo_signal::insert(&pool, &make_signal(sid, "sig_tf_m1", "tool_failure")).await.unwrap();
-    repo_signal::insert(&pool, &make_signal(sid, "sig_cb_m1", "context_bloat")).await.unwrap();
-    repo_signal::insert(&pool, &make_signal(sid, "sig_cb_m2", "context_bloat")).await.unwrap();
+    repo_signal::insert(&pool, &make_signal(sid, "sig_tf_m1", "tool_failure"))
+        .await
+        .unwrap();
+    repo_signal::insert(&pool, &make_signal(sid, "sig_cb_m1", "context_bloat"))
+        .await
+        .unwrap();
+    repo_signal::insert(&pool, &make_signal(sid, "sig_cb_m2", "context_bloat"))
+        .await
+        .unwrap();
 
     let m = compute_session_metrics(&pool, sid).await.unwrap();
     assert_eq!(m.detector_firing.get("tool_failure"), Some(&1));
@@ -177,40 +180,32 @@ async fn multiple_detectors_all_appear_in_map() {
 }
 
 // ---------------------------------------------------------------------------
-// Verification runs — pass rate
+// Verification runs — passed/failed counts
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn verification_pass_rate_computed_correctly() {
+async fn verification_counts_computed_correctly() {
     let pool = test_pool().await;
     let sid = "s_metrics_vr";
     let run_id = repo_runs::start(&pool).await.unwrap();
 
     seed_event(&pool, &run_id, sid, "tc_vr1", EventKind::ToolCall).await;
-    repo_verification_run::insert(&pool, &make_vrun(sid, "vr1", "passed")).await.unwrap();
-    repo_verification_run::insert(&pool, &make_vrun(sid, "vr2", "failed")).await.unwrap();
-    repo_verification_run::insert(&pool, &make_vrun(sid, "vr3", "passed")).await.unwrap();
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vr1", "passed"))
+        .await
+        .unwrap();
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vr2", "failed"))
+        .await
+        .unwrap();
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vr3", "passed"))
+        .await
+        .unwrap();
 
     let m = compute_session_metrics(&pool, sid).await.unwrap();
     assert_eq!(m.verification_total, 3);
     assert_eq!(m.verification_passed, 2);
-    assert!((m.verification_pass_rate - 2.0 / 3.0).abs() < 1e-9, "pass_rate={}", m.verification_pass_rate);
-}
-
-// ---------------------------------------------------------------------------
-// Cache hit ratio from usage_facet (no FK to observed_event)
-// ---------------------------------------------------------------------------
-
-#[tokio::test]
-async fn cache_hit_ratio_computed_from_usage_facet() {
-    let pool = test_pool().await;
-    let sid = "s_metrics_cache";
-
-    // input=10, cc=0, cr=90 → denom=100, ratio=0.9
-    repo_usage_facet::insert(&pool, &make_usage(sid, "raw_c1", 10, 0, 90)).await.unwrap();
-
-    let m = compute_session_metrics(&pool, sid).await.unwrap();
-    assert!((m.cache_hit_ratio - 0.9).abs() < 1e-9, "cache_hit_ratio={}", m.cache_hit_ratio);
+    assert_eq!(m.verification_failed, 1);
+    assert_eq!(m.verification_unknown, 0);
+    // rate는 소비자가 passed / (passed + failed) 로 직접 계산한다.
 }
 
 // ---------------------------------------------------------------------------
@@ -225,11 +220,50 @@ async fn empty_session_returns_all_zeros() {
     let m = compute_session_metrics(&pool, sid).await.unwrap();
     assert_eq!(m.tool_call_total, 0);
     assert_eq!(m.tool_failure_count, 0);
-    assert_eq!(m.tool_failure_rate, 0.0);
     assert_eq!(m.verification_total, 0);
     assert_eq!(m.verification_passed, 0);
-    assert_eq!(m.verification_pass_rate, 0.0);
+    assert_eq!(m.verification_failed, 0);
+    assert_eq!(m.verification_unknown, 0);
     assert_eq!(m.context_bloat_count, 0);
-    assert_eq!(m.cache_hit_ratio, 0.0);
     assert!(m.detector_firing.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Verification runs — passed/failed/unknown separated (spec F1)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn metrics_separates_verification_unknown_from_measured() {
+    let pool = test_pool().await;
+    let sid = "s_metrics_vr_sep";
+    let run_id = repo_runs::start(&pool).await.unwrap();
+
+    seed_event(&pool, &run_id, sid, "tc_sep1", EventKind::ToolCall).await;
+
+    // 6 runs: passed 1, failed 2, unknown 3
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vrs_p1", "passed"))
+        .await
+        .unwrap();
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vrs_f1", "failed"))
+        .await
+        .unwrap();
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vrs_f2", "failed"))
+        .await
+        .unwrap();
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vrs_u1", "unknown"))
+        .await
+        .unwrap();
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vrs_u2", "unknown"))
+        .await
+        .unwrap();
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vrs_u3", "unknown"))
+        .await
+        .unwrap();
+
+    let m = compute_session_metrics(&pool, sid).await.unwrap();
+    assert_eq!(m.verification_total, 6);
+    assert_eq!(m.verification_passed, 1);
+    assert_eq!(m.verification_failed, 2);
+    assert_eq!(m.verification_unknown, 3);
+    // measured = passed + failed = 3; unknown은 분모에서 분리되어 별도 노출.
 }

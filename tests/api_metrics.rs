@@ -7,8 +7,8 @@ use axum_test::TestServer;
 use serde_json::Value;
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::api::AppState;
-use wimcc::db::{migrate, repo_observed, repo_raw, repo_runs, repo_signal};
 use wimcc::db::repo_signal::SignalRow;
+use wimcc::db::{migrate, repo_observed, repo_raw, repo_runs, repo_signal};
 use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 // ---------------------------------------------------------------------------
@@ -25,22 +25,33 @@ async fn test_pool() -> sqlx::SqlitePool {
     pool
 }
 
-async fn seed_event(pool: &sqlx::SqlitePool, run_id: &str, session_id: &str, event_id: &str, kind: EventKind) {
+async fn seed_event(
+    pool: &sqlx::SqlitePool,
+    run_id: &str,
+    session_id: &str,
+    event_id: &str,
+    kind: EventKind,
+) {
     let raw_id = format!("raw_{event_id}");
-    repo_raw::insert_dedup(pool, &repo_raw::NewRaw {
-        raw_event_id: raw_id.clone(),
-        ingest_run_id: run_id.into(),
-        source_type: "claude_transcript".into(),
-        source_uri: "/tmp/test.jsonl".into(),
-        source_line_no: 0,
-        source_byte_offset: 0,
-        payload_sha256: format!("sha_{event_id}"),
-        payload: b"{}".to_vec(),
-        parse_error: None,
-        captured_at: chrono::Utc::now(),
-        redaction_state: "not_applicable".into(),
-        redaction_manifest: None,
-    }).await.unwrap();
+    repo_raw::insert_dedup(
+        pool,
+        &repo_raw::NewRaw {
+            raw_event_id: raw_id.clone(),
+            ingest_run_id: run_id.into(),
+            source_type: "claude_transcript".into(),
+            source_uri: "/tmp/test.jsonl".into(),
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: format!("sha_{event_id}"),
+            payload: b"{}".to_vec(),
+            parse_error: None,
+            captured_at: chrono::Utc::now(),
+            redaction_state: "not_applicable".into(),
+            redaction_manifest: None,
+        },
+    )
+    .await
+    .unwrap();
 
     let e = ObservedEvent {
         event_id: event_id.into(),
@@ -88,7 +99,9 @@ async fn metrics_returns_200_with_correct_shape() {
 
     seed_event(&pool, &run_id, sid, "tc_a1", EventKind::ToolCall).await;
     seed_event(&pool, &run_id, sid, "tc_a2", EventKind::ToolCall).await;
-    repo_signal::insert(&pool, &make_signal(sid, "sig_tf_a1", "tool_failure")).await.unwrap();
+    repo_signal::insert(&pool, &make_signal(sid, "sig_tf_a1", "tool_failure"))
+        .await
+        .unwrap();
 
     let server = build_server(pool);
     let r = server.get(&format!("/v1/sessions/{sid}/metrics")).await;
@@ -101,10 +114,24 @@ async fn metrics_returns_200_with_correct_shape() {
     assert_eq!(data["tool_call_total"].as_i64().unwrap(), 2);
     assert_eq!(data["tool_failure_count"].as_i64().unwrap(), 1);
 
-    let rate = data["tool_failure_rate"].as_f64().unwrap();
-    assert!((rate - 0.5).abs() < 1e-9, "tool_failure_rate={rate}");
+    // rate 필드는 삭제됨(spec F1) — 소비자가 count에서 자기 window로 계산
+    assert!(
+        data.get("tool_failure_rate").is_none(),
+        "metrics must NOT have tool_failure_rate"
+    );
+    assert!(
+        data.get("verification_pass_rate").is_none(),
+        "metrics must NOT have verification_pass_rate"
+    );
+    assert!(
+        data.get("cache_hit_ratio").is_none(),
+        "metrics must NOT have cache_hit_ratio"
+    );
 
-    assert!(data.get("severity").is_none(), "metrics must NOT have a severity field");
+    assert!(
+        data.get("severity").is_none(),
+        "metrics must NOT have a severity field"
+    );
 }
 
 #[tokio::test]
@@ -114,9 +141,15 @@ async fn metrics_detector_firing_map_present() {
     let run_id = repo_runs::start(&pool).await.unwrap();
 
     seed_event(&pool, &run_id, sid, "tc_b1", EventKind::ToolCall).await;
-    repo_signal::insert(&pool, &make_signal(sid, "sig_cb_b1", "context_bloat")).await.unwrap();
-    repo_signal::insert(&pool, &make_signal(sid, "sig_cb_b2", "context_bloat")).await.unwrap();
-    repo_signal::insert(&pool, &make_signal(sid, "sig_tf_b1", "tool_failure")).await.unwrap();
+    repo_signal::insert(&pool, &make_signal(sid, "sig_cb_b1", "context_bloat"))
+        .await
+        .unwrap();
+    repo_signal::insert(&pool, &make_signal(sid, "sig_cb_b2", "context_bloat"))
+        .await
+        .unwrap();
+    repo_signal::insert(&pool, &make_signal(sid, "sig_tf_b1", "tool_failure"))
+        .await
+        .unwrap();
 
     let server = build_server(pool);
     let r = server.get(&format!("/v1/sessions/{sid}/metrics")).await;
@@ -141,6 +174,10 @@ async fn metrics_empty_session_all_zeros() {
     let body: Value = r.json();
     let data = &body["data"];
     assert_eq!(data["tool_call_total"].as_i64().unwrap(), 0);
-    assert_eq!(data["tool_failure_rate"].as_f64().unwrap(), 0.0);
+    assert_eq!(data["tool_failure_count"].as_i64().unwrap(), 0);
+    assert_eq!(data["verification_total"].as_i64().unwrap(), 0);
+    assert_eq!(data["verification_passed"].as_i64().unwrap(), 0);
+    assert_eq!(data["verification_failed"].as_i64().unwrap(), 0);
+    assert_eq!(data["verification_unknown"].as_i64().unwrap(), 0);
     assert!(data["detector_firing"].is_object());
 }
