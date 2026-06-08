@@ -20,7 +20,9 @@
 **휴리스틱 추정→제거/축소**. 모든 변경은 CLAUDE.md 원칙 준수: TDD red-first, schema_version+provenance,
 evidence_refs, real-data anchoring(frozen fixture 또는 docs 인용), source-preserving.
 
-우선순위: **F1 → F2 → F3 → F4** (F1·F2는 "거짓을 참으로 제시"하는 능동적 해악, F3·F4는 부재/고마찰).
+우선순위(build 과제): **F1 → F2 → F3** (F1·F2는 "거짓을 참으로 제시"하는 능동적 해악, F3은 부재/고마찰).
+**F4는 build 과제가 아니라 determination** — Spec 정합성에 결정론적 정량 지표가 존재하지 않음을 확정하고
+범위 밖으로 둔다(아래 F4).
 
 ---
 
@@ -90,39 +92,67 @@ hook(`hook_event`) 원자료는 `observed_event`에 전부 있으나 facet/endpo
 
 > **TDD:** 패널 세션 실측 카운트(예: 1b30ced8 skill 59, sidechain 5235)를 fixture로 잠그는 테스트 우선.
 
-## F4 — Spec 정합성  [대부분 judgment → 정량 지표 대상 아님 · 경량]
+## F4 — Spec 정합성: 정량 지표가 존재하지 않음 → wimcc 지표 범위 밖 (determination, build 과제 아님)
 
-**정정된 사실(실측):** CLAUDE.md는 CC 동작 원리상 매 턴 시스템 프롬프트로 컨텍스트에 들어가지만,
-**transcript JSONL엔 기록되지 않는다.** 이 세션을 throwaway DB로 재ingest해 확인: `"project
-instructions, checked into"` 매치 6건은 전부 조사 노이즈(assistant_message 1 + tool_call 3 + tool_result
-2)였고 **실제 `# claudeMd` 주입 블록은 0건**. wimcc는 transcript를 분석하므로 CLAUDE.md *텍스트*를
-(에이전트가 Read하지 않는 한) 직접 보지 못하고, 그에 대한 **행동·효과**만 본다.
+**질문(사용자 확정):** wimcc는 claude.md를 읽을 필요가 없다. 진짜 질문은 — **claude.md/agents.md
+(이니셜 프롬프트 = 행동 spec)를 정량평가할 지표가 존재하는가.**
 
-→ 원래 F4-1("새 source_type doc ingestion")은 **과설계**(CLAUDE.md는 cwd 파일 1회 읽기로 충분, 별도
-파이프라인 불필요). 원래 F4-3(staleness/coverage detector)은 **judgment를 휴리스틱으로 추정하는 철학
-위반**이라 폐기.
+**분석:** "이니셜 프롬프트가 효율/효과적인가"를 재려는 모든 후보 지표를 분해하면, 예외 없이 (a) 지시
+텍스트를 읽어야 하거나, (b) 귀속·유사도·"교정인가" 같은 **판정 단계**를 요구한다.
 
-**원칙:** CLAUDE.md 준수는 **대부분 judgment이며 정량 지표 대상이 아니다.** wimcc는 (a) wimcc 자기
-상태로 결정되는 drift만 fact로 내고, (b) 기계적으로 확인 가능한 지시의 *행동 evidence*만 fact+evidence_refs로
-노출하며, (c) 그 외 준수 판정은 LLM에게 맡기거나 정량 범위 밖으로 둔다.
+| 후보 | 재려는 것 | 왜 결정론 지표가 못 되나 |
+|------|----------|------------------------|
+| 무시된 지시 | 지시 위반 | 지시 텍스트 필요 + 준수=대부분 judgment(소수 기계적 지시만 spot-check) |
+| 중복 지시 | 안 쓰인 지시 | "필요했나"를 결정론으로 못 잼 |
+| 누락 지시 | 막을 수 있던 실수 | "실수→지시 누락" 귀속이 inference |
+| 프롬프트 bloat | 크기 대비 효용 | 크기만 fact, 효용은 judgment |
+| 재지시 빈도 | 사용자 교정 반복 | "교정"·유사도 판정이 judgment |
 
-- **F4-1 (drift fact · 가벼움, 먼저)** `GET /v1/schema-info` — applied migrations + 최신 번호. 문서/에이전트가
-  주장한 번호와 wimcc 실제 상태의 불일치를 **fact**로(예: CLAUDE.md "0020" vs 실제 0022). **wimcc 자기
-  상태만으로 산출 — doc ingestion 불필요.**
-- **F4-2 (CLAUDE.md 텍스트 · 필요 시 경량)** drift/지시 대조에 CLAUDE.md 텍스트가 필요하면 **cwd의
-  `CLAUDE.md`를 ingest 시 1회 읽어** 세션에 첨부. 새 source_type/파이프라인이 아니라 cwd 파일 읽기
-  (cwd는 이미 관측됨). source-preserving.
-- **F4-3 (기계적 지시 → 행동 evidence-assembly)** 기계적으로 확인 가능한 지시(예: TDD red-first =
-  동일 모듈 impl Edit 이전에 실패하는 test 실행이 있었나)는 **행동 시퀀스를 fact + evidence_refs로 묶어**
-  노출. "준수했나/충분한가" 판정은 LLM. **점수화 detector 금지.**
-- **(범위 밖)** 기계적으로도 확인 불가한 서술적 지시는 **정량 지표 대상이 아니다.** 거짓 정량화 대신
-  LLM이 raw evidence 위에서 판정하는 다른 접근을 따른다 — 이 스펙은 그것을 지표화하지 않는다.
+> **부수 사실(실측):** 어차피 CLAUDE.md 주입은 transcript JSONL에 기록되지도 않는다(이 세션 throwaway
+> 재ingest로 확인 — `# claudeMd` 주입 블록 0건). wimcc는 행동·효과만 본다.
+
+→ **claude.md/agents.md 품질을 직접 재는 결정론적 정량 지표는 존재하지 않는다. 본질적으로 judgment
+영역이다.**
+
+**결론 (사용자 framework: "정량 평가 어려우면 정량 대상 아님"):** Spec 정합성은 **wimcc의 정량 지표
+범위 밖**이다.
+
+- wimcc는 spec-품질 metric도, spec-conformance detector도 만들지 않는다(휴리스틱 추정 = 철학 위반).
+  **F4는 wimcc 코드 build 과제가 아니다.**
+- wimcc의 기여는 **행동 evidence substrate** — 어떤 도구를 어떤 순서로, 재시도/재독, commit 전
+  verification 여부 등 **F2·F3가 이미 내는 결정론 fact**. spec 전용 신규 작업 없음.
+- **판정은 LLM 소비자가 한다.** LLM은 claude.md/agents.md를 *이미 자기 컨텍스트에 보유*하므로 wimcc가
+  그 텍스트를 읽거나 저장할 필요가 없다. LLM이 wimcc의 행동 evidence ↔ 자기 컨텍스트의 지시를 대조해
+  준수/효율을 판정한다(프론티어 패턴: deterministic evidence → LLM judge).
+- **(선택 · spec-metric 아님)** `GET /v1/schema-info`(applied migrations 등 wimcc 자기 상태 fact)는 값싸게
+  노출할 수 있으나, 이는 "claude.md 평가 지표"가 아니라 LLM이 임의 주장과 대조할 수 있는 일반 fact일
+  뿐이다. 채택 여부는 F1~F3와 독립.
+
+### F4 부록 — claude.md 개선 루프는 결정론적으로 가능한가
+
+"전부 결정론"이 아니라 **"결정론적으로 *게이트*"**가 프론티어 정답(deep-research). 루프를 분해하면:
+
+- **탐지**(무엇이 잘못됐나): 기계적 지시만 결정론, 산문 원칙은 judgment.
+- **제안**(무엇을 고칠까): **환원 불가능한 LLM 판정** → 완전 결정론 루프는 일반적으로 불가능.
+- **검증**(나아졌나): 조건부 결정론 — ① 결정론적 *행동 outcome 지표*가 존재하고(예: commit 전
+  verification_run 여부, TDD red-first 시퀀스, 특정 re-read 소멸) ② held-out/반복 실행으로 비율을 old vs
+  new로 비교할 때. 코드 루프는 outcome이 싸고 날카롭지만(test fail→pass), claude.md는 outcome이 확률적
+  미래 행동이라 N회 실행 필요 + 지표가 결정론 행동 fact여야 함.
+
+→ **결론:** 완전 결정론 claude.md 루프는 불가(제안=판정). **결정론적으로 게이트된 루프는 기계적
+지시 부분집합에서만 가능** — 거기서 wimcc가 위반-탐지 fact + **cross-session 행동 outcome 델타**(예:
+"변경 C 이후 commit-전-test 비율 X→Y")를 결정론으로 공급한다. 산문 원칙은 outcome조차 judgment라
+LLM 판정 + 사람 리뷰로 남는다.
+
+> **헌장 제약:** wimcc는 이 루프를 닫지 않는다(Non-goal: Claude Code 설정/메모리 변경·patch 생성 금지).
+> wimcc는 결정론적 evidence·outcome-델타 *측정*만 공급하고, 제안·적용은 wimcc 밖(LLM 제안 + 사람 게이트).
 
 ---
 
 ## 실행 순서·검증
 
-1. F1(스키마 0) → 2. F2(탐지 정밀, frozen fixture) → 3. F3(facet + events 필터) → 4. F4(전부 경량 — F4-1 schema-info 먼저).
+1. F1(스키마 0) → 2. F2(탐지 정밀, frozen fixture) → 3. F3(facet + events 필터). **F4는 build 없음**
+   (determination; `schema-info`는 선택적 부가 fact).
 - 각 단계 후 `.wimcc-analysis.sqlite` 재ingest 또는 신규 fixture로 회귀 확인.
 - UI 변경 동반 시 브라우저 smoke(CLAUDE.md 의무).
 - 매 단계 self-check 체크리스트(CLAUDE.md) 통과.
@@ -133,6 +163,7 @@ instructions, checked into"` 매치 6건은 전부 조사 노이즈(assistant_me
   unknown 미포함. 실측 fixture(195/1539, 2683 vs 43)로 잠김.
 - F2: frozen 오탐 fixture 3종이 verification_run으로 분류되지 않고, 실 러너 회귀 0.
 - F3: 하네스 4종 fact 카운트 + events kind/tool_name 필터 노출. "주입됐으나 안 쓴 skill" 집합 차이 fact화.
-- F4: schema-info가 applied migration drift를 fact로 노출. CLAUDE.md 텍스트는 cwd 파일 읽기(필요 시).
-  준수 판정은 어떤 detector로도 점수화하지 않는다 — 기계적 지시는 행동 evidence-assembly, 나머지는 범위 밖.
+- F4: Spec 정합성에 결정론적 정량 지표가 **존재하지 않음**을 확정(determination). wimcc는 spec-metric/
+  detector를 만들지 않고, 판정은 LLM(claude.md를 자기 컨텍스트에 보유)에게 둔다. `schema-info`는 선택적
+  일반 fact일 뿐 spec-metric 아님.
 - 전반: 어떤 신규 신호도 judgment 점수화가 아니다(fact 또는 evidence-assembly). 모든 일반화에 표본 수.
