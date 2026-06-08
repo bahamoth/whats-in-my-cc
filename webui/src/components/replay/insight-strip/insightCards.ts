@@ -11,7 +11,8 @@
  *  - SignalDto(detector=tool_failure) count drives the 도구 실패 card
  *    (deterministic L1 extractor count).
  *  - SessionUsageDto.estimated_cost_usd / cost_basis is the cost 추정.
- *  - An optional baseline (cache_hit_ratio) renders a "vs median" delta.
+ *  - An optional cross-session baseline (baseline cache_hit_ratio — NOT the
+ *    removed per-session scalar) renders a "vs median" delta.
  */
 import type {
   SessionUsageDto,
@@ -143,8 +144,9 @@ function tokensCard(inputs: InsightInputs): InsightCardModel {
 function verificationCard(inputs: InsightInputs): InsightCardModel {
   const tip =
     '가드 = 실행된 테스트/빌드/린트/포맷 검사. 알려진 도구 매칭(known_tool) + 종료코드(exit) 기반이면 측정, ' +
-    '키워드 추정(test_keyword)이나 파이프(piped)로 가려진 종료코드가 섞이면 혼합으로 표시(슬라이스 2 ' +
-    'detection_basis/status_basis). 브라우저 스모크/서브에이전트 테스트는 감지하지 않습니다(설계 §3 Q4 한계).';
+    '파이프(piped)로 가려진 종료코드가 섞이면 혼합으로 표시(슬라이스 2 detection_basis/status_basis). ' +
+    '키워드 추정(test_keyword)은 더 이상 생성되지 않으며(F2), 과거 ingest된 older 데이터에만 나타날 수 있습니다. ' +
+    '브라우저 스모크/서브에이전트 테스트는 감지하지 않습니다(설계 §3 Q4 한계).';
   const runs = inputs.verificationRuns;
   if (!runs || runs.length === 0) {
     return {
