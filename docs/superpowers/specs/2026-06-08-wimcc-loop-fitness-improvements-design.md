@@ -61,7 +61,7 @@ started_at·trigger_event_id 노출)와 **(b) 합성 가능한 count**만 낸다
 > **TDD:** `.wimcc-analysis.sqlite` 실측(195 measured/1539 unknown, 1b30ced8의 2683 assistant vs 43 turn)을
 > fixture로. "rate scalar 부재", "verification_unknown=total-measured", "user_turns=distinct turn_id"를 assert.
 
-## F2 — verification 탐지 정밀화  [휴리스틱→제거/축소 · 탐지 로직 수정]
+## F2 — verification 탐지 정밀화  [휴리스틱→제거 · Tier-2 keyword fallback 삭제]
 
 **문제(실측):** `classify_segment` Tier-2(`detection_basis="test_keyword"`)는 known_tool allowlist를
 못 맞춘 세그먼트가 `test`/`spec` 토큰을 가지면 verification_run으로 추정. multi-line Bash(commit
@@ -69,20 +69,24 @@ started_at·trigger_event_id 노출)와 **(b) 합성 가능한 count**만 낸다
 `"- CI 회복: scripts/run-tests.mjs 신설"`, `"declare the contract at spec §1.9"`. test_keyword 454건(26%)
 중 불릿-산문 38·Hangul 18·>200자 29건이 phantom. `src/insight/verification_allowlist.rs:282` 참조.
 
-- **F2-1** 세그먼트 추출에서 **인용 문자열/heredoc 본문/`-m` 메시지 인자를 별도 명령 세그먼트로
-  split하지 않는다.** 산문이 애초에 세그먼트가 되지 않게 — 근본 원인 차단.
-- **F2-2** Tier-2 keyword fallback 유지 여부 결정(plan에서 frozen fixture로 측정 후 택일):
-  - **(a) 제거** — known_tool(결정론 allowlist)만 verification_run. `make spec`·`./run_integration_test.sh`
-    류 비-allowlist 실 러너를 놓치나, 추정 0.
-  - **(b) 축소** — lead 토큰이 plausible executable(allowlist 밖이라도 path/binary 형태)일 때만 Tier-2
-    허용. 산문 lead(`-`, 빈 토큰, 다어절 자연어)는 deny.
-  - 판정 기준: **frozen 오탐 fixture(위 3종)에서 phantom run이 0이 되고, 실 러너(`node scripts/smoke-test.mjs`,
-    `make spec`) 회귀가 없을 것.** real-data anchoring으로 잠근다.
-- **F2-3** (선택) `verification_run`에 measured 불가 사유를 이미 status_basis(`piped`)로 일부 노출 —
-  F1-1과 함께 LLM이 "측정 실패 vs 진짜 실패"를 구분하도록 status_provenance를 집계에 노출(F1과 합류).
+**결정(데이터 기반): Tier-2 keyword fallback을 완전히 제거하고 known_tool(결정론 allowlist)만 남긴다.**
+근거 — 프로즈 오탐은 **전부 Tier-2**다(프로즈는 Tier-1 allowlist에 매칭 불가). 실측 detection_basis 분포:
+known_tool 1280건(measured 182), test_keyword 454건(measured 13 = passed 1 + failed 12, 나머지 441 unknown).
+따라서 Tier-2 제거 시 **measured 신호의 93.3%(182/195) 유지** + 프로즈/heredoc/quote 오탐 클래스 전체 소거.
+Tier-2는 본질적으로 "이 텍스트에 test 단어가 있으니 테스트일 것"이라는 휴리스틱 추정 — 사용자 철학 위반의
+정확한 사례라 제거가 정합.
 
-> **TDD:** 오염 명령 3종을 `tests/fixtures/.../real/`에 동결하고 "verification_run으로 분류되지 않음"을
-> assert하는 실패 테스트 우선. 기존 `classify_segment_tier2_*` 테스트의 실 러너 케이스는 green 유지.
+- **F2-1** `classify_segment`에서 Tier-2 keyword fallback 블록 제거(`src/insight/verification_allowlist.rs`
+  ~295–317). detection_basis는 `known_tool` 하나만 남음. `test_suite_other`/`test_keyword`를 기대하던
+  기존 테스트는 None 기대로 갱신.
+- **F2-2 (trade-off, 정직)** 비-allowlist 실 러너(`make spec`, `node scripts/smoke-test.mjs`,
+  `./run_integration_test.sh`)는 더 이상 잡히지 않는다. **거짓 phantom보다 일부 누락이 낫다**는 판단.
+  특정 실 러너가 필요하면 allowlist를 **결정론적으로** 확장(키워드 추정 아님).
+
+> **TDD:** 오염 명령 3종(`"- CI 회복: scripts/run-tests.mjs 신설"`, `"- SA1 … Airflux test"`,
+> `"declare the contract at spec §1.9 …"`)을 `classify_segment` → `None`으로 잠그는 실패 테스트 우선.
+> known_tool 회귀(`cargo test`, `npx vitest run`)는 green 유지. 기존 `classify_segment_tier2_*` 테스트는
+> None 기대로 수정.
 
 ## F3 — 하네스 facet 레이어  [fact→facet · signal 인프라 재사용 + events 필터]
 
@@ -175,7 +179,8 @@ LLM 판정 + 사람 리뷰로 남는다.
 - F1: `/metrics`·`/usage`에서 window-고정 rate scalar(pass_rate·tool_failure_rate·cache_hit_ratio) 제거,
   합성 가능한 count(verification passed/failed/unknown/total)만 노출. `turns`→`assistant_events`+`user_turns`.
   실측 fixture(195 measured/1539 unknown, 2683 vs 43)로 잠김. WebUI 소비자 갱신 + 브라우저 smoke.
-- F2: frozen 오탐 fixture 3종이 verification_run으로 분류되지 않고, 실 러너 회귀 0.
+- F2: Tier-2 제거. 프로즈 fixture 3종 → `None`, known_tool 러너(`cargo test`·`npx vitest run`) 회귀 0.
+  measured 신호 93.3% 유지(182/195), test_keyword phantom 클래스 소거.
 - F3: 하네스 4종 fact 카운트 + events kind/tool_name 필터 노출. "주입됐으나 안 쓴 skill" 집합 차이 fact화.
 - F4: Spec 정합성에 결정론적 정량 지표가 **존재하지 않음**을 확정(determination). wimcc는 spec-metric/
   detector를 만들지 않고, 판정은 LLM(claude.md를 자기 컨텍스트에 보유)에게 둔다. `schema-info`는 선택적
