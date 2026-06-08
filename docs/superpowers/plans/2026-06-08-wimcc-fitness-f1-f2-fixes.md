@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** LLM judge를 오도하는 두 거짓을 제거한다 — (F1) `/metrics`·`/usage`의 window-고정 rate scalar를 삭제하고 합성 가능한 count만 노출, (F2) verification 탐지의 Tier-2 keyword 휴리스틱을 제거해 산문 phantom run을 소거.
+**Goal:** LLM judge를 오도하는 거짓을 제거하고 verification 지표를 양질로 만든다 — (F2) verification 탐지의 Tier-2 keyword 휴리스틱을 제거해 산문 phantom run을 소거, (F5) outcome 성공 탐지를 추가해 89% unknown의 근본원인(성공 신호 미파싱)을 고침, (F1) `/metrics`·`/usage`의 window-고정 rate scalar를 삭제하고 합성 가능한 count만 노출. **실행 순서 F2 → F5 → F1.**
 
 **Architecture:** 둘 다 결정론 layer의 정직성 수정. 신규 스키마 없음(F1은 on-demand 집계/DTO, F2는 탐지 로직). rate는 소비자(프런트/LLM)가 count에서 자기 window로 계산. verification은 known_tool(결정론 allowlist)만 인정.
 
@@ -130,6 +130,118 @@ git commit -m "fix(insight): drop Tier-2 keyword fallback — prose phantom veri
 test_keyword 휴리스틱이 multi-line Bash 산문(commit 메시지·heredoc)을 테스트
 명령으로 추정해 phantom run을 만들었다. known_tool(결정론 allowlist)만 인정.
 measured 신호 93.3%(182/195) 유지, false-positive 클래스 소거. spec F2."
+```
+
+---
+
+## Task 1B: F5 — verification outcome 성공 탐지 (high-unknown 근본원인)
+
+> **실행 순서: Task 1(F2 phantom 제거) → 이 Task 1B(F5 unknown 실질 감소) → Task 2~(F1 정직 count).**
+> 근본원인(systematic-debugging 확정): `resolve_outcome`+Tier-4가 **실패 신호만** 보고 성공 탐지 경로가
+> 0개라, 성공 출력(`test result: ok`)을 가진 run이 unknown으로 떨어진다. 실측: unknown 1098건 중 58%가
+> 성공 마커 보유. 이 fix 없이는 F1의 count가 "전부 unknown"이라 무의미.
+
+**Files:**
+- Modify: `src/ingest/verification_run.rs` (`looks_like_failure` 515 옆에 `looks_like_success` 추가; Tier-4 블록 122-141)
+- Test: `src/ingest/verification_run.rs` 인라인 `mod tests`
+
+- [ ] **Step 1: 실패하는 테스트 작성** — 성공 출력이 Passed/Estimated로 해석됨
+
+`src/ingest/verification_run.rs`의 `mod tests`에 추가:
+
+```rust
+#[test]
+fn looks_like_success_detects_tool_summaries() {
+    assert!(looks_like_success("running 42 tests\ntest result: ok. 42 passed; 0 failed"));
+    assert!(looks_like_success("===== 41 passed in 1.20s ====="));
+    assert!(looks_like_success(" Test Files  5 passed (5)\n Tests  20 passed (20)"));
+    // 혼합/실패는 success로 보지 않음(가드는 Tier-4에서 !looks_like_failure로 적용)
+    assert!(!looks_like_success("RUN  v2.1.9\nstderr | TopBar ..."));
+}
+
+#[test]
+fn tier4_upgrades_unknown_success_to_passed_estimated() {
+    // Bash cargo test 호출 + 성공 요약 tool_result(Exit code 라인 없음, OTLP/hook 없음).
+    // 기존 extract_verification_runs 테스트의 이벤트 구성 헬퍼를 그대로 사용한다.
+    let evs = make_bash_run(
+        "toolu_ok1",
+        "cargo test",
+        "running 1 test\ntest result: ok. 1 passed; 0 failed; 0 ignored",
+    );
+    let runs = extract_verification_runs(&evs);
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].status, "passed");
+    assert_eq!(runs[0].status_provenance.as_deref(), Some("estimated"));
+}
+```
+
+> `make_bash_run(tid, cmd, result_content)`가 파일에 없으면 기존 extract 테스트의 이벤트 구성 패턴을
+> 헬퍼로 추출: ToolCall(`tool_name="Bash"`, `payload={"input":{"command":cmd}}`, `tool_use_id=tid`) +
+> ToolResult(`tool_use_id=tid`, `payload={"tool_result":{"content":result_content}}`)를 같은 session_id로.
+
+- [ ] **Step 2: 실패 확인**
+
+Run: `cargo test --lib ingest::verification_run` (또는 해당 테스트명)
+Expected: `looks_like_success` 미정의 컴파일 에러 → 정의 후엔 `tier4_upgrades...`가 FAIL(현재 성공 경로 없어 status="unknown").
+
+- [ ] **Step 3: `looks_like_success` 추가**
+
+`src/ingest/verification_run.rs` `looks_like_failure` 옆:
+
+```rust
+/// 도구 자체가 출력하는 결정론 성공 요약. exit code(measured)가 없을 때 Tier-4에서
+/// provenance=Estimated로 Passed 승격에 쓰인다(looks_like_failure와 대칭). CC는
+/// 성공 시 "Exit code N"을 prepend하지 않으므로 transcript-only 환경에서 성공은
+/// 이 요약으로만 결정 가능하다.
+fn looks_like_success(content: &str) -> bool {
+    // cargo test / cargo build / cargo nextest
+    content.contains("test result: ok")
+        // pytest summary ("===== 41 passed in 1.20s =====")
+        || content.contains(" passed in ")
+        // vitest / jest ("Test Files  5 passed (5)")
+        || (content.contains("Test Files") && content.contains("passed"))
+}
+```
+
+- [ ] **Step 4: Tier-4에 성공 경로 추가**
+
+`src/ingest/verification_run.rs` Tier-4 블록(122-141)의 내부 `if looks_like_failure` 분기를 확장:
+
+```rust
+                if looks_like_failure(content) {
+                    (OutcomeStatus::Failed, OutcomeProvenance::Estimated)
+                } else if looks_like_success(content) {
+                    // 도구의 결정론 성공 요약 → Passed(Estimated). exit code(Measured)와 구분.
+                    (OutcomeStatus::Passed, OutcomeProvenance::Estimated)
+                } else {
+                    (resolved.status, resolved.provenance)
+                }
+```
+
+- [ ] **Step 5: 통과 + 회귀**
+
+Run: `cargo test --lib verification_run`
+Expected: 신규 PASS. 기존 verification 테스트 green 유지(measured/exit-code 경로 불변).
+
+- [ ] **Step 6: 재ingest 실측 회귀 — unknown 급감 확인**
+
+```bash
+WIMCC_DB=.wimcc-analysis.sqlite ./target/release/wimcc init-db   # rm 후 재생성
+WIMCC_DB=.wimcc-analysis.sqlite cargo run --release -- ingest --all
+sqlite3 .wimcc-analysis.sqlite "SELECT status, status_provenance, COUNT(*) FROM verification_run GROUP BY status, status_provenance ORDER BY 3 DESC;"
+```
+Expected: `passed/estimated`가 대량 출현(이전 0→수백), `unknown` 비율 89%에서 크게 하락.
+
+- [ ] **Step 7: 커밋**
+
+```bash
+git add src/ingest/verification_run.rs
+git commit -m "fix(insight): detect command success from tool output (symmetric to failure)
+
+resolve_outcome+Tier-4가 실패 신호만 봐서, exit code를 안 남기는 성공 run(cargo
+'test result: ok' 등)이 unknown으로 떨어졌다(unknown 1098건 중 58%가 성공 마커
+보유). looks_like_success를 추가해 Unknown+!failure+success → Passed/Estimated.
+measured+estimated 커버리지 11%→~60%+. spec F5."
 ```
 
 ---

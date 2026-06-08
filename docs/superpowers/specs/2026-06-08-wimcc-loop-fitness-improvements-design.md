@@ -88,6 +88,32 @@ Tier-2는 본질적으로 "이 텍스트에 test 단어가 있으니 테스트�
 > known_tool 회귀(`cargo test`, `npx vitest run`)는 green 유지. 기존 `classify_segment_tier2_*` 테스트는
 > None 기대로 수정.
 
+## F5 — verification outcome 성공 탐지 (high-unknown 근본원인)  [파싱 결함 수정 · 우선순위 상]
+
+**근본원인(systematic-debugging으로 확정):** verification status가 89% unknown인 것은 "신호 부재"가
+아니라 **"성공 신호를 안 읽음"**이다. `resolve_outcome`(`src/insight/outcome.rs`)와 Tier-4 fallback
+(`src/ingest/verification_run.rs`)은 **실패 신호만** 본다 — OTLP `success`(offline 부재), hook
+`exit_code`(offline 부재), tool_result `Exit code N`(**CC는 비정상 종료에만 prepend**), `looks_like_failure`
+content 패턴. **성공 탐지 경로가 0개.** 성공한 cargo/vitest는 exit code 라인을 안 남기므로, 출력에
+`test result: ok. 42 passed; 0 failed` 같은 결정론 성공 요약이 있어도 Unknown으로 떨어진다.
+
+**증거(실측):** unknown known_tool 1098건 중 — 성공 마커(`test result: ok` 373 + `passed` w/o fail 265)
+= **638(58%)**, `Exit code` 라인 2건, content 빈 것 0건. 대부분이 "안 읽힌 성공"이다.
+
+- **F5-1** `looks_like_failure`와 대칭인 `looks_like_success(content)` 추가(도구 결정론 성공 요약):
+  cargo `test result: ok`, pytest `=N passed`/` passed in `, vitest/jest `Test Files`+`passed`. Tier-4에서
+  `Unknown && is_verification_kind && !looks_like_failure(c) && looks_like_success(c)` → **Passed,
+  provenance=`Estimated`**(measured=exit code와 구분). 이미 실패를 `Estimated`로 판정하므로 대칭·일관.
+- **F5-2 (정직)** 출력 요약 기반이라 provenance는 `estimated`(measured 아님). 거짓 추정이 아니라
+  도구 자체 성공 요약을 읽는 것이며, 잘못된 unknown으로 지표를 무력화하는 것보다 정직하고 유용하다.
+
+**효과:** measured+estimated 커버리지 11%→~60%+, unknown 89%→~30%대. F1(정직한 count)이 비로소
+"양질 지표"가 되는 전제. **순서: F2(phantom 제거) → F5(unknown 실질 감소) → F1(정직 count 노출).**
+
+> **TDD:** `.wimcc-analysis.sqlite`의 실 성공 출력(cargo `test result: ok`, vitest `Test Files … passed`)을
+> fixture로 `resolve`+Tier-4 → `Passed/Estimated` 잠금. 혼합(`1 failed, 41 passed`)은 `!looks_like_failure`
+> 가드로 Passed 아님 확인. 재ingest 후 unknown 비율 급감을 실측 회귀로.
+
 ## F3 — 하네스 facet 레이어  [fact→facet · signal 인프라 재사용 + events 필터]
 
 **문제(실측):** skill(`tool_name=Skill`)·subagent(`is_sidechain`)·mcp(`tool_name LIKE 'mcp__%'`)·
