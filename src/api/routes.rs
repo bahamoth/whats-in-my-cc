@@ -239,24 +239,27 @@ pub async fn session_events(
             // next_cursor is null when the window already reaches the session's
             // live tip — further events arrive via SSE, not via another page
             // fetch. The summary's last_observed_at is the authoritative tip.
-            let summary = repo_observed::session_summary(&pool, &id).await.expect("db");
+            let summary = repo_observed::session_summary(&pool, &id)
+                .await
+                .expect("db");
             let at_live_tip = matches!(summary, Some((_, _, last_observed_at)) if last_observed_at == last.observed_at.to_rfc3339());
             let next = if at_live_tip {
                 None
             } else {
-                Some(format!("{}|{}", last.observed_at.to_rfc3339(), last.event_id))
+                Some(format!(
+                    "{}|{}",
+                    last.observed_at.to_rfc3339(),
+                    last.event_id
+                ))
             };
             (Some(prev), next)
         }
         _ => (None, None),
     };
 
-    let events: Vec<serde_json::Value> =
-        evs.iter().map(observed_to_dto).collect();
+    let events: Vec<serde_json::Value> = evs.iter().map(observed_to_dto).collect();
     // Slice-18: aggregate redaction summary for this session's raw events.
-    let summary = repo_raw::aggregate_session_summary(&pool, &id)
-        .await
-        .ok();
+    let summary = repo_raw::aggregate_session_summary(&pool, &id).await.ok();
     let mut meta = ResponseMeta::now();
     if let Some(s) = summary {
         meta = meta.with_summary(s);
@@ -357,10 +360,11 @@ pub async fn event_raw(
 
 /// insight-redesign #1 — `GET /v1/sessions/:id/usage`
 ///
-/// Returns the session token-usage aggregate: total turns, raw token counts,
-/// billed_tokens (input + cache_creation + output; cache_read is NOT billed),
-/// cache_hit_ratio (cache_read / (cache_read + cache_creation + input); null
-/// when denominator is 0), and a per-model breakdown.
+/// Returns the session token-usage aggregate: assistant_events (usage_facet row
+/// count), user_turns (distinct turn_id), raw token counts, billed_tokens
+/// (input + cache_creation + output; cache_read is NOT billed), and a
+/// per-model breakdown. F1: `turns` renamed to `assistant_events`, `user_turns`
+/// added, `cache_hit_ratio` removed (consumers compute from token components).
 pub async fn session_usage(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
@@ -368,13 +372,10 @@ pub async fn session_usage(
     let agg = repo_usage_facet::session_aggregate(&pool, &id)
         .await
         .expect("db");
+    let user_turns = repo_observed::count_distinct_turns(&pool, &id)
+        .await
+        .expect("db");
     let billed = agg.input_tokens + agg.cache_creation_input_tokens + agg.output_tokens;
-    let denom = agg.cache_read_input_tokens + agg.cache_creation_input_tokens + agg.input_tokens;
-    let cache_hit_ratio = if denom > 0 {
-        Some(agg.cache_read_input_tokens as f64 / denom as f64)
-    } else {
-        None
-    };
     let cost = crate::insight::pricing::estimate_session_cost(&agg.by_model);
     let priced: std::collections::HashMap<&str, f64> = cost
         .per_model
@@ -383,13 +384,13 @@ pub async fn session_usage(
         .collect();
     let data = SessionUsageDto {
         session_id: id,
-        turns: agg.turns,
+        assistant_events: agg.assistant_events,
+        user_turns,
         input_tokens: agg.input_tokens,
         cache_creation_input_tokens: agg.cache_creation_input_tokens,
         cache_read_input_tokens: agg.cache_read_input_tokens,
         output_tokens: agg.output_tokens,
         billed_tokens: billed,
-        cache_hit_ratio,
         estimated_cost_usd: cost.total_usd,
         cost_basis: crate::insight::pricing::COST_BASIS_ESTIMATE.to_string(),
         pricing_version: crate::insight::pricing::PRICING_VERSION.to_string(),
@@ -402,7 +403,7 @@ pub async fn session_usage(
                 let is_priced = crate::insight::pricing::rates_for(&m.model).is_some();
                 ModelUsageDto {
                     model: m.model,
-                    turns: m.turns,
+                    assistant_events: m.assistant_events,
                     input_tokens: m.input_tokens,
                     cache_creation_input_tokens: m.cache_creation_input_tokens,
                     cache_read_input_tokens: m.cache_read_input_tokens,
@@ -435,7 +436,8 @@ pub async fn usage_baseline(State(pool): State<SqlitePool>) -> impl IntoResponse
 
     let cache_hit_vals: Vec<f64> = metrics.iter().filter_map(|m| m.cache_hit_ratio).collect();
     let billed_vals: Vec<f64> = metrics.iter().map(|m| m.billed_tokens as f64).collect();
-    let turns_vals: Vec<f64> = metrics.iter().map(|m| m.turns as f64).collect();
+    let assistant_events_vals: Vec<f64> =
+        metrics.iter().map(|m| m.assistant_events as f64).collect();
     let output_vals: Vec<f64> = metrics.iter().map(|m| m.output_tokens as f64).collect();
 
     fn stat(values: &[f64]) -> BaselineStat {
@@ -457,7 +459,7 @@ pub async fn usage_baseline(State(pool): State<SqlitePool>) -> impl IntoResponse
         session_count,
         cache_hit_ratio: stat(&cache_hit_vals),
         billed_tokens: stat(&billed_vals),
-        turns: stat(&turns_vals),
+        assistant_events: stat(&assistant_events_vals),
         output_tokens: stat(&output_vals),
     };
     Json(Envelope {
@@ -478,9 +480,7 @@ pub async fn session_verification_runs(
     let runs = repo_verification_run::list_session(&pool, &id)
         .await
         .expect("db");
-    let hunks = repo_diff_hunk::list_session(&pool, &id)
-        .await
-        .expect("db");
+    let hunks = repo_diff_hunk::list_session(&pool, &id).await.expect("db");
 
     let data: Vec<VerificationRunDto> = runs
         .into_iter()
@@ -503,9 +503,7 @@ pub async fn verification_run_detail(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> Result<Json<Envelope<VerificationRunDto>>, (StatusCode, Json<serde_json::Value>)> {
-    let row = repo_verification_run::get(&pool, &id)
-        .await
-        .expect("db");
+    let row = repo_verification_run::get(&pool, &id).await.expect("db");
     let Some(run) = row else {
         return Err((
             StatusCode::NOT_FOUND,
@@ -540,7 +538,7 @@ fn covered_hunk_ids_for_run(
     hunks
         .iter()
         .filter(|h| h.session_id == run.session_id)
-        .filter(|_| run_started.is_some())  // only when we have a parseable timestamp
+        .filter(|_| run_started.is_some()) // only when we have a parseable timestamp
         .map(|h| h.diff_hunk_id.clone())
         .collect()
     // Note: full temporal filtering requires the introducing event's timestamp,
@@ -611,7 +609,6 @@ fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Val
         "payload": e.payload,
     })
 }
-
 
 // ---------------------------------------------------------------------------
 // Plan 3a — Behavioral metrics endpoint

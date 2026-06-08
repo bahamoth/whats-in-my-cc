@@ -68,8 +68,8 @@ async fn baseline_endpoint_returns_median_across_sessions() {
     assert_eq!(data["billed_tokens"]["median"].as_f64().unwrap(), 300.0);
     // output_tokens: [100, 300] -> median 200.
     assert_eq!(data["output_tokens"]["median"].as_f64().unwrap(), 200.0);
-    // turns: [1, 1] -> median 1.
-    assert_eq!(data["turns"]["median"].as_f64().unwrap(), 1.0);
+    // assistant_events: [1, 1] -> median 1.
+    assert_eq!(data["assistant_events"]["median"].as_f64().unwrap(), 1.0);
     // cache_hit_ratio: [0.0, 0.9] -> median 0.45.
     let chr = data["cache_hit_ratio"]["median"].as_f64().unwrap();
     assert!((chr - 0.45).abs() < 1e-9, "got {chr}");

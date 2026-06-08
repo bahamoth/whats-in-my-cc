@@ -33,7 +33,7 @@ pub struct AssistantRawLine {
 /// Aggregate over a session's usage_facet rows.
 #[derive(Debug, Clone, Default)]
 pub struct UsageAggregate {
-    pub turns: i64,
+    pub assistant_events: i64,
     pub input_tokens: i64,
     pub cache_creation_input_tokens: i64,
     pub cache_read_input_tokens: i64,
@@ -44,7 +44,7 @@ pub struct UsageAggregate {
 #[derive(Debug, Clone, Default)]
 pub struct ModelUsage {
     pub model: String,
-    pub turns: i64,
+    pub assistant_events: i64,
     pub input_tokens: i64,
     pub cache_creation_input_tokens: i64,
     pub cache_read_input_tokens: i64,
@@ -61,7 +61,8 @@ pub struct SessionMetrics {
     pub cache_hit_ratio: Option<f64>,
     /// input + cache_creation + output (cache_read is NOT billed).
     pub billed_tokens: i64,
-    pub turns: i64,
+    /// Number of usage_facet rows for this session (= assistant event count).
+    pub assistant_events: i64,
     pub output_tokens: i64,
 }
 
@@ -153,7 +154,7 @@ pub async fn assistant_raw_lines(
 
 pub async fn session_aggregate(pool: &SqlitePool, session_id: &str) -> Result<UsageAggregate> {
     let row = sqlx::query(
-        "SELECT COUNT(*) AS turns,
+        "SELECT COUNT(*) AS assistant_events,
                 COALESCE(SUM(input_tokens),0) AS input_tokens,
                 COALESCE(SUM(cache_creation_input_tokens),0) AS cc,
                 COALESCE(SUM(cache_read_input_tokens),0) AS cr,
@@ -166,20 +167,20 @@ pub async fn session_aggregate(pool: &SqlitePool, session_id: &str) -> Result<Us
 
     let by_model_rows = sqlx::query(
         "SELECT COALESCE(model,'unknown') AS model,
-                COUNT(*) AS turns,
+                COUNT(*) AS assistant_events,
                 COALESCE(SUM(input_tokens),0) AS input_tokens,
                 COALESCE(SUM(cache_creation_input_tokens),0) AS cc,
                 COALESCE(SUM(cache_read_input_tokens),0) AS cr,
                 COALESCE(SUM(output_tokens),0) AS output_tokens
          FROM usage_facet WHERE session_id = ?
-         GROUP BY model ORDER BY turns DESC",
+         GROUP BY model ORDER BY assistant_events DESC",
     )
     .bind(session_id)
     .fetch_all(pool)
     .await?;
 
     Ok(UsageAggregate {
-        turns: row.get::<i64, _>("turns"),
+        assistant_events: row.get::<i64, _>("assistant_events"),
         input_tokens: row.get::<i64, _>("input_tokens"),
         cache_creation_input_tokens: row.get::<i64, _>("cc"),
         cache_read_input_tokens: row.get::<i64, _>("cr"),
@@ -196,7 +197,7 @@ pub async fn session_aggregate(pool: &SqlitePool, session_id: &str) -> Result<Us
 pub async fn per_session_metrics(pool: &SqlitePool) -> Result<Vec<SessionMetrics>> {
     let rows = sqlx::query(
         "SELECT session_id,
-                COUNT(*) AS turns,
+                COUNT(*) AS assistant_events,
                 COALESCE(SUM(input_tokens),0)
                   + COALESCE(SUM(cache_creation_input_tokens),0)
                   + COALESCE(SUM(output_tokens),0)            AS billed_tokens,
@@ -224,7 +225,7 @@ fn map_session_metrics(r: sqlx::sqlite::SqliteRow) -> SessionMetrics {
         session_id: r.get("session_id"),
         cache_hit_ratio: r.get::<Option<f64>, _>("cache_hit_ratio"),
         billed_tokens: r.get::<i64, _>("billed_tokens"),
-        turns: r.get::<i64, _>("turns"),
+        assistant_events: r.get::<i64, _>("assistant_events"),
         output_tokens: r.get::<i64, _>("output_tokens"),
     }
 }
@@ -242,7 +243,7 @@ fn map_assistant_raw_line(r: sqlx::sqlite::SqliteRow) -> AssistantRawLine {
 fn map_model_usage(r: sqlx::sqlite::SqliteRow) -> ModelUsage {
     ModelUsage {
         model: r.get("model"),
-        turns: r.get::<i64, _>("turns"),
+        assistant_events: r.get::<i64, _>("assistant_events"),
         input_tokens: r.get::<i64, _>("input_tokens"),
         cache_creation_input_tokens: r.get::<i64, _>("cc"),
         cache_read_input_tokens: r.get::<i64, _>("cr"),
@@ -256,7 +257,14 @@ mod tests {
     use crate::db::migrate;
     use sqlx::sqlite::SqlitePoolOptions;
 
-    fn row(raw_event_id: &str, model: &str, input: i64, cc: i64, cr: i64, output: i64) -> UsageFacetRow {
+    fn row(
+        raw_event_id: &str,
+        model: &str,
+        input: i64,
+        cc: i64,
+        cr: i64,
+        output: i64,
+    ) -> UsageFacetRow {
         UsageFacetRow {
             raw_event_id: raw_event_id.into(),
             schema_version: "usage_facet.v1".into(),
@@ -294,7 +302,7 @@ mod tests {
         .unwrap();
 
         let agg = session_aggregate(&pool, "sess_uf_test").await.unwrap();
-        assert_eq!(agg.turns, 2);
+        assert_eq!(agg.assistant_events, 2);
         assert_eq!(agg.input_tokens, 5);
         assert_eq!(agg.cache_creation_input_tokens, 300);
         assert_eq!(agg.cache_read_input_tokens, 11000);
@@ -306,17 +314,23 @@ mod tests {
             .iter()
             .find(|m| m.model == "claude-opus-4-8")
             .expect("opus row present");
-        assert_eq!(opus.turns, 1);
+        assert_eq!(opus.assistant_events, 1);
         assert_eq!(opus.output_tokens, 300);
         assert_eq!(opus.input_tokens, 2, "per-model input sum");
-        assert_eq!(opus.cache_creation_input_tokens, 100, "per-model cache_creation sum");
-        assert_eq!(opus.cache_read_input_tokens, 5000, "per-model cache_read sum");
+        assert_eq!(
+            opus.cache_creation_input_tokens, 100,
+            "per-model cache_creation sum"
+        );
+        assert_eq!(
+            opus.cache_read_input_tokens, 5000,
+            "per-model cache_read sum"
+        );
         let haiku = agg
             .by_model
             .iter()
             .find(|m| m.model == "claude-haiku-4-5-20251001")
             .expect("haiku row present");
-        assert_eq!(haiku.turns, 1);
+        assert_eq!(haiku.assistant_events, 1);
         assert_eq!(haiku.output_tokens, 400);
         assert_eq!(haiku.input_tokens, 3);
         assert_eq!(haiku.cache_creation_input_tokens, 200);
@@ -336,7 +350,10 @@ mod tests {
             .unwrap();
 
         let agg = session_aggregate(&pool, "sess_uf_test").await.unwrap();
-        assert_eq!(agg.turns, 1, "INSERT OR REPLACE must deduplicate by PK");
+        assert_eq!(
+            agg.assistant_events, 1,
+            "INSERT OR REPLACE must deduplicate by PK"
+        );
         assert_eq!(agg.input_tokens, 9, "aggregate reflects the replaced row");
         assert_eq!(agg.cache_creation_input_tokens, 900);
         assert_eq!(agg.cache_read_input_tokens, 9000);
@@ -408,7 +425,7 @@ mod tests {
         // Session B denom = 0+0+10 = 10, cache_read 0 -> ratio 0.0.
         assert_eq!(a.cache_hit_ratio, Some(0.0));
         assert_eq!(a.billed_tokens, 10 + 50);
-        assert_eq!(a.turns, 1);
+        assert_eq!(a.assistant_events, 1);
         assert_eq!(a.output_tokens, 50);
 
         let s = &metrics[1];
@@ -417,7 +434,7 @@ mod tests {
         let ratio = s.cache_hit_ratio.unwrap();
         assert!((ratio - 11000.0 / 11305.0).abs() < 1e-9);
         assert_eq!(s.billed_tokens, 5 + 300 + 700);
-        assert_eq!(s.turns, 2);
+        assert_eq!(s.assistant_events, 2);
         assert_eq!(s.output_tokens, 700);
     }
 }

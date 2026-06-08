@@ -37,38 +37,38 @@ async fn insert_inner(pool: &SqlitePool, e: &ObservedEvent, ignore: bool) -> Res
          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
     };
     let res = sqlx::query(sql)
-    .bind(&e.event_id)
-    .bind(&e.raw_event_id)
-    .bind(&e.schema_version)
-    .bind(&e.session_id)
-    .bind(&e.event_uuid)
-    .bind(&e.parent_uuid)
-    .bind(e.observed_at.to_rfc3339())
-    .bind(e.actor.as_str())
-    .bind(e.kind.as_str())
-    .bind(&e.subkind)
-    .bind(&e.tool_use_id)
-    .bind(&e.tool_name)
-    .bind(&e.request_id)
-    .bind(&e.message_id)
-    .bind(&e.turn_id)
-    .bind(&e.source_tool_assistant_uuid)
-    .bind(&e.source_tool_use_id)
-    .bind(e.is_sidechain as i64)
-    .bind(e.is_meta as i64)
-    .bind(&e.cwd)
-    .bind(&e.git_branch)
-    .bind(&e.user_type)
-    .bind(&e.entrypoint)
-    .bind(&e.cc_version)
-    .bind(&e.trace_id)
-    .bind(&e.span_id)
-    .bind(&e.parent_span_id)
-    .bind(e.latency_ms)
-    .bind(merge_payload_with_telemetry(&e.payload, e.telemetry.as_ref()).to_string())
-    .bind(&e.parser_version)
-    .execute(pool)
-    .await?;
+        .bind(&e.event_id)
+        .bind(&e.raw_event_id)
+        .bind(&e.schema_version)
+        .bind(&e.session_id)
+        .bind(&e.event_uuid)
+        .bind(&e.parent_uuid)
+        .bind(e.observed_at.to_rfc3339())
+        .bind(e.actor.as_str())
+        .bind(e.kind.as_str())
+        .bind(&e.subkind)
+        .bind(&e.tool_use_id)
+        .bind(&e.tool_name)
+        .bind(&e.request_id)
+        .bind(&e.message_id)
+        .bind(&e.turn_id)
+        .bind(&e.source_tool_assistant_uuid)
+        .bind(&e.source_tool_use_id)
+        .bind(e.is_sidechain as i64)
+        .bind(e.is_meta as i64)
+        .bind(&e.cwd)
+        .bind(&e.git_branch)
+        .bind(&e.user_type)
+        .bind(&e.entrypoint)
+        .bind(&e.cc_version)
+        .bind(&e.trace_id)
+        .bind(&e.span_id)
+        .bind(&e.parent_span_id)
+        .bind(e.latency_ms)
+        .bind(merge_payload_with_telemetry(&e.payload, e.telemetry.as_ref()).to_string())
+        .bind(&e.parser_version)
+        .execute(pool)
+        .await?;
     Ok(res.rows_affected() > 0)
 }
 
@@ -121,7 +121,10 @@ pub async fn list_sessions(pool: &SqlitePool, limit: i64) -> Result<Vec<SessionR
     }
     // Second pass: by_kind for just the session_ids we returned. Inlining the
     // IN(?) list with a dynamic placeholder list keeps it sqlx-friendly.
-    let ids: Vec<String> = totals.iter().map(|r| r.get::<String, _>("session_id")).collect();
+    let ids: Vec<String> = totals
+        .iter()
+        .map(|r| r.get::<String, _>("session_id"))
+        .collect();
     let placeholders = (0..ids.len()).map(|_| "?").collect::<Vec<_>>().join(",");
     let sql = format!(
         "SELECT session_id, kind, COUNT(*) AS n
@@ -134,8 +137,10 @@ pub async fn list_sessions(pool: &SqlitePool, limit: i64) -> Result<Vec<SessionR
         q = q.bind(id);
     }
     let kind_rows = q.fetch_all(pool).await?;
-    let mut by_kind_map: std::collections::HashMap<String, std::collections::BTreeMap<String, i64>> =
-        std::collections::HashMap::new();
+    let mut by_kind_map: std::collections::HashMap<
+        String,
+        std::collections::BTreeMap<String, i64>,
+    > = std::collections::HashMap::new();
     for r in kind_rows {
         let sid: String = r.get("session_id");
         let kind: String = r.get("kind");
@@ -156,6 +161,20 @@ pub async fn list_sessions(pool: &SqlitePool, limit: i64) -> Result<Vec<SessionR
             }
         })
         .collect())
+}
+
+/// Distinct `turn_id` count for a session = number of user turns (prompts).
+/// `turn_id` is the prompt_id carried by user + assistant events; counting
+/// distinct non-null values yields user-turn count (NOT assistant-event count).
+pub async fn count_distinct_turns(pool: &SqlitePool, session_id: &str) -> Result<i64> {
+    let row: (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT turn_id) FROM observed_event \
+         WHERE session_id = ? AND turn_id IS NOT NULL",
+    )
+    .bind(session_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
 }
 
 pub async fn list_session(
@@ -295,18 +314,20 @@ pub async fn list_session_window(
                             .fetch_all(pool)
                             .await?
                         }
-                        None => sqlx::query(
-                            "SELECT * FROM observed_event WHERE session_id = ? \
+                        None => {
+                            sqlx::query(
+                                "SELECT * FROM observed_event WHERE session_id = ? \
                              AND (observed_at < ? OR (observed_at = ? AND event_id <= ?)) \
                              ORDER BY observed_at DESC, event_id DESC LIMIT ?",
-                        )
-                        .bind(session_id)
-                        .bind(&uts)
-                        .bind(&uts)
-                        .bind(&ueid)
-                        .bind(RAW_CAP)
-                        .fetch_all(pool)
-                        .await?,
+                            )
+                            .bind(session_id)
+                            .bind(&uts)
+                            .bind(&uts)
+                            .bind(&ueid)
+                            .bind(RAW_CAP)
+                            .fetch_all(pool)
+                            .await?
+                        }
                     }
                 }
             }

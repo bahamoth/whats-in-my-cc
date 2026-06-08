@@ -206,23 +206,27 @@ pub struct SignalsResponse {
     pub data: Vec<SignalDto>,
 }
 
-/// insight-redesign #1 + #5(cost) — session token-usage aggregate, now with a
-/// public-pricing **estimate** of dollar cost (Q2). `estimated_cost_usd` is
-/// NOT actual billing: `cost_basis = "estimate_public_pricing"` and the UI
-/// badges it 추정. Replaced by the OTel `claude_code.cost.usage` metric if/when
-/// it arrives (spec §6.5).
+/// insight-redesign #1 + #5(cost) + F1(rename) — session token-usage aggregate.
+/// `estimated_cost_usd` is NOT actual billing: `cost_basis = "estimate_public_pricing"`.
+/// Replaced by the OTel `claude_code.cost.usage` metric if/when it arrives (spec §6.5).
+///
+/// F1 changes:
+/// - `turns` → `assistant_events`: usage_facet row count (assistant output events).
+/// - `user_turns` added: distinct `turn_id` count across `observed_event` for this session.
+/// - `cache_hit_ratio` removed: window-fixed rate; consumers compute from token components.
 #[derive(Serialize)]
 pub struct SessionUsageDto {
     pub session_id: String,
-    pub turns: i64,
+    /// Number of usage_facet rows for this session (= assistant output events).
+    pub assistant_events: i64,
+    /// Distinct turn_id count in observed_event for this session (= user prompts).
+    pub user_turns: i64,
     pub input_tokens: i64,
     pub cache_creation_input_tokens: i64,
     pub cache_read_input_tokens: i64,
     pub output_tokens: i64,
     /// input + cache_creation + output (cache_read is NOT billed)
     pub billed_tokens: i64,
-    /// cache_read / (cache_read + cache_creation + input); null when denom 0
-    pub cache_hit_ratio: Option<f64>,
     /// Estimated session cost in USD — public-pricing ESTIMATE, never actual
     /// billing. See `cost_basis` / `pricing_version`.
     pub estimated_cost_usd: f64,
@@ -239,7 +243,8 @@ pub struct SessionUsageDto {
 #[derive(Serialize)]
 pub struct ModelUsageDto {
     pub model: String,
-    pub turns: i64,
+    /// Number of usage_facet rows for this model (= assistant output events).
+    pub assistant_events: i64,
     pub input_tokens: i64,
     pub cache_creation_input_tokens: i64,
     pub cache_read_input_tokens: i64,
@@ -264,12 +269,16 @@ pub struct BaselineStat {
 /// insight-redesign #6 — cross-session usage baseline. Median (+ p25/p75) of
 /// each key metric across ALL stored sessions that have usage_facet rows.
 /// `session_count` is the number of sessions the baseline was computed over.
+///
+/// F1: `turns` renamed to `assistant_events` (quantile distribution of
+/// usage_facet row counts per session). `cache_hit_ratio` distribution retained
+/// here — unlike the per-session scalar, the baseline exposes a *quantile
+/// distribution* across sessions, which is a valid cross-session comparison.
 #[derive(Serialize)]
 pub struct UsageBaselineDto {
     pub session_count: i64,
     pub cache_hit_ratio: BaselineStat,
     pub billed_tokens: BaselineStat,
-    pub turns: BaselineStat,
+    pub assistant_events: BaselineStat,
     pub output_tokens: BaselineStat,
 }
-

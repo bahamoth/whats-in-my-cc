@@ -30,7 +30,10 @@ async fn ingest_populates_usage_facet_from_real_fixture() {
         .await
         .expect("aggregate");
 
-    assert!(agg.turns > 0, "expected assistant turns with usage");
+    assert!(
+        agg.assistant_events > 0,
+        "expected assistant events with usage"
+    );
     assert!(
         agg.cache_read_input_tokens > 0,
         "real fixture has prompt-cache reads"

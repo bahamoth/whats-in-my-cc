@@ -120,7 +120,8 @@ pub fn estimate_session_cost(by_model: &[ModelUsage]) -> CostEstimate {
         match rates_for(&m.model) {
             Some(r) => {
                 let usd = (m.input_tokens as f64) * r.input_per_mtok / 1_000_000.0
-                    + (m.cache_creation_input_tokens as f64) * r.cache_creation_per_mtok / 1_000_000.0
+                    + (m.cache_creation_input_tokens as f64) * r.cache_creation_per_mtok
+                        / 1_000_000.0
                     + (m.cache_read_input_tokens as f64) * r.cache_read_per_mtok / 1_000_000.0
                     + (m.output_tokens as f64) * r.output_per_mtok / 1_000_000.0;
                 out.total_usd += usd;
@@ -150,7 +151,7 @@ mod tests {
     fn mu(model: &str, input: i64, cc: i64, cr: i64, output: i64) -> ModelUsage {
         ModelUsage {
             model: model.into(),
-            turns: 1,
+            assistant_events: 1,
             input_tokens: input,
             cache_creation_input_tokens: cc,
             cache_read_input_tokens: cr,
@@ -161,8 +162,18 @@ mod tests {
     #[test]
     fn deterministic_cost_for_known_model() {
         // 1,000,000 of each class for opus-4-8: 15 + 18.75 + 1.5 + 75 = 110.25
-        let est = estimate_session_cost(&[mu("claude-opus-4-8", 1_000_000, 1_000_000, 1_000_000, 1_000_000)]);
-        assert!((est.total_usd - 110.25).abs() < 1e-9, "got {}", est.total_usd);
+        let est = estimate_session_cost(&[mu(
+            "claude-opus-4-8",
+            1_000_000,
+            1_000_000,
+            1_000_000,
+            1_000_000,
+        )]);
+        assert!(
+            (est.total_usd - 110.25).abs() < 1e-9,
+            "got {}",
+            est.total_usd
+        );
         assert_eq!(est.per_model.len(), 1);
         assert!(est.per_model[0].priced);
         assert!(est.models_without_pricing.is_empty());
@@ -173,8 +184,16 @@ mod tests {
         // 1M cache_read on opus = $1.50; 1M output = $75. Locks the rate split.
         let read = estimate_session_cost(&[mu("claude-opus-4-8", 0, 0, 1_000_000, 0)]);
         let out = estimate_session_cost(&[mu("claude-opus-4-8", 0, 0, 0, 1_000_000)]);
-        assert!((read.total_usd - 1.5).abs() < 1e-9, "cache_read got {}", read.total_usd);
-        assert!((out.total_usd - 75.0).abs() < 1e-9, "output got {}", out.total_usd);
+        assert!(
+            (read.total_usd - 1.5).abs() < 1e-9,
+            "cache_read got {}",
+            read.total_usd
+        );
+        assert!(
+            (out.total_usd - 75.0).abs() < 1e-9,
+            "output got {}",
+            out.total_usd
+        );
         assert!(read.total_usd < out.total_usd);
     }
 
@@ -182,7 +201,10 @@ mod tests {
     fn unknown_model_contributes_zero_and_is_flagged() {
         let est = estimate_session_cost(&[mu("some-future-model-x", 1_000_000, 0, 0, 1_000_000)]);
         assert_eq!(est.total_usd, 0.0);
-        assert_eq!(est.models_without_pricing, vec!["some-future-model-x".to_string()]);
+        assert_eq!(
+            est.models_without_pricing,
+            vec!["some-future-model-x".to_string()]
+        );
         assert_eq!(est.per_model.len(), 1);
         assert!(!est.per_model[0].priced);
         assert_eq!(est.per_model[0].estimated_cost_usd, 0.0);
@@ -191,9 +213,9 @@ mod tests {
     #[test]
     fn mixed_models_sum_only_priced() {
         let est = estimate_session_cost(&[
-            mu("claude-opus-4-8", 0, 0, 0, 1_000_000),   // $75
+            mu("claude-opus-4-8", 0, 0, 0, 1_000_000),           // $75
             mu("claude-haiku-4-5-20251001", 0, 0, 0, 1_000_000), // $5
-            mu("unknown-y", 0, 0, 0, 1_000_000),         // $0, flagged
+            mu("unknown-y", 0, 0, 0, 1_000_000),                 // $0, flagged
         ]);
         assert!((est.total_usd - 80.0).abs() < 1e-9, "got {}", est.total_usd);
         assert_eq!(est.models_without_pricing, vec!["unknown-y".to_string()]);
