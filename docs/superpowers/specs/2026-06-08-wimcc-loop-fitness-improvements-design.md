@@ -26,27 +26,40 @@ evidence_refs, real-data anchoring(frozen fixture 또는 docs 인용), source-pr
 
 ---
 
-## F1 — 집계 정직화  [fact→facet · 스키마 0, on-demand 집계/DTO 수정]
+## F1 — 집계 정직화: rate scalar 제거, 합성 가능한 count만  [스키마 0, on-demand 집계/DTO 수정]
 
-**문제(실측):** `/metrics`가 `verification_pass_rate: 0.0, passed: 0, total: 10`을 unknown 카운트 없이
-노출 → "테스트 다 실패" 오판. 코퍼스 진실: 1734건 중 measured 195(11%) / unknown 1539(89%).
-`/usage`의 `turns: 2683`은 실제 user turn(distinct turn_id) **43**의 62배. cost_basis는 세션 전체 단일
-`estimate`. `/usage/baseline`도 turns 오도 정의를 cross-session 전파.
+**원칙(사용자 확정):** **rate는 window를 박아넣은 파생값이며 합성되지 않는다(don't compose).** 분석마다
+구간(세션 전체 / per-turn / compact 전후 / 시간구간)이 다른데 window-고정 scalar는 그 한 분석에만 맞다.
+또 세션별 rate를 평균해도 코퍼스 rate가 안 나온다(크기 다름) — 올바른 합성은 분자·분모를 따로 더하는
+것. → substrate는 **(a) raw per-event fact**(이미 `/verification-runs`가 run별 status·provenance·
+started_at·trigger_event_id 노출)와 **(b) 합성 가능한 count**만 낸다. **rate는 소비자가 자기 window에서
+계산한다. wimcc는 어떤 window-고정 rate scalar도 내지 않는다.**
 
-- **F1-1** `/metrics`에 `verification_measured_count`·`verification_unknown_count` 추가하고
-  `verification_pass_rate`의 분모를 **measured-only**로 정정(현재 unknown을 분모에 섞어 0.0으로 왜곡).
-  `status_provenance` 집계만으로 산출(verification_run에 이미 존재). pass_rate 정의 변경은 `meta`에
-  명시.
-- **F1-2** `/usage` `turns` → `assistant_events`로 개명, `user_turns`(distinct turn_id)·`user_messages`
-  필드 추가. `by_model`도 동일. schema_version bump(API 계약 변경).
-- **F1-3** `/usage`의 `cost_basis`를 단일 세션 라벨에서 **source별 분리**로: OTLP request_id로 측정된
-  토큰은 `measured`, transcript 추정은 `estimate`. offline-only DB에선 전부 estimate지만 필드가 이를
-  *정직하게* 반영해야 한다(거짓 measured 금지).
-- **F1-4** `/usage/baseline`의 `turns` 백분위를 F1-2 개명에 맞춰 `user_turns` 기준으로 재정의(또는
-  둘 다 노출). cross-session 오도 전파 차단.
+**문제(실측):** `/metrics`의 `verification_pass_rate: 0.0`(passed 0/total 10)은 unknown 1539/1734(89%)를
+분모에 섞어 "테스트 다 실패"로 오도. `/usage`의 `turns: 2683`은 실제 user turn **43**의 62배(naming 거짓).
+`cache_hit_ratio`·`tool_failure_rate`도 같은 window-고정 rate.
 
-> **TDD:** 각 항목은 `.wimcc-analysis.sqlite`의 실측값(195/1539, 2683 vs 43)을 fixture로 잠그는 실패
-> 테스트 우선. "unknown이 분모에서 빠졌다", "user_turns가 distinct turn_id와 같다"를 assert.
+- **F1-1 (rate scalar 제거)** `/metrics`에서 `verification_pass_rate`·`tool_failure_rate`·`cache_hit_ratio`
+  **삭제**. 합성 가능한 count/component만 남김: `tool_call_total`, `tool_failure_count`,
+  `context_bloat_count`, 그리고 verification은 **`verification_passed`/`verification_failed`/
+  `verification_unknown`/`verification_total`**(status_provenance로 산출 — measured=passed+failed,
+  unknown 분리). cache는 ratio 대신 토큰 component를 노출하거나(이미 `/usage`에 있음) /metrics에서 제거.
+- **F1-2 (`/usage`도 동일 원칙)** `cache_hit_ratio` 삭제(토큰 component는 이미 노출 — 소비자가 계산).
+  `turns` → `assistant_events`로 개명(거짓 naming 교정) + `user_turns`(distinct turn_id) count 추가.
+  `billed_tokens`·`estimated_cost_usd`는 **합(sum)이라 합성 가능 → 유지**(단 `cost_basis` provenance 라벨
+  유지). `by_model`도 동일.
+- **F1-3 (raw windowing enabler, 선택)** `/verification-runs`는 이미 raw canonical. per-turn/compact-window
+  슬라이싱을 join 없이 쉽게 하려면 run에 `turn_id` 부가(현재 `trigger_event_id`→observed_event join으로도
+  가능). 채택은 B6/F5 필요 시.
+- **F1-4 (baseline)** `/usage/baseline`은 cross-session인데 **per-session rate의 분위수**(예: cache_hit
+  ratio 분위수)는 "rate 분포"라는 별개의 기술통계라 유지 가능하나, `turns` 분위수는 F1-2 개명(`assistant_events`
+  /`user_turns`)에 맞춰 정정. 합성형 통합 지표가 필요하면 per-session **count**를 합산해 계산(rate 평균 금지).
+
+> **blast radius:** rate 삭제·turns 개명은 `SessionMetrics`·`SessionUsageDto`·`ModelUsageDto`·
+> `repo_usage_facet` aggregate·baseline·**WebUI 소비자**까지. UI 변경은 브라우저 smoke 의무(CLAUDE.md).
+>
+> **TDD:** `.wimcc-analysis.sqlite` 실측(195 measured/1539 unknown, 1b30ced8의 2683 assistant vs 43 turn)을
+> fixture로. "rate scalar 부재", "verification_unknown=total-measured", "user_turns=distinct turn_id"를 assert.
 
 ## F2 — verification 탐지 정밀화  [휴리스틱→제거/축소 · 탐지 로직 수정]
 
@@ -159,8 +172,9 @@ LLM 판정 + 사람 리뷰로 남는다.
 
 ## 성공 기준
 
-- F1: `/metrics`·`/usage`가 measured/unknown·assistant_events/user_turns를 분리 노출, pass_rate 분모에
-  unknown 미포함. 실측 fixture(195/1539, 2683 vs 43)로 잠김.
+- F1: `/metrics`·`/usage`에서 window-고정 rate scalar(pass_rate·tool_failure_rate·cache_hit_ratio) 제거,
+  합성 가능한 count(verification passed/failed/unknown/total)만 노출. `turns`→`assistant_events`+`user_turns`.
+  실측 fixture(195 measured/1539 unknown, 2683 vs 43)로 잠김. WebUI 소비자 갱신 + 브라우저 smoke.
 - F2: frozen 오탐 fixture 3종이 verification_run으로 분류되지 않고, 실 러너 회귀 0.
 - F3: 하네스 4종 fact 카운트 + events kind/tool_name 필터 노출. "주입됐으나 안 쓴 skill" 집합 차이 fact화.
 - F4: Spec 정합성에 결정론적 정량 지표가 **존재하지 않음**을 확정(determination). wimcc는 spec-metric/
