@@ -68,14 +68,17 @@ skill(`tool_name=Skill`)·subagent(`is_sidechain`)·mcp(`tool_name LIKE 'mcp__%'
 → 전부 fact인데 가용성 🟡(고마찰). 처방: skill_invocation/subagent_run/mcp_usage/hook_outcome 집계
 facet + events kind/tool_name 필터. **(fact→facet)**
 
-### F4. Spec 산출물이 관측 경계 밖
+### F4. Spec 정합성 — 대부분 judgment, 정량 지표 대상 아님 (추가 검증으로 정정)
 
-CLAUDE.md/AGENTS.md/migrations/docs가 ingest 입력이 아니다(transcript/OTLP/hook만). drift(CLAUDE.md
-"0020" vs 실제 0022 — 본 분석에서도 확인)·지시 준수 판정에 필요한 대조 대상이 wimcc 안에 없어 LLM이
-매번 파일시스템으로 나가야 한다.
+**검증:** CLAUDE.md는 CC 동작 원리상 매 턴 시스템 프롬프트로 컨텍스트에 들어가지만 **transcript JSONL엔
+기록되지 않는다.** 이 세션을 throwaway DB로 재ingest해 확인 — `"project instructions, checked into"`
+매치 6건은 전부 조사 노이즈, **실제 `# claudeMd` 주입 블록 0건**. wimcc는 transcript를 분석하므로
+CLAUDE.md *텍스트*를 (Read하지 않는 한) 직접 보지 못하고 행동·효과만 본다.
 
-→ fact("지시 X 존재", "심볼 Y documented")인데 ❌. 처방: spec 산출물 인덱싱(새 source_type).
-**(fact→facet, 새 입력 소스)**
+→ 처방은 "새 source_type doc ingestion"(과설계)도, staleness/coverage detector(judgment 휴리스틱 추정 =
+철학 위반)도 아니다. 올바른 처방: **(a) drift는 wimcc 자기 상태로 산출(schema-info, doc ingestion 불필요),
+(b) CLAUDE.md 텍스트가 필요하면 cwd 파일 1회 읽기, (c) 준수 판정은 기계적 지시만 행동 evidence-assembly,
+나머지는 정량 범위 밖 → LLM 판정.** 상세 `specs/2026-06-08-wimcc-loop-fitness-improvements-design.md` F4.
 
 ---
 

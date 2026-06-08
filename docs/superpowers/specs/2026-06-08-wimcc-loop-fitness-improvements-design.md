@@ -90,27 +90,39 @@ hook(`hook_event`) 원자료는 `observed_event`에 전부 있으나 facet/endpo
 
 > **TDD:** 패널 세션 실측 카운트(예: 1b30ced8 skill 59, sidechain 5235)를 fixture로 잠그는 테스트 우선.
 
-## F4 — Spec 산출물 관측  [fact→새 입력 소스 · 가장 무거움]
+## F4 — Spec 정합성  [대부분 judgment → 정량 지표 대상 아님 · 경량]
 
-**문제(실측):** CLAUDE.md/AGENTS.md/migrations/docs가 ingest 입력 아님(transcript/OTLP/hook만). drift
-(CLAUDE.md "0020" vs 실제 0022 — 분석에서 확인)·지시 준수 판정의 대조 대상이 wimcc 밖.
+**정정된 사실(실측):** CLAUDE.md는 CC 동작 원리상 매 턴 시스템 프롬프트로 컨텍스트에 들어가지만,
+**transcript JSONL엔 기록되지 않는다.** 이 세션을 throwaway DB로 재ingest해 확인: `"project
+instructions, checked into"` 매치 6건은 전부 조사 노이즈(assistant_message 1 + tool_call 3 + tool_result
+2)였고 **실제 `# claudeMd` 주입 블록은 0건**. wimcc는 transcript를 분석하므로 CLAUDE.md *텍스트*를
+(에이전트가 Read하지 않는 한) 직접 보지 못하고, 그에 대한 **행동·효과**만 본다.
 
-- **F4-1** spec 산출물 인덱싱 — 새 `source_type`(또는 사이드 인덱스)로 CLAUDE.md·migrations·docs를
-  관측 대상에 포함. source-preserving(raw reference 유지).
-- **F4-2** `GET /v1/schema-info` — applied migrations + 최신 번호. CLAUDE.md "0020" vs 실제 0022 류
-  drift를 fact로. (이건 가벼워 F4 중 먼저.)
-- **F4-3** `symbol-spec-coverage` evidence — 세션 diff-hunk의 신규 심볼(enum/struct field/DB 컬럼/
-  manifest key)을 docs 인덱스에서 역추적해 **documented/undocumented boolean fact**. "문서화 부족인가"
-  판정은 LLM. (점수화 detector 아님 — boolean fact + evidence_refs.)
+→ 원래 F4-1("새 source_type doc ingestion")은 **과설계**(CLAUDE.md는 cwd 파일 1회 읽기로 충분, 별도
+파이프라인 불필요). 원래 F4-3(staleness/coverage detector)은 **judgment를 휴리스틱으로 추정하는 철학
+위반**이라 폐기.
 
-> **주의:** F4는 관측 경계를 "세션"에서 "프로젝트 산출물"로 확장 → 데이터 모델 변경 불가피. F1~F3
-> 안정화 후 착수. F4-2(schema-info)는 가벼우니 선행 가능.
+**원칙:** CLAUDE.md 준수는 **대부분 judgment이며 정량 지표 대상이 아니다.** wimcc는 (a) wimcc 자기
+상태로 결정되는 drift만 fact로 내고, (b) 기계적으로 확인 가능한 지시의 *행동 evidence*만 fact+evidence_refs로
+노출하며, (c) 그 외 준수 판정은 LLM에게 맡기거나 정량 범위 밖으로 둔다.
+
+- **F4-1 (drift fact · 가벼움, 먼저)** `GET /v1/schema-info` — applied migrations + 최신 번호. 문서/에이전트가
+  주장한 번호와 wimcc 실제 상태의 불일치를 **fact**로(예: CLAUDE.md "0020" vs 실제 0022). **wimcc 자기
+  상태만으로 산출 — doc ingestion 불필요.**
+- **F4-2 (CLAUDE.md 텍스트 · 필요 시 경량)** drift/지시 대조에 CLAUDE.md 텍스트가 필요하면 **cwd의
+  `CLAUDE.md`를 ingest 시 1회 읽어** 세션에 첨부. 새 source_type/파이프라인이 아니라 cwd 파일 읽기
+  (cwd는 이미 관측됨). source-preserving.
+- **F4-3 (기계적 지시 → 행동 evidence-assembly)** 기계적으로 확인 가능한 지시(예: TDD red-first =
+  동일 모듈 impl Edit 이전에 실패하는 test 실행이 있었나)는 **행동 시퀀스를 fact + evidence_refs로 묶어**
+  노출. "준수했나/충분한가" 판정은 LLM. **점수화 detector 금지.**
+- **(범위 밖)** 기계적으로도 확인 불가한 서술적 지시는 **정량 지표 대상이 아니다.** 거짓 정량화 대신
+  LLM이 raw evidence 위에서 판정하는 다른 접근을 따른다 — 이 스펙은 그것을 지표화하지 않는다.
 
 ---
 
 ## 실행 순서·검증
 
-1. F1(스키마 0) → 2. F2(탐지 정밀, frozen fixture) → 3. F3(facet + events 필터) → 4. F4(F4-2 먼저, F4-1/3 후행).
+1. F1(스키마 0) → 2. F2(탐지 정밀, frozen fixture) → 3. F3(facet + events 필터) → 4. F4(전부 경량 — F4-1 schema-info 먼저).
 - 각 단계 후 `.wimcc-analysis.sqlite` 재ingest 또는 신규 fixture로 회귀 확인.
 - UI 변경 동반 시 브라우저 smoke(CLAUDE.md 의무).
 - 매 단계 self-check 체크리스트(CLAUDE.md) 통과.
@@ -121,5 +133,6 @@ hook(`hook_event`) 원자료는 `observed_event`에 전부 있으나 facet/endpo
   unknown 미포함. 실측 fixture(195/1539, 2683 vs 43)로 잠김.
 - F2: frozen 오탐 fixture 3종이 verification_run으로 분류되지 않고, 실 러너 회귀 0.
 - F3: 하네스 4종 fact 카운트 + events kind/tool_name 필터 노출. "주입됐으나 안 쓴 skill" 집합 차이 fact화.
-- F4: schema-info가 applied migration 노출(최소), spec 산출물 인덱싱(전체).
+- F4: schema-info가 applied migration drift를 fact로 노출. CLAUDE.md 텍스트는 cwd 파일 읽기(필요 시).
+  준수 판정은 어떤 detector로도 점수화하지 않는다 — 기계적 지시는 행동 evidence-assembly, 나머지는 범위 밖.
 - 전반: 어떤 신규 신호도 judgment 점수화가 아니다(fact 또는 evidence-assembly). 모든 일반화에 표본 수.
