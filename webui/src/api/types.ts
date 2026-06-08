@@ -188,6 +188,7 @@ export type SessionMetricsDto = {
   session_id: string;
   tool_call_total: number;
   tool_failure_count: number;
+  /** passed + failed + unknown. 측정 비율은 passed/(passed+failed)를 쓴다(분모로 total 사용 금지). */
   verification_total: number;
   verification_passed: number;
   verification_failed: number;
