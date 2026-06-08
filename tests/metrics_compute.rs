@@ -1,7 +1,7 @@
 //! Plan 3a — unit tests for `compute_session_metrics`.
 //!
 //! Verifies deterministic aggregation over events + signals.
-//! Facts/counts/ratios only — no severity/judgment fields.
+//! Facts/counts only — no window-fixed rates (spec F1), no severity/judgment fields.
 
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::db::repo_signal::SignalRow;
@@ -132,11 +132,11 @@ async fn aggregates_tool_failure_and_detector_firing() {
 }
 
 // ---------------------------------------------------------------------------
-// Zero tool_calls — rate should be 0.0, not NaN/panic
+// Zero tool_calls — counts stay 0, no divide-by-zero (rate is the consumer's job)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn rate_is_zero_when_no_tool_calls() {
+async fn tool_failure_count_when_no_tool_calls() {
     let pool = test_pool().await;
     let sid = "s_metrics_zero";
     let run_id = repo_runs::start(&pool).await.unwrap();
