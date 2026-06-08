@@ -12,3 +12,4 @@ node_modules/
 
 # superpowers brainstorm mockups
 .superpowers/
+.wimcc-analysis.sqlite

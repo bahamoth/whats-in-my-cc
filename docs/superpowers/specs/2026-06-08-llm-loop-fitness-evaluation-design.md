@@ -1,5 +1,10 @@
 # wimcc 자기개선 지표 적합성 평가 (설계)
 
+> **상태: 실행 완료(2026-06-08).** 본 방법론으로 실측 평가를 수행했고 결과는
+> `docs/superpowers/2026-06-08-wimcc-loop-fitness-analysis.md`, 그 결과로 도출한 개선 스펙은
+> `docs/superpowers/specs/2026-06-08-wimcc-loop-fitness-improvements-design.md`. 이 문서는 *어떻게
+> 평가했는가*의 방법론 기록으로 보존한다.
+
 **질문 하나에 답한다:** *코딩 에이전트가 자기 워크플로우를 스스로 개선하는 데, wimcc가 내놓는
 데이터가 지표 소스로 충분한가?*
 
