@@ -119,8 +119,13 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
         let resolved = resolve_outcome(evs, tid);
 
         // Tier-4: for verification kinds (test/build/lint/format), when the
-        // chain returns Unknown, apply a content failure rule (estimated).
-        // This catches "error[" / "FAILED" in cargo output without OTLP.
+        // chain returns Unknown, apply content rules (estimated).
+        // Failure rule: "error[" / "FAILED" / … in cargo/vitest output.
+        // Success rule (F5): deterministic success summaries ("test result: ok",
+        // "passed in", "Test Files … passed") — symmetric to failure. CC does NOT
+        // prepend "Exit code N" on success, so these summaries are the only
+        // transcript-only success signal. Guard: looks_like_failure is checked
+        // first, so mixed "1 failed, 41 passed" → Failed (not Passed).
         let (resolved_status, resolved_prov) = if resolved.status == OutcomeStatus::Unknown
             && is_verification_kind(command_kind)
         {
@@ -132,6 +137,9 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
                     .unwrap_or("");
                 if looks_like_failure(content) {
                     (OutcomeStatus::Failed, OutcomeProvenance::Estimated)
+                } else if looks_like_success(content) {
+                    // 도구의 결정론 성공 요약 → Passed(Estimated). exit code(Measured)와 구분.
+                    (OutcomeStatus::Passed, OutcomeProvenance::Estimated)
                 } else {
                     (resolved.status, resolved.provenance)
                 }
@@ -510,6 +518,19 @@ fn is_verification_kind(kind: &str) -> bool {
     )
 }
 
+/// 도구 자체가 출력하는 결정론 성공 요약. exit code(measured)가 없을 때 Tier-4에서
+/// provenance=Estimated로 Passed 승격에 쓰인다(looks_like_failure와 대칭). CC는
+/// 성공 시 "Exit code N"을 prepend하지 않으므로 transcript-only 환경에서 성공은
+/// 이 요약으로만 결정 가능하다.
+fn looks_like_success(content: &str) -> bool {
+    // cargo test / cargo build / cargo nextest
+    content.contains("test result: ok")
+        // pytest summary ("===== 41 passed in 1.20s =====")
+        || content.contains(" passed in ")
+        // vitest / jest ("Test Files  5 passed (5)")
+        || (content.contains("Test Files") && content.contains("passed"))
+}
+
 /// Tier-4 estimated failure heuristic: checks for common failure patterns in
 /// tool output when no OTLP/hook/exit-code signal is available.
 ///
@@ -549,6 +570,85 @@ fn truncate(s: &str, max_bytes: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{TimeZone, Utc};
+    use crate::model::observed::{Actor, EventKind, ObservedEvent};
+
+    fn ts_inline(i: i64) -> chrono::DateTime<Utc> {
+        Utc.timestamp_opt(1_700_000_000 + i * 10, 0).unwrap()
+    }
+
+    /// Minimal helper: ToolCall(Bash, cmd) + ToolResult(content) pair for a single session.
+    fn make_bash_run(tid: &str, cmd: &str, result_content: &str) -> Vec<ObservedEvent> {
+        vec![
+            ObservedEvent {
+                event_id: format!("ev_{tid}_call"),
+                raw_event_id: format!("raw_{tid}_call"),
+                schema_version: "observed_event.v1".into(),
+                session_id: "sess_inline".into(),
+                observed_at: ts_inline(0),
+                actor: Actor::Assistant,
+                kind: EventKind::ToolCall,
+                tool_use_id: Some(tid.into()),
+                tool_name: Some("Bash".into()),
+                parser_version: "test".into(),
+                payload: serde_json::json!({
+                    "tool_use_id": tid,
+                    "name": "Bash",
+                    "input": {"command": cmd}
+                }),
+                ..Default::default()
+            },
+            ObservedEvent {
+                event_id: format!("ev_{tid}_result"),
+                raw_event_id: format!("raw_{tid}_result"),
+                schema_version: "observed_event.v1".into(),
+                session_id: "sess_inline".into(),
+                observed_at: ts_inline(1),
+                actor: Actor::Tool,
+                kind: EventKind::ToolResult,
+                tool_use_id: Some(tid.into()),
+                parser_version: "test".into(),
+                payload: serde_json::json!({
+                    "tool_result": {
+                        "tool_use_id": tid,
+                        "is_error": false,
+                        "content": result_content
+                    }
+                }),
+                ..Default::default()
+            },
+        ]
+    }
+
+    #[test]
+    fn looks_like_success_detects_tool_summaries() {
+        assert!(looks_like_success(
+            "running 42 tests\ntest result: ok. 42 passed; 0 failed"
+        ));
+        assert!(looks_like_success("===== 41 passed in 1.20s ====="));
+        assert!(looks_like_success(
+            " Test Files  5 passed (5)\n Tests  20 passed (20)"
+        ));
+        // 실패/진행중 출력은 success로 보지 않음
+        assert!(!looks_like_success("RUN  v2.1.9\nstderr | TopBar ..."));
+    }
+
+    #[test]
+    fn tier4_upgrades_unknown_success_to_passed_estimated() {
+        // Bash cargo test 호출 + 성공 요약 tool_result(Exit code 라인 없음, OTLP/hook 없음).
+        let evs = make_bash_run(
+            "toolu_ok1",
+            "cargo test",
+            "running 1 test\ntest result: ok. 1 passed; 0 failed; 0 ignored",
+        );
+        let runs = extract_verification_runs(&evs);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, "passed");
+        assert_eq!(
+            runs[0].status_provenance.as_deref(),
+            Some("estimated")
+        );
+    }
 
     #[test]
     fn normalise_removes_pipe_redirect() {
