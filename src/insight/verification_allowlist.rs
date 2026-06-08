@@ -104,7 +104,7 @@ pub fn classify(cmd: &str) -> Option<&'static str> {
     None
 }
 
-/// Wrapper prefixes stripped from a segment before Tier-1/Tier-2 matching.
+/// Wrapper prefixes stripped from a segment before classify_segment matching.
 /// Source: design spec §6.2 ("strip wrappers npx, pnpm dlx, bunx, yarn dlx,
 /// poetry run, uv run, sudo, time, env VAR=..").
 /// Multi-token wrappers (e.g. `pnpm dlx`) are listed as full token sequences.
