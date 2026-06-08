@@ -365,12 +365,13 @@ mod tests {
     }
 
     #[test]
-    fn classify_segment_tier2_path_with_tests_dir_is_not_a_run() {
+    fn classify_segment_path_with_tests_dir_is_not_a_run() {
         // Real-data anchoring: this project's transcripts contain
         //   `./target/debug/wimcc ingest tests/fixtures/transcripts/x.jsonl`
         // — a non-test command whose argument PATH contains a `tests/` dir.
-        // Tier-2 must NOT treat a `tests/` path component as a verification
-        // keyword (the tokenizer does not split on `/`).
+        // It is not on the Tier-1 known-tool allowlist, so it is None. (This
+        // was a Tier-2 false-positive class before the keyword fallback was
+        // removed — spec F2; now None falls out of the allowlist miss directly.)
         assert_eq!(
             classify_segment("./target/debug/wimcc ingest tests/fixtures/transcripts/minimal_session.jsonl"),
             None
@@ -382,8 +383,10 @@ mod tests {
     }
 
     #[test]
-    fn classify_segment_keyword_denylist_blocks_nonexec() {
-        // these CONTAIN `test` but the leading exec is on the non-exec denylist
+    fn classify_segment_non_allowlist_commands_with_test_token_are_none() {
+        // these CONTAIN a `test` token but are NOT on the Tier-1 known-tool
+        // allowlist; with Tier-2 keyword fallback removed (spec F2) they are
+        // all None (formerly some were blocked by the now-deleted KEYWORD_DENYLIST).
         assert_eq!(classify_segment("cat test_output.txt"), None);
         assert_eq!(classify_segment("grep test src/lib.rs"), None);
         assert_eq!(classify_segment("git commit -m 'add test'"), None);

@@ -37,7 +37,9 @@ pub struct VerificationRunRecord {
     pub trigger_tool_use_id: Option<String>,
     pub status: String,              // "passed" | "failed" | "unknown"
     pub status_provenance: Option<String>, // "measured" | "estimated" | "unknown"
-    pub detection_basis: String,     // "known_tool" | "test_keyword"
+    pub detection_basis: String,     // "known_tool"  ("test_keyword" is a legacy
+                                     // value that may persist only in older rows;
+                                     // the Tier-2 fallback was removed — spec F2)
     pub status_basis: String,        // "exit" | "piped"
     pub started_at: String,          // ISO 8601 UTC
     pub ended_at: Option<String>,
@@ -93,8 +95,8 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             .unwrap_or("");
 
         // Segment-split + per-segment classify: picks the first segment that
-        // matches a verification tool (Tier-1) or test/spec keyword (Tier-2),
-        // so `cd webui && npx vitest run` (or `cd webui\nnpx vitest run`) is
+        // matches a verification tool (known_tool allowlist), so
+        // `cd webui && npx vitest run` (or `cd webui\nnpx vitest run`) is
         // detected on its `npx vitest run` segment, not the leading `cd`.
         let Some(m) = matched_segment(cmd) else {
             continue;
@@ -362,7 +364,9 @@ pub struct MatchedSegment {
     /// The matched segment text (wrapper still present, redirects retained).
     pub command: String,
     pub command_kind: &'static str,
-    pub detection_basis: &'static str, // "known_tool" | "test_keyword"
+    pub detection_basis: &'static str, // "known_tool" (extractor only emits this;
+                                       // "test_keyword" is a legacy value that may
+                                       // persist only in older rows — spec F2)
     pub status_basis: &'static str,    // "exit" | "piped"
 }
 
@@ -420,8 +424,8 @@ pub fn split_segments(cmd: &str) -> Vec<String> {
 }
 
 /// Evaluate a compound Bash command and return the FIRST segment that matches
-/// a verification tool (Tier-1) or test/spec keyword (Tier-2), with its
-/// `status_basis` (whether a downstream non-pager pipe masks the exit code).
+/// a verification tool (known_tool allowlist), with its `status_basis`
+/// (whether a downstream non-pager pipe masks the exit code).
 pub fn matched_segment(cmd: &str) -> Option<MatchedSegment> {
     let segs = split_segments(cmd);
     for (idx, seg) in segs.iter().enumerate() {

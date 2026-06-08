@@ -11,11 +11,15 @@
 //!   - `npx tsc -b 2>&1 | tail -20` is a real line from session eb70234e
 //!     (is_error=false) — documents the honest gap that `tsc` is not detected.
 //!
-//! The keyword-tier (`./scripts/run_smoke_test.sh`) and dry-run
-//! (`cargo test --no-run`) lines are SYNTHETIC curated cases (no genuine
-//! sample exists in this user's transcripts); their semantics are also locked
-//! by the in-crate unit tests in `src/insight/verification_allowlist.rs` and
-//! `src/ingest/verification_run.rs`.
+//! The dry-run (`cargo test --no-run`) line is a SYNTHETIC curated case (no
+//! genuine sample exists in this user's transcripts); its semantics are also
+//! locked by the in-crate unit tests in `src/insight/verification_allowlist.rs`
+//! and `src/ingest/verification_run.rs`.
+//!
+//! The former keyword-tier line (`./scripts/run_smoke_test.sh`) and its test
+//! were removed with the Tier-2 keyword fallback (spec F2): the extractor now
+//! only emits `"known_tool"` (deterministic allowlist), so a synthetic
+//! keyword-only command is no longer detected.
 
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::db::{migrate, repo_observed};
@@ -69,15 +73,6 @@ async fn cd_npx_vitest_is_detected_as_known_tool_test_suite_js() {
     // status is "unknown" (is_error=false is no longer used for pass/fail).
     // Content is just a tail fragment: no failure pattern, no "exit code:" text.
     assert_eq!(m.status, "unknown");
-}
-
-#[tokio::test]
-async fn keyword_only_command_is_test_keyword_tier() {
-    let runs = load_runs().await;
-    let m = run_for_kind(&runs, "run_smoke_test.sh").expect("keyword tier run");
-    assert_eq!(m.detection_basis, "test_keyword");
-    assert_eq!(m.command_kind, "test_suite_other");
-    assert_eq!(m.status_basis, "exit");
 }
 
 #[tokio::test]
