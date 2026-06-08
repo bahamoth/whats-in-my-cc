@@ -243,7 +243,7 @@ pub struct SessionUsageDto {
 #[derive(Serialize)]
 pub struct ModelUsageDto {
     pub model: String,
-    /// Number of usage_facet rows for this model (= assistant output events).
+    /// 모델별 usage_facet 행 수(=assistant_events). user_turns는 세션 레벨이라 per-model 없음.
     pub assistant_events: i64,
     pub input_tokens: i64,
     pub cache_creation_input_tokens: i64,

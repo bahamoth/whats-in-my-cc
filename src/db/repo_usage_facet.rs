@@ -401,7 +401,7 @@ mod tests {
     #[tokio::test]
     async fn per_session_metrics_one_row_per_session() {
         let pool = pool().await;
-        // Session A (the shared sess_uf_test): two opus/haiku turns.
+        // Session A (the shared sess_uf_test): two opus/haiku assistant_events.
         insert(&pool, &row("raw_a1", "claude-opus-4-8", 2, 100, 5000, 300))
             .await
             .unwrap();
@@ -411,7 +411,7 @@ mod tests {
         )
         .await
         .unwrap();
-        // Session B: one turn, distinct session_id.
+        // Session B: one assistant_event, distinct session_id.
         let mut b = row("raw_b1", "claude-opus-4-8", 10, 0, 0, 50);
         b.session_id = "sess_uf_other".into();
         insert(&pool, &b).await.unwrap();

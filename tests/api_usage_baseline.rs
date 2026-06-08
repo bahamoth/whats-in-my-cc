@@ -44,12 +44,12 @@ fn uf(
 async fn baseline_endpoint_returns_median_across_sessions() {
     let pool = empty_pool().await;
 
-    // Session 1: turns=1, billed = 100 + 0 + 100 = 200, output 100,
+    // Session 1: assistant_events=1, billed = 100 + 0 + 100 = 200, output 100,
     //   denom = cr(0)+cc(0)+input(100)=100, cache_hit_ratio = 0/100 = 0.0
     repo_usage_facet::insert(&pool, &uf("r1", "sess_lo", 100, 0, 0, 100))
         .await
         .unwrap();
-    // Session 2: turns=1, billed = 100 + 0 + 300 = 400, output 300,
+    // Session 2: assistant_events=1, billed = 100 + 0 + 300 = 400, output 300,
     //   denom = cr(900)+cc(0)+input(100)=1000, cache_hit_ratio = 900/1000 = 0.9
     repo_usage_facet::insert(&pool, &uf("r2", "sess_hi", 100, 0, 900, 300))
         .await

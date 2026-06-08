@@ -9,8 +9,6 @@ use wimcc::ingest::store;
 use wimcc::live::NoopSink;
 use wimcc::model::observed::{EventKind, ObservedEvent};
 
-mod common;
-
 async fn empty_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(2)
