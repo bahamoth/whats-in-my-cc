@@ -280,10 +280,7 @@ cargo test
 
 ## 참고 문서
 
-- 전체 시스템 사양: `docs/index.html`, `docs/00..06_*.html`
+- 전체 시스템 사양: `docs/index.html`, `docs/00..05_*.html`
 - 구현 노트(편차·결정·event-first 재설계): `docs/implementation-notes.html`
 - 기여자용 프로젝트 가이드: `CLAUDE.md`
 
-> HTML 사양서는 2026-06-10에 현재 구현(event-first 뷰, deterministic L1 signal,
-> graph/judge 레이어 삭제)에 맞게 현행화됐다. 과거 결정의 기록은
-> `docs/implementation-notes.html` 참고.

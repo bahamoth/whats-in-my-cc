@@ -2,40 +2,24 @@
 
 ## Project Overview
 
-Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프와
-**evidence-linked insight**를 만드는 로컬 서비스. 사용자는 chat transcript가
-아닌 **execution replay**로 "무엇이, 왜 그렇게 됐는가"를 본다.
+Claude Code 실행을 **로컬에서** 관측하여 **event-first 실행 기록**(`ObservedEvent` +
+correlation 키)과 **evidence-linked Signal**을 만드는 로컬 서비스. 사용자는 chat
+transcript가 아닌 **execution replay**로 "무엇이, 왜 그렇게 됐는가"를 본다.
 
-- 산출물: 개선 patch가 아니라 **evidence-linked insight resource**
+- 산출물: 개선 patch가 아니라 **deterministic L1 Signal + 온디맨드 SessionMetrics**
 - 외부 접근: Pull API / MCP Streamable HTTP — **read-only**
 - 기본 네트워크: `127.0.0.1` binding
-
-### 설계 결정 — graph 레이어 삭제 (2026-06-07, `refactor/drop-judge-graph`)
-
-위 "OTel-first 실행 그래프"의 graph 레이어는 **완전히 삭제됐다.** 메세지·디테일·raw 뷰는
-이미 `ObservedEvent` + correlation 키로 직접 그렸고(event-first), graph node/edge는 어떤
-뷰의 backing도, finding의 근거도 아니었다(extractor는 `view.events`만 사용). 따라서
-`graph_node`/`graph_edge` 테이블·`src/graph/`·`edge_inference`·`/graph` Pull API·MCP
-`get_session_graph`/`explain_node`를 모두 제거했다. ingest는 graph rebuild 대신
-insight 파이프라인을 직접 호출한다. 사양서(00~06)는 2026-06-10에 현행화되어 graph-backed 서술이 제거됐다.
-
-> 동시에 **LLM judge 서브시스템도 삭제**됐다(기본 비활성으로 3/4 extractor가 휴면이었고,
-> 비결정·비로컬 LLM이 deterministic·local-first 철학과 충돌). 모든 extractor가 deterministic
-> L1으로 직접 승격한다. 상세·근거: **`docs/implementation-notes.html#judge-removal`,
-> `#graph-removal`, `#span-dedup`** + `docs/superpowers/plans/2026-06-06-drop-judge-graph-layers.md`.
+- 설계 변경 이력의 SSOT는 git history + `docs/implementation-notes.html`
 
 ## Status
 
-- **단계: MVP EXIT (2026-05-27). slice-1~19 완료, M3·M5·M6·M7 closed, AC-1~7 green.** slice별 구현 상세·이력은 `docs/implementation-notes.html`(§33~36 + `#event-first-redesign` + `#episode-removal`)와 git history.
-- **남은 계획:** UX 재설계 epic (`2026-05-27-wimcc-ux-redesign-epic.md`) — 마일스톤 밖 별도 트랙.
+- **남은 계획:** UX 재설계 epic (`2026-05-27-wimcc-ux-redesign-epic.md`) + 자기개선 지표 트랙. 구현 상세·이력은 `docs/implementation-notes.html`와 git history.
 - **인증 default = `--auth off`** (단일 사용자 dev, DEV-S19-08) — 브라우저로 그대로 접속. 켜려면 `wimcc serve --auth on`: `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요(`/v1/stream`·collectors·SPA는 인증 예외). Token 위치 macOS `~/Library/Application Support/wimcc/token` · Linux `~/.config/wimcc/token` (0600). retention sweep는 `wimcc serve --retention-profile default`.
 - **dev DB 재생성 규칙:** migration 변경(현재 최신 `0022` — 0018 judge drop · 0019 graph drop · 0020 `request_id` 인덱스 · 0021 signal · 0022 verification_run status_provenance) 시 `wimcc init-db` + 재ingest 필요. payload 필드(`tool_call.tool_name`, `assistant_message.model` 등)도 JSON BLOB이라 schema migration 없이 추가되므로 기존 이벤트엔 없음 — 재ingest해야 채워진다.
 
 ## Document Map
 
 작업 시작 전 관련 사양서를 먼저 읽는다. 모두 자기완결 HTML(외부 JS/CSS 없음).
-
-> **사양서 현행화(2026-06-10):** 00~06 문서는 현재 구현(event-first 뷰 · deterministic L1 Signal · graph/judge 삭제 · F1 count-only 집계)에 맞게 전면 갱신됐다. 설계 변경의 정식 이력은 여전히 `docs/implementation-notes.html`(`#event-first-redesign` · `#graph-removal` · `#judge-removal` · `#span-dedup` · `#disposition-classification`)이 single source of truth다. 뷰/window/events-API/signal/correlation 관련 작업 전 해당 섹션을 먼저 읽을 것.
 
 | 작업 영역 | 먼저 읽을 문서 |
 |----------|--------------|
@@ -45,7 +29,6 @@ insight 파이프라인을 직접 호출한다. 사양서(00~06)는 2026-06-10�
 | 스키마 (ObservedEvent, Signal, VerificationRun, Metrics…) | `docs/03_data_model_spec.html` |
 | HTTP / MCP endpoint 계약 | `docs/04_api_mcp_spec.html` |
 | Collection profile·redaction·export | `docs/05_security_governance_spec.html` |
-| Milestone·acceptance criteria | `docs/06_mvp_execution_plan.html` |
 
 `docs/index.html`은 위 문서의 포털.
 
