@@ -264,3 +264,46 @@ fn error_excerpt_is_raw_fact() {
     assert_eq!(cands[0].facts["error_excerpt"], json!("grep: no matches found"));
     assert!(cands[0].facts.get("failure_class").is_none());
 }
+
+/// `<tool_use_error>` 래퍼(하니스 구조화 에러 채널) → resolve_outcome=Failed(Measured)
+/// → 비-Bash 도구(Edit)의 실패도 발화한다. 코퍼스 ~790건(stale-read 431 등)이
+/// 이 경로로만 관측 가능 — real fixture: disposition_v01.jsonl (session 5864d6c7).
+#[test]
+fn fires_on_edit_tool_use_error_without_exit_code() {
+    let mut result = tool_result_ev(1, "tid_e", true);
+    result.payload = json!({
+        "content_ordinal": 0,
+        "tool_result": {
+            "type": "tool_result",
+            "tool_use_id": "tid_e",
+            "is_error": true,
+            "content": "<tool_use_error>File has been modified since read, either by the user or by a linter.</tool_use_error>"
+        }
+    });
+    let events = vec![tool_call_ev(0, "tid_e", "Edit"), result];
+    let view = view_from_events(&events);
+    let cands = ToolFailure.detect(&view, &DetectorConfig::default());
+
+    assert_eq!(cands.len(), 1);
+    assert_eq!(cands[0].detector, "tool_failure");
+}
+
+/// 병렬 호출 취소는 실행 실패가 아니다 → 발화하지 않는다.
+#[test]
+fn does_not_fire_on_cancelled_parallel_call() {
+    let mut result = tool_result_ev(1, "tid_c", true);
+    result.payload = json!({
+        "content_ordinal": 0,
+        "tool_result": {
+            "type": "tool_result",
+            "tool_use_id": "tid_c",
+            "is_error": true,
+            "content": "<tool_use_error>Cancelled: parallel tool call Bash(x)</tool_use_error>"
+        }
+    });
+    let events = vec![tool_call_ev(0, "tid_c", "Bash"), result];
+    let view = view_from_events(&events);
+    let cands = ToolFailure.detect(&view, &DetectorConfig::default());
+
+    assert!(cands.is_empty());
+}

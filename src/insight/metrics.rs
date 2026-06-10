@@ -15,6 +15,7 @@ use sqlx::SqlitePool;
 
 use crate::db::{repo_observed, repo_signal, repo_verification_run};
 use crate::error::Result;
+use crate::insight::disposition::{classify_disposition, Disposition};
 use crate::model::observed::EventKind;
 
 /// Session-level deterministic behavioral metrics.
@@ -44,6 +45,16 @@ pub struct SessionMetrics {
     pub verification_unknown: i64,
     /// Number of `context_bloat` detector signals fired in the session.
     pub context_bloat_count: i64,
+    /// `tool_result`가 사용자 거부 마커로 시작한 호출 수 (실행되지 않음 —
+    /// 실패도 unknown도 아닌 별도 축; `disposition::classify_disposition`).
+    pub tool_user_rejected: i64,
+    /// PreToolUse hook이 차단한 호출 수 ("Hook …denied this tool").
+    pub tool_policy_denied: i64,
+    /// 병렬 tool call 취소 수 ("<tool_use_error>Cancelled: …").
+    pub tool_cancelled: i64,
+    /// 백그라운드 실행으로 전환된 호출 수 — 해당 tool_result content는 실제
+    /// 출력이 아니므로 출력 기반 분류에서 제외해야 한다.
+    pub tool_backgrounded: i64,
     /// detector → number of signals fired (signal distribution, spec §6.6).
     pub detector_firing: BTreeMap<String, i64>,
 }
@@ -73,6 +84,30 @@ pub async fn compute_session_metrics(
         .filter(|e| e.kind == EventKind::ToolCall)
         .count() as i64;
 
+    // 실행되지 않은/중단된 호출의 결정론 분류 (disposition.rs — 하니스 마커
+    // prefix 매칭, real fixture로 잠김). 실패(tool_failure)·unknown과 별도 축.
+    let (mut tool_user_rejected, mut tool_policy_denied, mut tool_cancelled, mut tool_backgrounded) =
+        (0i64, 0i64, 0i64, 0i64);
+    for e in &events {
+        if e.kind != EventKind::ToolResult {
+            continue;
+        }
+        let Some(content) = e
+            .payload
+            .pointer("/tool_result/content")
+            .and_then(|v| v.as_str())
+        else {
+            continue;
+        };
+        match classify_disposition(content) {
+            Some(Disposition::UserRejected) => tool_user_rejected += 1,
+            Some(Disposition::PolicyDenied) => tool_policy_denied += 1,
+            Some(Disposition::Cancelled) => tool_cancelled += 1,
+            Some(Disposition::Backgrounded) => tool_backgrounded += 1,
+            None => {}
+        }
+    }
+
     let mut detector_firing: BTreeMap<String, i64> = BTreeMap::new();
     for s in &signals {
         *detector_firing.entry(s.detector.clone()).or_insert(0) += 1;
@@ -94,6 +129,10 @@ pub async fn compute_session_metrics(
         verification_failed,
         verification_unknown,
         context_bloat_count,
+        tool_user_rejected,
+        tool_policy_denied,
+        tool_cancelled,
+        tool_backgrounded,
         detector_firing,
     })
 }

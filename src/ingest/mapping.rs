@@ -216,7 +216,13 @@ fn attachment_meta(
         .get("type")
         .and_then(|t| t.as_str())
         .unwrap_or("");
-    let is_hook = subtype == "hook_success" || subtype == "hook_additional_context";
+    // hook_system_message(차단 규칙 이름+안내문)·hook_cancelled도 hook 실행의
+    // 산물이므로 hook_event로 승격한다. toolUseID/hookName이 없는 subtype은
+    // 해당 키가 None으로 남는다. (real fixture: disposition_v01.jsonl)
+    let is_hook = matches!(
+        subtype,
+        "hook_success" | "hook_additional_context" | "hook_system_message" | "hook_cancelled"
+    );
     let mut e = base(meta, raw_event_id, gen);
     e.session_id = a.session_id.clone();
     e.event_uuid = Some(a.uuid.clone());

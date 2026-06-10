@@ -267,3 +267,86 @@ async fn metrics_separates_verification_unknown_from_measured() {
     assert_eq!(m.verification_unknown, 3);
     // measured = passed + failed = 3; unknown은 분모에서 분리되어 별도 노출.
 }
+
+/// payload를 지정해 tool_result 이벤트를 시드한다 (disposition 카운트용).
+async fn seed_tool_result_with_content(
+    pool: &sqlx::SqlitePool,
+    run_id: &str,
+    session_id: &str,
+    event_id: &str,
+    content: &str,
+) {
+    let raw_id = format!("raw_{event_id}");
+    repo_raw::insert_dedup(
+        pool,
+        &repo_raw::NewRaw {
+            raw_event_id: raw_id.clone(),
+            ingest_run_id: run_id.into(),
+            source_type: "claude_transcript".into(),
+            source_uri: "/tmp/test.jsonl".into(),
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: format!("sha_{event_id}"),
+            payload: b"{}".to_vec(),
+            parse_error: None,
+            captured_at: chrono::Utc::now(),
+            redaction_state: "not_applicable".into(),
+            redaction_manifest: None,
+        },
+    )
+    .await
+    .unwrap();
+    let e = ObservedEvent {
+        event_id: event_id.into(),
+        raw_event_id: raw_id,
+        schema_version: "observed_event.v1".into(),
+        session_id: session_id.into(),
+        observed_at: chrono::Utc::now(),
+        actor: Actor::Tool,
+        kind: EventKind::ToolResult,
+        tool_use_id: Some(format!("toolu_{event_id}")),
+        parser_version: "test@v0".into(),
+        payload: serde_json::json!({
+            "tool_result": {"tool_use_id": format!("toolu_{event_id}"), "content": content}
+        }),
+        ..Default::default()
+    };
+    repo_observed::insert(pool, &e).await.unwrap();
+}
+
+#[tokio::test]
+async fn disposition_counts_from_tool_result_markers() {
+    // 마커 문구는 disposition_v01.jsonl 실 payload와 동일 형태
+    // (classify_disposition 단위/통합 테스트에서 real fixture로 잠김).
+    let pool = test_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+
+    seed_tool_result_with_content(
+        &pool, &run_id, "sess_d", "e1",
+        "The user doesn't want to proceed with this tool use. The tool use was rejected.",
+    ).await;
+    seed_tool_result_with_content(
+        &pool, &run_id, "sess_d", "e2",
+        "Hook PreToolUse:Bash denied this tool",
+    ).await;
+    seed_tool_result_with_content(
+        &pool, &run_id, "sess_d", "e3",
+        "<tool_use_error>Cancelled: parallel tool call Bash(x)</tool_use_error>",
+    ).await;
+    seed_tool_result_with_content(
+        &pool, &run_id, "sess_d", "e4",
+        "Command running in background with ID: abc123. Output is being written to: /tmp/t.output.",
+    ).await;
+    // 일반 출력 + 일반 tool_use_error(실행 실패)는 disposition 카운트에 포함되지 않는다.
+    seed_tool_result_with_content(&pool, &run_id, "sess_d", "e5", "test result: ok. 1 passed").await;
+    seed_tool_result_with_content(
+        &pool, &run_id, "sess_d", "e6",
+        "<tool_use_error>File has been modified since read</tool_use_error>",
+    ).await;
+
+    let m = compute_session_metrics(&pool, "sess_d").await.unwrap();
+    assert_eq!(m.tool_user_rejected, 1);
+    assert_eq!(m.tool_policy_denied, 1);
+    assert_eq!(m.tool_cancelled, 1);
+    assert_eq!(m.tool_backgrounded, 1);
+}

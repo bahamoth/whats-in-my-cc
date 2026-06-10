@@ -110,7 +110,8 @@ export type VerificationRunDto = {
   trigger_tool_use_id: string | null;
   status: 'passed' | 'failed' | 'skipped' | string;
   detection_basis: 'known_tool' | 'test_keyword' | string;
-  status_basis: 'exit' | 'piped' | string;
+  /** 'background' = 백그라운드 전환되어 이 이벤트엔 출력/exit code가 없음 (측정 불가 사유). */
+  status_basis: 'exit' | 'piped' | 'background' | string;
   started_at: string;
   ended_at: string | null;
   exit_code: number | null;
@@ -194,6 +195,14 @@ export type SessionMetricsDto = {
   verification_failed: number;
   verification_unknown: number;
   context_bloat_count: number;
+  /** 사용자가 permission 프롬프트에서 거부한 호출 수 — 실행 안 됨(실패 아님). */
+  tool_user_rejected: number;
+  /** PreToolUse hook이 차단한 호출 수 — 실행 안 됨(실패 아님). */
+  tool_policy_denied: number;
+  /** 병렬 tool call 취소 수 — 실행 안 됨(실패 아님). */
+  tool_cancelled: number;
+  /** 백그라운드 실행 전환 수 — 해당 tool_result content는 실제 출력이 아님. */
+  tool_backgrounded: number;
   detector_firing: Record<string, number>;
 };
 

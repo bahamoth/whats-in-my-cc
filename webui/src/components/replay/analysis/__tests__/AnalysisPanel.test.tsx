@@ -13,6 +13,10 @@ const m: SessionMetricsDto = {
   verification_failed: 1,
   verification_unknown: 0,
   context_bloat_count: 1,
+  tool_user_rejected: 0,
+  tool_policy_denied: 0,
+  tool_cancelled: 0,
+  tool_backgrounded: 0,
   detector_firing: { tool_failure: 2, context_bloat: 1 },
 };
 

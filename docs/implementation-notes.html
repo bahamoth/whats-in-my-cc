@@ -4041,6 +4041,50 @@ vitest: 69 passed
     <p>What's in My Claude Code · Implementation Notes · slice-1 + slice-2 + slice-3 + slice-4 + slice-5 + slice-6 + slice-7 + slice-8 + slice-9 + slice-10a + slice-11 + slice-12 + slice-13 + slice-14 + slice-15 + slice-16 + slice-17 + slice-18 + slice-19 · UX S1–S6 · UX S7–S12 · insight-surface slices 1–7 · stream live-append + thinking viz · facet correlation + 지표 중심 insight · telemetry fold Slice 1–2 · <strong>MVP EXIT 2026-05-27</strong></p>
     <p>Generated as self-contained HTML. No external JS/CSS dependency.</p>
   </footer>
+
+    <h2 id="disposition-classification">결정론 disposition 분류 — 미수집 하니스 마커 회수 (2026-06-10)</h2>
+    <p>
+      실 코퍼스 전수 스캔(78 메인 세션 + 696 서브에이전트 transcript, 136,724 레코드)으로
+      "결정론적 마커가 데이터에 존재하지만 분류되지 않는" 갭을 감사한 결과를 반영했다.
+      모든 마커는 <code>tests/fixtures/transcripts/real/disposition_v01.jsonl</code>(실 세션
+      7라인)에 동결되고 <code>tests/transcript_disposition.rs</code>의 invariant assertion으로 잠긴다.
+    </p>
+    <ul>
+      <li><strong><code>&lt;tool_use_error&gt;</code> → Failed(Measured)</strong> —
+        <code>outcome.rs</code> Step 3b. 하니스가 기계 생성하는 구조화 에러 래퍼(프로즈 파싱 아님)로,
+        exit code가 없는 비-Bash 도구(Edit/Write)의 유일한 transcript 실패 신호다. 코퍼스 ~790건
+        (stale-read 431 · not-read 143 · edit mismatch 152 · InputValidationError 36)이 전부
+        Unknown으로 유실되고 있었다. 이 변경으로 <code>tool_failure</code> detector가 Edit 실패에도
+        발화한다(재ingest 시 신호 수 증가는 의도된 회수). 예외:
+        <code>&lt;tool_use_error&gt;Cancelled:</code>(병렬 호출 취소)는 실행 실패가 아니라 Unknown 유지.</li>
+      <li><strong>disposition 분류기</strong> — <code>src/insight/disposition.rs</code>.
+        실행되지 않은/중단된 호출의 하니스 마커를 prefix 매칭으로 분류:
+        <code>user_rejected</code>(사용자 거부 44건) · <code>policy_denied</code>(hook 차단 4건) ·
+        <code>cancelled</code>(병렬 취소 ~24건) · <code>backgrounded</code>(백그라운드 전환 74건).
+        prefix 기준이므로 출력에 <em>인용</em>된 마커(mid-content, 실측 4건)는 매칭되지 않는다.
+        <code>SessionMetrics</code>/<code>/v1/sessions/:id/metrics</code>에 카운트 4종
+        (<code>tool_user_rejected</code>/<code>tool_policy_denied</code>/<code>tool_cancelled</code>/<code>tool_backgrounded</code>)으로 노출 —
+        실패(tool_failure)·unknown과 다른 축이며 실패율 분모에 넣으면 안 된다.
+        user_message 레벨 중단 마커(<code>[Request interrupted by user]</code>, 83건)는 tool_result에
+        실 payload가 없어(인용 4건뿐) 분류기에서 제외 — real-data anchoring 원칙.</li>
+      <li><strong>verification <code>status_basis="background"</code></strong> — 백그라운드 전환된
+        검증 명령의 tool_result content는 실제 출력이 아니라 안내문이므로 Tier-4 텍스트 추정을
+        적용하지 않고 unknown + basis로 측정 불가 사유를 남긴다. disposition이 잡힌 result는
+        모두 Tier-4에서 제외된다.</li>
+      <li><strong>hook attachment 승격</strong> — <code>hook_system_message</code>(차단 규칙 이름+안내문
+        보유)·<code>hook_cancelled</code>를 <code>attachment_meta</code>가 아닌 <code>hook_event</code>로
+        매핑. policy-denied 이벤트는 이제 tool_call(명령) ↔ tool_result(거부 마커) ↔
+        hook_system_message(규칙명)로 evidence-linked 복원이 가능하다.</li>
+    </ul>
+    <p>
+      <strong>백로그(이번 범위 외, 코퍼스 실측 있음):</strong> turn_duration system 레코드(762건)
+      지표화 · api_error(12건) 카운트 · compact_boundary(55건) 컨텍스트 압축 빈도 ·
+      <code>... [N characters truncated] ...</code> 잘림 fact(6건) · <code>Command timed out</code>(7건) ·
+      user_message 중단 마커(83건). OTel <code>tool_decision</code>은 ingest 코드가 이미 매핑하나
+      이 환경의 OTLP 수집이 꺼져 있어(corpus log_record 0건) real anchoring 불가 — 텔레메트리
+      활성화 후 별도 작업.
+    </p>
+
 </main>
 </div>
 </body></html>
