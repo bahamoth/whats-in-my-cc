@@ -69,9 +69,6 @@ wimcc serve [--bind 127.0.0.1] [--port 7878]
              [--no-watch-transcripts]            # disable the live tail (OTel/hook only)
              [--auth off|on]                      # bearer-token auth on /v1 + /mcp (default: off)
              [--retention-profile none|default|strict]   # background retention sweep (default: none)
-             [--judge none|fixture|anthropic]     # L2 judge backend for findings (default: none)
-             [--judge-budget N]                   # max judge API calls per rebuild (default: 20)
-             [--judge-fixture-path <PATH>]        # required when --judge=fixture
              [--print-token] [--rotate-token]     # manage the bearer token, then exit
              [--sse-keepalive-secs N]             # WebUI live-stream keep-alive (default: 30)
              [--sse-channel-capacity N]           # broadcast channel capacity (default: 512)
@@ -105,15 +102,15 @@ always unauthenticated loopback endpoints.
 | `/v1/sessions` | session list (newest first) |
 | `/v1/sessions/{id}` | `{summary, events[]}` |
 | `/v1/sessions/{id}/events` | paged observed events |
-| `/v1/sessions/{id}/graph` | `{nodes[], edges[]}` (causal-edge inference) |
 | `/v1/sessions/{id}/diff-hunks` | edit hunks for the session |
-| `/v1/sessions/{id}/usage` | token-usage rollup |
-| `/v1/sessions/{id}/findings` | findings scoped to the session |
-| `/v1/sessions/{id}/tool-failures` | tool-failure summaries |
+| `/v1/sessions/{id}/usage` | token-usage rollup (`assistant_events`, `user_turns`, tokens, estimated cost) |
+| `/v1/sessions/{id}/metrics` | on-demand session behavioral metrics — composable counts only (no rates) |
+| `/v1/sessions/{id}/signals` | deterministic detector signals (evidence-linked) |
+| `/v1/signals/{id}` | a single signal |
 | `/v1/sessions/{id}/verification-runs` | verification runs in the session |
 | `/v1/verification-runs/{id}` | a single verification run |
-| `/v1/usage/baseline` | cross-session usage baseline |
-| `/v1/findings`, `/v1/findings/{id}`, `/v1/findings/{id}/evidence` | findings + their evidence refs |
+| `/v1/usage/baseline` | cross-session usage baseline (p25/median/p75) |
+| `/v1/detectors` | detector manifest (5 deterministic L1 detectors) |
 | `/v1/events/{event_id}/raw` | source-preserving raw payload of one event |
 | `/v1/audit` | audit log |
 | `/v1/stream` | Server-Sent Events live stream (drives the WebUI) |
@@ -136,11 +133,9 @@ returns 404.
 `POST`/`GET /mcp` exposes the same read-only data as MCP tools:
 
 - `whats_in_my_cc.search_sessions`
-- `whats_in_my_cc.get_session_graph`
-- `whats_in_my_cc.search_findings`
-- `whats_in_my_cc.explain_node`
 - `whats_in_my_cc.get_file_lineage`
 - `whats_in_my_cc.get_otel_trace`
+- `whats_in_my_cc.list_detectors`
 
 ## Web UI
 
@@ -149,8 +144,10 @@ The `wimcc` binary embeds a React SPA (rust-embed), served at
 
 - `/sessions` — session list
 - `/sessions/:id` — event-first replay: a conversation stream with per-event
-  detail panel, raw-source tab, an insight strip (findings / tool failures /
-  usage), and an untagged-Bash panel for the tagging loop.
+  detail panel, raw-source tab, an insight strip (context efficiency / tokens /
+  verification / tool failures / cost, with provenance badges), an analysis
+  panel (session metrics + detector firing), and an untagged-Bash panel for the
+  tagging loop.
 
 For local development (dev servers, builds, tests) see
 [Build, test, develop](#build-test-develop).
@@ -236,9 +233,11 @@ curl -X POST http://127.0.0.1:7878/hooks/v1/events \
 
 ## Security notes
 
-- **No redaction yet.** Transcripts, OTel logs, and hook payloads can carry
-  prompts, tool input, command output, and secrets. Treat the SQLite file and
-  anything reachable on `127.0.0.1` as sensitive.
+- **Ingest-time redaction** masks known secret patterns (rule pack v1) before
+  raw payloads are stored, recording a `redaction_manifest` per event.
+  High-entropy strings are flagged only, and there is no export-side review —
+  still treat the SQLite file and anything reachable on `127.0.0.1` as
+  sensitive.
 - Edit-hunk text is truncated; binary diffs surface as `<binary>`.
 - The OTel real-fixture freeze script auto-redacts PII to stable placeholders,
   but always grep for your own email before committing fixtures.
@@ -283,7 +282,7 @@ cargo test
 tooling script (`webui/scripts/untagged-bash.ts`) needs Node 22+ for native type
 stripping.
 
-**dev DB regeneration** — after a migration change (latest `0017`), run
+**dev DB regeneration** — after a migration change (latest `0022`), run
 `wimcc init-db` and re-ingest. Payload fields stored as JSON BLOBs
 (`tool_call.tool_name`, `assistant_message.model`, …) are added without a schema
 migration, so existing events won't have them until re-ingested.
@@ -295,7 +294,7 @@ migration, so existing events won't have them until re-ingested.
   `docs/implementation-notes.html`
 - Project guidance for contributors: `CLAUDE.md`
 
-> The HTML specs (01–04) still describe the older graph-backed view model. The
-> shipped views are **event-first** (`ObservedEvent` + correlation keys); graph
-> is inference for `/v1/sessions/:id/graph` and MCP only. See
-> `docs/implementation-notes.html#event-first-redesign`.
+> The HTML specs were refreshed on 2026-06-10 to match the current
+> implementation (event-first views, deterministic L1 signals, graph/judge
+> layers removed). Historical decisions are recorded in
+> `docs/implementation-notes.html`.

@@ -67,9 +67,6 @@ wimcc serve [--bind 127.0.0.1] [--port 7878]
              [--no-watch-transcripts]            # live tail 비활성화 (OTel/hook만)
              [--auth off|on]                      # /v1 + /mcp에 bearer-token 인증 (기본: off)
              [--retention-profile none|default|strict]   # 백그라운드 retention sweep (기본: none)
-             [--judge none|fixture|anthropic]     # finding용 L2 judge 백엔드 (기본: none)
-             [--judge-budget N]                   # rebuild당 최대 judge API 호출 수 (기본: 20)
-             [--judge-fixture-path <PATH>]        # --judge=fixture일 때 필수
              [--print-token] [--rotate-token]     # bearer token 관리 후 종료
              [--sse-keepalive-secs N]             # WebUI live-stream keep-alive (기본: 30)
              [--sse-channel-capacity N]           # broadcast 채널 용량 (기본: 512)
@@ -102,15 +99,15 @@ generated_at, ...}, data: ...}`로 감싼다. `--auth on`이면 모든 `/v1/*`·
 | `/v1/sessions` | 세션 목록 (최신순) |
 | `/v1/sessions/{id}` | `{summary, events[]}` |
 | `/v1/sessions/{id}/events` | 페이지된 observed event |
-| `/v1/sessions/{id}/graph` | `{nodes[], edges[]}` (causal-edge inference) |
 | `/v1/sessions/{id}/diff-hunks` | 세션의 edit hunk |
-| `/v1/sessions/{id}/usage` | 토큰 usage 롤업 |
-| `/v1/sessions/{id}/findings` | 세션 범위 finding |
-| `/v1/sessions/{id}/tool-failures` | tool-failure 요약 |
+| `/v1/sessions/{id}/usage` | 토큰 usage 롤업 (`assistant_events`, `user_turns`, 토큰, 추정 비용) |
+| `/v1/sessions/{id}/metrics` | 온디맨드 세션 행동 지표 — 합성 가능한 count만 (rate 없음) |
+| `/v1/sessions/{id}/signals` | 결정론 detector signal (evidence-linked) |
+| `/v1/signals/{id}` | 단일 signal |
 | `/v1/sessions/{id}/verification-runs` | 세션 내 verification run |
 | `/v1/verification-runs/{id}` | 단일 verification run |
-| `/v1/usage/baseline` | 세션 간 usage baseline |
-| `/v1/findings`, `/v1/findings/{id}`, `/v1/findings/{id}/evidence` | finding + evidence ref |
+| `/v1/usage/baseline` | 세션 간 usage baseline (p25/median/p75) |
+| `/v1/detectors` | detector manifest (deterministic L1 detector 5종) |
 | `/v1/events/{event_id}/raw` | 한 event의 source-preserving raw payload |
 | `/v1/audit` | audit 로그 |
 | `/v1/stream` | Server-Sent Events live 스트림 (WebUI 구동) |
@@ -132,11 +129,9 @@ SDK가 `…/v1/metrics`로 POST해서 wimcc가 404를 반환한다.
 `POST`/`GET /mcp`는 동일한 read-only 데이터를 MCP tool로 노출한다:
 
 - `whats_in_my_cc.search_sessions`
-- `whats_in_my_cc.get_session_graph`
-- `whats_in_my_cc.search_findings`
-- `whats_in_my_cc.explain_node`
 - `whats_in_my_cc.get_file_lineage`
 - `whats_in_my_cc.get_otel_trace`
+- `whats_in_my_cc.list_detectors`
 
 ## Web UI
 
@@ -145,8 +140,9 @@ SDK가 `…/v1/metrics`로 POST해서 wimcc가 404를 반환한다.
 
 - `/sessions` — 세션 목록
 - `/sessions/:id` — event-first replay: event별 detail panel을 갖춘 conversation
-  stream, raw-source 탭, insight strip(findings / tool failure / usage), 그리고
-  tagging loop용 untagged-Bash 패널.
+  stream, raw-source 탭, insight strip(컨텍스트 효율/토큰/검증/도구 실패/비용,
+  provenance 배지), 분석 패널(세션 지표 + detector 분포), 그리고 tagging loop용
+  untagged-Bash 패널.
 
 로컬 개발(dev 서버·빌드·테스트)은 아래 **빌드 · 테스트 · 개발** 섹션을 참고한다.
 
@@ -230,9 +226,10 @@ curl -X POST http://127.0.0.1:7878/hooks/v1/events \
 
 ## 보안 주의
 
-- **아직 redaction 없음.** transcript, OTel log, hook payload는 prompt, tool input,
-  명령 출력, secret을 담을 수 있다. SQLite 파일과 `127.0.0.1`로 닿는 모든 것을 민감하게
-  취급할 것.
+- **ingest 시점 redaction**이 raw payload 저장 전에 알려진 secret 패턴을 마스킹하고
+  (rule pack v1) event별 `redaction_manifest`를 남긴다. high-entropy 문자열은
+  flag만 하며 export-side review는 없다 — SQLite 파일과 `127.0.0.1`로 닿는 모든 것은
+  여전히 민감하게 취급할 것.
 - edit-hunk 텍스트는 truncate되며, 바이너리 diff는 `<binary>`로 표시된다.
 - OTel real-fixture freeze 스크립트는 PII를 안정적 placeholder로 자동 redact하지만,
   fixture를 커밋하기 전 항상 본인 이메일을 grep할 것.
@@ -276,7 +273,7 @@ cargo test
 **Node 버전** — 빌드는 Node 20 (`webui/.nvmrc`). untagged-Bash 도구 스크립트
 (`webui/scripts/untagged-bash.ts`)는 네이티브 타입 스트리핑을 위해 Node 22+가 필요하다.
 
-**dev DB 재생성** — 마이그레이션 변경(최신 `0017`) 후에는 `wimcc init-db` + 재ingest가
+**dev DB 재생성** — 마이그레이션 변경(최신 `0022`) 후에는 `wimcc init-db` + 재ingest가
 필요하다. JSON BLOB으로 저장되는 payload 필드(`tool_call.tool_name`,
 `assistant_message.model` 등)는 schema migration 없이 추가되므로, 기존 event는
 재ingest해야 채워진다.
@@ -287,7 +284,6 @@ cargo test
 - 구현 노트(편차·결정·event-first 재설계): `docs/implementation-notes.html`
 - 기여자용 프로젝트 가이드: `CLAUDE.md`
 
-> HTML 사양서(01–04)는 여전히 옛 graph-backed 뷰 모델을 서술한다. 실제 출시된 뷰는
-> **event-first**(`ObservedEvent` + correlation key)이며, graph는
-> `/v1/sessions/:id/graph`와 MCP 전용 inference다.
-> `docs/implementation-notes.html#event-first-redesign` 참고.
+> HTML 사양서는 2026-06-10에 현재 구현(event-first 뷰, deterministic L1 signal,
+> graph/judge 레이어 삭제)에 맞게 현행화됐다. 과거 결정의 기록은
+> `docs/implementation-notes.html` 참고.

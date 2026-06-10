@@ -35,7 +35,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <a href="#decision">반영 결정</a>
 <a href="#map">문서 지도</a>
 <a href="#docs">문서 링크</a>
-<a href="#source">기준</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set · 2026-05-19</div><h1>What's in My Claude Code 문서 포털</h1><p>PRD 개정과 설계·스펙 문서 세트를 한곳에서 탐색하는 HTML 포털.</p><div class="badges"><span class="badge">Pull API</span><span class="badge">MCP Streamable HTTP</span><span class="badge">annotation removed</span><span class="badge">OTel-first</span></div></header>
+<a href="#source">기준</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set · 2026-05-19 · rev 2026-06-10 현행화</div><h1>What's in My Claude Code 문서 포털</h1><p>PRD 개정과 설계·스펙 문서 세트를 한곳에서 탐색하는 HTML 포털. 전 문서는 2026-06-10에 현재 구현(event-first 뷰 · deterministic L1 Signal · graph/judge 레이어 삭제)에 맞게 현행화됐다.</p><div class="badges"><span class="badge">Pull API</span><span class="badge">MCP Streamable HTTP</span><span class="badge">annotation removed</span><span class="badge">OTel-first</span><span class="badge">event-first</span><span class="badge">deterministic L1</span></div></header>
 <section id="overview"><h2><span class="num">01</span>문서 세트 개요</h2>
 <p>이 산출물은 기존 PRD를 <strong>로컬 구동 기반의 실행 인텔리전스 서비스</strong>로 재정렬한 HTML 문서 세트다. 외부 연동은 <em>Pull API</em>와 <em>MCP Streamable HTTP</em>를 우선하며, 외부 시스템이 finding이나 resource에 쓰기 작업을 하는 구조는 제거했다.</p>
 <div class="grid four">
@@ -51,6 +51,10 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <tr><td>어노테이션</td><td><span class="pill red">Removed</span> 외부·사용자 annotation model 제거</td><td>PRD, Data Model, API에서 POST/PATCH feedback write 제거</td></tr>
 <tr><td>collection level</td><td><span class="pill amber">local_full_evidence 기본</span></td><td>Security Spec, PRD, Architecture Spec</td></tr>
 <tr><td>OTel</td><td><span class="pill green">MVP core source</span> 나중에 붙이는 부가 source가 아님</td><td>Architecture, Data Model, MVP Plan 전반</td></tr>
+<tr><td>graph 레이어</td><td><span class="pill red">Removed (2026-06-07)</span> node/edge 테이블·API·MCP 도구 삭제 — event-first(correlation 키)로 대체</td><td>Architecture, Data Model, API/MCP, PRD</td></tr>
+<tr><td>LLM judge</td><td><span class="pill red">Removed (2026-06-06)</span> 모든 extractor deterministic L1</td><td>Architecture, MVP Plan</td></tr>
+<tr><td>Finding 모델</td><td><span class="pill violet">Signal로 대체</span> evidence_refs 필수, detector 5종</td><td>Data Model, API/MCP, PRD</td></tr>
+<tr><td>집계 정직성</td><td><span class="pill green">count만 (F1)</span> rate scalar 미제공 — 소비자가 자기 윈도우로 계산</td><td>Data Model, API/MCP</td></tr>
 <tr><td>문서 형태</td><td><span class="pill blue">분리 HTML</span></td><td>이 문서 세트 전체</td></tr>
 </tbody></table></section>
 <section id="map"><h2><span class="num">03</span>문서 지도</h2>
@@ -68,8 +72,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <section id="docs"><h2><span class="num">04</span>문서 링크</h2><div class="grid three">
 <a class="card" href="00_prd_revised.html"><h4>00 · Revised PRD</h4><p>제품 요구사항, scope, dependency graph, acceptance catalog.</p></a>
 <a class="card" href="01_product_design_spec.html"><h4>01 · Product Design Spec</h4><p>사용자 경험, 화면, interaction, decision states.</p></a>
-<a class="card" href="02_technical_architecture_spec.html"><h4>02 · Technical Architecture Spec</h4><p>로컬 runtime, 수집·정규화·graph·insight pipeline.</p></a>
-<a class="card" href="03_data_model_spec.html"><h4>03 · Data Model Spec</h4><p>ObservedEvent, Graph, Finding, Resource schema.</p></a>
+<a class="card" href="02_technical_architecture_spec.html"><h4>02 · Technical Architecture Spec</h4><p>로컬 runtime, 수집·정규화·side-table·signal pipeline (event-first).</p></a>
+<a class="card" href="03_data_model_spec.html"><h4>03 · Data Model Spec</h4><p>ObservedEvent, Signal, VerificationRun, SessionMetrics schema.</p></a>
 <a class="card" href="04_api_mcp_spec.html"><h4>04 · Pull API & MCP Spec</h4><p>REST-style Pull API, MCP Streamable HTTP resources/tools.</p></a>
 <a class="card" href="05_security_governance_spec.html"><h4>05 · Security & Governance Spec</h4><p>수집 레벨, local binding, redaction, retention, audit.</p></a>
 <a class="card" href="06_mvp_execution_plan.html"><h4>06 · MVP Execution Plan</h4><p>마일스톤, acceptance, test matrix, delivery sequence.</p></a>
