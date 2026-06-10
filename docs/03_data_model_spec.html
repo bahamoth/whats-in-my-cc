@@ -40,11 +40,11 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <a href="#migration">Migration</a>
 <a href="#questions">Feedback</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set</div><h1>Data Model Spec</h1><p>RawEvent, ObservedEvent(telemetry facet 포함), file lineage(DiffHunk), VerificationRun, Signal, SessionMetrics/usage schema를 정의한다. 뷰와 insight는 ObservedEvent + correlation 키로 직접 동작한다(event-first).</p><div class="badges"><span class="badge">Schemas</span><span class="badge">Event-first</span><span class="badge">Evidence</span></div></header>
 <section id="principles"><h2><span class="num">01</span>Data Model Principles</h2>
-<ol><li><strong>OTel-first:</strong> trace_id/span_id/metric/log reference는 나중에 붙이는 optional metadata가 아니라 ObservedEvent의 1급 correlation 컬럼·telemetry facet의 핵심 field다.</li><li><strong>Source-preserving:</strong> normalized object는 항상 raw source reference(<code>raw_event_id</code>)를 갖는다. unknown field는 <code>payload</code> JSON에 보존된다.</li><li><strong>Evidence-linked:</strong> Signal은 비어 있지 않은 <code>evidence_refs</code> 없이 존재할 수 없다 (AC-4).</li><li><strong>No annotation model:</strong> 사용자/외부 서비스가 signal에 correction, label, status를 쓰는 domain object는 정의하지 않는다.</li><li><strong>Schema versioning:</strong> 모든 top-level object는 schema_version과 provenance를 가진다.</li><li><strong>Deterministic L1:</strong> 모든 detector는 결정론 규칙이다. severity/confidence 같은 판단(judgment) 필드는 저장하지 않는다 — facts만 저장한다.</li><li><strong>합성 가능한 count만:</strong> window-고정 rate scalar는 저장·반환하지 않는다. rate = count / window이고 window는 분석마다 다르므로 소비자가 계산한다.</li></ol>
+<ol><li><strong>OTel-first:</strong> trace_id/span_id/metric/log reference는 나중에 붙이는 optional metadata가 아니라 ObservedEvent의 1급 correlation 컬럼·telemetry facet의 핵심 field다.</li><li><strong>Source-preserving:</strong> normalized object는 항상 raw source reference(<code>raw_event_id</code>)를 갖는다. unknown field는 <code>payload</code> JSON에 보존된다.</li><li><strong>Evidence-linked:</strong> 모든 detector는 비어 있지 않은 <code>evidence_refs</code>를 넣도록 detector별 테스트로 잠겨 있다 (AC-4). DB CHECK 제약이나 runtime guard는 아니다 — 컬럼은 <code>NOT NULL</code> TEXT(JSON 배열)일 뿐이다.</li><li><strong>No annotation model:</strong> 사용자/외부 서비스가 signal에 correction, label, status를 쓰는 domain object는 정의하지 않는다.</li><li><strong>Schema versioning:</strong> 모든 top-level object는 schema_version과 provenance를 가진다.</li><li><strong>Deterministic L1:</strong> 모든 detector는 결정론 규칙이다. severity/confidence 같은 판단(judgment) 필드는 저장하지 않는다 — facts만 저장한다.</li><li><strong>합성 가능한 count만:</strong> window-고정 rate scalar는 저장·반환하지 않는다. rate = count / window이고 window는 분석마다 다르므로 소비자가 계산한다.</li></ol>
 <p class="muted">Non-features: export bundle은 제공하지 않는다.</p>
 </section>
 <section id="erd"><h2><span class="num">02</span>Entity Relationship Map</h2>
-<p class="muted">SessionMetrics는 저장 테이블이 아니라 조회 시 on-demand 집계다(점선).</p>
+<p class="muted">SessionMetrics는 저장 테이블이 아니라 조회 시 on-demand 집계다(점선). 이 맵은 분석 데이터 모델 범위만 다룬다 — 운영 테이블(<code>ingest_run</code> · <code>audit</code> · <code>retention_tombstone</code>)은 DB에 존재하지만 doc 05(Security &amp; Governance) 영역이라 여기서 제외한다.</p>
 <div class="diagram"><svg viewBox="0 0 1080 440" width="100%" height="440"><defs><marker id="arrd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#6ee7ff"/></marker></defs>
 <rect x="40" y="40" width="180" height="62" class="nodebox"/><text x="130" y="77" text-anchor="middle" class="svgtext">RawEvent</text>
 <rect x="320" y="40" width="220" height="62" class="nodebox"/><text x="430" y="77" text-anchor="middle" class="svgtext">ObservedEvent</text>
@@ -87,7 +87,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <pre><code>{
   "event_id": "01J...  (ULID)",
   "raw_event_id": "01J...",
-  "schema_version": "observed_event.v1",
+  "schema_version": "0.5.0",     // 전역 SCHEMA_VERSION 상수 (src/model/meta.rs) — per-object 버전이 아니다
   "session_id": "sess_...",
   "event_uuid": "...", "parent_uuid": "...",        // transcript 연쇄
   "observed_at": "2026-06-10T09:12:00Z",
@@ -114,7 +114,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <tr><td><code>system_summary</code></td><td>transcript system 라인. subkind = 원본 subtype.</td></tr>
 <tr><td><code>session_state</code></td><td>세션 상태성 레코드 (예: subkind <code>file_history_snapshot</code>).</td></tr>
 <tr><td><code>attachment_meta</code></td><td>hook으로 승격되지 않은 attachment.</td></tr>
-<tr><td><code>otel_span</code> / <code>metric_sample</code> / <code>log_record</code></td><td>OTLP collector 산출. facet은 각각 telemetry 컬럼 / payload JSON.</td></tr>
+<tr><td><code>otel_span</code> / <code>metric_sample</code> / <code>log_record</code></td><td>OTLP collector 산출. <code>otel_span</code>의 TelemetryFacet은 모델 필드 <code>telemetry</code>다 — observed_event 테이블에 telemetry 컬럼은 없고, 저장 시 payload JSON의 <code>"telemetry"</code> 키로 merge되어 읽기 시 다시 분리된다. metric_sample/log_record의 MetricFacet/LogFacet은 payload JSON.</td></tr>
 <tr><td><code>unknown</code></td><td>분류 실패 — 원본은 raw_event에 보존.</td></tr>
 </tbody></table>
 <h3>Correlation 키</h3>
@@ -130,11 +130,12 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <div class="callout"><strong>Transcript-only file lineage:</strong> DiffHunk rows are produced from the transcript <code>toolUseResult.structuredPatch</code> of Edit tool_result lines. Write tool_results carry <code>structuredPatch=[]</code> by design and produce zero rows. No filesystem watcher, no git poller, no commit-SHA-as-verification-marker. The <code>structuredPatch</code> shape is locked by a real-fixture invariant test.</div>
 <div class="grid"><div class="card"><h4>DiffHunk</h4><pre><code>{
   "diff_hunk_id": "dh_…sha256…",
-  "schema_version": "diff_hunk.v1",
+  "schema_version": "0.5.0",       // diff_hunk는 전역 SCHEMA_VERSION을 저장한다 (per-object 버전 아님)
   "session_id": "sess_real",
   "file_path": "/abs/path/src/service.ts",
   "change_type": "modified",       // added | modified | deleted
-  "line_range_after": { "start": 42, "end": 57 },  // post-image 기준; 빈 hunk면 null
+  "line_range_after_start": 42,    // post-image 기준; 빈 hunk면 둘 다 null
+  "line_range_after_end": 57,      // (flat 컬럼 — nested object 아님)
   "introduced_by_event_id": "01J…(tool_result event_id)",
   "introduced_by_tool_use_id": "toolu_…",
   "patch_preview": " context\n-old\n+new\n",
@@ -157,8 +158,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "status_basis": "exit",            // exit | piped | user_rejected |
                                      // policy_denied | cancelled | background
   "started_at": "…", "ended_at": "…",
-  "exit_code": 1,
-  "failure_summary": "…(512자 truncate)",
+  "exit_code": null,                 // exit code는 outcome 판정에만 쓰이고
+                                     // 컬럼에는 저장되지 않는다 — 현재 전 행 NULL
+  "failure_summary": "…(512 bytes truncate, UTF-8 경계)",
   "raw_event_id": "01J…",
   "parser_version": "verification_run@v1"
 }</code></pre></div></div>
@@ -181,7 +183,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "detector": "tool_failure",
   "subkind": null,                 // 선택적 사실 분류 (해석 아님)
   "summary": "factual summary — 판단 어휘 없음",
-  "evidence_refs": ["01J…"],       // observed_event event_id 배열 — 비어 있을 수 없다 (AC-4)
+  "evidence_refs": ["01J…"],       // observed_event event_id 배열 — 비어 있지 않음은
+                                   // detector별 테스트로 보장 (AC-4; DB CHECK 제약 아님)
   "facts": { },                    // detector별 사실 projection — severity/confidence 없음
   "provenance": { "detector": "tool_failure@v1", "version": "L1", "rule_pack": null },
   "created_at": "…"
@@ -232,11 +235,16 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <tr><td>idx_obs_request_id</td><td>request_id (partial, NOT NULL)</td><td>API 요청 단위 correlated telemetry lookup</td></tr>
 <tr><td>idx_obs_turn_id</td><td>session_id, turn_id</td><td>user_turns 집계, 턴 묶음</td></tr>
 <tr><td>idx_obs_event_uuid / idx_obs_parent_uuid</td><td>event_uuid / parent_uuid (partial)</td><td>transcript 연쇄</td></tr>
+<tr><td>idx_obs_metric_instrument</td><td><code>json_extract(payload,'$.instrument_name')</code> (partial, kind='metric_sample')</td><td>OTel metric instrument별 조회 (payload-expression)</td></tr>
+<tr><td>idx_obs_log_event_name</td><td><code>json_extract(payload,'$.event_name')</code> (partial, kind='log_record')</td><td>OTel log event_name별 조회 (payload-expression)</td></tr>
+<tr><td>idx_raw_event_source</td><td>source_uri, source_line_no</td><td>raw_event source 파일·라인 lookup (ingest resume/dedup)</td></tr>
+<tr><td>idx_raw_source_type</td><td>source_type</td><td><code>/v1/health/sources</code> source_type 집계</td></tr>
 <tr><td>file_lineage_idx</td><td>file_path, diff_hunk_id</td><td>file lineage</td></tr>
 <tr><td>diff_hunk_event_idx / diff_hunk_tool_use_idx</td><td>introduced_by_event_id / introduced_by_tool_use_id</td><td>hunk → 생성 tool_result / tool_use 역추적</td></tr>
 <tr><td>idx_verification_run_session_started / idx_verification_run_trigger</td><td>session+started_at / trigger</td><td>verification 목록, bash↔hook dedup</td></tr>
 <tr><td>idx_usage_facet_session_observed</td><td>session_id, observed_at</td><td>usage 집계, baseline</td></tr>
 <tr><td>idx_signal_session / idx_signal_detector / idx_signal_sess_det</td><td>session_id / detector / (session_id, detector)</td><td>signal 조회, detector_firing 분포</td></tr>
+<tr><td>idx_audit_created</td><td>created_at</td><td>audit 레코드 시간순 조회</td></tr>
 </tbody></table>
 </section>
 <section id="migration"><h2><span class="num">09</span>Schema Migration Policy</h2>

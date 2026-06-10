@@ -54,7 +54,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <rect x="830" y="300" width="220" height="90" class="nodebox3"/><text x="940" y="336" text-anchor="middle" class="svgtext">Serving Layer</text><text x="940" y="358" text-anchor="middle" class="svgtext" opacity=".70">UI · Pull API · MCP · SSE</text>
 <rect x="300" y="445" width="190" height="75" class="nodebox"/><text x="395" y="478" text-anchor="middle" class="svgtext">Raw Store</text><text x="395" y="500" text-anchor="middle" class="svgtext" opacity=".68">raw_event payload</text>
 <rect x="560" y="445" width="210" height="75" class="nodebox"/><text x="665" y="478" text-anchor="middle" class="svgtext">Event Store</text><text x="665" y="500" text-anchor="middle" class="svgtext" opacity=".68">ObservedEvent + side-tables</text>
-<rect x="830" y="445" width="220" height="75" class="nodebox"/><text x="940" y="478" text-anchor="middle" class="svgtext">Signal Store</text><text x="940" y="500" text-anchor="middle" class="svgtext" opacity=".68">signals · detector manifest</text>
+<rect x="830" y="445" width="220" height="75" class="nodebox"/><text x="940" y="478" text-anchor="middle" class="svgtext">Signal Store</text><text x="940" y="500" text-anchor="middle" class="svgtext" opacity=".68">signals</text>
 <path d="M230 77 L300 155" class="edge" marker-end="url(#ar)"/><path d="M230 167 L300 185" class="edge" marker-end="url(#ar)"/><path d="M230 257 L300 220" class="edge" marker-end="url(#ar)"/><path d="M230 347 L300 250" class="edge" marker-end="url(#ar)"/><path d="M490 160 C520 118 535 92 560 87" class="edge" marker-end="url(#ar)"/><path d="M665 132 L665 160" class="edge" marker-end="url(#ar)"/><path d="M665 250 L665 278" class="edge" marker-end="url(#ar)"/><path d="M770 323 C808 290 828 242 830 210" class="edge" marker-end="url(#ar)"/><path d="M940 240 L940 300" class="edge" marker-end="url(#ar)"/><path d="M395 342 L395 445" class="edge" marker-end="url(#ar)"/><path d="M665 368 L665 445" class="edge" marker-end="url(#ar)"/><path d="M940 390 L940 445" class="edge" marker-end="url(#ar)"/></svg></div>
 </section>
 <section id="local"><h2><span class="num">02</span>Local Runtime Boundary</h2>
@@ -63,7 +63,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <section id="ingestion"><h2><span class="num">03</span>Ingestion Layer</h2>
 <table><thead><tr><th>Collector</th><th>Input</th><th>Output</th><th>Failure mode</th></tr></thead><tbody>
 <tr><td>Transcript Collector</td><td>local transcript JSONL — live tail(watch) + <code>wimcc ingest</code> backfill</td><td>raw_event + source offset</td><td>skip malformed line, keep parse error event</td></tr>
-<tr><td>OTel Receiver</td><td>OTLP metrics/logs/traces — <code>POST /otel/v1/traces|metrics|logs</code> (loopback 무인증)</td><td>raw_event + otel_span/metric_sample/log_record 이벤트</td><td>buffer then mark dropped count</td></tr>
+<tr><td>OTel Receiver</td><td>OTLP metrics/logs/traces — <code>POST /otel/v1/traces|metrics|logs</code> (loopback 무인증)</td><td>raw_event + otel_span/metric_sample/log_record 이벤트</td><td>버퍼 없음 — 동기 ingest. malformed 항목은 즉시 reject하고 <code>rejected_spans</code>/<code>rejected_data_points</code>/<code>rejected_log_records</code> 카운트를 HTTP 응답으로 반환</td></tr>
 <tr><td>Hook Receiver</td><td>hook lifecycle payload — <code>POST /hooks/v1/events</code> (loopback 무인증)</td><td>raw_event + hook_event(subkind: pre/post_tool_use 등)</td><td>non-blocking append failure</td></tr>
 <tr><td>File Lineage from Tool Results</td><td>transcript Edit/Write <code>toolUseResult.structuredPatch</code></td><td>DiffHunk (session-scoped)</td><td>Write produces zero hunks (structuredPatch=[]); Claude-external edits and Claude-external commits are out of scope</td></tr>
 </tbody></table>
@@ -72,11 +72,11 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 </section>
 <section id="pipeline"><h2><span class="num">04</span>Pipeline Stages</h2>
 <div class="timeline"><div class="titem"><strong>Stage 1 · Capture</strong><p>transcript live tail + <code>wimcc ingest</code> backfill + OTel/hook collector가 raw source event를 수집하고 <code>raw_event</code>에 원본 그대로 보존한다(source_uri, offset, capture timestamp 부여).</p></div><div class="titem"><strong>Stage 2 · Redaction Gate</strong><p>raw_event 저장 전에 rule_pack@v1(11개 규칙)으로 secret 패턴을 마스킹한다 — <code>src/security/redaction/</code>, ingest/hook/otel 경로 모두 <code>scan()</code> 통과. high-entropy 문자열은 flag-only, 결과는 <code>raw_event.redaction_manifest</code> + <code>meta.redaction_summary</code>로 기록. export-side review·경로 redaction은 제공하지 않는다.</p></div><div class="titem"><strong>Stage 3 · Normalize</strong><p>source별 parser가 <code>ObservedEvent</code>로 변환한다. correlation 키(<code>tool_use_id</code>/<code>request_id</code>/<code>turn_id</code>/<code>message_id</code>)는 1급 컬럼이다. OTel metrics/logs/traces는 telemetry facet을 가진다.</p></div><div class="titem"><strong>Stage 4 · Side-tables</strong><p><code>usage_facet</code>(토큰·모델), <code>diff_hunk</code>(transcript <code>toolUseResult.structuredPatch</code>), <code>verification_run</code>(test/build/lint 분류 + outcome resolution 체인으로 status 결정)을 추출한다.</p></div><div class="titem"><strong>Stage 5 · Insight</strong><p>ingest가 insight 파이프라인을 <strong>직접 호출</strong>한다. deterministic L1 detector 5종(tool_failure, risky_action, context_bloat, final_state_mismatch, re_read)이 <code>Signal</code>을 생성한다 — <code>evidence_refs</code> 필수, 외부 write 없음.</p></div><div class="titem"><strong>Stage 6 · Serve</strong><p>UI, Pull API, MCP Streamable HTTP가 동일 read service를 읽는다. SessionMetrics는 저장하지 않고 조회 시 on-demand 계산한다(count만 — rate scalar 없음). SSE <code>/v1/stream</code>이 WebUI 라이브 갱신을 담당한다.</p></div></div>
-<div class="callout"><strong>Outcome resolution 체인 (tool_result / verification status):</strong> ① OTLP tool_result log의 success attribute → ② hook post_tool_use <code>exit_code</code> → ③ transcript <code>"Exit code N"</code> 라인 → ③b <code>&lt;tool_use_error&gt;</code> 래퍼 → Failed(Measured; Cancelled는 예외) → ④ Unknown. 어느 tier에서 잡혔는지는 <code>status_provenance</code>(measured/estimated/unknown)로 보존된다. <strong>Tier-4 (estimated):</strong> looks_like_failure/success 텍스트 패턴 기반 추정 — 단, <strong>disposition</strong>(tool_result 하니스 마커 prefix → user_rejected/policy_denied/cancelled/backgrounded)이 잡힌 결과에는 적용하지 않는다(가드).</div>
+<div class="callout"><strong>Outcome resolution 체인 (tool_result / verification status):</strong> ① OTLP tool_result log의 success attribute → ② hook post_tool_use <code>exit_code</code> → ③ transcript <code>"Exit code N"</code> 라인 → ③b <code>&lt;tool_use_error&gt;</code> 래퍼 → Failed(Measured; Cancelled는 예외) → ④ Unknown. 어느 tier에서 잡혔는지는 <code>status_provenance</code>(measured/estimated/unknown)로 보존된다. <strong>Tier-4 (estimated):</strong> looks_like_failure/success 텍스트 패턴 기반 추정 — <strong>verification_run 추출 경로에서 command kind가 verification kind(test suite/build/lint/format_check 등)일 때만</strong> 적용된다. 일반 tool_result의 outcome resolution은 Tier-1~3b 이후 Unknown으로 종료한다. 또한 <strong>disposition</strong>(tool_result 하니스 마커 prefix → user_rejected/policy_denied/cancelled/backgrounded)이 잡힌 결과에는 적용하지 않는다(가드).</div>
 </section>
 <section id="stores"><h2><span class="num">05</span>Logical Stores</h2>
 <div class="grid three"><div class="card"><h4>Raw Evidence Store</h4><p><code>raw_event</code> — 원본 payload, source identity, offsets. unknown field도 그대로 보존(source-preserving).</p></div><div class="card"><h4>Normalized Event Store</h4><p><code>ObservedEvent</code> — source_refs, telemetry facet, correlation 키 컬럼(tool_use_id/request_id/turn_id/message_id; request_id 인덱스).</p></div><div class="card"><h4>Side-table Store</h4><p><code>usage_facet</code>, <code>diff_hunk</code>(Edit만 hunk 생성), <code>verification_run</code>(status_provenance measured/estimated/unknown).</p></div><div class="card"><h4>Signal Store</h4><p><code>Signal</code> — detector@v1, subkind, summary, facts(JSON), evidence_refs, provenance{detector, version:"L1", rule_pack}.</p></div><div class="card"><h4>Audit Store</h4><p>local access log, retention deletion.</p></div></div>
-<p class="muted">모든 store는 단일 SQLite 파일(<code>.wimcc.sqlite</code>) 안의 logical 분리다. migrations 현재 head는 <strong>0022</strong>다.</p>
+<p class="muted">모든 store는 단일 SQLite 파일(<code>.wimcc.sqlite</code>) 안의 logical 분리다. migrations 현재 head는 <strong>0022</strong>다. Detector manifest는 DB store가 아니다 — 코드에 컴파일된 정적 상수(<code>src/insight/manifest.rs</code>)이며 <code>GET /v1/detectors</code>와 MCP <code>list_detectors</code>로 노출된다.</p>
 </section>
 <section id="correlation"><h2><span class="num">06</span>Correlation Strategy</h2>
 <p>correlation 키는 <code>ObservedEvent</code>의 <strong>1급 컬럼</strong>이며, 뷰·디테일 패널·detector가 조회 시 직접 join/필터에 사용한다.</p>
@@ -87,32 +87,44 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <tr><td>4</td><td>trace_id + span_id + parent_span_id</td><td>otel_span 계층, model/tool/API operation chain, latency attribution</td><td>high deterministic</td></tr>
 <tr><td>5</td><td>file_path + tool_use_id (structuredPatch)</td><td>edit ↔ diff hunk ↔ file lineage</td><td>high deterministic</td></tr>
 </tbody></table>
-<div class="callout"><strong>텍스트 패턴은 correlation 키가 아니다:</strong> error text 패턴은 outcome resolution <strong>Tier-4(estimated)</strong>에서만, status 추정 목적에 한해 제한적으로 사용된다.</div>
+<div class="callout"><strong>텍스트 패턴은 correlation 키가 아니다:</strong> error text 패턴은 outcome resolution <strong>Tier-4(estimated)</strong>에서만, verification_run status 추정 목적에 한해 제한적으로 사용된다.</div>
 </section>
 <section id="otel"><h2><span class="num">07</span>OTel Integration Details</h2>
 <p>OTel data는 단순 metric dashboard용이 아니라 correlation identity와 outcome/quality signal을 제공한다.</p>
-<div class="grid"><div class="card"><h4>Metrics</h4><p>token, cost, cache, active time, model usage, tool counts. <code>metric_sample</code> 이벤트로 보존, usage/baseline 집계에 사용.</p></div><div class="card"><h4>Logs / Events</h4><p>API request/error, tool result, lifecycle event. Transcript/hook와 cross-reference. <strong>OTLP tool_result log는 outcome resolution 체인의 Tier-1.</strong></p></div><div class="card"><h4>Traces</h4><p>span hierarchy, parent-child relation, latency attribution. <code>otel_span</code> 이벤트 — correlation의 backbone.</p></div><div class="card"><h4>Resource attributes</h4><p>service.name, session.id, project, user-local context. Access control and grouping.</p></div></div>
-<pre><code>ObservedEvent.telemetry = {
+<div class="grid"><div class="card"><h4>Metrics</h4><p>token, cost, cache, active time, model usage, tool counts. <code>metric_sample</code> 이벤트로 보존, usage/baseline 집계에 사용.</p></div><div class="card"><h4>Logs / Events</h4><p>API request/error, tool result, lifecycle event. Transcript/hook와 cross-reference. <strong>OTLP tool_result log는 outcome resolution 체인의 Tier-1.</strong></p></div><div class="card"><h4>Traces</h4><p>span hierarchy, parent-child relation, latency attribution. <code>otel_span</code> 이벤트 — correlation의 backbone.</p></div><div class="card"><h4>Resource attributes</h4><p>service.name, session.id, project, user-local context. 세션/소스 grouping에 사용되고 <code>telemetry.resource</code>로 원본 보존된다. access control에는 사용되지 않는다(인증은 bearer 미들웨어뿐).</p></div></div>
+<pre><code>// ObservedEvent — trace identity와 latency는 최상위 컬럼이다
+{
   "trace_id": "trace_abc",
   "span_id": "span_def",
   "parent_span_id": "span_parent",
-  "span_kind": "client",
-  "metric_refs": ["metric_token_input_001"],
-  "log_event_refs": ["otel_log_error_001"],
   "latency_ms": 1842,
-  "cost_estimate": { "amount": 0.18, "currency": "USD" }
+
+  // ObservedEvent.telemetry — TelemetryFacet (otel_span 등 telemetry 이벤트)
+  "telemetry": {
+    "span_name": "…",
+    "span_kind": "client",
+    "status_code": "OK",
+    "status_message": null,
+    "start_unix_nano": 1736899200000000000,
+    "end_unix_nano": 1736899201842000000,
+    "attributes": { "…": "원본 span attributes 그대로 보존" },
+    "resource": { "…": "원본 resource attributes 그대로 보존" },
+    "scope_name": "…",
+    "scope_version": "…"
+  }
 }</code></pre>
+<p class="muted">cost는 저장 필드가 아니다 — <code>/v1/sessions/:id/usage</code> 조회 시 public per-million-token list rate 기반으로 on-demand 추정하며 <code>cost_basis="estimate_public_pricing"</code>으로 표기한다.</p>
 </section>
 <section id="serving"><h2><span class="num">08</span>Serving Architecture</h2>
 <div class="callout"><strong>Event-first serving:</strong> Local UI의 메세지·디테일·raw 뷰는 Normalized Event Store(<code>ObservedEvent</code>) + Raw Evidence Store를 correlation 키(<code>tool_use_id</code>/<code>request_id</code>)로 직접 읽는다. 모든 serving path가 동일하다 — 중간 표현 레이어 없음.</div>
-<div class="grid three"><div class="card"><h4>Local UI</h4><p>React SPA(rust-embed). <code>/sessions</code> 목록, <code>/sessions/:id</code> event-first replay — 대화 스트림, per-event 디테일 패널, Raw 탭, insight strip(provenance 배지), 분석 패널, untagged-Bash 패널. SSE <code>/v1/stream</code>으로 라이브 갱신.</p></div><div class="card"><h4>Pull API (read-only GET)</h4><p><code>/v1/health(/sources)</code> · <code>/v1/sessions(/:id)</code> · <code>events</code> · <code>diff-hunks</code> · <code>usage</code> · <code>metrics</code> · <code>signals</code> · <code>verification-runs</code> · <code>/v1/usage/baseline</code> · <code>/v1/detectors</code> · <code>/v1/events/:event_id/raw</code> · <code>/v1/audit</code> · <code>/v1/stream</code>(SSE). 응답은 <code>{meta, data}</code> 래핑.</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p>단일 로컬 endpoint <code>/mcp</code>, read-only 도구 4종: <code>search_sessions</code> · <code>get_file_lineage</code> · <code>get_otel_trace</code> · <code>list_detectors</code>.</p></div></div>
+<div class="grid three"><div class="card"><h4>Local UI</h4><p>React SPA(rust-embed). <code>/sessions</code> 목록, <code>/sessions/:id</code> event-first replay — 대화 스트림, per-event 디테일 패널, Raw 탭, insight strip(provenance 배지), 분석 패널, untagged-Bash 패널. SSE <code>/v1/stream</code>으로 라이브 갱신.</p></div><div class="card"><h4>Pull API (read-only GET)</h4><p><code>/v1/health(/sources)</code> · <code>/v1/sessions(/:id)</code> · <code>events</code> · <code>diff-hunks</code> · <code>usage</code> · <code>metrics</code> · <code>signals</code> · <code>verification-runs</code> · <code>/v1/verification-runs/:id</code> · <code>/v1/signals/:id</code> · <code>/v1/usage/baseline</code> · <code>/v1/detectors</code> · <code>/v1/events/:event_id/raw</code> · <code>/v1/audit</code> · <code>/v1/stream</code>(SSE). 응답은 <code>{meta, data}</code> 래핑.</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p>단일 로컬 endpoint <code>/mcp</code>, read-only 도구 4종: <code>search_sessions</code> · <code>get_file_lineage</code> · <code>get_otel_trace</code> · <code>list_detectors</code>. resources 기능도 제공한다 — <code>resources/list</code> · <code>resources/templates/list</code> · <code>resources/read</code>, resource template 3종: <code>whats-in-my-cc://sessions/{session_id}</code> · <code>whats-in-my-cc://file-lineage/{session_id}</code> · <code>whats-in-my-cc://otel/traces/{trace_id}</code>.</p></div></div>
 <div class="callout danger"><strong>Boundary:</strong> serving layer never applies improvements. No CLAUDE.md update, no hook install, no skill generation, no memory write.</div>
 </section>
 <section id="failure"><h2><span class="num">09</span>Failure and Degrade Semantics</h2>
 <table><thead><tr><th>Failure</th><th>System behavior</th><th>User-visible signal</th></tr></thead><tbody>
 <tr><td>OTel unavailable</td><td>transcript/hook 분석은 계속; outcome resolution이 Tier-2 이하(hook exit_code → transcript)로 강하한다.</td><td><code>/v1/health/sources</code>에 source 상태 표시.</td></tr>
-<tr><td>tool outcome 미확정 (Tier-1~3 모두 실패)</td><td>Tier-4 텍스트 패턴으로 estimated 추정하거나 Unknown으로 남긴다. disposition이 잡힌 결과에는 Tier-4 미적용.</td><td><code>status_provenance</code>(measured/estimated/unknown) 배지.</td></tr>
-<tr><td>Parser schema drift</td><td>raw_event 보존; <code>kind=unknown</code> ObservedEvent로 남긴다.</td><td>Raw 탭(<code>/v1/events/:id/raw</code>)에서 원본 확인 가능.</td></tr>
+<tr><td>tool outcome 미확정 (Tier-1~3 모두 실패)</td><td>일반 tool outcome은 Unknown으로 남는다. verification kind(test/build/lint 등)의 verification_run에 한해 Tier-4 텍스트 패턴으로 estimated 추정한다. disposition이 잡힌 결과에는 Tier-4 미적용.</td><td><code>status_provenance</code>(measured/estimated/unknown) 배지.</td></tr>
+<tr><td>Parser schema drift</td><td>unknown <strong>top-level record type</strong>은 raw_event로만 보존되고 ObservedEvent는 생성하지 않는다. 파싱 실패 라인은 <code>source_type="unparseable"</code> raw_event(parse_error 메세지 포함)로 보존된다. <code>kind=unknown</code> ObservedEvent는 assistant message 내부의 unknown content block에만 부여된다.</td><td>unknown content block(<code>kind=unknown</code>)은 Raw 탭(<code>/v1/events/:id/raw</code>)에서 원본 확인 가능. raw-only 레코드는 ObservedEvent가 없어 이벤트 스트림에 나타나지 않는다.</td></tr>
 <tr><td>Correlation ambiguity</td><td>correlation 키 컬럼을 비워 둔다; false correlation을 만들지 않는다.</td><td>디테일 패널에서 미연결 이벤트로 표시.</td></tr>
 </tbody></table></section>
 <section id="questions"><h2><span class="num">10</span>결정 사항과 미제공 범위</h2><ol><li>OTLP receiver는 서비스 내장이다(<code>/otel/v1/*</code> collector endpoint). 별도 collector dependency는 없다.</li><li>raw evidence store encryption-at-rest는 제공하지 않는다(post-MVP).</li><li>file snapshot은 transcript <code>structuredPatch</code> hunk만 보존한다. 전체 파일 snapshot은 없다.</li></ol></section>

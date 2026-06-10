@@ -4088,6 +4088,39 @@ vitest: 69 passed
       활성화 후 별도 작업.
     </p>
 
+    <h2 id="doc-audit-2026-06-10">문서↔구현 정합성 감사 — 정정 라운드와 코드 측 잔재 (2026-06-10)</h2>
+    <p>
+      전 문서 현행화(같은 날 선행 커밋) 직후, 문서의 검증 가능한 주장을 코드 전수 대조 +
+      실행 서버 실측(curl) + 브라우저 스모크로 재감사했다. 골격 주장(엔드포인트 17종, MCP 도구 4종,
+      enum, SessionMetrics, redaction 규칙 11종, retention)은 일치했고, 발견된 불일치(doc 04의
+      "redaction 미구현" stale 문구, doc 01의 미구현 UI 서술 ~10건, README envelope 과대 주장,
+      doc 02/03의 예시 필드·값 오기 등)는 모두 같은 커밋에서 정정했다. 정정은 전부 문서를
+      구현에 맞추는 방향 — 기능 변경 없음.
+    </p>
+    <p>
+      감사 중 발견한 <strong>코드 측 잔재(문서가 아닌 구현 정리 backlog)</strong>:
+    </p>
+    <ul>
+      <li><code>/v1/detectors</code> manifest의 intent/rationale 문자열이 폐기된 MVP plan 문서를
+        "Plan 6"으로 인용(<code>src/insight/manifest.rs</code>) — 현행 참조처럼 읽힘. 문구 교체 필요.</li>
+      <li><code>/v1/events/:id/raw</code> 응답의 <code>redaction_state</code>가 <code>"none"</code>
+        하드코딩(<code>src/api/routes.rs</code> event_raw) — DB의 <code>raw_event.redaction_state</code>를
+        읽지 않고, doc 05가 정의한 어휘(redacted/not_redacted/not_applicable) 밖의 값을 노출.
+        payload는 저장 시점에 이미 마스킹되므로 보안 문제는 아니나 정합 필요.</li>
+      <li>MCP initialize가 <code>prompts</code> capability를 선언하고 <code>prompts/list</code>는
+        빈 목록을 반환 — 동작은 무해하나 제공 기능이 없으면 capability 선언 정리 검토.</li>
+      <li><code>status_provenance</code>가 backend 응답에는 있으나 WebUI
+        <code>VerificationRunDto</code>(webui/src/api/types.ts)에 없음 — UI 배지는
+        detection_basis·status_basis 기반 4어휘(측정/혼합/추정/미수집)로 동작. 필드 수신 여부 결정 필요.</li>
+      <li>webui <code>laneMapping.ts</code>·<code>causalEdgeStyle.ts</code> — graph/judge 시대
+        dead code(자기 테스트 외 import 0건). 삭제 후보.</li>
+      <li><code>redaction_summary</code>는 <code>/v1/sessions</code>에서 최신 1개 세션만 집계하는
+        단순화 구현(<code>src/api/routes.rs:101-108</code>) — doc 04에 현행대로 기재함. 전 세션
+        집계로 바꿀지는 열린 질문.</li>
+      <li>replay <code>?selected=</code> 딥링크는 로드 윈도 밖 이벤트에서 디테일 패널을 열지
+        못함(브라우저 실측) — 윈도 백필 후 선택 또는 단건 fetch 필요.</li>
+    </ul>
+
 </main>
 </div>
 </body></html>

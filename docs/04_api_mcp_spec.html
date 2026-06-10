@@ -77,7 +77,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     "schema_version": "0.5.0",
     "collection_profile": "local_transcript_slice1",
     "redaction_policy": { "applied": true, "level": "standard" },
-    "redaction_summary": {            // optional — raw event가 포함된 응답에서만
+    "redaction_summary": {            // optional — 아래 callout 참조
       "total_items_redacted": 0,
       "rules_seen": [],
       "any_unredacted_sensitive": false
@@ -87,7 +87,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   },
   "data": { ... }
 }</code></pre>
-<div class="callout warn"><strong>redaction 주의:</strong> <code>redaction_policy</code>는 응답마다 선언되지만 실제 redaction 변환은 아직 구현되지 않았다. raw payload는 수집된 그대로 보존·반환된다 (Security Spec 05 참조).</div>
+<div class="callout"><strong>redaction:</strong> redaction은 ingest 시점에 동작한다 — <code>raw_event</code> 저장 <em>전에</em> rule pack v1(11규칙)으로 payload를 scan하여 마스킹된 텍스트를 저장한다(<code>high_entropy_heuristic.v1</code>은 flag-only, 마스킹하지 않음). 따라서 API가 반환하는 raw payload도 마스킹된 텍스트다. <code>redaction_policy</code>는 <code>{applied: true, level: "standard"}</code>로 선언되며, <code>redaction_summary</code>는 <code>/v1/sessions</code>(목록 첫 번째 = 최신 1개 세션 기준 집계로 단순화된 구현)와 <code>/v1/sessions/:id/events</code>(cursor window 응답)에 실린다 — <code>/v1/events/:id/raw</code>에는 실리지 않는다. 규칙 목록·manifest 상세는 Security Spec 05 §04 참조.</div>
 <h3>주요 DTO 계약</h3>
 <ul>
 <li><strong>usage:</strong> <code>assistant_events</code>(usage_facet 행 수 = assistant 출력 event 수)와 <code>user_turns</code>(distinct <code>turn_id</code> 수 = 사용자 prompt 수)를 제공한다. per-session <code>cache_hit_ratio</code> scalar는 없다 — 소비자가 토큰 성분으로 계산한다. <code>estimated_cost_usd</code>는 공개 단가 <em>추정</em>이며 실제 청구가 아니다 (<code>cost_basis = "estimate_public_pricing"</code>, <code>models_without_pricing</code>으로 미가격 모델 공개).</li>
@@ -99,7 +99,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <section id="filters"><h2><span class="num">04</span>Filtering and Pagination</h2>
 <div class="callout"><strong>session events window:</strong> <code>GET /v1/sessions/:id/events</code>의 <em>no-cursor</em> 초기 window는 raw 최신순이 아니라 <strong>렌더되는 event 기준 conversation-anchored</strong>(<code>[limit번째 최신 렌더 event, 최신 렌더 event]</code> 범위, 사이 텔레메트리 포함)다 — 텔레메트리 버스트로 끝나는 세션의 빈-화면 방지. 디테일용 <strong>on-demand 상관 조회 파라미터</strong> <code>?tool_use_id=…</code> / <code>?request_id=…</code>를 지원한다(payload의 correlation 키로 텔레메트리 반환, cursor 없는 targeted 응답). 설계 근거: <a href="implementation-notes.html#conversation-anchored-window"><code>implementation-notes.html#conversation-anchored-window</code></a>.</div>
 <table><thead><tr><th>Parameter</th><th>Applies to</th><th>Example / 의미</th></tr></thead><tbody>
-<tr><td><code>limit</code></td><td><code>/v1/sessions</code>, <code>/v1/sessions/:id/events</code></td><td><code>?limit=10</code> — 1~5000으로 clamp, 기본 500</td></tr>
+<tr><td><code>limit</code></td><td><code>/v1/sessions</code></td><td><code>?limit=10</code> — 1~5000으로 clamp, 기본 500</td></tr>
+<tr><td><code>limit</code></td><td><code>/v1/sessions/:id/events</code></td><td>기본 500 — <strong>렌더되는 event 수</strong> 기준으로 1~1000 clamp. window가 실어오는 raw 행 수에는 별도 상한 5000이 적용된다 (텔레메트리 밀집 구간 보호)</td></tr>
 <tr><td><code>before</code> / <code>after</code></td><td><code>/v1/sessions/:id/events</code></td><td>cursor 페이징. cursor 포맷은 <code>&lt;observed_at_rfc3339&gt;|&lt;event_id&gt;</code>. 응답의 <code>prev_cursor</code>/<code>next_cursor</code>를 그대로 전달. <code>next_cursor: null</code>은 live tip 도달을 의미 — 이후 갱신은 SSE로</td></tr>
 <tr><td><code>tool_use_id</code></td><td><code>/v1/sessions/:id/events</code></td><td><code>?tool_use_id=toolu_…</code> — payload에 해당 correlation 키를 가진 event들을 반환 (cursor 없는 targeted 응답, 디테일 패널용)</td></tr>
 <tr><td><code>request_id</code></td><td><code>/v1/sessions/:id/events</code></td><td><code>?request_id=req_…</code> — 위와 동일한 on-demand 상관 조회</td></tr>
@@ -117,7 +118,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <rect x="730" y="240" width="210" height="70" class="nodebox3"/><text x="835" y="278" text-anchor="middle" class="svgtext">Notifications</text>
 <path d="M250 90 L370 90" class="edge" marker-end="url(#am)"/><path d="M370 122 L250 122" class="edge" marker-end="url(#am)"/><path d="M610 90 L730 75" class="edge" marker-end="url(#am)"/><path d="M610 105 L730 175" class="edge" marker-end="url(#am)"/><path d="M610 122 C650 220 700 260 730 275" class="edge" marker-end="url(#am)"/></svg></div>
 <h3>Supported JSON-RPC methods</h3>
-<p><code>initialize</code> · <code>tools/list</code> · <code>tools/call</code> · <code>resources/list</code> · <code>resources/templates/list</code> · <code>resources/read</code>. capability 선언: <code>resources: { subscribe: true, listChanged: false }</code>.</p>
+<p><code>initialize</code> · <code>tools/list</code> · <code>tools/call</code> · <code>resources/list</code> · <code>resources/templates/list</code> · <code>resources/read</code> · <code>prompts/list</code>. capability 선언: <code>tools: { listChanged: false }</code>, <code>resources: { subscribe: true, listChanged: false }</code>, <code>prompts: { listChanged: false }</code>, <code>logging: {}</code>. 제공되는 prompt는 없다 — <code>prompts/list</code>는 빈 목록(<code>{ "prompts": [] }</code>)을 반환한다.</p>
 <h3>MCP resource URI scheme <span class="pill blue">src/api/mcp/resources/parse.rs</span></h3><pre><code>whats-in-my-cc://sessions/{session_id}
 whats-in-my-cc://file-lineage/{session_id}
 whats-in-my-cc://otel/traces/{trace_id}</code></pre>
@@ -161,7 +162,7 @@ data: {
 <li><strong>auth 적용 범위 (on일 때):</strong> 모든 <code>/v1/*</code> GET endpoint + <code>/mcp</code>에 <code>Authorization: Bearer &lt;token&gt;</code> 필요. <strong>예외(항상 열림):</strong> <code>/otel/*</code>·<code>/hooks/*</code> collectors, <code>/v1/stream</code>(SSE), static SPA. 토큰 비교는 constant-time(<code>subtle</code>).</li>
 <li><strong>token 위치:</strong> macOS <code>~/Library/Application Support/wimcc/token</code> · Linux <code>~/.config/wimcc/token</code>, mode 0600 (과잉 권한이면 기동 거부). CLI: <code>--print-token</code>, <code>--rotate-token</code>.</li>
 <li><strong>Host allowlist:</strong> 전 route에 host allowlist middleware가 적용된다 (DNS rebinding 방어).</li>
-<li><strong>redaction:</strong> 모든 envelope 응답이 <code>redaction_policy</code>를 선언하지만 실제 redaction 변환은 미구현 — raw payload는 수집 원본 그대로다.</li>
+<li><strong>redaction:</strong> ingest 시점에 rule pack v1(11규칙)으로 마스킹된 payload가 저장된다 — API가 반환하는 raw payload는 마스킹된 텍스트다 (<a href="#api">§03</a> redaction callout, Security Spec 05 §04).</li>
 </ul>
 </section>
 <section id="errors"><h2><span class="num">08</span>Error Model</h2>
@@ -172,7 +173,8 @@ data: {
   "detail": "session sess_123 not found"
 }</code></pre>
 <table><thead><tr><th>Title</th><th>Meaning</th><th>HTTP</th></tr></thead><tbody>
-<tr><td><code>RESOURCE_NOT_FOUND</code></td><td>session / event / verification_run / signal id 없음</td><td>404</td></tr>
+<tr><td><code>RESOURCE_NOT_FOUND</code></td><td>session / event / verification_run id 없음</td><td>404</td></tr>
+<tr><td><code>{"error":"signal not found","signal_id":…}</code></td><td>signal id 없음 — RFC 7807이 아닌 단순 <code>{"error": …}</code> 형식</td><td>404</td></tr>
 <tr><td><code>INVALID_CURSOR</code></td><td><code>before</code>/<code>after</code> cursor 파싱 실패</td><td>400</td></tr>
 <tr><td><code>RESOURCE_GONE</code></td><td>retention sweep로 삭제된 resource (tombstone 기록) — "없었던 것"(404)과 구분</td><td>410</td></tr>
 <tr><td>(본문 없음)</td><td>auth on일 때 token 누락/불일치, 또는 malformed <code>last_event_id</code>(plain text)</td><td>401 / 400</td></tr>

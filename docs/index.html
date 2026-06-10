@@ -59,7 +59,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <rect x="390" y="24" width="200" height="64" class="nodebox"/><text x="490" y="52" text-anchor="middle" class="svgtext">Revised PRD</text><text x="490" y="72" text-anchor="middle" class="svgtext" opacity=".72">source of product truth</text>
 <rect x="36" y="158" width="180" height="64" class="nodebox2"/><text x="126" y="188" text-anchor="middle" class="svgtext">Product Design</text><text x="126" y="208" text-anchor="middle" class="svgtext" opacity=".72">UX / flows</text>
 <rect x="258" y="158" width="180" height="64" class="nodebox2"/><text x="348" y="188" text-anchor="middle" class="svgtext">Architecture</text><text x="348" y="208" text-anchor="middle" class="svgtext" opacity=".72">pipeline / runtime</text>
-<rect x="480" y="158" width="180" height="64" class="nodebox2"/><text x="570" y="188" text-anchor="middle" class="svgtext">Data Model</text><text x="570" y="208" text-anchor="middle" class="svgtext" opacity=".72">schemas / graph</text>
+<rect x="480" y="158" width="180" height="64" class="nodebox2"/><text x="570" y="188" text-anchor="middle" class="svgtext">Data Model</text><text x="570" y="208" text-anchor="middle" class="svgtext" opacity=".72">schemas / correlation</text>
 <rect x="702" y="158" width="220" height="64" class="nodebox2"/><text x="812" y="188" text-anchor="middle" class="svgtext">Pull API & MCP</text><text x="812" y="208" text-anchor="middle" class="svgtext" opacity=".72">read-oriented serving</text>
 <rect x="220" y="302" width="230" height="64" class="nodebox3"/><text x="335" y="332" text-anchor="middle" class="svgtext">Security & Governance</text><text x="335" y="352" text-anchor="middle" class="svgtext" opacity=".72">local + redaction</text>
 <path d="M490 88 C490 118 126 118 126 158" class="edge" marker-end="url(#arrow)"/><path d="M490 88 C490 120 348 124 348 158" class="edge" marker-end="url(#arrow)"/><path d="M490 88 C490 120 570 124 570 158" class="edge" marker-end="url(#arrow)"/><path d="M490 88 C540 120 812 124 812 158" class="edge" marker-end="url(#arrow)"/><path d="M348 222 C336 258 335 274 335 302" class="edge" marker-end="url(#arrow)"/></svg></div>
@@ -74,7 +74,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <a class="card" href="implementation-notes.html"><h4>06 · Implementation Notes</h4><p>slice별 의도적 편차, 트레이드오프, 정책 결정 기록. spec 대비 구현 차이의 single source of truth.</p></a>
 </div></section>
 <section id="source"><h2><span class="num">05</span>기준 문서와 외부 기준</h2>
-<p>기준 PRD는 업로드된 <strong>What's in My Claude Code — Feedback Resource PRD</strong>다. MCP 문서에서는 Streamable HTTP가 POST/GET 기반이며 SSE를 통한 streaming이 가능하다는 점, 그리고 로컬 서버는 Origin 검증과 localhost 바인딩이 중요하다는 점을 설계에 반영했다. Claude Code OTel 문서에서는 metrics, logs/events, traces가 source layer로 사용될 수 있다는 점을 반영했다.</p>
+<p>기준 PRD는 <a href="00_prd_revised.html"><strong>00 · Revised PRD</strong></a>이며, 현재 시스템만 서술한다. MCP 문서에서는 Streamable HTTP가 POST/GET 기반이며 SSE를 통한 streaming이 가능하다는 점, 그리고 로컬 서버는 Origin 검증과 localhost 바인딩이 중요하다는 점을 설계에 반영했다. Claude Code OTel 문서에서는 metrics, logs/events, traces가 source layer로 사용될 수 있다는 점을 반영했다.</p>
 </section>
 <div class="footer">What's in My Claude Code HTML Documentation Set · local-first · evidence-linked · OTel-first</div></main></div>
 <script>
