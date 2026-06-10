@@ -42,7 +42,8 @@ pub struct VerificationRunRecord {
     pub detection_basis: String,     // "known_tool"  ("test_keyword" is a legacy
                                      // value that may persist only in older rows;
                                      // the Tier-2 fallback was removed — spec F2)
-    pub status_basis: String,        // "exit" | "piped" | "background"
+    pub status_basis: String,        // "exit" | "piped" | disposition
+                                     // ("user_rejected"|"policy_denied"|"cancelled"|"background")
     pub started_at: String,          // ISO 8601 UTC
     pub ended_at: Option<String>,
     pub exit_code: Option<i32>,
@@ -183,16 +184,25 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
 
         // status_basis: when the matched segment is piped to a non-pager,
         // the exit code is masked → force status to "unknown" (design §6.2).
-        // Backgrounded 실행도 마찬가지 — content가 출력이 아니고 exit code도
-        // 이 이벤트에 없으므로 unknown + basis="background"로 측정 불가 사유를 남긴다.
-        let backgrounded = result_disposition
-            == Some(crate::insight::disposition::Disposition::Backgrounded);
-        let status_basis = if backgrounded {
-            "background".to_string()
-        } else {
-            m.status_basis.to_string()
+        // Disposition이 잡힌 result도 마찬가지 — 도구가 실행되지 않았거나(거부/차단/
+        // 취소) content가 출력이 아니므로(백그라운드) "exit"로 남기면 "실행됐는데
+        // exit 미관측"으로 오귀속된다. basis에 disposition 이름을 기록해 측정 불가
+        // 사유를 구분 가능하게 남긴다.
+        let status_basis = match result_disposition {
+            Some(crate::insight::disposition::Disposition::UserRejected) => {
+                "user_rejected".to_string()
+            }
+            Some(crate::insight::disposition::Disposition::PolicyDenied) => {
+                "policy_denied".to_string()
+            }
+            Some(crate::insight::disposition::Disposition::Cancelled) => "cancelled".to_string(),
+            Some(crate::insight::disposition::Disposition::Backgrounded) => {
+                "background".to_string()
+            }
+            None => m.status_basis.to_string(),
         };
-        let (status, status_provenance) = if m.status_basis == "piped" || backgrounded {
+        let (status, status_provenance) = if m.status_basis == "piped" || result_disposition.is_some()
+        {
             ("unknown", "unknown".to_string())
         } else {
             (status, status_provenance_str.to_string())
@@ -675,6 +685,38 @@ mod tests {
             runs[0].status_provenance.as_deref(),
             Some("estimated")
         );
+    }
+
+    #[test]
+    fn user_rejected_run_records_disposition_basis() {
+        // 사용자가 검증 명령을 거부하면 도구가 실행되지 않았으므로 basis="exit"
+        // (실행됐는데 exit 미관측)로 남기면 오귀속이다 — disposition을 basis로 기록.
+        let evs = make_bash_run(
+            "toolu_rej1",
+            "cargo test",
+            "The user doesn't want to proceed with this tool use. The tool use was rejected.",
+        );
+        let runs = extract_verification_runs(&evs);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, "unknown");
+        assert_eq!(runs[0].status_basis, "user_rejected");
+        assert_eq!(runs[0].status_provenance.as_deref(), Some("unknown"));
+    }
+
+    #[test]
+    fn disposition_guard_blocks_tier4_even_with_success_pattern() {
+        // 가드 자체를 잠그는 테스트: disposition 마커 뒤에 성공 패턴이 인용되어
+        // 있어도 Tier-4 추정이 적용되지 않아야 한다. (가드를 제거하면
+        // looks_like_success가 " passed in "에 매칭되어 passed/estimated로 오염.)
+        let evs = make_bash_run(
+            "toolu_bg2",
+            "npx vitest run",
+            "Command running in background with ID: x1. Output is being written to: /tmp/t.output. Last line was: 41 passed in 1.20s",
+        );
+        let runs = extract_verification_runs(&evs);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, "unknown");
+        assert_eq!(runs[0].status_basis, "background");
     }
 
     #[test]

@@ -217,8 +217,10 @@ fn attachment_meta(
         .and_then(|t| t.as_str())
         .unwrap_or("");
     // hook_system_message(차단 규칙 이름+안내문)·hook_cancelled도 hook 실행의
-    // 산물이므로 hook_event로 승격한다. toolUseID/hookName이 없는 subtype은
-    // 해당 키가 None으로 남는다. (real fixture: disposition_v01.jsonl)
+    // 산물이므로 hook_event로 승격한다. (real fixture: disposition_v01.jsonl —
+    // 두 attachment 모두 toolUseID/hookName 보유 실측.) 키가 없는 attachment가
+    // 오면 아래 추출이 None으로 남기는 코드 폴백이며, 그 케이스의 실 payload는
+    // 아직 관측되지 않았다.
     let is_hook = matches!(
         subtype,
         "hook_success" | "hook_additional_context" | "hook_system_message" | "hook_cancelled"
