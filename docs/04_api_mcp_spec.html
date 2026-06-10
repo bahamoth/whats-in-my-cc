@@ -39,47 +39,76 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <a href="#auth">Auth</a>
 <a href="#errors">Errors</a>
 <a href="#examples">Examples</a>
-<a href="#questions">Feedback</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set · 2026-05-19</div><h1>Pull API & MCP Streamable HTTP Spec</h1><p>외부 시스템이 로컬 insight resource를 읽기 위한 Pull API와 MCP Streamable HTTP 계약을 정의한다.</p><div class="badges"><span class="badge">Pull API</span><span class="badge">MCP Streamable HTTP</span><span class="badge">read-oriented</span></div></header>
+<a href="#questions">Feedback</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set · 2026-05-19 · rev 2026-06-10 — 구현 현행화 (graph/finding/judge 삭제 반영 · Signal·Verification·Usage·Metrics 계약 갱신, src/api 코드 검증)</div><h1>Pull API & MCP Streamable HTTP Spec</h1><p>외부 시스템이 로컬 insight resource를 읽기 위한 Pull API와 MCP Streamable HTTP 계약을 정의한다.</p><div class="badges"><span class="badge">Pull API</span><span class="badge">MCP Streamable HTTP</span><span class="badge">read-oriented</span></div></header>
 <section id="principles"><h2><span class="num">01</span>Integration Principles</h2>
-<ul><li><strong>Read-oriented:</strong> 외부 client는 insight resource를 읽는다. correction, label, status write는 제공하지 않는다.</li><li><strong>Same domain model:</strong> UI, Pull API, MCP는 같은 resource schema를 사용한다.</li><li><strong>Local-first security:</strong> 기본 endpoint는 localhost에만 bind한다.</li><li><strong>Streaming where useful:</strong> MCP Streamable HTTP는 long-running ingest/analysis 상태와 finding 생성 이벤트를 stream할 수 있다.</li></ul>
+<ul><li><strong>Read-oriented:</strong> 외부 client는 insight resource를 읽는다. correction, label, status write는 제공하지 않는다. 모든 Pull API endpoint는 GET이다 (예외: collector ingest POST — 외부 write가 아니라 로컬 telemetry 수집 입력).</li><li><strong>Same domain model:</strong> WebUI, Pull API, MCP는 같은 resource schema(<code>ObservedEvent</code> · <code>Signal</code> · <code>VerificationRun</code> · <code>DiffHunk</code> · usage aggregate)를 사용한다.</li><li><strong>Local-first security:</strong> 기본 endpoint는 <code>127.0.0.1</code>에만 bind한다.</li><li><strong>Event-first:</strong> 모든 조회는 <code>ObservedEvent</code> + correlation 키(<code>tool_use_id</code>/<code>request_id</code>/<code>turn_id</code>/<code>message_id</code>)에 직접 기반한다. graph node/edge 레이어는 존재하지 않는다.</li><li><strong>Deterministic insight:</strong> signal은 deterministic L1 detector가 생성하며 severity/confidence 같은 judgment 필드가 없다. LLM judge 서브시스템은 존재하지 않는다.</li></ul>
 <div class="callout"><strong>용어:</strong> MCP 공식 명칭은 <em>Streamable HTTP transport</em>다. 본 문서에서는 사용자의 표현인 “MCP streaming http”를 이 transport로 해석한다.</div>
+<div class="callout warn"><strong>⚠ 2026-06-07 — graph·finding·judge 삭제:</strong> 이 문서 초판에 있던 <code>/v1/sessions/:id/graph</code>, <code>/v1/findings*</code>, <code>/v1/resources/*</code>, <code>/v1/export-bundles</code> endpoint와 MCP <code>get_session_graph</code>/<code>explain_node</code>/<code>search_findings</code> 도구는 <strong>모두 삭제되거나 구현되지 않았다</strong>. Finding 모델은 <code>Signal</code>로 대체됐다. 본 개정판은 <code>src/api/mod.rs</code> route 등록과 <code>src/api/dto.rs</code>를 기준으로 현행 계약만 서술한다. 결정 기록: <a href="implementation-notes.html#graph-removal"><code>implementation-notes.html#graph-removal</code></a> · <a href="implementation-notes.html#judge-removal"><code>#judge-removal</code></a>.</div>
 </section>
 <section id="surface"><h2><span class="num">02</span>Serving Surface</h2>
-<div class="grid three"><div class="card"><h4>Local UI</h4><p>브라우저 기반 사람이 보는 화면. 모든 detail은 API-backed view model이 아니라 domain resource로부터 렌더링된다.</p></div><div class="card"><h4>Pull API</h4><p>HTTP JSON API. GET 중심. export bundle 생성 같은 owner-only local action은 별도 보호.</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p>AI client나 tool client가 resources와 read-only tools를 통해 insight를 조회한다.</p></div></div>
+<div class="grid three"><div class="card"><h4>Local WebUI</h4><p>브라우저 기반 React SPA (rust-embed로 서버에 내장). 같은 Pull API + SSE를 소비해 event-first replay와 insight strip을 렌더링한다.</p></div><div class="card"><h4>Pull API</h4><p>HTTP JSON API. <strong>전부 GET</strong> read-only. write endpoint 없음 (export-bundles는 구현되지 않았다).</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p><code>/mcp</code> 단일 endpoint. AI client가 resources와 read-only tools 4종으로 insight를 조회한다.</p></div></div>
+<div class="callout"><strong>Collectors (입력면):</strong> 같은 서버가 OTLP/HTTP receiver(<code>POST /otel/v1/traces|metrics|logs</code>)와 hook receiver(<code>POST /hooks/v1/events</code>)를 함께 연다. 이는 telemetry <em>수집</em>이며 read-only 원칙의 예외가 아니다 — domain resource를 외부에서 수정하는 경로가 아니다.</div>
 </section>
 <section id="api"><h2><span class="num">03</span>Pull API Contract</h2>
-<h3>Endpoint map</h3>
-<table><thead><tr><th>Method</th><th>Path</th><th>Purpose</th><th>Write?</th></tr></thead><tbody>
-<tr><td>GET</td><td><code>/v1/health</code></td><td>service status, version, enabled collectors</td><td>No</td></tr>
-<tr><td>GET</td><td><code>/v1/sessions</code></td><td>list sessions with filters</td><td>No</td></tr>
-<tr><td>GET</td><td><code>/v1/sessions/{session_id}</code></td><td>session summary</td><td>No</td></tr>
-<tr><td>GET</td><td><code>/v1/sessions/{session_id}/graph</code></td><td>nodes, edges, source refs</td><td>No</td></tr>
-<tr><td>GET</td><td><code>/v1/sessions/{session_id}/findings</code></td><td>findings for session</td><td>No</td></tr>
-<tr><td>GET</td><td><code>/v1/findings/{finding_id}</code></td><td>finding detail</td><td>No</td></tr>
-<tr><td>GET</td><td><code>/v1/resources/{resource_id}</code></td><td>feedback/insight resource</td><td>No</td></tr>
-<tr><td>GET</td><td><code>/v1/resources/{resource_id}/evidence</code></td><td>evidence subgraph and source refs</td><td>No</td></tr>
-<tr><td>GET</td><td><code>/v1/file-lineage</code></td><td>file path or diff hunk lineage</td><td>No</td></tr>
-<tr><td>GET</td><td><code>/v1/context-map</code></td><td>context artifact map</td><td>No</td></tr>
-<tr><td>GET</td><td><code>/v1/otel/traces/{trace_id}</code></td><td>trace tree and linked graph nodes</td><td>No</td></tr>
-<tr><td>GET</td><td><code>/v1/export-bundles/{bundle_id}</code></td><td>export bundle manifest/download metadata</td><td>No</td></tr>
-<tr><td>POST</td><td><code>/v1/export-bundles</code></td><td>owner-only local export creation</td><td>Local owner action</td></tr>
+<h3>Endpoint map <span class="pill blue">src/api/mod.rs route 등록 전수</span></h3>
+<table><thead><tr><th>Method</th><th>Path</th><th>Purpose</th><th>Envelope</th></tr></thead><tbody>
+<tr><td>GET</td><td><code>/v1/health</code></td><td>service status: <code>status</code>, <code>build_sha</code>, <code>security.auth_required</code>, <code>security.retention_profile</code></td><td>bare JSON</td></tr>
+<tr><td>GET</td><td><code>/v1/health/sources</code></td><td>source별 ingest freshness (transcript / otel-traces / otel-metrics / otel-logs / hook) — <code>wimcc doctor</code>가 사용</td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/sessions</code></td><td>세션 목록 (최신순, <code>?limit=</code>) — <code>event_count</code>, <code>by_kind</code> 별 행수 포함</td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/sessions/{session_id}</code></td><td>session summary (<code>event_count</code>, <code>by_kind</code>, first/last observed). event 본문은 포함하지 않는다</td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/sessions/{session_id}/events</code></td><td>cursor-paged <code>ObservedEvent</code> window + on-demand 상관 조회 (<code>?tool_use_id=</code> / <code>?request_id=</code>)</td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/sessions/{session_id}/diff-hunks</code></td><td>transcript <code>toolUseResult.structuredPatch</code>에서 추출한 <code>DiffHunk</code> 목록</td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/sessions/{session_id}/usage</code></td><td>token-usage aggregate: <code>assistant_events</code>·<code>user_turns</code>·토큰 4종·<code>billed_tokens</code>·<code>estimated_cost_usd</code>·<code>by_model</code></td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/sessions/{session_id}/metrics</code></td><td>on-demand behavioral metrics (<code>SessionMetrics</code> — count만, 저장 없음)</td><td>{data}</td></tr>
+<tr><td>GET</td><td><code>/v1/sessions/{session_id}/signals</code></td><td>세션의 <code>Signal</code> 목록 (deterministic detector 산출물)</td><td>{data}</td></tr>
+<tr><td>GET</td><td><code>/v1/signals/{signal_id}</code></td><td>signal 단건. retention sweep로 삭제됐으면 <code>410 Gone</code></td><td>{data}</td></tr>
+<tr><td>GET</td><td><code>/v1/sessions/{session_id}/verification-runs</code></td><td>세션의 <code>VerificationRun</code> 목록 (<code>covered_diff_hunk_ids</code>는 응답 시점 계산)</td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/verification-runs/{run_id}</code></td><td>verification run 단건 상세</td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/usage/baseline</code></td><td>세션 횡단 baseline: <code>cache_hit_ratio</code>·<code>billed_tokens</code>·<code>assistant_events</code>·<code>output_tokens</code>의 p25/median/p75</td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/detectors</code></td><td>detector manifest catalog 5종 (id, intent, inputs, rule, output, config_keys, rationale)</td><td>{data}</td></tr>
+<tr><td>GET</td><td><code>/v1/events/{event_id}/raw</code></td><td>event의 raw source payload + source ref(file_path, line_no) + telemetry facet</td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/audit</code></td><td>최근 audit 행 200개 (retention sweep 기록 등)</td><td>{data}</td></tr>
+<tr><td>GET</td><td><code>/v1/stream</code></td><td>SSE live event stream — <a href="#streaming">§06</a></td><td>SSE frames</td></tr>
+<tr><td>POST</td><td><code>/otel/v1/traces</code> · <code>/otel/v1/metrics</code> · <code>/otel/v1/logs</code></td><td>OTLP/HTTP collector receivers (loopback, 무인증)</td><td>accept counters</td></tr>
+<tr><td>POST</td><td><code>/hooks/v1/events</code></td><td>Claude Code hook event receiver (loopback, 무인증)</td><td>accept counters</td></tr>
 </tbody></table>
-<div class="callout warn"><strong>POST exception:</strong> export 생성은 외부 feedback write가 아니라 사용자가 로컬 파일을 만들기 위한 owner-only action이다. 외부 service-to-service correction/status write는 제공하지 않는다.</div>
-<h3>Common response envelope</h3><pre><code>{
-  "data": {},
+<div class="callout danger"><strong>삭제·미구현 endpoint:</strong> <code>/v1/sessions/:id/graph</code>(graph 레이어 삭제), <code>/v1/findings*</code>·<code>/v1/sessions/:id/findings</code>·<code>/v1/sessions/:id/tool-failures</code>(Signal로 대체), <code>/v1/resources/*</code>, <code>/v1/file-lineage</code>(MCP tool로만 제공), <code>/v1/context-map</code>, <code>/v1/otel/traces/{trace_id}</code>(MCP <code>get_otel_trace</code>로만 제공), <code>/v1/export-bundles</code>(<strong>구현되지 않음</strong> — POST/GET 모두 route에 없다). 이들을 호출하면 SPA fallback 또는 404가 반환된다.</div>
+<h3>Common response envelope</h3>
+<p>대부분의 endpoint는 <code>{meta, data}</code> envelope을 반환한다 (<code>src/model/meta.rs</code>의 <code>Envelope&lt;T&gt;</code>). 위 표의 Envelope 열이 예외를 표시한다: <code>/v1/health</code>는 bare JSON, metrics/signals/detectors/audit는 <code>{data}</code>만 반환한다.</p>
+<pre><code>{
   "meta": {
-    "schema_version": "response_envelope.v1",
-    "request_id": "req_01J...",
-    "pagination": { "next_cursor": null },
+    "schema_version": "0.5.0",
+    "collection_profile": "local_transcript_slice1",
     "redaction_policy": { "applied": true, "level": "standard" },
-    "collection_profile": "local_full_evidence",
-    "access": { "mode": "local", "actor": "owner_or_local_client" }
-  }
+    "redaction_summary": {            // optional — raw event가 포함된 응답에서만
+      "total_items_redacted": 0,
+      "rules_seen": [],
+      "any_unredacted_sensitive": false
+    },
+    "generated_at": "2026-06-10T03:00:00Z",
+    "next_cursor": null
+  },
+  "data": { ... }
 }</code></pre>
+<div class="callout warn"><strong>redaction 주의:</strong> <code>redaction_policy</code>는 응답마다 선언되지만 실제 redaction 변환은 아직 구현되지 않았다. raw payload는 수집된 그대로 보존·반환된다 (Security Spec 05 참조).</div>
+<h3>주요 DTO 계약 변경 <span class="pill violet">F1 · 2026-06</span></h3>
+<ul>
+<li><strong>usage:</strong> <code>turns</code> → <code>assistant_events</code>(usage_facet 행 수 = assistant 출력 event 수)로 개명, <code>user_turns</code>(distinct <code>turn_id</code> 수 = 사용자 prompt 수) 추가. per-session <code>cache_hit_ratio</code> scalar는 삭제 — 소비자가 토큰 성분으로 계산한다. <code>estimated_cost_usd</code>는 공개 단가 <em>추정</em>이며 실제 청구가 아니다 (<code>cost_basis = "estimate_public_pricing"</code>, <code>models_without_pricing</code>으로 미가격 모델 공개).</li>
+<li><strong>metrics (<code>SessionMetrics</code>):</strong> count만 노출 — <code>tool_call_total</code>, <code>tool_failure_count</code>, <code>verification_total/passed/failed/unknown</code>, <code>context_bloat_count</code>, <code>tool_user_rejected</code>/<code>tool_policy_denied</code>/<code>tool_cancelled</code>/<code>tool_backgrounded</code>(disposition 축), <code>detector_firing{}</code>. <strong>rate scalar 없음</strong> (F1: <code>verification_pass_rate</code>·<code>tool_failure_rate</code>·<code>cache_hit_ratio</code> 삭제 — rate는 소비자가 count로 계산). <code>verification_unknown</code>은 측정 실패이지 검증 실패가 아니다 — pass/fail 분모에서 제외할 것.</li>
+<li><strong>verification_run:</strong> <code>status</code> ∈ passed|failed|unknown · <code>status_provenance</code> ∈ measured|estimated|unknown · <code>status_basis</code> ∈ exit|piped|user_rejected|policy_denied|cancelled|background · <code>detection_basis</code> = known_tool (<code>test_keyword</code>는 legacy row 전용 — F2부터 생성 중단) · <code>command_kind</code> ∈ test_suite_js/rust/py/go/java, build, build_check, lint, format_check.</li>
+<li><strong>signal (<code>SignalDto</code>):</strong> <code>signal_id</code>, <code>schema_version</code>, <code>session_id</code>, <code>detector</code>(@v1 버전스탬프), <code>subkind</code>, <code>summary</code>, <code>evidence_refs[]</code>(필수), <code>facts{}</code>, <code>provenance{detector, version:"L1", rule_pack}</code>, <code>created_at</code>. severity/confidence/status 같은 judgment 필드는 의도적으로 <strong>없다</strong>.</li>
+</ul>
 </section>
 <section id="filters"><h2><span class="num">04</span>Filtering and Pagination</h2>
 <div class="callout"><strong>⚠ 2026-06-04 변경 (PR #33) — session events window:</strong> <code>GET /v1/sessions/:id/events</code>의 <em>no-cursor</em> 초기 window는 raw 최신순이 아니라 <strong>렌더되는 event 기준 conversation-anchored</strong>(<code>[limit번째 최신 렌더 event, 최신 렌더 event]</code> 범위, 사이 텔레메트리 포함)다 — 텔레메트리 버스트로 끝나는 세션의 빈-화면 방지. 또한 디테일용 <strong>on-demand 상관 조회 파라미터</strong> <code>?tool_use_id=…</code> / <code>?request_id=…</code> 추가(payload의 correlation 키로 텔레메트리 반환, cursor 없는 targeted 응답). 상세: <a href="implementation-notes.html#event-first-redesign"><code>implementation-notes.html#event-first-redesign</code></a>, <a href="implementation-notes.html#conversation-anchored-window"><code>#conversation-anchored-window</code></a>.</div>
-<table><thead><tr><th>Parameter</th><th>Applies to</th><th>Example</th></tr></thead><tbody><tr><td><code>session_id</code></td><td>findings, resources, lineage</td><td><code>?session_id=sess_123</code></td></tr><tr><td><code>category</code></td><td>findings</td><td><code>?category=tool_failure</code></td></tr><tr><td><code>severity</code></td><td>findings</td><td><code>?severity=high</code></td></tr><tr><td><code>file_path</code></td><td>file-lineage</td><td><code>?file_path=src/service.ts</code></td></tr><tr><td><code>trace_id</code></td><td>graph, OTel</td><td><code>?trace_id=trace_abc</code></td></tr><tr><td><code>cursor</code></td><td>list endpoints</td><td><code>?cursor=eyJvZmZzZXQiOjEwMH0=</code></td></tr></tbody></table>
+<table><thead><tr><th>Parameter</th><th>Applies to</th><th>Example / 의미</th></tr></thead><tbody>
+<tr><td><code>limit</code></td><td><code>/v1/sessions</code>, <code>/v1/sessions/:id/events</code></td><td><code>?limit=10</code> — 1~5000으로 clamp, 기본 500</td></tr>
+<tr><td><code>before</code> / <code>after</code></td><td><code>/v1/sessions/:id/events</code></td><td>cursor 페이징. cursor 포맷은 <code>&lt;observed_at_rfc3339&gt;|&lt;event_id&gt;</code>. 응답의 <code>prev_cursor</code>/<code>next_cursor</code>를 그대로 전달. <code>next_cursor: null</code>은 live tip 도달을 의미 — 이후 갱신은 SSE로</td></tr>
+<tr><td><code>tool_use_id</code></td><td><code>/v1/sessions/:id/events</code></td><td><code>?tool_use_id=toolu_…</code> — payload에 해당 correlation 키를 가진 event들을 반환 (cursor 없는 targeted 응답, 디테일 패널용)</td></tr>
+<tr><td><code>request_id</code></td><td><code>/v1/sessions/:id/events</code></td><td><code>?request_id=req_…</code> — 위와 동일한 on-demand 상관 조회</td></tr>
+<tr><td><code>last_event_id</code></td><td><code>/v1/stream</code></td><td><code>?last_event_id=…</code> 또는 <code>Last-Event-ID</code> 헤더 — SSE 재연결 backfill cursor</td></tr>
+</tbody></table>
+<div class="callout"><strong>filter 없는 endpoint:</strong> signals / verification-runs / diff-hunks / usage / metrics는 세션 단위 전체 반환이며 category·severity 류의 filter 파라미터는 없다 (Signal에 severity 자체가 없다).</div>
 </section>
 <section id="mcp"><h2><span class="num">05</span>MCP Streamable HTTP Contract</h2>
 <p>서비스는 로컬 MCP server로도 동작한다. 기본 endpoint는 <code>http://127.0.0.1:{port}/mcp</code>이며, POST로 JSON-RPC messages를 받고 GET + SSE로 server-to-client streaming을 제공할 수 있다.</p>
@@ -90,74 +119,91 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <rect x="730" y="140" width="210" height="70" class="nodebox3"/><text x="835" y="178" text-anchor="middle" class="svgtext">Read-only Tools</text>
 <rect x="730" y="240" width="210" height="70" class="nodebox3"/><text x="835" y="278" text-anchor="middle" class="svgtext">Notifications</text>
 <path d="M250 90 L370 90" class="edge" marker-end="url(#am)"/><path d="M370 122 L250 122" class="edge" marker-end="url(#am)"/><path d="M610 90 L730 75" class="edge" marker-end="url(#am)"/><path d="M610 105 L730 175" class="edge" marker-end="url(#am)"/><path d="M610 122 C650 220 700 260 730 275" class="edge" marker-end="url(#am)"/></svg></div>
-<h3>MCP resource URI scheme</h3><pre><code>whats-in-my-cc://sessions
-whats-in-my-cc://sessions/{session_id}
-whats-in-my-cc://sessions/{session_id}/graph
-whats-in-my-cc://sessions/{session_id}/findings
-whats-in-my-cc://findings/{finding_id}
-whats-in-my-cc://resources/{resource_id}
-whats-in-my-cc://resources/{resource_id}/evidence
-whats-in-my-cc://file-lineage/{session_id}?file_path=src/service.ts
+<h3>Supported JSON-RPC methods</h3>
+<p><code>initialize</code> · <code>tools/list</code> · <code>tools/call</code> · <code>resources/list</code> · <code>resources/templates/list</code> · <code>resources/read</code>. capability 선언: <code>resources: { subscribe: true, listChanged: false }</code>.</p>
+<h3>MCP resource URI scheme <span class="pill blue">src/api/mcp/resources/parse.rs</span></h3><pre><code>whats-in-my-cc://sessions/{session_id}
+whats-in-my-cc://file-lineage/{session_id}
 whats-in-my-cc://otel/traces/{trace_id}</code></pre>
-<h3>Read-only tool catalog</h3><table><thead><tr><th>Tool</th><th>Input</th><th>Output</th><th>Mutates?</th></tr></thead><tbody>
-<tr><td><code>whats_in_my_cc.search_sessions</code></td><td>time range, project, outcome</td><td>session summaries</td><td>No</td></tr>
-<tr><td><code>whats_in_my_cc.get_session_graph</code></td><td>session_id, include_sources</td><td>graph slice</td><td>No</td></tr>
-<tr><td><code>whats_in_my_cc.search_findings</code></td><td>category, severity, session_id</td><td>finding list</td><td>No</td></tr>
-<tr><td><code>whats_in_my_cc.explain_node</code></td><td>node_id</td><td>why panel payload</td><td>No</td></tr>
-<tr><td><code>whats_in_my_cc.get_file_lineage</code></td><td>session_id, file_path</td><td>lineage graph</td><td>No</td></tr>
-<tr><td><code>whats_in_my_cc.get_otel_trace</code></td><td>trace_id</td><td>trace tree + linked nodes</td><td>No</td></tr>
-<tr><td><code>whats_in_my_cc.get_export_manifest</code></td><td>bundle_id</td><td>manifest only</td><td>No</td></tr>
+<p class="muted"><code>resources/list</code>는 저장된 세션들을 <code>whats-in-my-cc://sessions/{session_id}</code> URI로 나열한다. 위 3개 template 외 패턴은 인식되지 않는다.</p>
+<h3>Read-only tool catalog <span class="pill green">4종 — src/api/mcp/tools/</span></h3><table><thead><tr><th>Tool</th><th>Input (required <strong>굵게</strong>)</th><th>Output</th><th>Mutates?</th></tr></thead><tbody>
+<tr><td><code>whats_in_my_cc.search_sessions</code></td><td><code>limit</code> (integer, 기본 20)</td><td>최근 로컬 관측 세션 요약 목록</td><td>No</td></tr>
+<tr><td><code>whats_in_my_cc.get_file_lineage</code></td><td><strong><code>session_id</code></strong>, <strong><code>file_path</code></strong></td><td>해당 파일의 diff-hunk lineage</td><td>No</td></tr>
+<tr><td><code>whats_in_my_cc.get_otel_trace</code></td><td><strong><code>trace_id</code></strong> (hex)</td><td>trace의 OTel span 목록</td><td>No</td></tr>
+<tr><td><code>whats_in_my_cc.list_detectors</code></td><td>(없음)</td><td>detector manifest catalog — <code>/v1/detectors</code>와 동일 내용</td><td>No</td></tr>
 </tbody></table>
+<div class="callout"><strong>tool 출력 형식:</strong> 모든 tool 결과는 JSON을 직렬화한 단일 <code>text</code> content block으로 래핑된다 (DEV-S17-03). 오류는 <code>isError: true</code> + 메시지 text.</div>
+<div class="callout danger"><strong>삭제된 도구:</strong> <code>get_session_graph</code>·<code>explain_node</code>(graph 레이어 삭제), <code>search_findings</code>(finding→Signal 전환), <code>get_export_manifest</code>(export-bundles 미구현). signal 조회 tool은 추후 plan으로 이연.</div>
 </section>
-<section id="streaming"><h2><span class="num">06</span>Streaming Events</h2>
-<p>MCP Streamable HTTP의 streaming은 long-running 분석 상태를 client가 관찰하는 데 사용한다. domain data를 수정하지 않는다.</p>
-<table><thead><tr><th>Event</th><th>Payload</th><th>Use case</th></tr></thead><tbody>
-<tr><td><code>session.ingested</code></td><td>session_id, source_counts</td><td>UI/client refresh</td></tr>
-<tr><td><code>graph.updated</code></td><td>session_id, node_count, edge_count</td><td>replay update</td></tr>
-<tr><td><code>finding.generated</code></td><td>finding_id, category, severity</td><td>alert or client side summary</td></tr>
-<tr><td><code>otel.trace.linked</code></td><td>trace_id, linked_node_count</td><td>OTel correlation progress</td></tr>
-<tr><td><code>export.ready</code></td><td>bundle_id, manifest_uri</td><td>owner-created export completion</td></tr>
+<section id="streaming"><h2><span class="num">06</span>Streaming — <code>GET /v1/stream</code> (SSE)</h2>
+<p>ingest writer가 event를 쓸 때마다 <code>LiveEvent</code> envelope을 SSE로 전달한다. WebUI의 라이브 갱신이 이 stream을 소비한다. domain data를 수정하지 않는다.</p>
+<h3>Frame 종류</h3>
+<table><thead><tr><th>Frame</th><th>Payload</th><th>의미</th></tr></thead><tbody>
+<tr><td>(기본 message, <code>id:</code> = event_id)</td><td><code>LiveEvent</code> JSON</td><td>새 <code>ObservedEvent</code> 도착 알림 — client는 Pull API로 본문을 다시 읽는다</td></tr>
+<tr><td><code>event: resync</code></td><td>안내 JSON</td><td>전달된 cursor가 well-formed지만 store에 없음 — client는 전체 재조회 필요</td></tr>
+<tr><td><code>event: gap</code></td><td>lag 정보</td><td>broadcast channel lag으로 event 유실 — client는 재조회 필요</td></tr>
 </tbody></table>
-<pre><code>event: finding.generated
+<pre><code>id: 01JX9ZD1QJ4N7…
 data: {
-  "schema_version": "stream_event.v1",
-  "finding_id": "find_01J...",
-  "session_id": "sess_123",
-  "category": "tool_failure",
-  "severity": "high"
+  "schema_version": "1",
+  "session_id": "595247aa-…",
+  "event_id": "01JX9ZD1QJ4N7…",
+  "kind": "tool_call",
+  "source_type": "claude_transcript",
+  "observed_at": "2026-06-10T03:00:00Z"
 }</code></pre>
+<ul>
+<li><strong>재연결 backfill:</strong> <code>Last-Event-ID</code> 헤더 또는 <code>?last_event_id=</code> query로 cursor를 전달하면 그 이후 event를 backfill(최대 10,000행) 후 live forward로 전환한다. cursor 없으면 backfill 없이 live만.</li>
+<li><strong>keepalive:</strong> <code>--sse-keepalive-secs</code>(기본 30) 주기 keepalive, <code>--sse-channel-capacity</code>(기본 512) broadcast 버퍼.</li>
+<li><strong>MCP streaming:</strong> <code>GET /mcp</code>는 MCP Streamable HTTP의 server-to-client SSE 채널이다. server가 발행하는 notification은 transport 수준(<code>notifications/initialized</code> echo 등)이며, finding/graph 류의 domain stream event는 존재하지 않는다.</li>
+</ul>
 </section>
 <section id="auth"><h2><span class="num">07</span>Auth, Origin, and Local Binding</h2>
-<ul><li>기본 bind: <code>127.0.0.1</code>.</li><li>all-interface bind는 explicit setting과 UI warning 필요.</li><li>MCP Streamable HTTP endpoint는 Origin header를 검증한다.</li><li>local auth token을 기본으로 요구한다. token은 UI에서 rotate 가능해야 한다.</li><li>raw evidence endpoint는 redaction policy를 항상 반환한다.</li></ul>
+<ul>
+<li><strong>기본 bind:</strong> <code>127.0.0.1</code> (<code>--bind</code>로 변경 시 explicit opt-in). 기본 port <code>7878</code>.</li>
+<li><strong>auth 기본 = off</strong> (단일 사용자 dev, DEV-S19-08). <code>wimcc serve --auth on</code>으로 켜면 bearer token 검증이 활성화된다.</li>
+<li><strong>auth 적용 범위 (on일 때):</strong> 모든 <code>/v1/*</code> GET endpoint + <code>/mcp</code>에 <code>Authorization: Bearer &lt;token&gt;</code> 필요. <strong>예외(항상 열림):</strong> <code>/otel/*</code>·<code>/hooks/*</code> collectors, <code>/v1/stream</code>(SSE), static SPA. 토큰 비교는 constant-time(<code>subtle</code>).</li>
+<li><strong>token 위치:</strong> macOS <code>~/Library/Application Support/wimcc/token</code> · Linux <code>~/.config/wimcc/token</code>, mode 0600 (과잉 권한이면 기동 거부). CLI: <code>--print-token</code>, <code>--rotate-token</code>.</li>
+<li><strong>Host allowlist:</strong> 전 route에 host allowlist middleware가 적용된다 (DNS rebinding 방어).</li>
+<li><strong>redaction:</strong> 모든 envelope 응답이 <code>redaction_policy</code>를 선언하지만 실제 redaction 변환은 미구현 — raw payload는 수집 원본 그대로다.</li>
+</ul>
 </section>
 <section id="errors"><h2><span class="num">08</span>Error Model</h2>
+<p>오류 본문은 RFC 7807 스타일의 <code>{type, title, detail}</code> JSON이다 (서버 오류·일부 경로는 단순 <code>{"error": …}</code>).</p>
 <pre><code>{
-  "error": {
-    "code": "SOURCE_NOT_AVAILABLE",
-    "message": "OTel trace not found for trace_id=trace_abc.",
-    "details": {
-      "trace_id": "trace_abc",
-      "suggested_next": "Check whether OTel collection was enabled for this session."
-    }
-  },
-  "meta": { "request_id": "req_01J...", "schema_version": "error.v1" }
+  "type": "about:blank",
+  "title": "RESOURCE_NOT_FOUND",
+  "detail": "session sess_123 not found"
 }</code></pre>
-<table><thead><tr><th>Code</th><th>Meaning</th><th>HTTP</th></tr></thead><tbody><tr><td>RESOURCE_NOT_FOUND</td><td>id does not exist or outside retention</td><td>404</td></tr><tr><td>REDACTION_REQUIRED</td><td>raw payload requires explicit preview/export action</td><td>403</td></tr><tr><td>SOURCE_NOT_AVAILABLE</td><td>requested source layer not collected</td><td>404/206</td></tr><tr><td>SCHEMA_VERSION_UNSUPPORTED</td><td>client requested unsupported schema</td><td>400</td></tr><tr><td>LOCAL_AUTH_REQUIRED</td><td>missing or invalid token</td><td>401</td></tr></tbody></table>
+<table><thead><tr><th>Title</th><th>Meaning</th><th>HTTP</th></tr></thead><tbody>
+<tr><td><code>RESOURCE_NOT_FOUND</code></td><td>session / event / verification_run / signal id 없음</td><td>404</td></tr>
+<tr><td><code>INVALID_CURSOR</code></td><td><code>before</code>/<code>after</code> cursor 파싱 실패</td><td>400</td></tr>
+<tr><td><code>RESOURCE_GONE</code></td><td>retention sweep로 삭제된 resource (tombstone 기록) — "없었던 것"(404)과 구분</td><td>410</td></tr>
+<tr><td>(본문 없음)</td><td>auth on일 때 token 누락/불일치, 또는 malformed <code>last_event_id</code>(plain text)</td><td>401 / 400</td></tr>
+<tr><td><code>{"error":"internal server error"}</code></td><td>내부 오류</td><td>500</td></tr>
+</tbody></table>
 </section>
 <section id="examples"><h2><span class="num">09</span>Example Queries</h2>
 <pre><code># Pull API
-GET /v1/sessions?snapshot=recent&limit=10
-GET /v1/sessions/sess_123/graph?include_sources=true
-GET /v1/findings/find_001
-GET /v1/resources/fbr_001/evidence?include_raw=false
-GET /v1/otel/traces/trace_abc
+GET /v1/sessions?limit=10
+GET /v1/sessions/sess_123/events?limit=200
+GET /v1/sessions/sess_123/events?tool_use_id=toolu_01AB…   # on-demand 상관 조회
+GET /v1/sessions/sess_123/usage
+GET /v1/sessions/sess_123/metrics
+GET /v1/sessions/sess_123/signals
+GET /v1/sessions/sess_123/verification-runs
+GET /v1/usage/baseline
+GET /v1/detectors
+GET /v1/events/01JX9ZD1…/raw
+GET /v1/stream                                # SSE (curl -N)
 
-# MCP resource examples
-read_resource("whats-in-my-cc://sessions/sess_123/findings")
-call_tool("whats_in_my_cc.explain_node", { "node_id": "node_edit_001" })
-call_tool("whats_in_my_cc.get_file_lineage", { "session_id": "sess_123", "file_path": "src/service.ts" })</code></pre>
+# MCP examples
+read_resource("whats-in-my-cc://sessions/sess_123")
+call_tool("whats_in_my_cc.search_sessions", { "limit": 5 })
+call_tool("whats_in_my_cc.get_file_lineage", { "session_id": "sess_123", "file_path": "src/service.ts" })
+call_tool("whats_in_my_cc.get_otel_trace", { "trace_id": "a1b2c3…" })
+call_tool("whats_in_my_cc.list_detectors", {})</code></pre>
 </section>
-<section id="questions"><h2><span class="num">10</span>피드백 필요 사항</h2><ol><li>Pull API에서 owner-only <code>POST /v1/export-bundles</code>를 허용할지, export는 UI/CLI에서만 만들지 결정 필요.</li><li>MCP endpoint가 streaming event를 기본 활성화할지, client capability negotiation 후 활성화할지 결정 필요.</li><li>API response의 기본 evidence depth를 node-level까지만 할지, edge/raw source refs까지 포함할지 결정 필요.</li></ol></section>
+<section id="questions"><h2><span class="num">10</span>피드백 항목 — 해소 상태</h2><ol><li><code>POST /v1/export-bundles</code> 허용 여부 → <strong>해소:</strong> export-bundles는 MVP에서 구현되지 않았다. route 자체가 없으며, 필요해지면 owner-only local action으로 별도 설계한다.</li><li>MCP streaming event 기본 활성화 여부 → <strong>해소:</strong> domain stream event는 만들지 않았다. 라이브 갱신은 Pull API 측 <code>GET /v1/stream</code>(SSE)이 담당하고, MCP GET SSE는 transport 수준 채널로만 동작한다.</li><li>기본 evidence depth → <strong>해소(모델 변경):</strong> graph node/edge 레이어가 삭제되어 질문 자체가 무효. <code>Signal.evidence_refs</code>가 event 단위 참조를 직접 담고, raw source는 <code>/v1/events/:id/raw</code>로 1-hop 조회한다.</li></ol></section>
 <div class="footer">What's in My Claude Code HTML Documentation Set · local-first · evidence-linked · OTel-first</div></main></div>
 <script>
 const bar=document.querySelector('.scrollbar');

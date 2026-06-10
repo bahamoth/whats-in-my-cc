@@ -17,7 +17,7 @@ Claude Code 실행을 **로컬에서** 관측하여 OTel-first 실행 그래프�
 뷰의 backing도, finding의 근거도 아니었다(extractor는 `view.events`만 사용). 따라서
 `graph_node`/`graph_edge` 테이블·`src/graph/`·`edge_inference`·`/graph` Pull API·MCP
 `get_session_graph`/`explain_node`를 모두 제거했다. ingest는 graph rebuild 대신
-insight 파이프라인을 직접 호출한다. 사양서(00~04)의 graph-backed 서술은 따르지 말 것.
+insight 파이프라인을 직접 호출한다. 사양서(00~06)는 2026-06-10에 현행화되어 graph-backed 서술이 제거됐다.
 
 > 동시에 **LLM judge 서브시스템도 삭제**됐다(기본 비활성으로 3/4 extractor가 휴면이었고,
 > 비결정·비로컬 LLM이 deterministic·local-first 철학과 충돌). 모든 extractor가 deterministic
@@ -28,21 +28,21 @@ insight 파이프라인을 직접 호출한다. 사양서(00~04)의 graph-backed
 
 - **단계: MVP EXIT (2026-05-27). slice-1~19 완료, M3·M5·M6·M7 closed, AC-1~7 green.** slice별 구현 상세·이력은 `docs/implementation-notes.html`(§33~36 + `#event-first-redesign` + `#episode-removal`)와 git history.
 - **남은 계획:** UX 재설계 epic (`2026-05-27-wimcc-ux-redesign-epic.md`) — 마일스톤 밖 별도 트랙.
-- **인증 default = `--auth off`** (단일 사용자 dev, DEV-S19-08) — 브라우저로 그대로 접속. 켜려면 `wimcc serve --auth on`: 모든 `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요. Token 위치 macOS `~/Library/Application Support/wimcc/token` · Linux `~/.config/wimcc/token` (0600). retention sweep는 `wimcc serve --retention-profile default`.
-- **dev DB 재생성 규칙:** migration 변경(현재 최신 `0020` — 0018 judge·0019 graph 테이블 drop, 0020 `request_id` 인덱스) 시 `wimcc init-db` + 재ingest 필요. payload 필드(`tool_call.tool_name`, `assistant_message.model` 등)도 JSON BLOB이라 schema migration 없이 추가되므로 기존 이벤트엔 없음 — 재ingest해야 채워진다.
+- **인증 default = `--auth off`** (단일 사용자 dev, DEV-S19-08) — 브라우저로 그대로 접속. 켜려면 `wimcc serve --auth on`: `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요(`/v1/stream`·collectors·SPA는 인증 예외). Token 위치 macOS `~/Library/Application Support/wimcc/token` · Linux `~/.config/wimcc/token` (0600). retention sweep는 `wimcc serve --retention-profile default`.
+- **dev DB 재생성 규칙:** migration 변경(현재 최신 `0022` — 0018 judge drop · 0019 graph drop · 0020 `request_id` 인덱스 · 0021 signal · 0022 verification_run status_provenance) 시 `wimcc init-db` + 재ingest 필요. payload 필드(`tool_call.tool_name`, `assistant_message.model` 등)도 JSON BLOB이라 schema migration 없이 추가되므로 기존 이벤트엔 없음 — 재ingest해야 채워진다.
 
 ## Document Map
 
 작업 시작 전 관련 사양서를 먼저 읽는다. 모두 자기완결 HTML(외부 JS/CSS 없음).
 
-> **⚠ event-first 뷰 재설계(2026-06-04, PR #33) + graph·judge 삭제(2026-06-07) 반영 주의:** 아래 01/02/03/04 문서는 메세지/디테일/raw 뷰가 **graph node/facet 기반**이고 graph·LLM judge가 존재한다고 서술하지만, 실제 구현은 **`ObservedEvent` + correlation 키 기반**이며 **graph 레이어와 judge 서브시스템은 삭제됐다**. 정식 기록은 `docs/implementation-notes.html`의 `#event-first-redesign` · `#graph-removal` · `#judge-removal` · `#span-dedup`. 뷰/window/events-API/finding/correlation 관련 작업 전 반드시 이 섹션들을 먼저 읽을 것.
+> **사양서 현행화(2026-06-10):** 00~06 문서는 현재 구현(event-first 뷰 · deterministic L1 Signal · graph/judge 삭제 · F1 count-only 집계)에 맞게 전면 갱신됐다. 설계 변경의 정식 이력은 여전히 `docs/implementation-notes.html`(`#event-first-redesign` · `#graph-removal` · `#judge-removal` · `#span-dedup` · `#disposition-classification`)이 single source of truth다. 뷰/window/events-API/signal/correlation 관련 작업 전 해당 섹션을 먼저 읽을 것.
 
 | 작업 영역 | 먼저 읽을 문서 |
 |----------|--------------|
 | 제품 요구·범위·non-goals | `docs/00_prd_revised.html` |
-| UX·screen·replay·why panel | `docs/01_product_design_spec.html` |
+| UX·screen·replay·insight strip·분석 패널 | `docs/01_product_design_spec.html` |
 | 파이프라인·store·OTel 연동 | `docs/02_technical_architecture_spec.html` |
-| 스키마 (ObservedEvent, Graph, Finding…) | `docs/03_data_model_spec.html` |
+| 스키마 (ObservedEvent, Signal, VerificationRun, Metrics…) | `docs/03_data_model_spec.html` |
 | HTTP / MCP endpoint 계약 | `docs/04_api_mcp_spec.html` |
 | Collection profile·redaction·export | `docs/05_security_governance_spec.html` |
 | Milestone·acceptance criteria | `docs/06_mvp_execution_plan.html` |
@@ -55,8 +55,8 @@ insight 파이프라인을 직접 호출한다. 사양서(00~04)의 graph-backed
   correlation_keys·telemetry facet의 1급 키. 나중에 붙이는 식으로 schema 변경 금지.
 - **Source-preserving**: normalized object는 항상 raw source reference를 가진다.
   unknown field는 raw payload에 보존.
-- **Evidence-linked**: `Finding` / `RootCauseHypothesis` / `QualitySummary`는
-  `evidence_refs` 없이 만들지 않는다.
+- **Evidence-linked**: `Signal`(구 Finding 계열 대체)은 `evidence_refs` 없이
+  만들지 않는다.
 - **No annotation model**: 외부에서 finding/resource에 correction·label·status를
   쓰는 API는 정의·구현하지 않는다.
 - **Local-first**: 기본 bind `127.0.0.1`. `0.0.0.0`은 explicit setting일 때만.
@@ -109,7 +109,7 @@ insight 파이프라인을 직접 호출한다. 사양서(00~04)의 graph-backed
 - hidden reasoning / private chain-of-thought 복원 주장
 - 원격 multi-user SaaS 운영 기능 (MVP 범위 외)
 
-예외: `POST /v1/export-bundles`는 owner-only local export action이며 외부 write가 아니다.
+예외: `POST /v1/export-bundles`(미구현, 계획만 존재)는 owner-only local export action이며 외부 write가 아니다.
 
 ## Implementation Notes (지속 유지 의무)
 

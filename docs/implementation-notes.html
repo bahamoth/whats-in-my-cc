@@ -2191,7 +2191,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       <dt>HTTP API</dt>
       <dd>
         <ul>
-          <li><code>GET /v1/findings</code> — ListFilter: session_id, category, severity, status, limit (200)</li>
+          <li><code>GET /v1/findings</code> <em>(현행: Finding→Signal 전환으로 /v1/sessions/:id/signals·/v1/signals/:id로 대체)</em> — ListFilter: session_id, category, severity, status, limit (200)</li>
           <li><code>GET /v1/findings/:id</code> — finding detail</li>
           <li><code>GET /v1/findings/:id/evidence</code> — evidence subgraph + raw_source_refs</li>
           <li><code>GET /v1/sessions/:id/findings</code> — session alias (status="active" 기본)</li>
@@ -2310,7 +2310,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
           AtomicI64 counters — in-memory, server restart 시 reset (DEV-S15-03).</dd>
 
       <dt>CLI</dt>
-      <dd><code>wimcc serve --judge {none|anthropic|fixture} --judge-budget N --judge-fixture-path &lt;path&gt;</code>.
+      <dd><code>wimcc serve --judge {none|anthropic|fixture} --judge-budget N --judge-fixture-path &lt;path&gt; <em>(현행: judge 삭제(0018)로 플래그 전부 제거)</em></code>.
           <code>none</code>은 <code>noop</code>의 alias. Default = none (L2 OFF).</dd>
     </dl>
 
@@ -2423,7 +2423,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     <h2><span class="num">39</span>slice-17 — MCP Streamable HTTP (2026-05-27)</h2>
     <h3>Overview (slice-17)</h3>
     <p><code>POST /mcp</code> (JSON-RPC 2.0) + <code>GET /mcp</code> (SSE) 엔드포인트 추가. 프로토콜 버전 <code>2024-11-05</code> (DEV-S17-02). rmcp 등 SDK 없이 axum 위에 직접 구현 (DEV-S17-01).</p>
-    <p>6개 read-only 도구: <code>get_session_graph</code>, <code>search_sessions</code>, <code>search_findings</code>, <code>explain_node</code>, <code>get_file_lineage</code>, <code>get_otel_trace</code>.<br>
+    <p><em>(현행 2026-06-10: graph·finding 도구 삭제로 4종 — search_sessions/get_file_lineage/get_otel_trace/list_detectors)</em> 6개 read-only 도구: <code>get_session_graph</code>, <code>search_sessions</code>, <code>search_findings</code>, <code>explain_node</code>, <code>get_file_lineage</code>, <code>get_otel_trace</code>.<br>
     6개 resource URI template: <code>whats-in-my-cc://sessions/{session_id}</code>, <code>…/graph</code>, <code>…/findings</code>, <code>whats-in-my-cc://findings/{finding_id}</code>, <code>…/file-lineage/{session_id}</code>, <code>…/otel/traces/{trace_id}</code>.</p>
     <p>도구 출력은 단일 <code>text</code> content block으로 JSON 직렬화 (DEV-S17-03). 세션 상태는 in-memory only (DEV-S17-04). SSE 채널: connect 시 <code>notifications/initialized</code> echo, rebuild 시 <code>notifications/resources/updated</code> fan-out. Origin 검증: non-localhost origin → 403.</p>
     <p>Compat golden: <code>tests/fixtures/mcp/protocol_compat.json</code> — initialize 응답·tools/list·resource templates 형상 동결. <code>tests/mcp_spec_compat.rs</code>가 diff-assert. 변경 시 같은 commit에서 golden 업데이트 필수.</p>
@@ -2967,11 +2967,11 @@ vitest: 69 passed
     <h3>엔드포인트: <code>GET /v1/sessions/:id/usage</code></h3>
     <p>집계 응답 필드:</p>
     <ul>
-      <li><strong>turns</strong>: assistant 턴 수 (<code>usage_facet</code> 행 수).</li>
+      <li><strong>assistant_events</strong> <em>(구 turns — F1에서 개명)</em>: usage_facet 행 수. <strong>user_turns</strong>: distinct turn_id 수 (F1 추가).</li>
       <li><strong>input_tokens / cache_creation_input_tokens / cache_read_input_tokens / output_tokens</strong>: 합산 토큰.</li>
       <li><strong>billed_tokens</strong>: <code>input + cache_creation + output</code> (cache_read는 과금 없음).</li>
-      <li><strong>cache_hit_ratio</strong>: <code>cache_read / (cache_read + cache_creation + input)</code>.</li>
-      <li><strong>by_model</strong>: 모델별 turns + output_tokens 배열.</li>
+      <li><em>(구 cache_hit_ratio scalar는 F1에서 삭제 — 프론트가 토큰 count로 직접 계산, baseline 분위수만 서버 제공)</em></li>
+      <li><strong>by_model</strong>: 모델별 assistant_events + output_tokens 배열.</li>
     </ul>
     <h4>실 데이터 스모크 결과 (세션 <code>653ea169</code>, 2026-05-30)</h4>
     <pre><code>{
@@ -4012,13 +4012,14 @@ vitest: 69 passed
         <code>UsageAggregate.{input_tokens, cache_read_input_tokens, cache_creation_input_tokens}</code>로
         <code>cache_hit_ratio = cache_read / (input + cache_read + cache_creation)</code> 계산.</li>
     </ul>
-    <h3>지표 목록 (facts/counts/ratios — severity/judgment 없음)</h3>
+    <h3>지표 목록 <em>(2026-06-08 F1로 rate scalar 삭제 — 현행은 count만; 아래는 현행 기준으로 정정됨)</em></h3>
     <ul>
       <li><code>tool_call_total</code> — EventKind::ToolCall 이벤트 수.</li>
-      <li><code>tool_failure_count</code> / <code>tool_failure_rate</code> — detector="tool_failure" signal 수 / tool_call_total 비율.</li>
-      <li><code>verification_total</code> / <code>verification_passed</code> / <code>verification_pass_rate</code>.</li>
+      <li><code>tool_failure_count</code> — detector="tool_failure" signal 수. <em>(구 tool_failure_rate는 F1에서 삭제 — rate는 소비자가 count/자기 윈도우로 계산)</em></li>
+      <li><code>verification_total</code> / <code>verification_passed</code> / <code>verification_failed</code> / <code>verification_unknown</code>. <em>(구 verification_pass_rate 삭제; unknown은 분모 금지)</em></li>
       <li><code>context_bloat_count</code> — detector="context_bloat" signal 수.</li>
-      <li><code>cache_hit_ratio</code> — usage_facet에서 0-denominator 시 0.0.</li>
+      <li><code>tool_user_rejected</code> / <code>tool_policy_denied</code> / <code>tool_cancelled</code> / <code>tool_backgrounded</code> — disposition 카운트 (2026-06-10, #disposition-classification).</li>
+      <li><em>(구 cache_hit_ratio scalar는 F1에서 /metrics·/usage에서 삭제 — baseline 분포에만 존재)</em></li>
       <li><code>detector_firing: BTreeMap&lt;String, i64&gt;</code> — 신호분포 (spec §6.6).</li>
     </ul>
     <h3>API</h3>
