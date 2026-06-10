@@ -32,6 +32,10 @@ pub struct RawForEventRow {
     pub captured_at: String, // RFC3339 string straight from sqlite
     pub payload: Vec<u8>,
     pub observed_payload: String,
+    /// doc-audit-2026-06-10 — DB value of `raw_event.redaction_state`
+    /// ("redacted" | "not_redacted" | "not_applicable" per doc 05).
+    /// `None` for legacy rows ingested before Slice-18 added the column.
+    pub redaction_state: Option<String>,
 }
 
 pub async fn get_for_event_id(pool: &SqlitePool, event_id: &str) -> Result<Option<RawForEventRow>> {
@@ -46,7 +50,8 @@ pub async fn get_for_event_id(pool: &SqlitePool, event_id: &str) -> Result<Optio
                 r.source_uri      AS source_uri, \
                 r.source_line_no  AS source_line_no, \
                 r.captured_at     AS captured_at, \
-                r.payload         AS payload \
+                r.payload         AS payload, \
+                r.redaction_state AS redaction_state \
          FROM observed_event o \
          JOIN raw_event r ON r.raw_event_id = o.raw_event_id \
          WHERE o.event_id = ?",
@@ -65,6 +70,7 @@ pub async fn get_for_event_id(pool: &SqlitePool, event_id: &str) -> Result<Optio
         captured_at: r.get("captured_at"),
         payload: r.get("payload"),
         observed_payload: r.get("observed_payload"),
+        redaction_state: r.get("redaction_state"),
     }))
 }
 
@@ -96,21 +102,20 @@ pub async fn insert_dedup(pool: &SqlitePool, r: &NewRaw) -> Result<bool> {
     Ok(res.rows_affected() > 0)
 }
 
-/// Slice-18 — aggregate redaction manifests for a session's raw events.
+/// Slice-18 — aggregate redaction manifests for a single session's raw events.
 ///
-/// Returns a `RedactionSummary` by scanning all `raw_event` rows for a session
-/// (via the `observed_event` join). Bounded by the existing 200-event pagination
-/// cap — callers pass their current page's raw_event_ids.
+/// Returns a `RedactionSummary` by scanning the session's distinct `raw_event`
+/// rows (via the `observed_event` join), capped at 200 rows. Note the cap is a
+/// row budget on this query, not an alignment with the events endpoint's
+/// pagination window (the scan has no ORDER BY).
 ///
 /// If there are no raw events or no manifests, returns a zero-count summary.
 pub async fn aggregate_session_summary(
     pool: &SqlitePool,
     session_id: &str,
 ) -> Result<RedactionSummary> {
-    use sqlx::Row;
-
     let rows = sqlx::query(
-        "SELECT r.redaction_manifest, r.redaction_state \
+        "SELECT r.redaction_manifest \
          FROM raw_event r \
          JOIN observed_event o ON o.raw_event_id = r.raw_event_id \
          WHERE o.session_id = ? \
@@ -120,12 +125,50 @@ pub async fn aggregate_session_summary(
     .bind(session_id)
     .fetch_all(pool)
     .await?;
+    Ok(fold_manifest_rows(&rows))
+}
+
+/// doc-audit-2026-06-10 — aggregate redaction manifests across *multiple*
+/// sessions, for the `/v1/sessions` listing: `meta.redaction_summary` must
+/// cover every session in the response, not just the most recent one. Scans
+/// each listed session's distinct raw rows with no row cap (the session list
+/// itself is already bounded by the endpoint's limit clamp).
+pub async fn aggregate_sessions_summary(
+    pool: &SqlitePool,
+    session_ids: &[String],
+) -> Result<RedactionSummary> {
+    if session_ids.is_empty() {
+        return Ok(fold_manifest_rows(&[]));
+    }
+    let placeholders = (0..session_ids.len())
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT r.redaction_manifest \
+         FROM raw_event r \
+         JOIN observed_event o ON o.raw_event_id = r.raw_event_id \
+         WHERE o.session_id IN ({placeholders}) \
+         GROUP BY r.raw_event_id"
+    );
+    let mut q = sqlx::query(&sql);
+    for id in session_ids {
+        q = q.bind(id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    Ok(fold_manifest_rows(&rows))
+}
+
+/// Fold `redaction_manifest` rows into a `RedactionSummary`. Shared by the
+/// single-session and multi-session aggregates above.
+fn fold_manifest_rows(rows: &[sqlx::sqlite::SqliteRow]) -> RedactionSummary {
+    use sqlx::Row;
 
     let mut total: u32 = 0;
     let mut rules_seen: std::collections::BTreeSet<String> = Default::default();
     let mut any_unredacted = false;
 
-    for row in &rows {
+    for row in rows {
         let manifest_json: Option<String> = row.try_get("redaction_manifest").ok().flatten();
         if let Some(ref json) = manifest_json {
             // Parse only the fields we need to avoid the &'static str lifetime
@@ -149,9 +192,9 @@ pub async fn aggregate_session_summary(
         }
     }
 
-    Ok(RedactionSummary {
+    RedactionSummary {
         total_items_redacted: total,
         rules_seen: rules_seen.into_iter().collect(),
         any_unredacted_sensitive: any_unredacted,
-    })
+    }
 }

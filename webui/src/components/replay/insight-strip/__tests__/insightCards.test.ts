@@ -52,6 +52,7 @@ function vr(
   status: string,
   detection_basis = 'known_tool',
   status_basis = 'exit',
+  status_provenance: string | null = 'measured',
 ): VerificationRunDto {
   return {
     verification_run_id: `vr_${kind}_${status}`,
@@ -63,6 +64,7 @@ function vr(
     trigger_event_id: 'e',
     trigger_tool_use_id: null,
     status,
+    status_provenance,
     detection_basis,
     status_basis,
     started_at: '2026-05-30T00:00:00Z',
@@ -164,6 +166,36 @@ describe('buildInsightCards — verification guards (Q4)', () => {
     ];
     const c = byId({ ...EMPTY, verificationRuns: runs }).get('verification')!;
     expect(c.provenance).toBe('mixed');
+  });
+
+  it('drill rows mark estimated-status runs with (추정) after the status', () => {
+    // status_provenance = how the per-run STATUS was determined (0022). This is
+    // a different axis from the card badge (measured/mixed from
+    // detection_basis/status_basis): an output-text heuristic can yield
+    // estimated even on a known_tool + exit run shape.
+    const runs = [
+      vr('test_suite_rust', 'passed', 'known_tool', 'exit', 'measured'),
+      vr('build', 'failed', 'known_tool', 'exit', 'estimated'),
+    ];
+    const c = byId({ ...EMPTY, verificationRuns: runs }).get('verification')!;
+    expect(c.drill?.lines).toEqual([
+      'test_suite_rust → passed',
+      'build → failed (추정)',
+    ]);
+  });
+
+  it('drill rows stay unmarked for measured / unknown / null status_provenance (pre-0022 rows)', () => {
+    const runs = [
+      vr('test_suite_rust', 'passed', 'known_tool', 'exit', 'measured'),
+      vr('lint', 'unknown', 'known_tool', 'piped', 'unknown'),
+      vr('build', 'passed', 'known_tool', 'exit', null),
+    ];
+    const c = byId({ ...EMPTY, verificationRuns: runs }).get('verification')!;
+    expect(c.drill?.lines).toEqual([
+      'test_suite_rust → passed',
+      'lint → unknown',
+      'build → passed',
+    ]);
   });
 
   it('is 미수집·예정 when there are no verification runs', () => {

@@ -49,6 +49,18 @@ describe('api client', () => {
     );
   });
 
+  it('getSessionEvents builds /events URL with around param (deep-link window)', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(
+      ok({ meta: { generated_at: 'n' }, data: { events: [], prev_cursor: null, next_cursor: null } })
+    );
+    await getSessionEvents('sess-A', { around: '01JTARGET', limit: 200 });
+    expect(f).toHaveBeenCalledWith(
+      '/v1/sessions/sess-A/events?around=01JTARGET&limit=200',
+      expect.any(Object),
+    );
+  });
+
   it('getSessionEvents with no opts hits /events without query string', async () => {
     const f = fetch as unknown as ReturnType<typeof vi.fn>;
     f.mockResolvedValueOnce(

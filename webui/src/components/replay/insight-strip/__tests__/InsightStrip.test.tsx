@@ -22,7 +22,7 @@ function vr(kind: string, status: string): VerificationRunDto {
     verification_run_id: `vr_${kind}`, schema_version: '1', session_id: 's1',
     source: 'transcript_bash', command: kind, command_kind: kind,
     trigger_event_id: 'e', trigger_tool_use_id: null, status,
-    detection_basis: 'known_tool', status_basis: 'exit',
+    status_provenance: 'measured', detection_basis: 'known_tool', status_basis: 'exit',
     started_at: '2026-05-30T00:00:00Z', ended_at: null, exit_code: null,
     failure_summary: null, covered_diff_hunk_ids: [],
   };

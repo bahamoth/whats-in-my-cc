@@ -174,7 +174,16 @@ function verificationCard(inputs: InsightInputs): InsightCardModel {
     detail: Object.entries(byKind).map(([k, n]) => `${k} ${n}`).join(' · '),
     provenance: allMeasured ? 'measured' : 'mixed', tooltip: tip,
     drill: {
-      lines: runs.map((r) => `${r.command_kind} → ${r.status}`),
+      // status_provenance (0022) = how each run's STATUS was determined — a
+      // per-run axis distinct from the card badge (measured/mixed above, which
+      // derives from detection_basis/status_basis). Only 'estimated' (output-
+      // text heuristic instead of an exit code) is flagged; measured/unknown/
+      // null (pre-0022 rows) render unmarked, matching the badge convention of
+      // calling out only the degraded case.
+      lines: runs.map(
+        (r) =>
+          `${r.command_kind} → ${r.status}${r.status_provenance === 'estimated' ? ' (추정)' : ''}`,
+      ),
       byKind,
     },
   };

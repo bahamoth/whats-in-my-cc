@@ -282,6 +282,66 @@ describe('useSessionWindow', () => {
     expect(f.mock.calls.length).toBe(callsBefore); // no fetch issued
   });
 
+  // --- loadAround — deep-link `?selected=<event_id>` outside the loaded
+  // window. The client only has the event_id (no observed_at → no cursor), so
+  // it asks the server for the window AROUND that event and REPLACES the
+  // buffer with it. prev/next cursors come from the response, so older/newer
+  // pagination keeps working from the new window.
+  it('loadAround replaces the window with the around page and keeps cursors', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(50), makeEvent(51)], prev_cursor: 'pc-tail', next_cursor: null }),
+    );
+    const { result } = renderHook(() => useSessionWindow('s'));
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+
+    f.mockResolvedValueOnce(
+      envelope({
+        events: [makeEvent(9), makeEvent(10), makeEvent(11)],
+        prev_cursor: 'pc-around',
+        next_cursor: 'nc-around',
+      }),
+    );
+    let found: boolean | undefined;
+    await act(async () => {
+      found = await result.current.loadAround(makeEvent(10).event_id);
+    });
+    expect(found).toBe(true);
+    // window REPLACED (not appended): tail rows are gone, around rows in.
+    expect(result.current.events.map((e) => e.event_id)).toEqual([
+      makeEvent(9).event_id,
+      makeEvent(10).event_id,
+      makeEvent(11).event_id,
+    ]);
+    expect(result.current.oldest).toBe('pc-around');
+    expect(result.current.newest).toBe('nc-around');
+    expect(result.current.atLiveTip).toBe(false);
+    // fetch used ?around=<event_id>
+    const lastCall = f.mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).toContain(`around=${encodeURIComponent(makeEvent(10).event_id)}`);
+  });
+
+  it('loadAround returns false on 404 and leaves the window intact', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(1), makeEvent(2)], prev_cursor: 'pc', next_cursor: null }),
+    );
+    const { result } = renderHook(() => useSessionWindow('s'));
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+
+    f.mockResolvedValueOnce(
+      new Response('{"detail":"event nope not found in session s"}', { status: 404 }),
+    );
+    let found: boolean | undefined;
+    await act(async () => {
+      found = await result.current.loadAround('nope');
+    });
+    expect(found).toBe(false);
+    expect(result.current.events).toHaveLength(2);
+    expect(result.current.oldest).toBe('pc');
+    expect(result.current.loading).toBe('idle');
+  });
+
   it('LRU cap: appending past maxEvents trims oldest and shifts oldest cursor', async () => {
     const f = fetch as unknown as ReturnType<typeof vi.fn>;
     f.mockResolvedValueOnce(

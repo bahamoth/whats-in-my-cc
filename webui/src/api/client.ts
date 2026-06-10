@@ -43,14 +43,20 @@ export const getEventRaw  = (eventId: string) =>
 
 /** Slice-9 — cursor-paged event window. `before`/`after` cursors have the
  *  shape `<observed_at_rfc3339>|<event_id>` and accept either ULIDs or the
- *  composite event_ids slice-6 emits for OTel metrics/logs. */
+ *  composite event_ids slice-6 emits for OTel metrics/logs.
+ *
+ *  `around` is the deep-link window: a bare event_id (no cursor — the client
+ *  doesn't know the event's observed_at) for which the server returns the
+ *  window containing that event (half the limit before, half after). 404 when
+ *  the event is not in the session. Takes precedence over before/after. */
 export function getSessionEvents(
   id: string,
-  opts?: { before?: string; after?: string; limit?: number },
+  opts?: { before?: string; after?: string; around?: string; limit?: number },
 ): Promise<SessionEventsResponse> {
   const params = new URLSearchParams();
   if (opts?.before) params.set('before', opts.before);
   if (opts?.after) params.set('after', opts.after);
+  if (opts?.around) params.set('around', opts.around);
   if (opts?.limit !== undefined) params.set('limit', String(opts.limit));
   const qs = params.toString();
   const path =

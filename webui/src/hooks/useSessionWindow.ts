@@ -15,7 +15,7 @@
 // Cursor format: `<observed_at_rfc3339>|<event_id>` (server contract).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getSessionEvents } from '../api/client';
+import { ApiError, getSessionEvents } from '../api/client';
 import type { ObservedEventDto } from '../api/types';
 
 const DEFAULT_INITIAL_LIMIT = 500;
@@ -55,6 +55,13 @@ export interface UseSessionWindowResult {
    *  backfill the real events instead of appending the empty envelope. No-op
    *  while another load is in flight or the window is empty. */
   loadNewer: () => Promise<void>;
+  /** Deep-link jump: fetch the window AROUND the given event (`?around=`) and
+   *  REPLACE the buffer with it. Used when `?selected=<event_id>` points at an
+   *  event outside the loaded window — the client has no cursor for it (only
+   *  the bare event_id). Cursors come from the response, so older/newer
+   *  pagination keeps working from the new window. Resolves `false` (window
+   *  untouched) when the event does not exist (404) or a load is in flight. */
+  loadAround: (eventId: string) => Promise<boolean>;
   /** Push a single event (typically an SSE envelope). Dedupes by event_id and
    *  drops rows whose `(observed_at, event_id)` is ≤ the newest already in
    *  the window. */
@@ -184,6 +191,37 @@ export function useSessionWindow(
     }
   }, [sessionId, pageLimit, maxEvents, setLoadingBoth]);
 
+  const loadAround = useCallback(
+    async (eventId: string): Promise<boolean> => {
+      if (loadingRef.current !== 'idle') return false;
+      // 'older' so the existing "이전 메시지 불러오는 중…" affordance shows.
+      setLoadingBoth('older');
+      try {
+        const resp = await getSessionEvents(sessionId, {
+          around: eventId,
+          limit: pageLimit,
+        });
+        setEvents(resp.events);
+        setOldest(resp.prev_cursor);
+        setNewest(resp.next_cursor);
+        setAtLiveTip(resp.next_cursor === null);
+        setLoadingBoth('idle');
+        return true;
+      } catch (e: unknown) {
+        if (e instanceof ApiError && e.status === 404) {
+          // Deep link to an event that no longer exists (retention sweep /
+          // wrong session): keep the loaded window, just report not-found.
+          setLoadingBoth('idle');
+          return false;
+        }
+        setError(e instanceof Error ? e.message : String(e));
+        setLoadingBoth('idle'); // recoverable
+        return false;
+      }
+    },
+    [sessionId, pageLimit, setLoadingBoth],
+  );
+
   const appendOne = useCallback(
     (e: ObservedEventDto) => {
       setEvents((prev) => {
@@ -220,6 +258,7 @@ export function useSessionWindow(
     error,
     loadOlder,
     loadNewer,
+    loadAround,
     appendOne,
     reload: doInitial,
   };

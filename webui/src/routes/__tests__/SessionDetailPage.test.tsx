@@ -7,11 +7,11 @@ import SessionDetailPage from '../SessionDetailPage';
 import { MockEventSource } from '../../test/MockEventSource';
 import { createQueryClient } from '../../lib/queryClient';
 
-function rendered(sessionId: string) {
+function rendered(sessionId: string, search = '') {
   const qc = createQueryClient();
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[`/sessions/${sessionId}`]}>
+      <MemoryRouter initialEntries={[`/sessions/${sessionId}${search}`]}>
         <Routes>
           <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
         </Routes>
@@ -27,6 +27,7 @@ function rendered(sessionId: string) {
 type Routes = {
   detail?: Response;
   events?: Response;
+  around?: Response;
   raw?: Response;
   signals?: Response;
   metrics?: Response;
@@ -40,6 +41,12 @@ function setupFetch(routes: Routes) {
     // mock re-returning already-loaded rows (which would duplicate keys).
     if (url.includes('/events?') && url.includes('before=')) {
       return Promise.resolve(env({ events: [], prev_cursor: null, next_cursor: null }));
+    }
+    // Deep-link window (`?around=<event_id>`): the window containing the
+    // deep-linked event, or 404 when no `around` route is configured.
+    if (url.includes('/events?') && url.includes('around=')) {
+      if (routes.around) return Promise.resolve(routes.around.clone());
+      return Promise.resolve(new Response('{"detail":"event not found"}', { status: 404 }));
     }
     if (url.includes('/events?') || url.endsWith('/events')) {
       // window endpoint
@@ -222,6 +229,70 @@ describe('SessionDetailPage', () => {
         .querySelector('[data-event-id="ev1"] [data-testid="message-card"]')
         ?.getAttribute('data-selected'),
     ).toBe('false');
+  });
+
+  // Deep link `/sessions/:id?selected=<event_id>` where the event is OUTSIDE
+  // the initial (newest-tail) window: the page must fetch the window AROUND
+  // that event (`?around=`), replace the stream with it, and the deep-linked
+  // event must end up rendered + selected (so the DetailPanel opens). This was
+  // the #doc-audit-2026-06-10 backlog bug: the panel never opened because the
+  // event was simply absent from the loaded window.
+  it('deep-linked ?selected= outside the window loads the around window and selects it', async () => {
+    const evOld = {
+      event_id: 'ev-old', raw_event_id: 'r0', session_id: 's1', event_uuid: null,
+      parent_uuid: null, observed_at: '2026-05-19T09:00:00Z', actor: 'user',
+      kind: 'user_message', subkind: null, tool_use_id: null, tool_name: null,
+      turn_id: null, is_sidechain: false, is_meta: false,
+      payload: { content: 'an old message far before the tail window' },
+    };
+    const f = setupFetch({
+      detail: env(sessionDetail),
+      events: env({
+        events: eventsWithRows.events, // tail window WITHOUT ev-old
+        prev_cursor: '2026-05-19T10:00:00Z|ev1',
+        next_cursor: null,
+      }),
+      around: env({
+        events: [evOld, ...eventsWithRows.events],
+        prev_cursor: '2026-05-19T09:00:00Z|ev-old',
+        next_cursor: '2026-05-19T10:00:05Z|ev2',
+      }),
+      raw: env({ ...raw, event_id: 'ev-old' }),
+    });
+    const { container } = rendered('s1', '?selected=ev-old');
+
+    // The page must issue the around fetch for the missing event…
+    await waitFor(() => {
+      const calls = f.mock.calls.map((c) => String(c[0]));
+      expect(calls.some((u) => u.includes('around=ev-old'))).toBe(true);
+    });
+    // …and the deep-linked event renders selected (detail panel opens).
+    await waitFor(() => {
+      expect(
+        container
+          .querySelector('[data-event-id="ev-old"] [data-testid="message-card"]')
+          ?.getAttribute('data-selected'),
+      ).toBe('true');
+    });
+    await waitFor(() => expect(screen.getByRole('tablist')).toBeInTheDocument());
+  });
+
+  it('deep-linked ?selected= already in the window issues no around fetch', async () => {
+    const f = setupFetch({
+      detail: env(sessionDetail),
+      events: env(eventsWithRows),
+      raw: env(raw),
+    });
+    const { container } = rendered('s1', '?selected=ev1');
+    await waitFor(() => {
+      expect(
+        container
+          .querySelector('[data-event-id="ev1"] [data-testid="message-card"]')
+          ?.getAttribute('data-selected'),
+      ).toBe('true');
+    });
+    const calls = f.mock.calls.map((c) => String(c[0]));
+    expect(calls.some((u) => u.includes('around='))).toBe(false);
   });
 
   it('shows 404 when session detail missing', async () => {

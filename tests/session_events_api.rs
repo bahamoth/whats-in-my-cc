@@ -134,6 +134,80 @@ async fn after_cursor_paginates_forward() {
     assert_eq!(events.last().unwrap()["event_id"], format!("01J{:023}", 80));
 }
 
+// --- `?around=<event_id>` — deep-link window centered on an arbitrary event.
+// Replay deep links (`/sessions/:id?selected=<event_id>`) carry only the
+// event_id; the client cannot build a `<observed_at>|<event_id>` cursor for it
+// and the cursor bounds are exclusive anyway. The server resolves the event and
+// returns a window containing it (half the limit before, half after).
+
+#[tokio::test]
+async fn around_returns_window_containing_target_event() {
+    let s = setup().await;
+    let target = format!("01J{:023}", 30);
+    let v: Value = s
+        .get(&format!(
+            "/v1/sessions/sess-window/events?around={target}&limit=21"
+        ))
+        .await
+        .json();
+    let events = v["data"]["events"].as_array().unwrap();
+    // centered: 10 before + target + 10 after = ids 20..=40 ASC
+    assert_eq!(events.len(), 21);
+    assert_eq!(events.first().unwrap()["event_id"], format!("01J{:023}", 20));
+    assert_eq!(events.last().unwrap()["event_id"], format!("01J{:023}", 40));
+    assert!(events.iter().any(|e| e["event_id"] == target.as_str()));
+    // Both cursors present → subsequent older/newer pagination keeps working.
+    assert!(v["data"]["prev_cursor"].is_string());
+    assert!(v["data"]["next_cursor"].is_string());
+}
+
+#[tokio::test]
+async fn around_newest_event_reaches_live_tip_null_next_cursor() {
+    let s = setup().await;
+    let target = format!("01J{:023}", 99);
+    let v: Value = s
+        .get(&format!(
+            "/v1/sessions/sess-window/events?around={target}&limit=21"
+        ))
+        .await
+        .json();
+    let events = v["data"]["events"].as_array().unwrap();
+    // 10 before + target, nothing after the live tip.
+    assert_eq!(events.len(), 11);
+    assert_eq!(events.last().unwrap()["event_id"], target.as_str());
+    // Window's newest row == session's last_observed_at → live tip → null.
+    assert!(v["data"]["next_cursor"].is_null());
+    assert!(v["data"]["prev_cursor"].is_string());
+}
+
+#[tokio::test]
+async fn around_near_session_start_clamps_window() {
+    let s = setup().await;
+    let target = format!("01J{:023}", 0);
+    let v: Value = s
+        .get(&format!(
+            "/v1/sessions/sess-window/events?around={target}&limit=21"
+        ))
+        .await
+        .json();
+    let events = v["data"]["events"].as_array().unwrap();
+    // Nothing before the first event: target + 10 after.
+    assert_eq!(events.len(), 11);
+    assert_eq!(events.first().unwrap()["event_id"], target.as_str());
+    assert_eq!(events.last().unwrap()["event_id"], format!("01J{:023}", 10));
+}
+
+#[tokio::test]
+async fn around_unknown_event_returns_404() {
+    let s = setup().await;
+    let resp = s
+        .get("/v1/sessions/sess-window/events?around=01JNOPE")
+        .await;
+    resp.assert_status(axum::http::StatusCode::NOT_FOUND);
+    let v: Value = resp.json();
+    assert_eq!(v["title"], "RESOURCE_NOT_FOUND");
+}
+
 #[tokio::test]
 async fn invalid_cursor_returns_400() {
     let s = setup().await;

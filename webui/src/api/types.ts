@@ -109,6 +109,13 @@ export type VerificationRunDto = {
   trigger_event_id: string;
   trigger_tool_use_id: string | null;
   status: 'passed' | 'failed' | 'skipped' | string;
+  /** `status`가 어떻게 결정됐는지의 출처(migration 0022): 'measured' = exit code
+   *  직접 관측, 'estimated' = 도구 출력 텍스트 휴리스틱(성공/실패 요약 패턴),
+   *  'unknown' = 판정 불가(piped로 가려짐·미실행 disposition 등). pre-0022 행은
+   *  null. 주의 — 검증 카드 배지의 measured/mixed 어휘와는 다른 축이다: 배지는
+   *  detection_basis·status_basis(run 집합의 감지·관측 방식)에서 파생되고, 이
+   *  필드는 개별 run의 status 값 자체의 신뢰 출처다. */
+  status_provenance: 'measured' | 'estimated' | 'unknown' | string | null;
   detection_basis: 'known_tool' | 'test_keyword' | string;
   /** 측정 불가 사유 포함: 'background'(출력/exit code가 이 이벤트에 없음) ·
    *  'user_rejected'/'policy_denied'/'cancelled'(도구가 실행되지 않음). */
@@ -211,6 +218,19 @@ export type SessionMetricsDto = {
   tool_cancelled: number;
   /** 백그라운드 실행 전환 수 — 해당 tool_result content는 실제 출력이 아님. */
   tool_backgrounded: number;
+  /** system/turn_duration 레코드의 durationMs 합(ms). 평균은 소비자가
+   *  turn_duration_count로 나눠 계산한다(F1: count·합만 제공). */
+  turn_duration_ms_total: number;
+  turn_duration_count: number;
+  /** system/api_error 레코드 수 (예: 529 overloaded → retry). */
+  api_error_count: number;
+  /** system/compact_boundary 레코드 수 — 컨텍스트 압축 횟수. */
+  compact_boundary_count: number;
+  /** `... [N characters truncated] ...` 잘림 마커를 포함한 tool_result 수 —
+   *  CC 캡처 채널에서 출력이 잘린 사실의 측정값. */
+  tool_result_truncated_count: number;
+  /** `[Request interrupted by user`로 시작하는 user_message 수. */
+  user_interruption_count: number;
   detector_firing: Record<string, number>;
 };
 

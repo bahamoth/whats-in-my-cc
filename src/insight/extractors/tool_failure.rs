@@ -47,7 +47,7 @@ impl Detector for ToolFailure {
     fn manifest(&self) -> DetectorManifest {
         DetectorManifest {
             id: "tool_failure",
-            intent: "도구 실행의 명령 결과가 Failed(Plan 6 resolve_outcome 체인)이고 retry_window 내에 같은 tool_use_id로 Passed가 없는 경우를 탐지한다. is_error는 도구 실행 여부만 나타내며 pass/fail 판정에 미사용.",
+            intent: "도구 실행의 명령 결과가 resolve_outcome 체인(OTLP→hook→transcript, 측정 우선)에서 Failed이고 retry_window 내에 같은 tool_use_id로 Passed가 없는 경우를 탐지한다. is_error는 도구 실행 여부만 나타내며 pass/fail 판정에 미사용.",
             // Verified against detect(): reads ev.tool_use_id (correlation),
             // resolve_outcome chain (OTLP/hook/exit-code), /tool_result/content (error_excerpt),
             // paired tool_call for tool_name. is_error kept as FACT, not trigger.
@@ -64,7 +64,7 @@ impl Detector for ToolFailure {
             output: "{is_error, outcome_provenance, retried, tool_name, tool_use_id, error_excerpt, tool_result_event_id, paired_call_event_id}",
             // Verified: cfg.usize_param("tool_failure", "retry_window", RETRY_WINDOW_DEFAULT)
             config_keys: vec!["retry_window"],
-            rationale: "tests/fixtures/transcripts/real/tool_failure_v01.jsonl + Plan 6 + spec §6.3",
+            rationale: "tests/fixtures/transcripts/real/tool_failure_v01.jsonl + outcome resolution 체인(src/insight/outcome.rs) + spec §6.3",
         }
     }
 

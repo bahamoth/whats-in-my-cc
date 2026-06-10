@@ -275,6 +275,50 @@ describe('ConversationStream', () => {
     spy.mockRestore();
   });
 
+  // Deep-link case: `?selected=` is set at mount but the event is NOT in the
+  // initially loaded items (it arrives later via the `?around=` window
+  // replacement). The selection-scroll effect is keyed on selectedEventId, so
+  // without a deferred retry the late-mounting row never gets scrolled to.
+  it('scrolls to the selected message when it mounts AFTER selection (deep-link around window)', () => {
+    const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+    const tail = [msg('y', 'tail-1'), msg('z', 'tail-2')];
+    const { container, rerender } = render(
+      <ConversationStream
+        items={tail}
+        selectedEventId="old" // selected at mount, not yet loaded
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(spy).not.toHaveBeenCalled();
+    // The around window replaces the items and now contains the selected row.
+    const around = [msg('old', 'deep-linked'), ...tail];
+    rerender(
+      <ConversationStream
+        items={around}
+        selectedEventId="old"
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    const target = container.querySelector('[data-event-id="old"]');
+    expect(target).not.toBeNull();
+    expect(spy.mock.instances).toContain(target);
+    // …and a later unrelated append must NOT re-scroll (selection unchanged,
+    // already satisfied).
+    spy.mockClear();
+    rerender(
+      <ConversationStream
+        items={[...around, msg('new', 'append')]}
+        selectedEventId="old"
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
   it('does not scroll when selectedEventId is null', () => {
     const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
     render(

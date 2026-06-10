@@ -210,9 +210,15 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "tool_policy_denied": 1,
   "tool_cancelled": 0,
   "tool_backgrounded": 2,
+  "turn_duration_ms_total": 19115218,  // system/turn_duration 레코드 durationMs 합
+  "turn_duration_count": 51,           // 평균은 소비자가 합/count로 계산
+  "api_error_count": 0,                // system/api_error 레코드 수 (예: 529 overloaded)
+  "compact_boundary_count": 5,         // system/compact_boundary — 컨텍스트 압축 횟수
+  "tool_result_truncated_count": 0,    // "... [N characters truncated] ..." 마커 포함 tool_result 수
+  "user_interruption_count": 11,       // "[Request interrupted by user"로 시작하는 user_message 수
   "detector_firing": { "tool_failure": 3, "re_read": 1 }   // detector → signal 수
 }</code></pre>
-<p class="muted">disposition count 4종은 실패도 unknown도 아닌 별도 축 — 실행되지 않았거나(거부/차단/취소) content가 실제 출력이 아닌(백그라운드) 호출의 결정론 분류다.</p>
+<p class="muted">disposition count 4종은 실패도 unknown도 아닌 별도 축 — 실행되지 않았거나(거부/차단/취소) content가 실제 출력이 아닌(백그라운드) 호출의 결정론 분류다. session-facts 6종(turn_duration·api_error·compact_boundary·truncation·interruption)은 transcript의 결정론 마커·레코드에서 직접 세는 측정값으로, 전부 실 코퍼스 fixture(<code>session_facts_v01.jsonl</code>)에 잠겨 있다.</p>
 <h3>Usage — <code>/v1/sessions/:id/usage</code></h3>
 <p>side-table <code>usage_facet</code>(assistant 출력 이벤트당 1행: model + 토큰 4종)에서 집계.</p>
 <ul>

@@ -87,7 +87,10 @@ async fn raw_endpoint_returns_record() {
     assert_eq!(body["data"]["source"]["kind"], "claude_transcript");
     assert!(body["data"]["record"].is_object());
     assert!(body["data"]["record_type"].is_string());
-    assert_eq!(body["data"]["redaction_state"], "none");
+    // doc-audit-2026-06-10 — must mirror raw_event.redaction_state (doc 05
+    // vocabulary). The minimal fixture has no secrets and non-empty payloads,
+    // so the ingest scan marks every row not_redacted.
+    assert_eq!(body["data"]["redaction_state"], "not_redacted");
 }
 
 #[tokio::test]
