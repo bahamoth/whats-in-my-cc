@@ -225,6 +225,12 @@ async fn empty_session_returns_all_zeros() {
     assert_eq!(m.verification_failed, 0);
     assert_eq!(m.verification_unknown, 0);
     assert_eq!(m.context_bloat_count, 0);
+    assert_eq!(m.turn_duration_count, 0);
+    assert_eq!(m.turn_duration_ms_total, 0);
+    assert_eq!(m.api_error_count, 0);
+    assert_eq!(m.compact_boundary_count, 0);
+    assert_eq!(m.tool_result_truncated_count, 0);
+    assert_eq!(m.user_interruption_count, 0);
     assert!(m.detector_firing.is_empty());
 }
 
@@ -349,4 +355,159 @@ async fn disposition_counts_from_tool_result_markers() {
     assert_eq!(m.tool_policy_denied, 1);
     assert_eq!(m.tool_cancelled, 1);
     assert_eq!(m.tool_backgrounded, 1);
+}
+
+// ---------------------------------------------------------------------------
+// Session facts — system 레코드 카운트 + 마커 카운트 (real 형태는
+// session_facts_v01.jsonl / tests/session_facts.rs에서 잠김)
+// ---------------------------------------------------------------------------
+
+/// kind + subkind + payload를 지정해 이벤트를 시드한다 (system fact 카운트용).
+async fn seed_event_with_payload(
+    pool: &sqlx::SqlitePool,
+    run_id: &str,
+    session_id: &str,
+    event_id: &str,
+    kind: EventKind,
+    subkind: Option<&str>,
+    payload: serde_json::Value,
+) {
+    let raw_id = format!("raw_{event_id}");
+    repo_raw::insert_dedup(
+        pool,
+        &repo_raw::NewRaw {
+            raw_event_id: raw_id.clone(),
+            ingest_run_id: run_id.into(),
+            source_type: "claude_transcript".into(),
+            source_uri: "/tmp/test.jsonl".into(),
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: format!("sha_{event_id}"),
+            payload: b"{}".to_vec(),
+            parse_error: None,
+            captured_at: chrono::Utc::now(),
+            redaction_state: "not_applicable".into(),
+            redaction_manifest: None,
+        },
+    )
+    .await
+    .unwrap();
+    let e = ObservedEvent {
+        event_id: event_id.into(),
+        raw_event_id: raw_id,
+        schema_version: "observed_event.v1".into(),
+        session_id: session_id.into(),
+        observed_at: chrono::Utc::now(),
+        actor: Actor::System,
+        kind,
+        subkind: subkind.map(String::from),
+        parser_version: "test@v0".into(),
+        payload,
+        ..Default::default()
+    };
+    repo_observed::insert(pool, &e).await.unwrap();
+}
+
+#[tokio::test]
+async fn system_summary_facts_counted_by_subkind() {
+    // payload 형태는 session_facts_v01.jsonl 실 레코드와 동일 구조.
+    let pool = test_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    let sid = "sess_sysfacts";
+
+    seed_event_with_payload(
+        &pool, &run_id, sid, "td1",
+        EventKind::SystemSummary, Some("turn_duration"),
+        serde_json::json!({"durationMs": 139516, "messageCount": 100}),
+    ).await;
+    seed_event_with_payload(
+        &pool, &run_id, sid, "td2",
+        EventKind::SystemSummary, Some("turn_duration"),
+        serde_json::json!({"durationMs": 454567, "messageCount": 334}),
+    ).await;
+    seed_event_with_payload(
+        &pool, &run_id, sid, "ae1",
+        EventKind::SystemSummary, Some("api_error"),
+        serde_json::json!({"level": "error", "error": {"status": 529}}),
+    ).await;
+    seed_event_with_payload(
+        &pool, &run_id, sid, "cb1",
+        EventKind::SystemSummary, Some("compact_boundary"),
+        serde_json::json!({"content": "Conversation compacted", "compactMetadata": {"trigger": "manual", "preTokens": 310705}}),
+    ).await;
+    // 다른 subkind의 system 레코드는 어느 카운트에도 들어가지 않는다.
+    seed_event_with_payload(
+        &pool, &run_id, sid, "sh1",
+        EventKind::SystemSummary, Some("stop_hook_summary"),
+        serde_json::json!({}),
+    ).await;
+
+    let m = compute_session_metrics(&pool, sid).await.unwrap();
+    assert_eq!(m.turn_duration_count, 2);
+    assert_eq!(m.turn_duration_ms_total, 139516 + 454567);
+    assert_eq!(m.api_error_count, 1);
+    assert_eq!(m.compact_boundary_count, 1);
+}
+
+#[tokio::test]
+async fn truncated_tool_result_marker_counted() {
+    let pool = test_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    let sid = "sess_trunc";
+
+    // 진성 마커 — 본문 중간 "\n\n... [N characters truncated] ...\n\n" (실 6건 전수 동일 형태).
+    seed_tool_result_with_content(
+        &pool, &run_id, sid, "tr1",
+        "modified: a.md\n\n... [5882 characters truncated] ...\n\nmodified: b.md",
+    ).await;
+    // 숫자 대신 리터럴 N으로 인용된 문구(코퍼스의 문서 인용 형태)는 매칭되지 않는다.
+    seed_tool_result_with_content(
+        &pool, &run_id, sid, "tr2",
+        "<code>... [N characters truncated] ...</code> 잘림 fact(6건)",
+    ).await;
+    // 마커 없는 일반 출력.
+    seed_tool_result_with_content(&pool, &run_id, sid, "tr3", "test result: ok").await;
+
+    let m = compute_session_metrics(&pool, sid).await.unwrap();
+    assert_eq!(m.tool_result_truncated_count, 1);
+}
+
+/// user_message text 이벤트를 시드한다 (중단 마커 카운트용).
+async fn seed_user_text(
+    pool: &sqlx::SqlitePool,
+    run_id: &str,
+    session_id: &str,
+    event_id: &str,
+    text: &str,
+) {
+    seed_event_with_payload(
+        pool,
+        run_id,
+        session_id,
+        event_id,
+        EventKind::UserMessage,
+        None,
+        serde_json::json!({"content_ordinal": 0, "text": text}),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn user_interruption_markers_counted() {
+    let pool = test_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    let sid = "sess_interrupt";
+
+    // 두 실측 변형 (session_facts_v01.jsonl) — 둘 다 카운트.
+    seed_user_text(&pool, &run_id, sid, "ui1", "[Request interrupted by user]").await;
+    seed_user_text(&pool, &run_id, sid, "ui2", "[Request interrupted by user for tool use]").await;
+    // 일반 사용자 메시지 + mid-content 인용은 카운트되지 않는다.
+    seed_user_text(&pool, &run_id, sid, "ui3", "please fix the bug").await;
+    seed_user_text(
+        &pool, &run_id, sid, "ui4",
+        "코퍼스에서 [Request interrupted by user] 마커를 세어줘",
+    ).await;
+
+    let m = compute_session_metrics(&pool, sid).await.unwrap();
+    assert_eq!(m.user_interruption_count, 2);
 }

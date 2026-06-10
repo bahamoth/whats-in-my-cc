@@ -125,6 +125,12 @@ describe('getSessionMetrics', () => {
   tool_policy_denied: 0,
   tool_cancelled: 0,
   tool_backgrounded: 0,
+      turn_duration_ms_total: 139516,
+      turn_duration_count: 1,
+      api_error_count: 1,
+      compact_boundary_count: 1,
+      tool_result_truncated_count: 1,
+      user_interruption_count: 2,
       detector_firing: { tool_failure: 2, context_bloat: 1 },
     };
     fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));

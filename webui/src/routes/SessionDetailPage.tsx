@@ -151,6 +151,24 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const selectedStreamEventId = selectedEventId;
   const selectStreamCard = (eventId: string) => sel.setSelectedNodeId(eventId);
 
+  // Deep-link `?selected=<event_id>` outside the loaded window (the initial
+  // load is the newest tail): fetch the window AROUND the event and replace
+  // the buffer with it, so the card mounts and the DetailPanel opens
+  // (#doc-audit-2026-06-10 backlog). One attempt per event id — a 404 (event
+  // gone via retention / wrong session) must not retry forever.
+  const triedAroundRef = useRef<string | null>(null);
+  const windowLoading = window_.loading;
+  const windowEvents = window_.events;
+  const loadAround = window_.loadAround;
+  useEffect(() => {
+    if (!selectedEventId) return;
+    if (windowLoading !== 'idle') return;
+    if (windowEvents.some((e) => e.event_id === selectedEventId)) return;
+    if (triedAroundRef.current === selectedEventId) return;
+    triedAroundRef.current = selectedEventId;
+    void loadAround(selectedEventId);
+  }, [selectedEventId, windowLoading, windowEvents, loadAround]);
+
   // --- DetailPanel inputs (all event-derived; no graph) ---
   const selectedEvent = useMemo(
     () =>

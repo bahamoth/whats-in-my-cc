@@ -55,8 +55,54 @@ pub struct SessionMetrics {
     /// 백그라운드 실행으로 전환된 호출 수 — 해당 tool_result content는 실제
     /// 출력이 아니므로 출력 기반 분류에서 제외해야 한다.
     pub tool_backgrounded: i64,
+    /// system/turn_duration 레코드의 `durationMs` 합 (밀리초). 분모는
+    /// `turn_duration_count` — 평균은 소비자가 계산한다 (F1: count/합만).
+    pub turn_duration_ms_total: i64,
+    /// system/turn_duration 레코드 수 (= 하니스가 측정한 turn 수).
+    pub turn_duration_count: i64,
+    /// system/api_error 레코드 수 (API 요청 실패·재시도 이벤트).
+    pub api_error_count: i64,
+    /// system/compact_boundary 레코드 수 (컨텍스트 압축 발생 횟수).
+    pub compact_boundary_count: i64,
+    /// 하니스 잘림 마커("… [N characters truncated] …")를 포함한 tool_result 수
+    /// — 출력이 잘려 보존된 호출의 fact.
+    pub tool_result_truncated_count: i64,
+    /// "[Request interrupted by user]" / "… for tool use]" 마커 user_message 수
+    /// — 사용자가 turn/도구 실행을 중단한 횟수.
+    pub user_interruption_count: i64,
     /// detector → number of signals fired (signal distribution, spec §6.6).
     pub detector_firing: BTreeMap<String, i64>,
+}
+
+/// 하니스 출력 잘림 마커 — `... [N characters truncated] ...` (N = 자릿수).
+///
+/// Real-data anchoring: `session_facts_v01.jsonl` 동결 payload + 코퍼스 실측
+/// 6건 전수에서 마커는 항상 본문 *중간*에 `\n\n` 으로 둘러싸여 나타나므로
+/// prefix 매칭이 불가능해 substring 매칭을 쓴다. 숫자 자리는 가변이라
+/// 숫자 1개 이상을 요구한다 — 문서 인용 형태(`[N characters truncated]`,
+/// 리터럴 N)는 매칭되지 않는다.
+fn has_truncation_marker(content: &str) -> bool {
+    const HEAD: &str = "... [";
+    const TAIL: &str = " characters truncated] ...";
+    let mut rest = content;
+    while let Some(i) = rest.find(HEAD) {
+        let after = &rest[i + HEAD.len()..];
+        let digits = after.bytes().take_while(u8::is_ascii_digit).count();
+        if digits > 0 && after[digits..].starts_with(TAIL) {
+            return true;
+        }
+        rest = after;
+    }
+    false
+}
+
+/// 사용자 중단 마커 — user_message text가 마커로 시작하는가.
+///
+/// 실측 두 변형 `[Request interrupted by user]` / `[Request interrupted by
+/// user for tool use]` (코퍼스 74건 전수에서 text item *전체*가 정확히 마커
+/// 문자열). disposition과 같은 prefix 기준이라 본문 중간 인용은 매칭되지 않는다.
+fn is_interruption_marker(text: &str) -> bool {
+    text.starts_with("[Request interrupted by user")
 }
 
 /// Compute on-demand behavioral metrics for `session_id`.
@@ -88,23 +134,58 @@ pub async fn compute_session_metrics(
     // prefix 매칭, real fixture로 잠김). 실패(tool_failure)·unknown과 별도 축.
     let (mut tool_user_rejected, mut tool_policy_denied, mut tool_cancelled, mut tool_backgrounded) =
         (0i64, 0i64, 0i64, 0i64);
+    // 코퍼스 실측 session fact 카운트 (session_facts_v01.jsonl로 잠김).
+    let (mut turn_duration_ms_total, mut turn_duration_count) = (0i64, 0i64);
+    let (mut api_error_count, mut compact_boundary_count) = (0i64, 0i64);
+    let (mut tool_result_truncated_count, mut user_interruption_count) = (0i64, 0i64);
     for e in &events {
-        if e.kind != EventKind::ToolResult {
-            continue;
-        }
-        let Some(content) = e
-            .payload
-            .pointer("/tool_result/content")
-            .and_then(|v| v.as_str())
-        else {
-            continue;
-        };
-        match classify_disposition(content) {
-            Some(Disposition::UserRejected) => tool_user_rejected += 1,
-            Some(Disposition::PolicyDenied) => tool_policy_denied += 1,
-            Some(Disposition::Cancelled) => tool_cancelled += 1,
-            Some(Disposition::Backgrounded) => tool_backgrounded += 1,
-            None => {}
+        match e.kind {
+            EventKind::ToolResult => {
+                let Some(content) = e
+                    .payload
+                    .pointer("/tool_result/content")
+                    .and_then(|v| v.as_str())
+                else {
+                    continue;
+                };
+                match classify_disposition(content) {
+                    Some(Disposition::UserRejected) => tool_user_rejected += 1,
+                    Some(Disposition::PolicyDenied) => tool_policy_denied += 1,
+                    Some(Disposition::Cancelled) => tool_cancelled += 1,
+                    Some(Disposition::Backgrounded) => tool_backgrounded += 1,
+                    None => {}
+                }
+                if has_truncation_marker(content) {
+                    tool_result_truncated_count += 1;
+                }
+            }
+            EventKind::SystemSummary => match e.subkind.as_deref() {
+                Some("turn_duration") => {
+                    turn_duration_count += 1;
+                    // 실 payload(system 레코드 top-level)의 durationMs. 필드가
+                    // 없는 변형은 코퍼스에서 관측되지 않았다 — 방어적 0 가산.
+                    turn_duration_ms_total += e
+                        .payload
+                        .pointer("/durationMs")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0);
+                }
+                Some("api_error") => api_error_count += 1,
+                Some("compact_boundary") => compact_boundary_count += 1,
+                _ => {}
+            },
+            EventKind::UserMessage => {
+                // 중단 마커는 array-content의 text item으로만 실측됨
+                // (코퍼스 74건 전수) — user_message payload의 /text를 본다.
+                if e.payload
+                    .pointer("/text")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(is_interruption_marker)
+                {
+                    user_interruption_count += 1;
+                }
+            }
+            _ => {}
         }
     }
 
@@ -133,6 +214,12 @@ pub async fn compute_session_metrics(
         tool_policy_denied,
         tool_cancelled,
         tool_backgrounded,
+        turn_duration_ms_total,
+        turn_duration_count,
+        api_error_count,
+        compact_boundary_count,
+        tool_result_truncated_count,
+        user_interruption_count,
         detector_firing,
     })
 }

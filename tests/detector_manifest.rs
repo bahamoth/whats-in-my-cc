@@ -21,6 +21,20 @@ fn tool_failure_manifest_is_self_describing() {
         m.inputs
     );
     assert!(!m.rationale.is_empty(), "rationale must be non-empty");
+    // API-visible manifest text must not cite retired plan documents as if
+    // they were live references — rationale anchors are the real fixture and
+    // the spec section (doc-audit-2026-06-10 backlog).
+    assert!(
+        !m.intent.contains("Plan") && !m.rationale.contains("Plan"),
+        "manifest text must not cite plan documents; intent={:?} rationale={:?}",
+        m.intent,
+        m.rationale
+    );
+    assert!(
+        m.rationale.contains("tool_failure_v01.jsonl"),
+        "rationale must anchor to the frozen real fixture; got: {:?}",
+        m.rationale
+    );
     assert!(!m.rule.is_empty(), "rule must be non-empty");
     assert!(!m.output.is_empty(), "output must be non-empty");
     assert!(

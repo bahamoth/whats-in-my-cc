@@ -98,16 +98,14 @@ pub async fn list_sessions(
     let rows = repo_observed::list_sessions(&pool, limit)
         .await
         .expect("db");
-    // Slice-18: aggregate redaction summary across all listed sessions.
-    // For simplicity, we report aggregate across the first session or a global
-    // query. Per design §6, the summary covers the response's raw events.
-    // Here we aggregate across all sessions in the response (first 200 raw rows).
-    let summary = if !rows.is_empty() {
-        let sid = &rows[0].session_id;
-        repo_raw::aggregate_session_summary(&pool, sid).await.ok()
-    } else {
-        None
-    };
+    // Slice-18 + doc-audit-2026-06-10: meta.redaction_summary aggregates the
+    // redaction manifests of *every* session in this response (per design §6,
+    // the summary covers the response's raw events), not just the most
+    // recent session.
+    let session_ids: Vec<String> = rows.iter().map(|r| r.session_id.clone()).collect();
+    let summary = repo_raw::aggregate_sessions_summary(&pool, &session_ids)
+        .await
+        .ok();
     let data: Vec<SessionListItem> = rows
         .into_iter()
         .map(|r| SessionListItem {
@@ -168,6 +166,10 @@ pub async fn session_detail(
 pub struct EventsQuery {
     pub before: Option<String>,
     pub after: Option<String>,
+    /// Deep-link window: return the window containing this event (half the
+    /// limit before it, half after). 404 when the event is not in the session.
+    /// Takes precedence over `before`/`after` (same as the correlated params).
+    pub around: Option<String>,
     pub limit: Option<i64>,
     /// On-demand correlated telemetry for the detail view: when either is set,
     /// the endpoint returns the events whose payload carries that
@@ -224,14 +226,34 @@ pub async fn session_events(
         }));
     }
 
-    let before = parse_cursor(q.before.as_deref())?;
-    let after = parse_cursor(q.after.as_deref())?;
     let limit = q.limit.unwrap_or(500);
 
-    let evs =
+    let evs = if let Some(around_id) = q.around.as_deref() {
+        // Deep-link window centered on an event the client only knows by id
+        // (it cannot build the `<observed_at>|<event_id>` cursor itself).
+        match repo_observed::list_session_around(&pool, &id, around_id, limit)
+            .await
+            .expect("db")
+        {
+            Some(evs) => evs,
+            None => {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    Json(json!({
+                        "type": "about:blank",
+                        "title": "RESOURCE_NOT_FOUND",
+                        "detail": format!("event {around_id} not found in session {id}"),
+                    })),
+                ))
+            }
+        }
+    } else {
+        let before = parse_cursor(q.before.as_deref())?;
+        let after = parse_cursor(q.after.as_deref())?;
         repo_observed::list_session_window(&pool, &id, before.as_ref(), after.as_ref(), limit)
             .await
-            .expect("db");
+            .expect("db")
+    };
 
     let (prev_cursor, next_cursor) = match (evs.first(), evs.last()) {
         (Some(first), Some(last)) => {
@@ -352,7 +374,7 @@ pub async fn event_raw(
             },
             record,
             record_type: row.kind,
-            redaction_state: "none".into(),
+            redaction_state: row.redaction_state,
             telemetry,
         },
     }))

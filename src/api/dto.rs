@@ -179,7 +179,10 @@ pub struct RawEventResponse {
     pub source: RawSource,
     pub record: serde_json::Value,
     pub record_type: String,
-    pub redaction_state: String,
+    /// doc-audit-2026-06-10 — mirrors `raw_event.redaction_state`
+    /// ("redacted" | "not_redacted" | "not_applicable" per doc 05).
+    /// JSON null for legacy rows ingested before the column existed.
+    pub redaction_state: Option<String>,
     pub telemetry: Option<serde_json::Value>,
 }
 

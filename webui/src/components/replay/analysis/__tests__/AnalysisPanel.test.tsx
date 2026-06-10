@@ -17,6 +17,12 @@ const m: SessionMetricsDto = {
   tool_policy_denied: 0,
   tool_cancelled: 0,
   tool_backgrounded: 0,
+  turn_duration_ms_total: 0,
+  turn_duration_count: 0,
+  api_error_count: 0,
+  compact_boundary_count: 0,
+  tool_result_truncated_count: 0,
+  user_interruption_count: 0,
   detector_firing: { tool_failure: 2, context_bloat: 1 },
 };
 

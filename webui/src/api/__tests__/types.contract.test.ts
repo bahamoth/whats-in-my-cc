@@ -42,6 +42,7 @@ describe('types.ts contract', () => {
       trigger_event_id: 'e1',
       trigger_tool_use_id: null,
       status: 'passed',
+      status_provenance: 'measured',
       detection_basis: 'known_tool',
       status_basis: 'exit',
       started_at: '2026-05-29T00:00:00Z',

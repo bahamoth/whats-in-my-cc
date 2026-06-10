@@ -191,15 +191,25 @@ export function ConversationStream({
   }, [signature.first, signature.last]);
 
   // Scroll the selected item into view when selection changes from an external
-  // source (e.g. subgraph click). Keyed on selectedEventId only so it does not
-  // fire on every append. When the selected event lives inside an activity-run,
-  // ActivityStack auto-expands on
-  // its own (it receives selectedEventId), so the row is mounted by the time
-  // the fallback querySelector runs.
+  // source (e.g. deep link, untagged-bash jump). The satisfied-ref makes this
+  // one-shot per selection: appends re-run the effect (items dep) but never
+  // re-scroll an already-satisfied selection. The deferred case matters for
+  // deep links — `?selected=` is set at mount while the event arrives later
+  // via the `?around=` window replacement, so the first run finds no row and
+  // the retry on the items change performs the scroll. When the selected event
+  // lives inside an activity-run, ActivityStack auto-expands on its own (it
+  // receives selectedEventId), so the row is mounted by the time the fallback
+  // querySelector runs.
+  const scrollSatisfiedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!selectedEventId) return;
+    if (!selectedEventId) {
+      scrollSatisfiedRef.current = null;
+      return;
+    }
+    if (scrollSatisfiedRef.current === selectedEventId) return;
     const idx = items.findIndex((it) => itemContainsEvent(it, selectedEventId));
-    if (idx < 0) return;
+    if (idx < 0) return; // not loaded yet — retried when items change
+    scrollSatisfiedRef.current = selectedEventId;
     // Virtual path: scroll the virtualizer to that index — but ONLY when the
     // selected row is not already on screen. Clicking a row that is already
     // visible (in-stream selection) must not re-center it and yank the
@@ -223,9 +233,10 @@ export function ConversationStream({
         (el as HTMLElement).scrollIntoView({ block: 'nearest' });
       }
     }
-  // Deliberately keyed on selectedEventId only — must fire on selection change, not on every append.
+  // virtualizer identity is render-stable enough here; the satisfied-ref is
+  // the real one-shot guard.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEventId]);
+  }, [selectedEventId, items]);
 
   if (items.length === 0) {
     return <p className={styles.empty}>No conversation events yet.</p>;

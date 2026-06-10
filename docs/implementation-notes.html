@@ -4080,12 +4080,11 @@ vitest: 69 passed
         hook_system_message(규칙명)로 evidence-linked 복원이 가능하다.</li>
     </ul>
     <p>
-      <strong>백로그(이번 범위 외, 코퍼스 실측 있음):</strong> turn_duration system 레코드(762건)
-      지표화 · api_error(12건) 카운트 · compact_boundary(55건) 컨텍스트 압축 빈도 ·
-      <code>... [N characters truncated] ...</code> 잘림 fact(6건) · <code>Command timed out</code>(7건) ·
-      user_message 중단 마커(83건). OTel <code>tool_decision</code>은 ingest 코드가 이미 매핑하나
-      이 환경의 OTLP 수집이 꺼져 있어(corpus log_record 0건) real anchoring 불가 — 텔레메트리
-      활성화 후 별도 작업.
+      <strong>백로그 처리(2026-06-10):</strong> turn_duration·api_error·compact_boundary·잘림 fact·
+      user_message 중단 마커는 <a href="#session-facts-metrics">session-facts 카운트 6종</a>으로 구현 완료.
+      <code>Command timed out</code>은 실 payload 소실(인용만 잔존)로 anchoring 불가 — 보류(같은 섹션 참조).
+      OTel <code>tool_decision</code>은 ingest 코드가 이미 매핑하나 이 환경의 OTLP 수집이 꺼져 있어
+      (corpus log_record 0건) real anchoring 불가 — 텔레메트리 활성화 후 별도 작업으로 여전히 남는다.
     </p>
 
     <h2 id="doc-audit-2026-06-10">문서↔구현 정합성 감사 — 정정 라운드와 코드 측 잔재 (2026-06-10)</h2>
@@ -4101,24 +4100,77 @@ vitest: 69 passed
       감사 중 발견한 <strong>코드 측 잔재(문서가 아닌 구현 정리 backlog)</strong>:
     </p>
     <ul>
-      <li><code>/v1/detectors</code> manifest의 intent/rationale 문자열이 폐기된 MVP plan 문서를
-        "Plan 6"으로 인용(<code>src/insight/manifest.rs</code>) — 현행 참조처럼 읽힘. 문구 교체 필요.</li>
-      <li><code>/v1/events/:id/raw</code> 응답의 <code>redaction_state</code>가 <code>"none"</code>
-        하드코딩(<code>src/api/routes.rs</code> event_raw) — DB의 <code>raw_event.redaction_state</code>를
-        읽지 않고, doc 05가 정의한 어휘(redacted/not_redacted/not_applicable) 밖의 값을 노출.
-        payload는 저장 시점에 이미 마스킹되므로 보안 문제는 아니나 정합 필요.</li>
-      <li>MCP initialize가 <code>prompts</code> capability를 선언하고 <code>prompts/list</code>는
-        빈 목록을 반환 — 동작은 무해하나 제공 기능이 없으면 capability 선언 정리 검토.</li>
-      <li><code>status_provenance</code>가 backend 응답에는 있으나 WebUI
-        <code>VerificationRunDto</code>(webui/src/api/types.ts)에 없음 — UI 배지는
-        detection_basis·status_basis 기반 4어휘(측정/혼합/추정/미수집)로 동작. 필드 수신 여부 결정 필요.</li>
-      <li>webui <code>laneMapping.ts</code>·<code>causalEdgeStyle.ts</code> — graph/judge 시대
-        dead code(자기 테스트 외 import 0건). 삭제 후보.</li>
-      <li><code>redaction_summary</code>는 <code>/v1/sessions</code>에서 최신 1개 세션만 집계하는
-        단순화 구현(<code>src/api/routes.rs:101-108</code>) — doc 04에 현행대로 기재함. 전 세션
-        집계로 바꿀지는 열린 질문.</li>
-      <li>replay <code>?selected=</code> 딥링크는 로드 윈도 밖 이벤트에서 디테일 패널을 열지
-        못함(브라우저 실측) — 윈도 백필 후 선택 또는 단건 fetch 필요.</li>
+      <li><strong>[해결 2026-06-10]</strong> <code>/v1/detectors</code> manifest의 intent/rationale 문자열이 폐기된 plan 문서를
+        "Plan 6"으로 인용 — 현행 참조처럼 읽힘.
+        → <code>tool_failure.rs</code>의 manifest 문자열을 resolve_outcome 체인·실 fixture·spec §6.3 참조로 교체하고,
+        <code>tests/detector_manifest.rs</code>에 "manifest 텍스트는 plan 문서를 인용하지 않는다 + fixture 앵커 필수"
+        assertion을 추가해 잠갔다(red 확인 후 수정). 내부 코드 주석의 "Plan 6"은 이력 참조라 유지.</li>
+      <li><strong>[해결 2026-06-10]</strong> <code>/v1/events/:id/raw</code> 응답의 <code>redaction_state</code>가 <code>"none"</code>
+        하드코딩 — doc 05 어휘 밖의 값을 노출.
+        → DB <code>raw_event.redaction_state</code> 값(<code>not_redacted</code>/<code>redacted</code>)을 그대로 반환.
+        legacy NULL 행(0011 migration 이전)은 doc 05 어휘에 "스캔 미실시" 값이 없으므로 — <code>not_applicable</code>은
+        빈 payload 의미라 오용 — JSON <code>null</code>로 반환하기로 결정하고 테스트로 잠갔다
+        (<code>tests/api_event_raw_redaction.rs</code> 2건, red 확인 후 구현). 실 DB에 NULL 행은 현재 0건.</li>
+      <li><strong>[해결 2026-06-10 — 현행 유지 결정]</strong> MCP initialize가 <code>prompts</code> capability를 선언하고
+        <code>prompts/list</code>는 빈 목록을 반환.
+        → 빈 prompt 목록 제공은 MCP 스펙상 유효하고, 다수 클라이언트가 capability와 무관하게 <code>prompts/list</code>를
+        무조건 호출하므로 빈 목록 응답이 method_not_found보다 호환성이 높다. capability·핸들러 모두 유지.
+        doc 04 §05에 현행 동작 기재 완료.</li>
+      <li><strong>[해결 2026-06-10]</strong> <code>status_provenance</code>가 backend 응답에는 있으나 WebUI
+        <code>VerificationRunDto</code>에 없음.
+        → DTO에 필드 추가(JSDoc에 카드 배지 4어휘와 다른 축임을 명시), 검증 카드 drill의 per-run 행에
+        <code>estimated</code>일 때만 <em>(추정)</em> suffix 표기(measured/unknown/legacy null은 무표기 —
+        degraded 케이스만 표기하는 기존 배지 관례). vitest 2건 red 확인 후 구현, 브라우저 스모크 확인.</li>
+      <li><strong>[해결 2026-06-10]</strong> webui <code>laneMapping.ts</code>·<code>causalEdgeStyle.ts</code> — graph/judge 시대
+        dead code. → import 0건 재확인 후 소스+테스트 4파일 삭제. vitest·tsc green.</li>
+      <li><strong>[해결 2026-06-10]</strong> <code>redaction_summary</code>는 <code>/v1/sessions</code>에서 최신 1개 세션만 집계하는
+        단순화 구현이었음. → 응답에 포함된 전 세션 집계로 교체(<code>repo_raw::aggregate_sessions_summary</code> 신설,
+        동적 IN — 세션 수는 limit clamp로 bounded). 실측: 단일 세션 집계 0건 → 전 세션 27,841건/9규칙.
+        테스트 red 확인 후 구현(<code>tests/api_redaction_summary.rs</code>). doc 04 문구도 갱신.</li>
+      <li><strong>[해결 2026-06-10]</strong> replay <code>?selected=</code> 딥링크는 로드 윈도 밖 이벤트에서 디테일 패널을 열지
+        못함(브라우저 실측) — 윈도 백필 후 선택 또는 단건 fetch 필요.
+        → <code>GET /v1/sessions/:id/events?around=&lt;event_id&gt;</code>로 구현(doc 04 파라미터 표 참조).
+        cursor 포맷이 <code>&lt;observed_at&gt;|&lt;event_id&gt;</code>라 event_id만 가진 클라이언트가 cursor를 직접
+        구성할 수 없고, cursor 경계가 exclusive라 대상 event 본인을 포함시킬 수도 없어 — 프론트 단독(선택지 b)이
+        아닌 백엔드 파라미터(선택지 a)를 택했다. 서버는 대상 event를 중심으로 전 <code>(limit-1)/2</code>·후 나머지
+        window를 반환(<code>list_session_around</code>가 기존 <code>list_session_window</code>의 before/after arm 재사용,
+        event 부재 시 404). WebUI는 <code>useSessionWindow.loadAround</code>가 윈도를 around 페이지로 교체(응답
+        cursor 유지 → 이후 위/아래 페이지네이션 정상), <code>SessionDetailPage</code>가 selected가 윈도에 없을 때
+        1회 시도(404 무한 재시도 방지 ref 가드), <code>ConversationStream</code>은 늦게 마운트되는 선택 row에
+        한해 deferred scroll-into-view(선택당 1회, append에는 재스크롤 없음).</li>
+    </ul>
+
+    <h2 id="session-facts-metrics">SessionMetrics — 코퍼스 실측 session fact 카운트 6종 (2026-06-10)</h2>
+    <p>
+      #disposition-classification 백로그를 구현했다. 모든 마커/레코드 형태는 재스캔(776 파일)에서
+      직접 추출해 <code>tests/fixtures/transcripts/real/session_facts_v01.jsonl</code>(실 세션 6라인)에
+      동결하고 <code>tests/session_facts.rs</code>의 invariant assertion으로 잠갔다. 전부 F1
+      count/합 — rate scalar 없음. Rust(<code>src/insight/metrics.rs</code>) + WebUI <code>SessionMetricsDto</code>
+      필드 동기화(tsc red 확인 후 추가). 분석 패널 렌더는 미추가 — API/DTO로만 노출.
+    </p>
+    <ul>
+      <li><strong><code>turn_duration_ms_total</code> + <code>turn_duration_count</code></strong> —
+        system/turn_duration 레코드(재스캔 734건; 백로그 시점 762건 대비 감소는 세션 로테이션)의
+        <code>durationMs</code> 합과 레코드 수. 평균은 소비자 계산.</li>
+      <li><strong><code>api_error_count</code></strong> — system/api_error 레코드 수(12건,
+        status 529 overloaded_error + retryAttempt/retryInMs 보유 실측).</li>
+      <li><strong><code>compact_boundary_count</code></strong> — system/compact_boundary 레코드 수
+        (44건, <code>compactMetadata.trigger/preTokens/postTokens</code> 보유).
+        세 system 레코드 모두 기존 ingest가 SystemSummary + subkind로 이미 매핑하고 있어 파서 변경 없음.</li>
+      <li><strong><code>tool_result_truncated_count</code></strong> — 하니스 잘림 마커
+        <code>... [N characters truncated] ...</code>(N=숫자)를 포함한 tool_result 수. 실측 6건 전수에서
+        마커는 본문 중간 <code>\n\n</code> 둘레 — prefix 매칭 불가라 숫자 요구 substring 매칭
+        (리터럴 N 문서 인용은 비매칭, 숫자 포함 인용이 오면 오탐 가능성은 남는다).</li>
+      <li><strong><code>user_interruption_count</code></strong> — user_message text가
+        <code>[Request interrupted by user</code>로 시작(실측 74건 전수가 정확히
+        <code>[Request interrupted by user]</code> 44 · <code>… for tool use]</code> 30, 모두
+        array-content text item 전체=마커). disposition과 동일한 prefix 기준.</li>
+      <li><strong>구현 보류: <code>tool_timeout_count</code></strong> — <code>Command timed out</code>
+        마커는 현 코퍼스에 22건 전부가 <em>인용</em>(이전 감사 세션의 스캔 보고서·문서 diff,
+        mid-content)이고 하니스 생성 실 tool_result가 0건(백로그가 측정한 7건의 세션은 로테이션으로
+        소실). real-data anchoring 불가로 미구현 — 실 payload가 다시 관측되면 동결 후 추가.
+        MCP 도구별 timeout 문구("CDP sendCommand … timed out", "The operation timed out.")는
+        도구 고유 프로즈라 결정론 하니스 마커가 아니어서 일반화하지 않았다.</li>
     </ul>
 
 </main>

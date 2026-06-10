@@ -392,6 +392,49 @@ pub async fn list_session_window(
     Ok(events)
 }
 
+/// Deep-link window — the events around (and including) `event_id`, ordered
+/// ASC like every window. Used by `?around=<event_id>`: a replay deep link
+/// (`/sessions/:id?selected=<event_id>`) carries only the event_id, so the
+/// client cannot build a `<observed_at>|<event_id>` cursor for it — and the
+/// cursor bounds are exclusive, so even a known cursor could not include the
+/// target itself. Returns `None` when the event does not exist in the session.
+///
+/// Window shape: `(limit-1)/2` events strictly before the target, the target,
+/// then the remainder strictly after — both halves clamp at the session
+/// edges (no rebalancing; a target near the start/end yields a smaller
+/// window). Reuses `list_session_window`'s before/after arms so the ordering
+/// key `(observed_at, event_id)` stays the single SQL contract.
+pub async fn list_session_around(
+    pool: &SqlitePool,
+    session_id: &str,
+    event_id: &str,
+    limit: i64,
+) -> Result<Option<Vec<ObservedEvent>>> {
+    let limit = limit.clamp(1, 1000);
+    let row = sqlx::query("SELECT * FROM observed_event WHERE session_id = ? AND event_id = ?")
+        .bind(session_id)
+        .bind(event_id)
+        .fetch_optional(pool)
+        .await?;
+    let Some(row) = row else { return Ok(None) };
+    let target = row_to_observed(row);
+    let cursor = Cursor {
+        observed_at: target.observed_at,
+        event_id: target.event_id.clone(),
+    };
+    let before_n = (limit - 1) / 2;
+    let after_n = limit - 1 - before_n;
+    let mut events = Vec::with_capacity(limit as usize);
+    if before_n > 0 {
+        events.extend(list_session_window(pool, session_id, Some(&cursor), None, before_n).await?);
+    }
+    events.push(target);
+    if after_n > 0 {
+        events.extend(list_session_window(pool, session_id, None, Some(&cursor), after_n).await?);
+    }
+    Ok(Some(events))
+}
+
 /// On-demand correlated telemetry for the detail view: the events whose indexed
 /// `tool_use_id` / `request_id` columns match the given keys, used when an
 /// entity's correlated telemetry falls outside the loaded message window.
