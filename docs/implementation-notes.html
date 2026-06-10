@@ -2161,7 +2161,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
           evidence_refs: action.start_event_id + action.end_event_id + hunk event_ids + intake window start.</dd>
 
       <dt><code>tool_failure</code> 룰</dt>
-      <dd>is_error=true인 tool_result에 대해 forward 5 events 이내 같은 tool_use_id의 성공 retry가 없을 때 발화.
+      <dd><em>(stale — Plan 6에서 <code>resolve_outcome(...).status == Failed</code> 트리거로 교체됨;
+          is_error는 FACT로만 보존. 2026-06-10 disposition PR에서 정정. 아래는 당시 기록.)</em>
+          is_error=true인 tool_result에 대해 forward 5 events 이내 같은 tool_use_id의 성공 retry가 없을 때 발화.
           confidence 1.0 (is_error flag 직접 인용), severity high.
           evidence_refs: [tool_result_event_id, paired_tool_call_event_id].
           <strong>페이로드 경로</strong>: <code>payload.pointer("/tool_result/is_error")</code> —
@@ -4052,8 +4054,8 @@ vitest: 69 passed
     <ul>
       <li><strong><code>&lt;tool_use_error&gt;</code> → Failed(Measured)</strong> —
         <code>outcome.rs</code> Step 3b. 하니스가 기계 생성하는 구조화 에러 래퍼(프로즈 파싱 아님)로,
-        exit code가 없는 비-Bash 도구(Edit/Write)의 유일한 transcript 실패 신호다. 코퍼스 ~790건
-        (stale-read 431 · not-read 143 · edit mismatch 152 · InputValidationError 36)이 전부
+        exit code가 없는 비-Bash 도구(Edit/Write)의 유일한 transcript 실패 신호다. 코퍼스에서 이 래퍼는 ~786건
+        (실패 4종 합 762 = stale-read 431 · not-read 143 · edit mismatch 152 · InputValidationError 36, + 취소 ~24)이 전부
         Unknown으로 유실되고 있었다. 이 변경으로 <code>tool_failure</code> detector가 Edit 실패에도
         발화한다(재ingest 시 신호 수 증가는 의도된 회수). 예외:
         <code>&lt;tool_use_error&gt;Cancelled:</code>(병렬 호출 취소)는 실행 실패가 아니라 Unknown 유지.</li>

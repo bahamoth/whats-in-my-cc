@@ -110,8 +110,16 @@ export type VerificationRunDto = {
   trigger_tool_use_id: string | null;
   status: 'passed' | 'failed' | 'skipped' | string;
   detection_basis: 'known_tool' | 'test_keyword' | string;
-  /** 'background' = 백그라운드 전환되어 이 이벤트엔 출력/exit code가 없음 (측정 불가 사유). */
-  status_basis: 'exit' | 'piped' | 'background' | string;
+  /** 측정 불가 사유 포함: 'background'(출력/exit code가 이 이벤트에 없음) ·
+   *  'user_rejected'/'policy_denied'/'cancelled'(도구가 실행되지 않음). */
+  status_basis:
+    | 'exit'
+    | 'piped'
+    | 'background'
+    | 'user_rejected'
+    | 'policy_denied'
+    | 'cancelled'
+    | string;
   started_at: string;
   ended_at: string | null;
   exit_code: number | null;

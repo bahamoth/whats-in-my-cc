@@ -13,6 +13,10 @@
 //!    — measured.
 //! 3. Transcript `tool_result` content — a line-start "Exit code N" (Claude
 //!    Code's prepend on non-zero exit) or "exit code: N" — measured.
+//! 3b. Transcript `tool_result` content starting with `<tool_use_error>` —
+//!     하니스의 기계 생성 에러 래퍼 → Failed, measured. exit code가 없는
+//!     비-Bash 도구(Edit/Write)의 유일한 transcript 실패 신호.
+//!     예외: `<tool_use_error>Cancelled:`(병렬 호출 취소)는 Unknown 유지.
 //! 4. Nothing matched → Unknown (is_error is NOT used for outcome).
 
 use crate::model::observed::{EventKind, ObservedEvent};
@@ -30,8 +34,10 @@ pub enum OutcomeStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OutcomeProvenance {
-    /// Derived from a signal that directly reflects the command's exit
-    /// (OTLP success attribute, hook exit_code, or a line-start "Exit code N").
+    /// Derived from a machine-generated signal that directly reflects the
+    /// tool execution's result: OTLP success attribute, hook exit_code, a
+    /// line-start "Exit code N", or the harness `<tool_use_error>` wrapper
+    /// (Step 3b — 실패 사실은 측정이지만 exit code 값은 없을 수 있음).
     Measured,
     /// Derived from a tool-specific output pattern heuristic (e.g. "FAILED").
     Estimated,
@@ -55,8 +61,8 @@ impl Outcome {
 
 /// Resolve the command outcome for a given `tool_use_id` from the event slice.
 ///
-/// Events must belong to the same session. Order is not assumed (all three
-/// steps scan the full slice).
+/// Events must belong to the same session. Order is not assumed (every step
+/// of the chain scans the full slice).
 ///
 /// The `is_error` field of transcript `tool_result` events is intentionally
 /// **not** used to determine pass/fail — it only indicates whether the tool
@@ -166,7 +172,7 @@ pub fn resolve_outcome(events: &[ObservedEvent], tool_use_id: &str) -> Outcome {
             // "<tool_use_error>…</tool_use_error>"는 Claude Code 하니스가 도구
             // 실행 실패 시 기계 생성하는 래퍼(프로즈 파싱 아님) → Failed, Measured.
             // Bash 외 도구(Edit/Write 등)는 exit code가 없어 이 채널이 유일한
-            // transcript 실패 신호다 (코퍼스 ~790건; real fixture:
+            // transcript 실패 신호다 (코퍼스 ~786건 = 실패 4종 762 + 취소 ~24; real fixture:
             // disposition_v01.jsonl, invariant: tests/transcript_disposition.rs).
             // 예외: "Cancelled:"(병렬 호출 취소)는 실행 실패가 아니라
             // disposition(cancelled) → Unknown 유지.
@@ -280,7 +286,7 @@ mod tests {
     fn tool_use_error_resolves_failed_measured() {
         // <tool_use_error>는 하니스가 기계 생성하는 구조화 에러 채널(프로즈 아님) —
         // 실 payload: disposition_v01.jsonl session 5864d6c7 (stale-read Edit 실패).
-        // 코퍼스 ~790건이 이 래퍼를 갖지만 기존 체인은 전부 Unknown으로 흘려보냈다.
+        // 코퍼스 ~786건(실패 4종 762 + 취소 ~24)이 이 래퍼를 갖지만 기존 체인은 전부 Unknown으로 흘려보냈다.
         let evs = vec![tool_result_ev(
             "toolu_stale",
             "<tool_use_error>File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.</tool_use_error>",
