@@ -13,10 +13,10 @@
 //!    — measured.
 //! 3. Transcript `tool_result` content — a line-start "Exit code N" (Claude
 //!    Code's prepend on non-zero exit) or "exit code: N" — measured.
-//! 3b. Transcript `tool_result` content starting with `<tool_use_error>` —
-//!     하니스의 기계 생성 에러 래퍼 → Failed, measured. exit code가 없는
-//!     비-Bash 도구(Edit/Write)의 유일한 transcript 실패 신호.
-//!     예외: `<tool_use_error>Cancelled:`(병렬 호출 취소)는 Unknown 유지.
+//! 3. (b) Transcript `tool_result` content starting with `<tool_use_error>` —
+//!    하니스의 기계 생성 에러 래퍼 → Failed, measured. exit code가 없는
+//!    비-Bash 도구(Edit/Write)의 유일한 transcript 실패 신호.
+//!    예외: `<tool_use_error>Cancelled:`(병렬 호출 취소)는 Unknown 유지.
 //! 4. Nothing matched → Unknown (is_error is NOT used for outcome).
 
 use crate::model::observed::{EventKind, ObservedEvent};
