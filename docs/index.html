@@ -30,32 +30,28 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <a class="" href="03_data_model_spec.html">Data Model Spec</a>
 <a class="" href="04_api_mcp_spec.html">Pull API & MCP Spec</a>
 <a class="" href="05_security_governance_spec.html">Security & Governance Spec</a>
-<a class="" href="06_mvp_execution_plan.html">MVP Execution Plan</a>
 <a class="" href="implementation-notes.html">Implementation Notes</a></nav><h2>On this page</h2><nav class="localnav"><a href="#overview">개요</a>
 <a href="#decision">반영 결정</a>
 <a href="#map">문서 지도</a>
 <a href="#docs">문서 링크</a>
-<a href="#source">기준</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set · 2026-05-19 · rev 2026-06-10 현행화</div><h1>What's in My Claude Code 문서 포털</h1><p>PRD 개정과 설계·스펙 문서 세트를 한곳에서 탐색하는 HTML 포털. 전 문서는 2026-06-10에 현재 구현(event-first 뷰 · deterministic L1 Signal · graph/judge 레이어 삭제)에 맞게 현행화됐다.</p><div class="badges"><span class="badge">Pull API</span><span class="badge">MCP Streamable HTTP</span><span class="badge">annotation removed</span><span class="badge">OTel-first</span><span class="badge">event-first</span><span class="badge">deterministic L1</span></div></header>
+<a href="#source">기준</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set</div><h1>What's in My Claude Code 문서 포털</h1><p>wimcc의 제품 요구·설계·스펙 문서 세트를 한곳에서 탐색하는 HTML 포털. 설계 변경 이력은 git과 Implementation Notes가 보관한다.</p><div class="badges"><span class="badge">Pull API</span><span class="badge">MCP Streamable HTTP</span><span class="badge">annotation removed</span><span class="badge">OTel-first</span><span class="badge">event-first</span><span class="badge">deterministic L1</span></div></header>
 <section id="overview"><h2><span class="num">01</span>문서 세트 개요</h2>
-<p>이 산출물은 기존 PRD를 <strong>로컬 구동 기반의 실행 인텔리전스 서비스</strong>로 재정렬한 HTML 문서 세트다. 외부 연동은 <em>Pull API</em>와 <em>MCP Streamable HTTP</em>를 우선하며, 외부 시스템이 finding이나 resource에 쓰기 작업을 하는 구조는 제거했다.</p>
+<p>wimcc는 <strong>로컬 구동 기반의 실행 인텔리전스 서비스</strong>다. 외부 연동은 <em>Pull API</em>와 <em>MCP Streamable HTTP</em>이며 전부 read-only다 — 외부 시스템이 signal이나 resource에 쓰기 작업을 하는 구조는 없다.</p>
 <div class="grid four">
-  <div class="card"><h4>PRD 수정</h4><p>annotation 관련 요구사항 제거. OTel, local full evidence, read-only resource serving을 핵심 요구사항으로 승격.</p></div>
-  <div class="card"><h4>설계 분리</h4><p>Product, Architecture, Data Model, API/MCP, Security, MVP Plan으로 분리.</p></div>
+  <div class="card"><h4>Read-only 연동</h4><p>Pull API·MCP 모두 읽기 전용. annotation·외부 write 모델 없음.</p></div>
+  <div class="card"><h4>설계 분리</h4><p>Product, Architecture, Data Model, API/MCP, Security 스펙으로 분리.</p></div>
   <div class="card"><h4>시각화 우선</h4><p>HTML 기반 swimlane, animated pipeline, SVG graph, Gantt, metric chart 포함.</p></div>
   <div class="card"><h4>로컬 우선</h4><p>127.0.0.1 바인딩, high-fidelity local collection, secret redaction, owner-controlled export.</p></div>
 </div>
 </section>
-<section id="decision"><h2><span class="num">02</span>반영된 의사결정</h2>
-<table><thead><tr><th>항목</th><th>결정</th><th>문서 반영</th></tr></thead><tbody>
-<tr><td>외부 연동</td><td><span class="pill blue">Pull API</span> <span class="pill violet">MCP Streamable HTTP</span></td><td>API & MCP Spec, Architecture Spec</td></tr>
-<tr><td>어노테이션</td><td><span class="pill red">Removed</span> 외부·사용자 annotation model 제거</td><td>PRD, Data Model, API에서 POST/PATCH feedback write 제거</td></tr>
-<tr><td>collection level</td><td><span class="pill amber">local_full_evidence 기본</span></td><td>Security Spec, PRD, Architecture Spec</td></tr>
-<tr><td>OTel</td><td><span class="pill green">MVP core source</span> 나중에 붙이는 부가 source가 아님</td><td>Architecture, Data Model, MVP Plan 전반</td></tr>
-<tr><td>graph 레이어</td><td><span class="pill red">Removed (2026-06-07)</span> node/edge 테이블·API·MCP 도구 삭제 — event-first(correlation 키)로 대체</td><td>Architecture, Data Model, API/MCP, PRD</td></tr>
-<tr><td>LLM judge</td><td><span class="pill red">Removed (2026-06-06)</span> 모든 extractor deterministic L1</td><td>Architecture, MVP Plan</td></tr>
-<tr><td>Finding 모델</td><td><span class="pill violet">Signal로 대체</span> evidence_refs 필수, detector 5종</td><td>Data Model, API/MCP, PRD</td></tr>
-<tr><td>집계 정직성</td><td><span class="pill green">count만 (F1)</span> rate scalar 미제공 — 소비자가 자기 윈도우로 계산</td><td>Data Model, API/MCP</td></tr>
-<tr><td>문서 형태</td><td><span class="pill blue">분리 HTML</span></td><td>이 문서 세트 전체</td></tr>
+<section id="decision"><h2><span class="num">02</span>설계 원칙</h2>
+<table><thead><tr><th>원칙</th><th>내용</th><th>상세 문서</th></tr></thead><tbody>
+<tr><td>외부 연동</td><td><span class="pill blue">Pull API</span> <span class="pill violet">MCP Streamable HTTP</span> — 전부 read-only</td><td>API & MCP Spec</td></tr>
+<tr><td>Event-first</td><td><span class="pill blue">ObservedEvent + correlation 키</span> 뷰·지표·signal이 이벤트를 직접 읽는다</td><td>Architecture, Data Model</td></tr>
+<tr><td>Deterministic insight</td><td><span class="pill green">L1 detector 5종 → Signal</span> evidence_refs 필수, LLM 판정 없음</td><td>Data Model, API/MCP</td></tr>
+<tr><td>집계 정직성</td><td><span class="pill green">count만 제공</span> rate scalar 없음 — 소비자가 자기 윈도우로 계산</td><td>Data Model, API/MCP</td></tr>
+<tr><td>OTel</td><td><span class="pill green">core source</span> trace/span은 correlation 1급 키</td><td>Architecture, Data Model</td></tr>
+<tr><td>Local-first</td><td><span class="pill amber">127.0.0.1 · local_full_evidence · ingest redaction</span></td><td>Security Spec</td></tr>
 </tbody></table></section>
 <section id="map"><h2><span class="num">03</span>문서 지도</h2>
 <div class="diagram"><svg viewBox="0 0 980 430" width="100%" height="430" role="img" aria-label="document architecture map">
@@ -66,8 +62,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <rect x="480" y="158" width="180" height="64" class="nodebox2"/><text x="570" y="188" text-anchor="middle" class="svgtext">Data Model</text><text x="570" y="208" text-anchor="middle" class="svgtext" opacity=".72">schemas / graph</text>
 <rect x="702" y="158" width="220" height="64" class="nodebox2"/><text x="812" y="188" text-anchor="middle" class="svgtext">Pull API & MCP</text><text x="812" y="208" text-anchor="middle" class="svgtext" opacity=".72">read-oriented serving</text>
 <rect x="220" y="302" width="230" height="64" class="nodebox3"/><text x="335" y="332" text-anchor="middle" class="svgtext">Security & Governance</text><text x="335" y="352" text-anchor="middle" class="svgtext" opacity=".72">local + redaction</text>
-<rect x="530" y="302" width="230" height="64" class="nodebox3"/><text x="645" y="332" text-anchor="middle" class="svgtext">MVP Execution Plan</text><text x="645" y="352" text-anchor="middle" class="svgtext" opacity=".72">milestones / acceptance</text>
-<path d="M490 88 C490 118 126 118 126 158" class="edge" marker-end="url(#arrow)"/><path d="M490 88 C490 120 348 124 348 158" class="edge" marker-end="url(#arrow)"/><path d="M490 88 C490 120 570 124 570 158" class="edge" marker-end="url(#arrow)"/><path d="M490 88 C540 120 812 124 812 158" class="edge" marker-end="url(#arrow)"/><path d="M348 222 C336 258 335 274 335 302" class="edge" marker-end="url(#arrow)"/><path d="M570 222 C600 258 630 274 645 302" class="edge" marker-end="url(#arrow)"/><path d="M812 222 C780 260 704 274 645 302" class="edge" marker-end="url(#arrow)"/></svg></div>
+<path d="M490 88 C490 118 126 118 126 158" class="edge" marker-end="url(#arrow)"/><path d="M490 88 C490 120 348 124 348 158" class="edge" marker-end="url(#arrow)"/><path d="M490 88 C490 120 570 124 570 158" class="edge" marker-end="url(#arrow)"/><path d="M490 88 C540 120 812 124 812 158" class="edge" marker-end="url(#arrow)"/><path d="M348 222 C336 258 335 274 335 302" class="edge" marker-end="url(#arrow)"/></svg></div>
 </section>
 <section id="docs"><h2><span class="num">04</span>문서 링크</h2><div class="grid three">
 <a class="card" href="00_prd_revised.html"><h4>00 · Revised PRD</h4><p>제품 요구사항, scope, dependency graph, acceptance catalog.</p></a>
@@ -76,8 +71,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <a class="card" href="03_data_model_spec.html"><h4>03 · Data Model Spec</h4><p>ObservedEvent, Signal, VerificationRun, SessionMetrics schema.</p></a>
 <a class="card" href="04_api_mcp_spec.html"><h4>04 · Pull API & MCP Spec</h4><p>REST-style Pull API, MCP Streamable HTTP resources/tools.</p></a>
 <a class="card" href="05_security_governance_spec.html"><h4>05 · Security & Governance Spec</h4><p>수집 레벨, local binding, redaction, retention, audit.</p></a>
-<a class="card" href="06_mvp_execution_plan.html"><h4>06 · MVP Execution Plan</h4><p>마일스톤, acceptance, test matrix, delivery sequence.</p></a>
-<a class="card" href="implementation-notes.html"><h4>07 · Implementation Notes</h4><p>slice별 의도적 편차, 트레이드오프, 정책 결정 기록. spec 대비 구현 차이의 single source of truth.</p></a>
+<a class="card" href="implementation-notes.html"><h4>06 · Implementation Notes</h4><p>slice별 의도적 편차, 트레이드오프, 정책 결정 기록. spec 대비 구현 차이의 single source of truth.</p></a>
 </div></section>
 <section id="source"><h2><span class="num">05</span>기준 문서와 외부 기준</h2>
 <p>기준 PRD는 업로드된 <strong>What's in My Claude Code — Feedback Resource PRD</strong>다. MCP 문서에서는 Streamable HTTP가 POST/GET 기반이며 SSE를 통한 streaming이 가능하다는 점, 그리고 로컬 서버는 Origin 검증과 localhost 바인딩이 중요하다는 점을 설계에 반영했다. Claude Code OTel 문서에서는 metrics, logs/events, traces가 source layer로 사용될 수 있다는 점을 반영했다.</p>

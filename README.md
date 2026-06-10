@@ -289,12 +289,8 @@ migration, so existing events won't have them until re-ingested.
 
 ## Reference docs
 
-- Full system specs: `docs/index.html` and `docs/00..06_*.html`
+- Full system specs: `docs/index.html` and `docs/00..05_*.html`
 - Implementation notes (deviations, decisions, event-first redesign):
   `docs/implementation-notes.html`
 - Project guidance for contributors: `CLAUDE.md`
 
-> The HTML specs were refreshed on 2026-06-10 to match the current
-> implementation (event-first views, deterministic L1 signals, graph/judge
-> layers removed). Historical decisions are recorded in
-> `docs/implementation-notes.html`.

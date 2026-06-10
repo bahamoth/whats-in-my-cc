@@ -29,25 +29,22 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <a class="" href="02_technical_architecture_spec.html">Technical Architecture Spec</a>
 <a class="active" href="03_data_model_spec.html">Data Model Spec</a>
 <a class="" href="04_api_mcp_spec.html">Pull API & MCP Spec</a>
-<a class="" href="05_security_governance_spec.html">Security & Governance Spec</a>
-<a class="" href="06_mvp_execution_plan.html">MVP Execution Plan</a></nav><h2>On this page</h2><nav class="localnav"><a href="#principles">Principles</a>
+<a class="" href="05_security_governance_spec.html">Security & Governance Spec</a></nav><h2>On this page</h2><nav class="localnav"><a href="#principles">Principles</a>
 <a href="#erd">ERD</a>
 <a href="#raw">RawEvent</a>
 <a href="#observed">ObservedEvent</a>
-<a href="#graph">Graph (삭제됨)</a>
-<a href="#context">ContextArtifact (폐기)</a>
 <a href="#lineage">Lineage</a>
 <a href="#insight">Signal</a>
 <a href="#metrics">Metrics & Usage</a>
-<a href="#resource">Resource (미구현)</a>
 <a href="#indexes">Indexes</a>
 <a href="#migration">Migration</a>
-<a href="#questions">Feedback</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set · 2026-05-19 · 개정 2026-06-10: graph 스키마 삭제(0019)·Finding→Signal(0021)·VerificationRun/SessionMetrics/usage 현행화</div><h1>Data Model Spec</h1><p>RawEvent, ObservedEvent(telemetry facet 포함), file lineage(DiffHunk), VerificationRun, Signal, SessionMetrics/usage schema를 정의한다. graph(node/edge) 스키마는 2026-06-07 삭제됐다 — 뷰와 insight는 ObservedEvent + correlation 키로 직접 동작한다(event-first).</p><div class="badges"><span class="badge">Schemas</span><span class="badge">Event-first</span><span class="badge">Evidence</span></div></header>
+<a href="#questions">Feedback</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set</div><h1>Data Model Spec</h1><p>RawEvent, ObservedEvent(telemetry facet 포함), file lineage(DiffHunk), VerificationRun, Signal, SessionMetrics/usage schema를 정의한다. 뷰와 insight는 ObservedEvent + correlation 키로 직접 동작한다(event-first).</p><div class="badges"><span class="badge">Schemas</span><span class="badge">Event-first</span><span class="badge">Evidence</span></div></header>
 <section id="principles"><h2><span class="num">01</span>Data Model Principles</h2>
-<ol><li><strong>OTel-first:</strong> trace_id/span_id/metric/log reference는 나중에 붙이는 optional metadata가 아니라 ObservedEvent의 1급 correlation 컬럼·telemetry facet의 핵심 field다.</li><li><strong>Source-preserving:</strong> normalized object는 항상 raw source reference(<code>raw_event_id</code>)를 갖는다. unknown field는 <code>payload</code> JSON에 보존된다.</li><li><strong>Evidence-linked:</strong> Signal은 비어 있지 않은 <code>evidence_refs</code> 없이 존재할 수 없다 (AC-4).</li><li><strong>No annotation model:</strong> 사용자/외부 서비스가 signal에 correction, label, status를 쓰는 domain object는 정의하지 않는다.</li><li><strong>Schema versioning:</strong> 모든 top-level object는 schema_version과 provenance를 가진다.</li><li><strong>Deterministic L1:</strong> 모든 detector는 결정론 규칙이다. severity/confidence 같은 판단(judgment) 필드는 저장하지 않는다 — facts만 저장한다. (LLM judge 서브시스템은 2026-06-06 삭제.)</li><li><strong>합성 가능한 count만 (F1):</strong> window-고정 rate scalar는 저장·반환하지 않는다. rate = count / window이고 window는 분석마다 다르므로 소비자가 계산한다.</li></ol>
+<ol><li><strong>OTel-first:</strong> trace_id/span_id/metric/log reference는 나중에 붙이는 optional metadata가 아니라 ObservedEvent의 1급 correlation 컬럼·telemetry facet의 핵심 field다.</li><li><strong>Source-preserving:</strong> normalized object는 항상 raw source reference(<code>raw_event_id</code>)를 갖는다. unknown field는 <code>payload</code> JSON에 보존된다.</li><li><strong>Evidence-linked:</strong> Signal은 비어 있지 않은 <code>evidence_refs</code> 없이 존재할 수 없다 (AC-4).</li><li><strong>No annotation model:</strong> 사용자/외부 서비스가 signal에 correction, label, status를 쓰는 domain object는 정의하지 않는다.</li><li><strong>Schema versioning:</strong> 모든 top-level object는 schema_version과 provenance를 가진다.</li><li><strong>Deterministic L1:</strong> 모든 detector는 결정론 규칙이다. severity/confidence 같은 판단(judgment) 필드는 저장하지 않는다 — facts만 저장한다.</li><li><strong>합성 가능한 count만:</strong> window-고정 rate scalar는 저장·반환하지 않는다. rate = count / window이고 window는 분석마다 다르므로 소비자가 계산한다.</li></ol>
+<p class="muted">Non-features: export bundle은 제공하지 않는다.</p>
 </section>
 <section id="erd"><h2><span class="num">02</span>Entity Relationship Map</h2>
-<p class="muted">2026-06-07 graph 삭제 후의 현행 엔티티. GraphNode/GraphEdge·Finding·FeedbackResource/ExportBundle은 더 이상 존재하지 않는다. SessionMetrics는 저장 테이블이 아니라 조회 시 on-demand 집계다(점선).</p>
+<p class="muted">SessionMetrics는 저장 테이블이 아니라 조회 시 on-demand 집계다(점선).</p>
 <div class="diagram"><svg viewBox="0 0 1080 440" width="100%" height="440"><defs><marker id="arrd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#6ee7ff"/></marker></defs>
 <rect x="40" y="40" width="180" height="62" class="nodebox"/><text x="130" y="77" text-anchor="middle" class="svgtext">RawEvent</text>
 <rect x="320" y="40" width="220" height="62" class="nodebox"/><text x="430" y="77" text-anchor="middle" class="svgtext">ObservedEvent</text>
@@ -64,7 +61,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <path d="M520 367 L620 363" class="edge" marker-end="url(#arrd)"/>
 <path d="M700 252 C730 280 750 300 757 330" class="edge" marker-end="url(#arrd)"/>
 </svg></div>
-<p class="muted">transcript live tail + ingest backfill + OTel/hook collector → <code>raw_event</code>(원본 보존) → <code>observed_event</code> → side-table(usage_facet · diff_hunk · verification_run) → ingest가 insight 파이프라인(detector 5종)을 직접 호출 → <code>signal</code> → 조회 시 on-demand SessionMetrics. graph rebuild 단계는 없다.</p>
+<p class="muted">transcript live tail + ingest backfill + OTel/hook collector → <code>raw_event</code>(원본 보존) → <code>observed_event</code> → side-table(usage_facet · diff_hunk · verification_run) → ingest가 insight 파이프라인(detector 5종)을 직접 호출 → <code>signal</code> → 조회 시 on-demand SessionMetrics.</p>
 </section>
 <section id="raw"><h2><span class="num">03</span>RawEvent</h2>
 <p>원본 보존 레이어. 구현은 별도 payload store 없이 <code>raw_event</code> 행에 payload bytes를 직접 보존한다 (<code>src/db/repo_raw.rs</code> 기준).</p>
@@ -82,10 +79,10 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "redaction_state": "not_redacted",
   "redaction_manifest": null
 }</code></pre>
-<table><thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead><tbody><tr><td>source_type</td><td>yes</td><td><code>claude_transcript</code> · <code>otel</code>(traces) · <code>otel-metrics</code> · <code>otel-logs</code> · <code>hook</code> · <code>unparseable</code>(파싱 실패 라인도 원본 보존). <strong>Slice-10a:</strong> <code>file_git</code> removed; file lineage comes from transcript <code>toolUseResult.structuredPatch</code>.</td></tr><tr><td>payload / payload_sha256</td><td>yes</td><td>payload bytes 그대로 보존. <code>payload_sha256</code>는 dedup 키 — hook collector 경로에서는 마스킹 적용 <em>전</em> canonical payload 기준으로 계산된다.</td></tr><tr><td>redaction_state</td><td>yes</td><td><code>redacted</code> | <code>not_redacted</code> | <code>not_applicable</code> (slice-18). <code>redaction_manifest</code>는 적용 규칙의 JSON 직렬화.</td></tr></tbody></table>
+<table><thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead><tbody><tr><td>source_type</td><td>yes</td><td><code>claude_transcript</code> · <code>otel</code>(traces) · <code>otel-metrics</code> · <code>otel-logs</code> · <code>hook</code> · <code>unparseable</code>(파싱 실패 라인도 원본 보존). file lineage는 transcript <code>toolUseResult.structuredPatch</code>에서 나온다.</td></tr><tr><td>payload / payload_sha256</td><td>yes</td><td>payload bytes 그대로 보존. <code>payload_sha256</code>는 dedup 키 — hook collector 경로에서는 마스킹 적용 <em>전</em> canonical payload 기준으로 계산된다.</td></tr><tr><td>redaction_state</td><td>yes</td><td><code>redacted</code> | <code>not_redacted</code> | <code>not_applicable</code>. <code>redaction_manifest</code>는 적용 규칙의 JSON 직렬화.</td></tr></tbody></table>
 </section>
 <section id="observed"><h2><span class="num">04</span>ObservedEvent</h2>
-<div class="callout"><strong>Event-first (2026-06-04, PR #33):</strong> 메세지·디테일·raw 뷰와 모든 detector는 <code>ObservedEvent</code> + correlation 키(<code>tool_use_id</code>/<code>request_id</code>/<code>turn_id</code>/<code>message_id</code>)로 직접 동작한다. correlation 키는 nested object가 아니라 <strong>1급 컬럼</strong>이다. 상세: <a href="implementation-notes.html#event-first-redesign"><code>implementation-notes.html#event-first-redesign</code></a>.</div>
+<div class="callout"><strong>Event-first:</strong> 메세지·디테일·raw 뷰와 모든 detector는 <code>ObservedEvent</code> + correlation 키(<code>tool_use_id</code>/<code>request_id</code>/<code>turn_id</code>/<code>message_id</code>)로 직접 동작한다. correlation 키는 nested object가 아니라 <strong>1급 컬럼</strong>이다. 상세: <a href="implementation-notes.html#event-first-redesign"><code>implementation-notes.html#event-first-redesign</code></a>.</div>
 <p>구현 기준 형태 (<code>src/model/observed.rs</code>의 <code>ObservedEvent</code>):</p>
 <pre><code>{
   "event_id": "01J...  (ULID)",
@@ -120,25 +117,17 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <tr><td><code>otel_span</code> / <code>metric_sample</code> / <code>log_record</code></td><td>OTLP collector 산출. facet은 각각 telemetry 컬럼 / payload JSON.</td></tr>
 <tr><td><code>unknown</code></td><td>분류 실패 — 원본은 raw_event에 보존.</td></tr>
 </tbody></table>
-</section>
-<section id="graph"><h2><span class="num">05</span>Graph — 삭제됨 (2026-06-07)</h2>
-<div class="callout danger"><strong>GraphNode/GraphEdge 스키마는 완전히 삭제됐다</strong> (2026-06-07, <code>refactor/drop-judge-graph</code>, migration 0019에서 <code>graph_node</code>/<code>graph_edge</code> 테이블 drop). <code>src/graph/</code>·edge_inference·<code>/v1/sessions/:id/graph</code> Pull API·MCP <code>get_session_graph</code>/<code>explain_node</code>도 함께 제거됐다. 이 문서의 이전 판이 정의했던 node/edge JSON과 edge type 표는 git history에서만 유효하다.</div>
-<h3>대체: correlation 키 기반 event-first</h3>
-<p>graph는 어떤 뷰의 backing도, signal의 근거도 아니었다 — 메세지·디테일·raw 뷰는 이미 <code>ObservedEvent</code> + correlation 키로 직접 그렸고, extractor는 이벤트만 사용했다. 따라서 별도 graph 레이어 없이:</p>
+<h3>Correlation 키</h3>
 <ul>
-<li><strong>tool_call ↔ tool_result 페어링:</strong> <code>tool_use_id</code> 컬럼 (partial index <code>idx_obs_tool_use_id</code>).</li>
-<li><strong>API 요청 단위 묶음:</strong> <code>request_id</code> 컬럼 (0020에서 <code>idx_obs_request_id</code> 추가).</li>
+<li><strong>tool_call ↔ tool_result 페어링:</strong> <code>tool_use_id</code> 컬럼.</li>
+<li><strong>API 요청 단위 묶음:</strong> <code>request_id</code> 컬럼.</li>
 <li><strong>턴/메세지 묶음:</strong> <code>turn_id</code> / <code>message_id</code> 컬럼.</li>
 <li><strong>transcript 연쇄:</strong> <code>event_uuid</code> / <code>parent_uuid</code>.</li>
 <li><strong>OTel 상관:</strong> <code>trace_id</code> / <code>span_id</code> / <code>parent_span_id</code> 컬럼.</li>
 </ul>
-<p>ingest는 graph rebuild 대신 insight 파이프라인(detector)을 직접 호출한다. 근거·상세: <a href="implementation-notes.html#graph-removal"><code>implementation-notes.html#graph-removal</code></a>, <a href="implementation-notes.html#event-first-redesign"><code>#event-first-redesign</code></a>.</p>
 </section>
-<section id="context"><h2><span class="num">06</span>ContextArtifact — 폐기</h2>
-<div class="callout warn"><strong>구현되지 않음 / 계획 폐기:</strong> 파생 객체 <code>ContextArtifact</code>는 저장 모델로 구현되지 않았다. <code>context_bloat</code> detector는 별도 artifact 객체 없이 <code>ObservedEvent</code>에서 직접 결정론 규칙으로 signal을 만든다. 마찬가지로 파생 <strong>Episode 객체와 phase enum</strong>(intake/exploration/… )도 제거됐다(migration 0017, <a href="implementation-notes.html#episode-removal">implementation-notes #episode-removal</a>) — 분류는 파생 episode가 아니라 개별 이벤트에 속한다.</div>
-</section>
-<section id="lineage"><h2><span class="num">07</span>File Lineage and VerificationRun</h2>
-<div class="callout"><strong>Slice-10a — transcript-only file lineage:</strong> DiffHunk rows are produced from the transcript <code>toolUseResult.structuredPatch</code> of Edit tool_result lines. Write tool_results carry <code>structuredPatch=[]</code> by design and produce zero rows. No filesystem watcher, no git poller, no commit-SHA-as-verification-marker. The <code>structuredPatch</code> shape is locked by a real-fixture invariant test (see <a href="implementation-notes.html#slice10a">implementation-notes slice-10a</a>).</div>
+<section id="lineage"><h2><span class="num">05</span>File Lineage and VerificationRun</h2>
+<div class="callout"><strong>Transcript-only file lineage:</strong> DiffHunk rows are produced from the transcript <code>toolUseResult.structuredPatch</code> of Edit tool_result lines. Write tool_results carry <code>structuredPatch=[]</code> by design and produce zero rows. No filesystem watcher, no git poller, no commit-SHA-as-verification-marker. The <code>structuredPatch</code> shape is locked by a real-fixture invariant test.</div>
 <div class="grid"><div class="card"><h4>DiffHunk</h4><pre><code>{
   "diff_hunk_id": "dh_…sha256…",
   "schema_version": "diff_hunk.v1",
@@ -152,7 +141,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "lines_added": 1,
   "lines_removed": 1,
   "user_modified": false
-}</code></pre><p><small>Slice-10a removed <code>introduced_by_commit_sha</code> and the <code>introduced_by_node_id</code> coupling. <code>user_modified</code> mirrors transcript <code>toolUseResult.userModified</code> for the <code>risky_action</code> detector. <strong>Edit tool_result만 hunk를 만든다</strong> — Write는 <code>structuredPatch=[]</code>라 0행.</small></p></div><div class="card"><h4>VerificationRunRecord</h4><pre><code>{
+}</code></pre><p><small><code>user_modified</code> mirrors transcript <code>toolUseResult.userModified</code> for the <code>risky_action</code> detector. <strong>Edit tool_result만 hunk를 만든다</strong> — Write는 <code>structuredPatch=[]</code>라 0행.</small></p></div><div class="card"><h4>VerificationRunRecord</h4><pre><code>{
   "verification_run_id": "vr_…sha256…",   // sha256(session‖trigger_event‖started_at)
   "schema_version": "verification_run.v1",
   "session_id": "sess_…",
@@ -164,7 +153,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "trigger_tool_use_id": "toolu_…",
   "status": "failed",                // passed | failed | unknown
   "status_provenance": "measured",   // measured | estimated | unknown
-  "detection_basis": "known_tool",   // "test_keyword"는 legacy row 전용 (F2로 생성 중단)
+  "detection_basis": "known_tool",   // "test_keyword"는 기존 row 전용 — 신규 생성 없음
   "status_basis": "exit",            // exit | piped | user_rejected |
                                      // policy_denied | cancelled | background
   "started_at": "…", "ended_at": "…",
@@ -178,12 +167,12 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <li><strong>OTLP tool_result log</strong> (success 신호) — measured.</li>
 <li><strong>hook <code>post_tool_use</code>의 exit_code</strong> — measured.</li>
 <li><strong>transcript "Exit code N" 라인</strong> — measured. <em>③b</em> <code>&lt;tool_use_error&gt;</code> 래퍼 → Failed(measured) — 단 Cancelled disposition은 예외.</li>
-<li><strong>Unknown.</strong> 단, test/build/lint/format kind에 한해 <strong>Tier-4(estimated)</strong> 텍스트 규칙 적용 — <code>looks_like_failure</code>("error[", "FAILED" 등) 우선, 그다음 <code>looks_like_success</code>("test result: ok" 등 결정론 성공 요약, F5). disposition 마커가 잡힌 result에는 Tier-4를 적용하지 않는다 (content가 실제 출력이 아님 — real fixture <code>disposition_v01.jsonl</code>).</li>
+<li><strong>Unknown.</strong> 단, test/build/lint/format kind에 한해 <strong>Tier-4(estimated)</strong> 텍스트 규칙 적용 — <code>looks_like_failure</code>("error[", "FAILED" 등) 우선, 그다음 <code>looks_like_success</code>("test result: ok" 등 결정론 성공 요약). disposition 마커가 잡힌 result에는 Tier-4를 적용하지 않는다 (content가 실제 출력이 아님 — real fixture <code>disposition_v01.jsonl</code>).</li>
 </ol>
-<p><code>status_basis</code> 의미: <code>exit</code> = exit code 관측 경로, <code>piped</code> = non-pager로 파이프되어 exit code가 가려짐(status는 unknown으로 강제), 나머지 4종은 disposition 분류(2026-06-10) — tool_result의 하니스 마커 prefix로 <code>user_rejected</code>(사용자 거부) / <code>policy_denied</code>(PreToolUse hook 차단) / <code>cancelled</code>(병렬 호출 취소) / <code>background</code>(백그라운드 전환)를 기록해 측정 불가 사유를 구분한다. tool_result의 <code>is_error</code>는 pass/fail 판정에 사용하지 않는다.</p>
+<p><code>status_basis</code> 의미: <code>exit</code> = exit code 관측 경로, <code>piped</code> = non-pager로 파이프되어 exit code가 가려짐(status는 unknown으로 강제), 나머지 4종은 disposition 분류 — tool_result의 하니스 마커 prefix로 <code>user_rejected</code>(사용자 거부) / <code>policy_denied</code>(PreToolUse hook 차단) / <code>cancelled</code>(병렬 호출 취소) / <code>background</code>(백그라운드 전환)를 기록해 측정 불가 사유를 구분한다. tool_result의 <code>is_error</code>는 pass/fail 판정에 사용하지 않는다.</p>
 </section>
-<section id="insight"><h2><span class="num">08</span>Signal</h2>
-<div class="callout warn"><strong>Finding → Signal 전환 (migration 0021):</strong> <code>Finding</code>/<code>RootCauseHypothesis</code>/<code>QualitySummary</code> 스키마는 폐기됐고 <code>finding</code> 테이블은 drop됐다. severity/confidence/claim 같은 <strong>판단(judgment) 필드는 저장하지 않는다</strong> — Signal은 결정론 detector가 관측한 <strong>사실(facts)</strong>만 담는다. <code>/v1/findings*</code>·MCP <code>search_findings</code>도 함께 삭제됐다.</div>
+<section id="insight"><h2><span class="num">06</span>Signal</h2>
+<div class="callout"><strong>Facts only:</strong> Signal은 결정론 detector가 관측한 <strong>사실(facts)</strong>만 담는다. severity/confidence/claim 같은 <strong>판단(judgment) 필드는 저장하지 않는다</strong>.</div>
 <pre><code>{
   "signal_id": "sig_…",            // sha256(detector ‖ session_id ‖ sorted evidence_refs)[..12]
                                    // → 재실행 idempotent (INSERT OR REPLACE)
@@ -197,14 +186,14 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "provenance": { "detector": "tool_failure@v1", "version": "L1", "rule_pack": null },
   "created_at": "…"
 }</code></pre>
-<p><code>provenance.version</code>은 항상 <code>"L1"</code>(deterministic — judge 레이어 없음). <code>rule_pack</code>은 코드 기본 detector면 <code>null</code>, TOML rule pack 로드 시 그 id. 외부에서 signal에 쓰는 API는 없다 (no annotation model).</p>
+<p><code>provenance.version</code>은 항상 <code>"L1"</code>(deterministic). <code>rule_pack</code>은 코드 기본 detector면 <code>null</code>, TOML rule pack 로드 시 그 id. 외부에서 signal에 쓰는 API는 없다 (no annotation model).</p>
 <h3>Detector 5종 (deterministic L1)</h3>
 <table><thead><tr><th>detector</th><th>Evidence requirement</th></tr></thead><tbody><tr><td><code>tool_failure</code></td><td>failed tool result or OTel error event</td></tr><tr><td><code>risky_action</code></td><td>destructive command, sensitive file/path, <code>user_modified</code> hunk 등 관측 사실</td></tr><tr><td><code>context_bloat</code></td><td>대형/반복 출력 등 이벤트 기반 결정론 규칙</td></tr><tr><td><code>final_state_mismatch</code></td><td>final answer claim conflicts with file/verification state</td></tr><tr><td><code>re_read</code></td><td>동일 대상 반복 read 관측</td></tr></tbody></table>
 <p class="muted">detector manifest는 <code>/v1/detectors</code>와 MCP <code>whats_in_my_cc.list_detectors</code>로 노출된다.</p>
 </section>
-<section id="metrics"><h2><span class="num">09</span>SessionMetrics & Usage</h2>
+<section id="metrics"><h2><span class="num">07</span>SessionMetrics & Usage</h2>
 <h3>SessionMetrics — on-demand (저장 테이블 없음)</h3>
-<p><code>GET /v1/sessions/:id/metrics</code> 호출 시 side-table에서 매번 재계산한다. <strong>F1: 합성 가능한 count만</strong> — <code>verification_pass_rate</code>/<code>tool_failure_rate</code>/<code>cache_hit_ratio</code> 같은 window-고정 rate scalar는 삭제됐고, rate는 소비자가 자기 window로 계산한다. severity/판단/threshold 플래그 없음.</p>
+<p><code>GET /v1/sessions/:id/metrics</code> 호출 시 side-table에서 매번 재계산한다. <strong>합성 가능한 count만</strong> 반환한다 — window-고정 rate scalar는 반환하지 않으며, rate는 소비자가 자기 window로 계산한다. severity/판단/threshold 플래그 없음.</p>
 <pre><code>{
   "session_id": "sess_…",
   "tool_call_total": 124,
@@ -214,7 +203,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "verification_failed": 1,
   "verification_unknown": 1,        // 측정 실패 — 실패가 아니다. pass/fail 분모에 넣지 말 것
   "context_bloat_count": 2,         // context_bloat detector signal 수
-  "tool_user_rejected": 0,          // disposition 분류 (2026-06-10, 하니스 마커 prefix)
+  "tool_user_rejected": 0,          // disposition 분류 (하니스 마커 prefix)
   "tool_policy_denied": 1,
   "tool_cancelled": 0,
   "tool_backgrounded": 2,
@@ -224,39 +213,36 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <h3>Usage — <code>/v1/sessions/:id/usage</code></h3>
 <p>side-table <code>usage_facet</code>(assistant 출력 이벤트당 1행: model + 토큰 4종)에서 집계.</p>
 <ul>
-<li><strong>F1 rename:</strong> <code>turns</code> → <code>assistant_events</code>(usage_facet 행 수). <code>user_turns</code> 추가 — 세션의 distinct <code>turn_id</code> 수(= 사용자 프롬프트 수).</li>
+<li><code>assistant_events</code>: usage_facet 행 수. <code>user_turns</code>: 세션의 distinct <code>turn_id</code> 수(= 사용자 프롬프트 수).</li>
 <li><strong>토큰 4종:</strong> <code>input_tokens</code> · <code>cache_creation_input_tokens</code> · <code>cache_read_input_tokens</code> · <code>output_tokens</code>.</li>
 <li><code>billed_tokens</code> = input + cache_creation + output (cache_read는 비과금).</li>
 <li><code>estimated_cost_usd</code>: 공개 단가 <strong>추정</strong> — 실제 청구가 아니다. <code>cost_basis="estimate_public_pricing"</code> + <code>pricing_version</code> + <code>models_without_pricing</code>(가격 미상 모델은 합계에서 제외, UI에 공시).</li>
 <li><code>by_model</code>: 모델별 assistant_events·토큰·추정 비용·<code>priced</code> 플래그. user_turns는 세션 레벨이라 per-model 없음.</li>
-<li><strong>F1:</strong> per-session <code>cache_hit_ratio</code> scalar 삭제 — 토큰 구성요소에서 소비자가 계산.</li>
+<li>per-session <code>cache_hit_ratio</code> scalar는 반환하지 않는다 — 토큰 구성요소에서 소비자가 계산한다.</li>
 </ul>
 <h3>Usage baseline — <code>/v1/usage/baseline</code></h3>
-<p>usage_facet가 있는 모든 세션 횡단 quantile(p25/median/p75): <code>cache_hit_ratio</code> · <code>billed_tokens</code> · <code>assistant_events</code> · <code>output_tokens</code> + <code>session_count</code>. cache_hit_ratio <em>분포</em>는 baseline에만 존재한다 — 세션 횡단 quantile 분포는 유효한 비교이고, per-session scalar와 달리 F1에 저촉되지 않는다.</p>
+<p>usage_facet가 있는 모든 세션 횡단 quantile(p25/median/p75): <code>cache_hit_ratio</code> · <code>billed_tokens</code> · <code>assistant_events</code> · <code>output_tokens</code> + <code>session_count</code>. cache_hit_ratio <em>분포</em>는 baseline에만 존재한다 — 세션 횡단 quantile 분포는 유효한 비교다.</p>
 </section>
-<section id="resource"><h2><span class="num">10</span>FeedbackResource and ExportBundle — 미구현</h2>
-<div class="callout warn"><strong>구현되지 않음:</strong> <code>FeedbackResource</code>와 <code>ExportBundle</code> 스키마, 그리고 <code>POST /v1/export-bundles</code>는 구현되지 않았다(routes에 없음). 이전 판의 JSON 정의는 graph node id를 evidence로 참조하는 등 삭제된 모델에 묶여 있어 그대로는 유효하지 않다. 외부 소비는 현행 read-only Pull API(<code>/v1/sessions/:id/signals</code>, <code>/v1/signals/:id</code> 등)와 MCP 도구 4종으로 이뤄진다. export bundle을 되살린다면 evidence 참조는 <code>event_id</code>/<code>raw_event_id</code> 기반으로 재설계해야 한다.</div>
-</section>
-<section id="indexes"><h2><span class="num">11</span>Indexes and Query Keys</h2>
-<p class="muted">migration 파일 기준 현행 인덱스. graph(0019)·finding/episode/judge(0017·0018·0021) 인덱스는 테이블과 함께 drop됐다.</p>
+<section id="indexes"><h2><span class="num">08</span>Indexes and Query Keys</h2>
+<p class="muted">migration 파일 기준 현행 인덱스.</p>
 <table><thead><tr><th>Index</th><th>Fields</th><th>Used by</th></tr></thead><tbody>
 <tr><td>idx_obs_session_time</td><td>session_id, observed_at</td><td>timeline, replay</td></tr>
 <tr><td>idx_obs_trace_span</td><td>trace/span 키</td><td>OTel correlation, latency attribution</td></tr>
 <tr><td>idx_obs_tool_use_id</td><td>tool_use_id (partial, NOT NULL)</td><td>tool_call ↔ tool_result 페어링</td></tr>
-<tr><td>idx_obs_request_id</td><td>request_id (partial, NOT NULL — 0020)</td><td>API 요청 단위 correlated telemetry lookup</td></tr>
+<tr><td>idx_obs_request_id</td><td>request_id (partial, NOT NULL)</td><td>API 요청 단위 correlated telemetry lookup</td></tr>
 <tr><td>idx_obs_turn_id</td><td>session_id, turn_id</td><td>user_turns 집계, 턴 묶음</td></tr>
 <tr><td>idx_obs_event_uuid / idx_obs_parent_uuid</td><td>event_uuid / parent_uuid (partial)</td><td>transcript 연쇄</td></tr>
 <tr><td>file_lineage_idx</td><td>file_path, diff_hunk_id</td><td>file lineage</td></tr>
 <tr><td>diff_hunk_event_idx / diff_hunk_tool_use_idx</td><td>introduced_by_event_id / introduced_by_tool_use_id</td><td>hunk → 생성 tool_result / tool_use 역추적</td></tr>
 <tr><td>idx_verification_run_session_started / idx_verification_run_trigger</td><td>session+started_at / trigger</td><td>verification 목록, bash↔hook dedup</td></tr>
 <tr><td>idx_usage_facet_session_observed</td><td>session_id, observed_at</td><td>usage 집계, baseline</td></tr>
-<tr><td>idx_signal_session / idx_signal_detector / idx_signal_sess_det</td><td>session_id / detector / (session_id, detector)</td><td>signal 조회, detector_firing 분포 (0021)</td></tr>
+<tr><td>idx_signal_session / idx_signal_detector / idx_signal_sess_det</td><td>session_id / detector / (session_id, detector)</td><td>signal 조회, detector_firing 분포</td></tr>
 </tbody></table>
 </section>
-<section id="migration"><h2><span class="num">12</span>Schema Migration Policy</h2>
-<ul><li>Minor schema changes must preserve existing fields or provide derived compatibility view.</li><li>Parser version changes must be recorded on every ObservedEvent.</li><li>OTel schema drift must not break raw event preservation; unknown telemetry fields는 facet의 <code>attributes</code> JSON에 보존된다.</li><li>현행 head는 <strong>0022</strong> — 0017 episode drop, 0018 judge drop, 0019 graph drop, 0020 <code>request_id</code> 인덱스, 0021 signal 테이블 + finding drop, 0022 verification_run <code>status_provenance</code>.</li><li>payload 필드(<code>tool_call.tool_name</code>, <code>assistant_message.model</code> 등)는 JSON BLOB이라 schema migration 없이 추가된다 — 기존 이벤트에 채우려면 재ingest 필요.</li></ul>
+<section id="migration"><h2><span class="num">09</span>Schema Migration Policy</h2>
+<ul><li>Minor schema changes must preserve existing fields or provide derived compatibility view.</li><li>Parser version changes must be recorded on every ObservedEvent.</li><li>OTel schema drift must not break raw event preservation; unknown telemetry fields는 facet의 <code>attributes</code> JSON에 보존된다.</li><li>현행 migration head는 <strong>0022</strong>.</li><li>payload 필드(<code>tool_call.tool_name</code>, <code>assistant_message.model</code> 등)는 JSON BLOB이라 schema migration 없이 추가된다 — 기존 이벤트에 채우려면 재ingest 필요.</li></ul>
 </section>
-<section id="questions"><h2><span class="num">13</span>피드백 필요 사항</h2><ol><li><del><code>FeedbackResource</code> 이름 결정</del> — 해소: FeedbackResource/ExportBundle 자체가 미구현으로 남았고, 외부 소비는 Signal 중심 Pull API/MCP로 정리됐다.</li><li><del>confidence score 표현 방식</del> — 해소: confidence/severity는 판단 필드로서 모델에서 제거됐다(Signal은 facts만 저장).</li><li>raw payload hash 기준 — 현행 구현(hook collector 경로 실측)은 redaction <em>전</em> canonical payload 기준으로 sha256을 계산한다. 다른 source 경로 전반의 기준 통일 여부는 검토 항목.</li></ol></section>
+<section id="questions"><h2><span class="num">10</span>피드백 필요 사항</h2><ol><li>raw payload hash 기준 — 현행 구현(hook collector 경로 실측)은 redaction <em>전</em> canonical payload 기준으로 sha256을 계산한다. 다른 source 경로 전반의 기준 통일 여부는 검토 항목.</li></ol></section>
 <div class="footer">What's in My Claude Code HTML Documentation Set · local-first · evidence-linked · OTel-first</div></main></div>
 <script>
 const bar=document.querySelector('.scrollbar');

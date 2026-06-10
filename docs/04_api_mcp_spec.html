@@ -29,8 +29,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <a class="" href="02_technical_architecture_spec.html">Technical Architecture Spec</a>
 <a class="" href="03_data_model_spec.html">Data Model Spec</a>
 <a class="active" href="04_api_mcp_spec.html">Pull API & MCP Spec</a>
-<a class="" href="05_security_governance_spec.html">Security & Governance Spec</a>
-<a class="" href="06_mvp_execution_plan.html">MVP Execution Plan</a></nav><h2>On this page</h2><nav class="localnav"><a href="#principles">Principles</a>
+<a class="" href="05_security_governance_spec.html">Security & Governance Spec</a></nav><h2>On this page</h2><nav class="localnav"><a href="#principles">Principles</a>
 <a href="#surface">Surface</a>
 <a href="#api">Pull API</a>
 <a href="#filters">Filters</a>
@@ -38,15 +37,13 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <a href="#streaming">Streaming</a>
 <a href="#auth">Auth</a>
 <a href="#errors">Errors</a>
-<a href="#examples">Examples</a>
-<a href="#questions">Feedback</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set · 2026-05-19 · rev 2026-06-10 — 구현 현행화 (graph/finding/judge 삭제 반영 · Signal·Verification·Usage·Metrics 계약 갱신, src/api 코드 검증)</div><h1>Pull API & MCP Streamable HTTP Spec</h1><p>외부 시스템이 로컬 insight resource를 읽기 위한 Pull API와 MCP Streamable HTTP 계약을 정의한다.</p><div class="badges"><span class="badge">Pull API</span><span class="badge">MCP Streamable HTTP</span><span class="badge">read-oriented</span></div></header>
+<a href="#examples">Examples</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set</div><h1>Pull API & MCP Streamable HTTP Spec</h1><p>외부 시스템이 로컬 insight resource를 읽기 위한 Pull API와 MCP Streamable HTTP 계약을 정의한다.</p><div class="badges"><span class="badge">Pull API</span><span class="badge">MCP Streamable HTTP</span><span class="badge">read-oriented</span></div></header>
 <section id="principles"><h2><span class="num">01</span>Integration Principles</h2>
 <ul><li><strong>Read-oriented:</strong> 외부 client는 insight resource를 읽는다. correction, label, status write는 제공하지 않는다. 모든 Pull API endpoint는 GET이다 (예외: collector ingest POST — 외부 write가 아니라 로컬 telemetry 수집 입력).</li><li><strong>Same domain model:</strong> WebUI, Pull API, MCP는 같은 resource schema(<code>ObservedEvent</code> · <code>Signal</code> · <code>VerificationRun</code> · <code>DiffHunk</code> · usage aggregate)를 사용한다.</li><li><strong>Local-first security:</strong> 기본 endpoint는 <code>127.0.0.1</code>에만 bind한다.</li><li><strong>Event-first:</strong> 모든 조회는 <code>ObservedEvent</code> + correlation 키(<code>tool_use_id</code>/<code>request_id</code>/<code>turn_id</code>/<code>message_id</code>)에 직접 기반한다. graph node/edge 레이어는 존재하지 않는다.</li><li><strong>Deterministic insight:</strong> signal은 deterministic L1 detector가 생성하며 severity/confidence 같은 judgment 필드가 없다. LLM judge 서브시스템은 존재하지 않는다.</li></ul>
 <div class="callout"><strong>용어:</strong> MCP 공식 명칭은 <em>Streamable HTTP transport</em>다. 본 문서에서는 사용자의 표현인 “MCP streaming http”를 이 transport로 해석한다.</div>
-<div class="callout warn"><strong>⚠ 2026-06-07 — graph·finding·judge 삭제:</strong> 이 문서 초판에 있던 <code>/v1/sessions/:id/graph</code>, <code>/v1/findings*</code>, <code>/v1/resources/*</code>, <code>/v1/export-bundles</code> endpoint와 MCP <code>get_session_graph</code>/<code>explain_node</code>/<code>search_findings</code> 도구는 <strong>모두 삭제되거나 구현되지 않았다</strong>. Finding 모델은 <code>Signal</code>로 대체됐다. 본 개정판은 <code>src/api/mod.rs</code> route 등록과 <code>src/api/dto.rs</code>를 기준으로 현행 계약만 서술한다. 결정 기록: <a href="implementation-notes.html#graph-removal"><code>implementation-notes.html#graph-removal</code></a> · <a href="implementation-notes.html#judge-removal"><code>#judge-removal</code></a>.</div>
 </section>
 <section id="surface"><h2><span class="num">02</span>Serving Surface</h2>
-<div class="grid three"><div class="card"><h4>Local WebUI</h4><p>브라우저 기반 React SPA (rust-embed로 서버에 내장). 같은 Pull API + SSE를 소비해 event-first replay와 insight strip을 렌더링한다.</p></div><div class="card"><h4>Pull API</h4><p>HTTP JSON API. <strong>전부 GET</strong> read-only. write endpoint 없음 (export-bundles는 구현되지 않았다).</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p><code>/mcp</code> 단일 endpoint. AI client가 resources와 read-only tools 4종으로 insight를 조회한다.</p></div></div>
+<div class="grid three"><div class="card"><h4>Local WebUI</h4><p>브라우저 기반 React SPA (rust-embed로 서버에 내장). 같은 Pull API + SSE를 소비해 event-first replay와 insight strip을 렌더링한다.</p></div><div class="card"><h4>Pull API</h4><p>HTTP JSON API. <strong>전부 GET</strong> read-only. write endpoint 없음.</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p><code>/mcp</code> 단일 endpoint. AI client가 resources와 read-only tools 4종으로 insight를 조회한다.</p></div></div>
 <div class="callout"><strong>Collectors (입력면):</strong> 같은 서버가 OTLP/HTTP receiver(<code>POST /otel/v1/traces|metrics|logs</code>)와 hook receiver(<code>POST /hooks/v1/events</code>)를 함께 연다. 이는 telemetry <em>수집</em>이며 read-only 원칙의 예외가 아니다 — domain resource를 외부에서 수정하는 경로가 아니다.</div>
 </section>
 <section id="api"><h2><span class="num">03</span>Pull API Contract</h2>
@@ -72,7 +69,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <tr><td>POST</td><td><code>/otel/v1/traces</code> · <code>/otel/v1/metrics</code> · <code>/otel/v1/logs</code></td><td>OTLP/HTTP collector receivers (loopback, 무인증)</td><td>accept counters</td></tr>
 <tr><td>POST</td><td><code>/hooks/v1/events</code></td><td>Claude Code hook event receiver (loopback, 무인증)</td><td>accept counters</td></tr>
 </tbody></table>
-<div class="callout danger"><strong>삭제·미구현 endpoint:</strong> <code>/v1/sessions/:id/graph</code>(graph 레이어 삭제), <code>/v1/findings*</code>·<code>/v1/sessions/:id/findings</code>·<code>/v1/sessions/:id/tool-failures</code>(Signal로 대체), <code>/v1/resources/*</code>, <code>/v1/file-lineage</code>(MCP tool로만 제공), <code>/v1/context-map</code>, <code>/v1/otel/traces/{trace_id}</code>(MCP <code>get_otel_trace</code>로만 제공), <code>/v1/export-bundles</code>(<strong>구현되지 않음</strong> — POST/GET 모두 route에 없다). 이들을 호출하면 SPA fallback 또는 404가 반환된다.</div>
+<div class="callout"><strong>완결성:</strong> 위 표가 제공되는 endpoint의 전부다. 표에 없는 경로는 SPA fallback 또는 404를 반환한다.</div>
 <h3>Common response envelope</h3>
 <p>대부분의 endpoint는 <code>{meta, data}</code> envelope을 반환한다 (<code>src/model/meta.rs</code>의 <code>Envelope&lt;T&gt;</code>). 위 표의 Envelope 열이 예외를 표시한다: <code>/v1/health</code>는 bare JSON, metrics/signals/detectors/audit는 <code>{data}</code>만 반환한다.</p>
 <pre><code>{
@@ -91,16 +88,16 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "data": { ... }
 }</code></pre>
 <div class="callout warn"><strong>redaction 주의:</strong> <code>redaction_policy</code>는 응답마다 선언되지만 실제 redaction 변환은 아직 구현되지 않았다. raw payload는 수집된 그대로 보존·반환된다 (Security Spec 05 참조).</div>
-<h3>주요 DTO 계약 변경 <span class="pill violet">F1 · 2026-06</span></h3>
+<h3>주요 DTO 계약</h3>
 <ul>
-<li><strong>usage:</strong> <code>turns</code> → <code>assistant_events</code>(usage_facet 행 수 = assistant 출력 event 수)로 개명, <code>user_turns</code>(distinct <code>turn_id</code> 수 = 사용자 prompt 수) 추가. per-session <code>cache_hit_ratio</code> scalar는 삭제 — 소비자가 토큰 성분으로 계산한다. <code>estimated_cost_usd</code>는 공개 단가 <em>추정</em>이며 실제 청구가 아니다 (<code>cost_basis = "estimate_public_pricing"</code>, <code>models_without_pricing</code>으로 미가격 모델 공개).</li>
-<li><strong>metrics (<code>SessionMetrics</code>):</strong> count만 노출 — <code>tool_call_total</code>, <code>tool_failure_count</code>, <code>verification_total/passed/failed/unknown</code>, <code>context_bloat_count</code>, <code>tool_user_rejected</code>/<code>tool_policy_denied</code>/<code>tool_cancelled</code>/<code>tool_backgrounded</code>(disposition 축), <code>detector_firing{}</code>. <strong>rate scalar 없음</strong> (F1: <code>verification_pass_rate</code>·<code>tool_failure_rate</code>·<code>cache_hit_ratio</code> 삭제 — rate는 소비자가 count로 계산). <code>verification_unknown</code>은 측정 실패이지 검증 실패가 아니다 — pass/fail 분모에서 제외할 것.</li>
-<li><strong>verification_run:</strong> <code>status</code> ∈ passed|failed|unknown · <code>status_provenance</code> ∈ measured|estimated|unknown · <code>status_basis</code> ∈ exit|piped|user_rejected|policy_denied|cancelled|background · <code>detection_basis</code> = known_tool (<code>test_keyword</code>는 legacy row 전용 — F2부터 생성 중단) · <code>command_kind</code> ∈ test_suite_js/rust/py/go/java, build, build_check, lint, format_check.</li>
+<li><strong>usage:</strong> <code>assistant_events</code>(usage_facet 행 수 = assistant 출력 event 수)와 <code>user_turns</code>(distinct <code>turn_id</code> 수 = 사용자 prompt 수)를 제공한다. per-session <code>cache_hit_ratio</code> scalar는 없다 — 소비자가 토큰 성분으로 계산한다. <code>estimated_cost_usd</code>는 공개 단가 <em>추정</em>이며 실제 청구가 아니다 (<code>cost_basis = "estimate_public_pricing"</code>, <code>models_without_pricing</code>으로 미가격 모델 공개).</li>
+<li><strong>metrics (<code>SessionMetrics</code>):</strong> count만 노출 — <code>tool_call_total</code>, <code>tool_failure_count</code>, <code>verification_total/passed/failed/unknown</code>, <code>context_bloat_count</code>, <code>tool_user_rejected</code>/<code>tool_policy_denied</code>/<code>tool_cancelled</code>/<code>tool_backgrounded</code>(disposition 축), <code>detector_firing{}</code>. <strong>rate scalar 없음</strong> — rate는 소비자가 count로 계산한다. <code>verification_unknown</code>은 측정 실패이지 검증 실패가 아니다 — pass/fail 분모에서 제외할 것.</li>
+<li><strong>verification_run:</strong> <code>status</code> ∈ passed|failed|unknown · <code>status_provenance</code> ∈ measured|estimated|unknown · <code>status_basis</code> ∈ exit|piped|user_rejected|policy_denied|cancelled|background · <code>detection_basis</code> = known_tool (older data row에는 <code>test_keyword</code> 값이 존재할 수 있다 — 신규 생성되지 않는다) · <code>command_kind</code> ∈ test_suite_js/rust/py/go/java, build, build_check, lint, format_check.</li>
 <li><strong>signal (<code>SignalDto</code>):</strong> <code>signal_id</code>, <code>schema_version</code>, <code>session_id</code>, <code>detector</code>(@v1 버전스탬프), <code>subkind</code>, <code>summary</code>, <code>evidence_refs[]</code>(필수), <code>facts{}</code>, <code>provenance{detector, version:"L1", rule_pack}</code>, <code>created_at</code>. severity/confidence/status 같은 judgment 필드는 의도적으로 <strong>없다</strong>.</li>
 </ul>
 </section>
 <section id="filters"><h2><span class="num">04</span>Filtering and Pagination</h2>
-<div class="callout"><strong>⚠ 2026-06-04 변경 (PR #33) — session events window:</strong> <code>GET /v1/sessions/:id/events</code>의 <em>no-cursor</em> 초기 window는 raw 최신순이 아니라 <strong>렌더되는 event 기준 conversation-anchored</strong>(<code>[limit번째 최신 렌더 event, 최신 렌더 event]</code> 범위, 사이 텔레메트리 포함)다 — 텔레메트리 버스트로 끝나는 세션의 빈-화면 방지. 또한 디테일용 <strong>on-demand 상관 조회 파라미터</strong> <code>?tool_use_id=…</code> / <code>?request_id=…</code> 추가(payload의 correlation 키로 텔레메트리 반환, cursor 없는 targeted 응답). 상세: <a href="implementation-notes.html#event-first-redesign"><code>implementation-notes.html#event-first-redesign</code></a>, <a href="implementation-notes.html#conversation-anchored-window"><code>#conversation-anchored-window</code></a>.</div>
+<div class="callout"><strong>session events window:</strong> <code>GET /v1/sessions/:id/events</code>의 <em>no-cursor</em> 초기 window는 raw 최신순이 아니라 <strong>렌더되는 event 기준 conversation-anchored</strong>(<code>[limit번째 최신 렌더 event, 최신 렌더 event]</code> 범위, 사이 텔레메트리 포함)다 — 텔레메트리 버스트로 끝나는 세션의 빈-화면 방지. 디테일용 <strong>on-demand 상관 조회 파라미터</strong> <code>?tool_use_id=…</code> / <code>?request_id=…</code>를 지원한다(payload의 correlation 키로 텔레메트리 반환, cursor 없는 targeted 응답). 설계 근거: <a href="implementation-notes.html#conversation-anchored-window"><code>implementation-notes.html#conversation-anchored-window</code></a>.</div>
 <table><thead><tr><th>Parameter</th><th>Applies to</th><th>Example / 의미</th></tr></thead><tbody>
 <tr><td><code>limit</code></td><td><code>/v1/sessions</code>, <code>/v1/sessions/:id/events</code></td><td><code>?limit=10</code> — 1~5000으로 clamp, 기본 500</td></tr>
 <tr><td><code>before</code> / <code>after</code></td><td><code>/v1/sessions/:id/events</code></td><td>cursor 페이징. cursor 포맷은 <code>&lt;observed_at_rfc3339&gt;|&lt;event_id&gt;</code>. 응답의 <code>prev_cursor</code>/<code>next_cursor</code>를 그대로 전달. <code>next_cursor: null</code>은 live tip 도달을 의미 — 이후 갱신은 SSE로</td></tr>
@@ -131,8 +128,8 @@ whats-in-my-cc://otel/traces/{trace_id}</code></pre>
 <tr><td><code>whats_in_my_cc.get_otel_trace</code></td><td><strong><code>trace_id</code></strong> (hex)</td><td>trace의 OTel span 목록</td><td>No</td></tr>
 <tr><td><code>whats_in_my_cc.list_detectors</code></td><td>(없음)</td><td>detector manifest catalog — <code>/v1/detectors</code>와 동일 내용</td><td>No</td></tr>
 </tbody></table>
-<div class="callout"><strong>tool 출력 형식:</strong> 모든 tool 결과는 JSON을 직렬화한 단일 <code>text</code> content block으로 래핑된다 (DEV-S17-03). 오류는 <code>isError: true</code> + 메시지 text.</div>
-<div class="callout danger"><strong>삭제된 도구:</strong> <code>get_session_graph</code>·<code>explain_node</code>(graph 레이어 삭제), <code>search_findings</code>(finding→Signal 전환), <code>get_export_manifest</code>(export-bundles 미구현). signal 조회 tool은 추후 plan으로 이연.</div>
+<div class="callout"><strong>tool 출력 형식:</strong> 모든 tool 결과는 JSON을 직렬화한 단일 <code>text</code> content block으로 래핑된다. 오류는 <code>isError: true</code> + 메시지 text.</div>
+<div class="callout"><strong>완결성:</strong> 위 4종이 제공되는 tool의 전부다.</div>
 </section>
 <section id="streaming"><h2><span class="num">06</span>Streaming — <code>GET /v1/stream</code> (SSE)</h2>
 <p>ingest writer가 event를 쓸 때마다 <code>LiveEvent</code> envelope을 SSE로 전달한다. WebUI의 라이브 갱신이 이 stream을 소비한다. domain data를 수정하지 않는다.</p>
@@ -154,13 +151,13 @@ data: {
 <ul>
 <li><strong>재연결 backfill:</strong> <code>Last-Event-ID</code> 헤더 또는 <code>?last_event_id=</code> query로 cursor를 전달하면 그 이후 event를 backfill(최대 10,000행) 후 live forward로 전환한다. cursor 없으면 backfill 없이 live만.</li>
 <li><strong>keepalive:</strong> <code>--sse-keepalive-secs</code>(기본 30) 주기 keepalive, <code>--sse-channel-capacity</code>(기본 512) broadcast 버퍼.</li>
-<li><strong>MCP streaming:</strong> <code>GET /mcp</code>는 MCP Streamable HTTP의 server-to-client SSE 채널이다. server가 발행하는 notification은 transport 수준(<code>notifications/initialized</code> echo 등)이며, finding/graph 류의 domain stream event는 존재하지 않는다.</li>
+<li><strong>MCP streaming:</strong> <code>GET /mcp</code>는 MCP Streamable HTTP의 server-to-client SSE 채널이다. server가 발행하는 notification은 transport 수준(<code>notifications/initialized</code> echo 등)이며, domain 수준 stream event는 존재하지 않는다 — 라이브 갱신은 Pull API 측 <code>GET /v1/stream</code>(SSE)이 담당한다.</li>
 </ul>
 </section>
 <section id="auth"><h2><span class="num">07</span>Auth, Origin, and Local Binding</h2>
 <ul>
 <li><strong>기본 bind:</strong> <code>127.0.0.1</code> (<code>--bind</code>로 변경 시 explicit opt-in). 기본 port <code>7878</code>.</li>
-<li><strong>auth 기본 = off</strong> (단일 사용자 dev, DEV-S19-08). <code>wimcc serve --auth on</code>으로 켜면 bearer token 검증이 활성화된다.</li>
+<li><strong>auth 기본 = off</strong> (단일 사용자 dev). <code>wimcc serve --auth on</code>으로 켜면 bearer token 검증이 활성화된다.</li>
 <li><strong>auth 적용 범위 (on일 때):</strong> 모든 <code>/v1/*</code> GET endpoint + <code>/mcp</code>에 <code>Authorization: Bearer &lt;token&gt;</code> 필요. <strong>예외(항상 열림):</strong> <code>/otel/*</code>·<code>/hooks/*</code> collectors, <code>/v1/stream</code>(SSE), static SPA. 토큰 비교는 constant-time(<code>subtle</code>).</li>
 <li><strong>token 위치:</strong> macOS <code>~/Library/Application Support/wimcc/token</code> · Linux <code>~/.config/wimcc/token</code>, mode 0600 (과잉 권한이면 기동 거부). CLI: <code>--print-token</code>, <code>--rotate-token</code>.</li>
 <li><strong>Host allowlist:</strong> 전 route에 host allowlist middleware가 적용된다 (DNS rebinding 방어).</li>
@@ -203,7 +200,6 @@ call_tool("whats_in_my_cc.get_file_lineage", { "session_id": "sess_123", "file_p
 call_tool("whats_in_my_cc.get_otel_trace", { "trace_id": "a1b2c3…" })
 call_tool("whats_in_my_cc.list_detectors", {})</code></pre>
 </section>
-<section id="questions"><h2><span class="num">10</span>피드백 항목 — 해소 상태</h2><ol><li><code>POST /v1/export-bundles</code> 허용 여부 → <strong>해소:</strong> export-bundles는 MVP에서 구현되지 않았다. route 자체가 없으며, 필요해지면 owner-only local action으로 별도 설계한다.</li><li>MCP streaming event 기본 활성화 여부 → <strong>해소:</strong> domain stream event는 만들지 않았다. 라이브 갱신은 Pull API 측 <code>GET /v1/stream</code>(SSE)이 담당하고, MCP GET SSE는 transport 수준 채널로만 동작한다.</li><li>기본 evidence depth → <strong>해소(모델 변경):</strong> graph node/edge 레이어가 삭제되어 질문 자체가 무효. <code>Signal.evidence_refs</code>가 event 단위 참조를 직접 담고, raw source는 <code>/v1/events/:id/raw</code>로 1-hop 조회한다.</li></ol></section>
 <div class="footer">What's in My Claude Code HTML Documentation Set · local-first · evidence-linked · OTel-first</div></main></div>
 <script>
 const bar=document.querySelector('.scrollbar');
