@@ -4,7 +4,9 @@
 //! events that represent verification activity:
 //!   - **Bash branch**: `ToolCall` with `tool_name == "Bash"` and a command
 //!     on the `verification_allowlist`, plus its paired `ToolResult`.
-//!     Status is derived from `tool_result["is_error"]`.
+//!     Status is derived from `resolve_outcome` (OTLP-first chain) + Tier-4
+//!     content rules — `is_error`는 사용하지 않는다. disposition 마커(거부/차단/
+//!     취소/백그라운드)가 잡힌 result는 Tier-4 추정에서 제외된다.
 //!   - **Hook branch**: `HookEvent` with `subkind == "PostToolUse"` and
 //!     `hook_input.tool_name == "Bash"` + matched command. Deduped by
 //!     `trigger_event_id` — if a Bash row already exists for the same
@@ -40,7 +42,7 @@ pub struct VerificationRunRecord {
     pub detection_basis: String,     // "known_tool"  ("test_keyword" is a legacy
                                      // value that may persist only in older rows;
                                      // the Tier-2 fallback was removed — spec F2)
-    pub status_basis: String,        // "exit" | "piped"
+    pub status_basis: String,        // "exit" | "piped" | "background"
     pub started_at: String,          // ISO 8601 UTC
     pub ended_at: Option<String>,
     pub exit_code: Option<i32>,
@@ -126,8 +128,17 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
         // prepend "Exit code N" on success, so these summaries are the only
         // transcript-only success signal. Guard: looks_like_failure is checked
         // first, so mixed "1 failed, 41 passed" → Failed (not Passed).
+        // Disposition 가드: tool_result content가 하니스 마커(거부/차단/취소/
+        // 백그라운드)면 실제 출력이 아니므로 Tier-4 텍스트 추정을 적용하지 않는다
+        // (real fixture: disposition_v01.jsonl).
+        let result_disposition = result_ev
+            .and_then(|r| r.payload.pointer("/tool_result/content"))
+            .and_then(|v| v.as_str())
+            .and_then(crate::insight::disposition::classify_disposition);
+
         let (resolved_status, resolved_prov) = if resolved.status == OutcomeStatus::Unknown
             && is_verification_kind(command_kind)
+            && result_disposition.is_none()
         {
             if let Some(r) = result_ev {
                 let content = r
@@ -172,7 +183,16 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
 
         // status_basis: when the matched segment is piped to a non-pager,
         // the exit code is masked → force status to "unknown" (design §6.2).
-        let (status, status_provenance) = if m.status_basis == "piped" {
+        // Backgrounded 실행도 마찬가지 — content가 출력이 아니고 exit code도
+        // 이 이벤트에 없으므로 unknown + basis="background"로 측정 불가 사유를 남긴다.
+        let backgrounded = result_disposition
+            == Some(crate::insight::disposition::Disposition::Backgrounded);
+        let status_basis = if backgrounded {
+            "background".to_string()
+        } else {
+            m.status_basis.to_string()
+        };
+        let (status, status_provenance) = if m.status_basis == "piped" || backgrounded {
             ("unknown", "unknown".to_string())
         } else {
             (status, status_provenance_str.to_string())
@@ -207,7 +227,7 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             status: status.into(),
             status_provenance,
             detection_basis: m.detection_basis.to_string(),
-            status_basis: m.status_basis.to_string(),
+            status_basis,
             started_at,
             ended_at,
             exit_code: None, // not available in transcript; OTel branch may set this
@@ -655,6 +675,23 @@ mod tests {
             runs[0].status_provenance.as_deref(),
             Some("estimated")
         );
+    }
+
+    #[test]
+    fn backgrounded_run_is_unknown_with_background_basis() {
+        // 백그라운드 전환 시 tool_result content는 실제 출력이 아니라 하니스 안내문
+        // (실 payload: disposition_v01.jsonl session 5864d6c7, 코퍼스 74건).
+        // Tier-4 텍스트 추정을 적용하면 안 되고, basis로 측정 불가 사유를 남긴다.
+        let evs = make_bash_run(
+            "toolu_bg1",
+            "npx vitest run",
+            "Command running in background with ID: b3upcoakz. Output is being written to: /private/tmp/x.output. You will be notified when it completes.",
+        );
+        let runs = extract_verification_runs(&evs);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, "unknown");
+        assert_eq!(runs[0].status_basis, "background");
+        assert_eq!(runs[0].status_provenance.as_deref(), Some("unknown"));
     }
 
     #[test]

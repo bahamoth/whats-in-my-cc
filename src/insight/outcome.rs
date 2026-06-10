@@ -162,6 +162,22 @@ pub fn resolve_outcome(events: &[ObservedEvent], tool_use_id: &str) -> Outcome {
                     provenance: OutcomeProvenance::Measured,
                 };
             }
+            // ── Step 3b: harness 구조화 에러 래퍼 ─────────────────────────────
+            // "<tool_use_error>…</tool_use_error>"는 Claude Code 하니스가 도구
+            // 실행 실패 시 기계 생성하는 래퍼(프로즈 파싱 아님) → Failed, Measured.
+            // Bash 외 도구(Edit/Write 등)는 exit code가 없어 이 채널이 유일한
+            // transcript 실패 신호다 (코퍼스 ~790건; real fixture:
+            // disposition_v01.jsonl, invariant: tests/transcript_disposition.rs).
+            // 예외: "Cancelled:"(병렬 호출 취소)는 실행 실패가 아니라
+            // disposition(cancelled) → Unknown 유지.
+            if let Some(inner) = content.strip_prefix("<tool_use_error>") {
+                if !inner.starts_with("Cancelled:") {
+                    return Outcome {
+                        status: OutcomeStatus::Failed,
+                        provenance: OutcomeProvenance::Measured,
+                    };
+                }
+            }
         }
     }
 
@@ -242,6 +258,48 @@ mod tests {
         assert_eq!(parse_exit_code("Exit code 101\nthread 'main' panicked"), Some(101));
         assert_eq!(parse_exit_code("Exit code 7\nintentional non-zero exit"), Some(7));
         assert_eq!(parse_exit_code("Exit code 1"), Some(1));
+    }
+
+    fn tool_result_ev(tid: &str, content: &str) -> ObservedEvent {
+        ObservedEvent {
+            event_id: format!("ev_{tid}"),
+            raw_event_id: format!("raw_{tid}"),
+            schema_version: "observed_event.v1".into(),
+            session_id: "sess_outcome".into(),
+            kind: EventKind::ToolResult,
+            tool_use_id: Some(tid.into()),
+            parser_version: "test".into(),
+            payload: serde_json::json!({
+                "tool_result": {"tool_use_id": tid, "is_error": true, "content": content}
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn tool_use_error_resolves_failed_measured() {
+        // <tool_use_error>는 하니스가 기계 생성하는 구조화 에러 채널(프로즈 아님) —
+        // 실 payload: disposition_v01.jsonl session 5864d6c7 (stale-read Edit 실패).
+        // 코퍼스 ~790건이 이 래퍼를 갖지만 기존 체인은 전부 Unknown으로 흘려보냈다.
+        let evs = vec![tool_result_ev(
+            "toolu_stale",
+            "<tool_use_error>File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.</tool_use_error>",
+        )];
+        let o = resolve_outcome(&evs, "toolu_stale");
+        assert_eq!(o.status, OutcomeStatus::Failed);
+        assert_eq!(o.provenance, OutcomeProvenance::Measured);
+    }
+
+    #[test]
+    fn tool_use_error_cancelled_stays_unknown() {
+        // 병렬 호출 취소는 실행 실패가 아니다 — disposition(cancelled)의 영역.
+        // 실 payload: disposition_v01.jsonl session ed82aee9.
+        let evs = vec![tool_result_ev(
+            "toolu_cxl",
+            "<tool_use_error>Cancelled: parallel tool call Bash(...)</tool_use_error>",
+        )];
+        let o = resolve_outcome(&evs, "toolu_cxl");
+        assert_eq!(o.status, OutcomeStatus::Unknown);
     }
 
     #[test]

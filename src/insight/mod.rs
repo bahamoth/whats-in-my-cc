@@ -1,4 +1,5 @@
 pub mod config;
+pub mod disposition;
 pub mod extractor;
 pub mod extractors;
 pub mod manifest;
