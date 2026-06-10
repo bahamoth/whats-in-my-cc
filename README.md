@@ -87,8 +87,11 @@ wimcc serve [--bind 127.0.0.1] [--port 7878]
 
 ## Endpoints
 
-All `/v1/*` and `/mcp` responses are wrapped in
-`{meta: {schema_version, collection_profile, generated_at, ...}, data: ...}`.
+Most `GET /v1/*` responses are wrapped in
+`{meta: {schema_version, collection_profile, redaction_policy, …}, data}` —
+with exceptions: `/v1/health` returns bare JSON; the metrics, signals,
+detectors, and audit endpoints return `{data}` only; MCP tool results are
+JSON-RPC content.
 When `--auth on`, every `/v1/*` and `/mcp` request needs
 `Authorization: Bearer <token>`; the OTel/hook collectors and the SSE stream are
 always unauthenticated loopback endpoints.
@@ -97,10 +100,10 @@ always unauthenticated loopback endpoints.
 
 | Path | Response |
 | --- | --- |
-| `/v1/health` | `{status, build_sha}` |
+| `/v1/health` | `{status, build_sha, security: {auth_required, retention_profile}}` |
 | `/v1/health/sources` | per-source freshness (used by `doctor`) |
 | `/v1/sessions` | session list (newest first) |
-| `/v1/sessions/{id}` | `{summary, events[]}` |
+| `/v1/sessions/{id}` | `{session_id, summary}` (events come from `/v1/sessions/{id}/events`) |
 | `/v1/sessions/{id}/events` | paged observed events |
 | `/v1/sessions/{id}/diff-hunks` | edit hunks for the session |
 | `/v1/sessions/{id}/usage` | token-usage rollup (`assistant_events`, `user_turns`, tokens, estimated cost) |
@@ -146,8 +149,8 @@ The `wimcc` binary embeds a React SPA (rust-embed), served at
 - `/sessions/:id` — event-first replay: a conversation stream with per-event
   detail panel, raw-source tab, an insight strip (context efficiency / tokens /
   verification / tool failures / cost, with provenance badges), an analysis
-  panel (session metrics + detector firing), and an untagged-Bash panel for the
-  tagging loop.
+  panel (session metrics + detector firing distribution), and an untagged-Bash
+  panel for the tagging loop.
 
 For local development (dev servers, builds, tests) see
 [Build, test, develop](#build-test-develop).
@@ -229,7 +232,9 @@ curl -X POST http://127.0.0.1:7878/hooks/v1/events \
   `~/.config/wimcc/token` (mode `0600`). Manage it with `serve --print-token`
   / `--rotate-token`.
 - **Retention** defaults to `none` (no deletion). `--retention-profile default`
-  (30d/180d/90d) or `strict` (7d/30d/30d) enables a background sweep.
+  (raw 30d / normalized 180d / insight 180d / audit 90d) or `strict`
+  (raw 7d / normalized 30d / insight 30d / audit 30d) enables a background
+  sweep.
 
 ## Security notes
 
@@ -238,7 +243,8 @@ curl -X POST http://127.0.0.1:7878/hooks/v1/events \
   High-entropy strings are flagged only, and there is no export-side review —
   still treat the SQLite file and anything reachable on `127.0.0.1` as
   sensitive.
-- Edit-hunk text is truncated; binary diffs surface as `<binary>`.
+- Diff hunks are derived only from transcript `structuredPatch` text; long
+  patch previews are truncated to a bounded size.
 - The OTel real-fixture freeze script auto-redacts PII to stable placeholders,
   but always grep for your own email before committing fixtures.
 
@@ -253,7 +259,7 @@ build or test the backend.**
 | `just webui-install` | install webui npm deps (idempotent) |
 | `just webui-build` | production SPA build → `webui/dist/` (`tsc -b && vite build`) |
 | `just webui-test` | frontend unit tests (`vitest run`) |
-| `just webui-dev` | vite dev server (`127.0.0.1:5173`, proxies `/v1` · `/otel` · `/hooks` → `7878`) |
+| `just webui-dev` | vite dev server (`127.0.0.1:5173`, proxies `/v1` → `7878`) |
 | `just serve-dev` | run the backend in dev (`cargo run -- serve --auto-migrate`) |
 | `just build-release` | `webui-build`, then `cargo build --release` → `target/release/wimcc` |
 

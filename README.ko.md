@@ -85,8 +85,10 @@ wimcc serve [--bind 127.0.0.1] [--port 7878]
 
 ## 엔드포인트
 
-모든 `/v1/*`·`/mcp` 응답은 `{meta: {schema_version, collection_profile,
-generated_at, ...}, data: ...}`로 감싼다. `--auth on`이면 모든 `/v1/*`·`/mcp` 요청에
+대부분의 `GET /v1/*` 응답은 `{meta: {schema_version, collection_profile,
+redaction_policy, …}, data}`로 감싼다 — 예외: `/v1/health`는 bare JSON,
+metrics·signals·detectors·audit 엔드포인트는 `{data}`만, MCP tool 결과는
+JSON-RPC content다. `--auth on`이면 모든 `/v1/*`·`/mcp` 요청에
 `Authorization: Bearer <token>`이 필요하다. OTel/hook collector와 SSE 스트림은 항상
 인증 없는 loopback 엔드포인트다.
 
@@ -94,10 +96,10 @@ generated_at, ...}, data: ...}`로 감싼다. `--auth on`이면 모든 `/v1/*`·
 
 | 경로 | 응답 |
 | --- | --- |
-| `/v1/health` | `{status, build_sha}` |
+| `/v1/health` | `{status, build_sha, security: {auth_required, retention_profile}}` |
 | `/v1/health/sources` | 소스별 freshness (`doctor`가 사용) |
 | `/v1/sessions` | 세션 목록 (최신순) |
-| `/v1/sessions/{id}` | `{summary, events[]}` |
+| `/v1/sessions/{id}` | `{session_id, summary}` (event는 `/v1/sessions/{id}/events`로 조회) |
 | `/v1/sessions/{id}/events` | 페이지된 observed event |
 | `/v1/sessions/{id}/diff-hunks` | 세션의 edit hunk |
 | `/v1/sessions/{id}/usage` | 토큰 usage 롤업 (`assistant_events`, `user_turns`, 토큰, 추정 비용) |
@@ -141,7 +143,7 @@ SDK가 `…/v1/metrics`로 POST해서 wimcc가 404를 반환한다.
 - `/sessions` — 세션 목록
 - `/sessions/:id` — event-first replay: event별 detail panel을 갖춘 conversation
   stream, raw-source 탭, insight strip(컨텍스트 효율/토큰/검증/도구 실패/비용,
-  provenance 배지), 분석 패널(세션 지표 + detector 분포), 그리고 tagging loop용
+  provenance 배지), 분석 패널(세션 지표 + detector 발화 분포), 그리고 tagging loop용
   untagged-Bash 패널.
 
 로컬 개발(dev 서버·빌드·테스트)은 아래 **빌드 · 테스트 · 개발** 섹션을 참고한다.
@@ -221,8 +223,10 @@ curl -X POST http://127.0.0.1:7878/hooks/v1/events \
   --auth on`은 `/v1/*` + `/mcp`에 bearer token을 강제한다. Token 파일: macOS
   `~/Library/Application Support/wimcc/token`, Linux `~/.config/wimcc/token`
   (mode `0600`). `serve --print-token` / `--rotate-token`으로 관리한다.
-- **retention**은 기본 `none`(삭제 없음). `--retention-profile default`(30d/180d/90d)
-  또는 `strict`(7d/30d/30d)로 백그라운드 sweep을 활성화한다.
+- **retention**은 기본 `none`(삭제 없음). `--retention-profile default`
+  (raw 30d / normalized 180d / insight 180d / audit 90d) 또는 `strict`
+  (raw 7d / normalized 30d / insight 30d / audit 30d)로 백그라운드 sweep을
+  활성화한다.
 
 ## 보안 주의
 
@@ -230,7 +234,8 @@ curl -X POST http://127.0.0.1:7878/hooks/v1/events \
   (rule pack v1) event별 `redaction_manifest`를 남긴다. high-entropy 문자열은
   flag만 하며 export-side review는 없다 — SQLite 파일과 `127.0.0.1`로 닿는 모든 것은
   여전히 민감하게 취급할 것.
-- edit-hunk 텍스트는 truncate되며, 바이너리 diff는 `<binary>`로 표시된다.
+- diff hunk는 transcript `structuredPatch` 텍스트에서만 생성되며, 긴 patch
+  preview는 일정 크기로 truncate된다.
 - OTel real-fixture freeze 스크립트는 PII를 안정적 placeholder로 자동 redact하지만,
   fixture를 커밋하기 전 항상 본인 이메일을 grep할 것.
 
@@ -245,7 +250,7 @@ curl -X POST http://127.0.0.1:7878/hooks/v1/events \
 | `just webui-install` | webui npm 의존성 설치 (idempotent) |
 | `just webui-build` | SPA 프로덕션 빌드 → `webui/dist/` (`tsc -b && vite build`) |
 | `just webui-test` | 프론트엔드 단위 테스트 (`vitest run`) |
-| `just webui-dev` | vite dev 서버 (`127.0.0.1:5173`, `/v1` · `/otel` · `/hooks` → `7878` 프록시) |
+| `just webui-dev` | vite dev 서버 (`127.0.0.1:5173`, `/v1` → `7878` 프록시) |
 | `just serve-dev` | 백엔드 dev 실행 (`cargo run -- serve --auto-migrate`) |
 | `just build-release` | `webui-build` 후 `cargo build --release` → `target/release/wimcc` |
 
