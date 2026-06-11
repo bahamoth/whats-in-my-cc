@@ -435,6 +435,17 @@ async fn system_summary_facts_counted_by_subkind() {
         EventKind::SystemSummary, Some("compact_boundary"),
         serde_json::json!({"content": "Conversation compacted", "compactMetadata": {"trigger": "manual", "preTokens": 310705}}),
     ).await;
+    // away_summary: 사용자 자리비움 turn — turn_duration 대신 기록된다.
+    seed_event_with_payload(
+        &pool, &run_id, sid, "aw1",
+        EventKind::SystemSummary, Some("away_summary"),
+        serde_json::json!({"content": "User stepped away"}),
+    ).await;
+    seed_event_with_payload(
+        &pool, &run_id, sid, "aw2",
+        EventKind::SystemSummary, Some("away_summary"),
+        serde_json::json!({"content": "User stepped away"}),
+    ).await;
     // 다른 subkind의 system 레코드는 어느 카운트에도 들어가지 않는다.
     seed_event_with_payload(
         &pool, &run_id, sid, "sh1",
@@ -447,6 +458,10 @@ async fn system_summary_facts_counted_by_subkind() {
     assert_eq!(m.turn_duration_ms_total, 139516 + 454567);
     assert_eq!(m.api_error_count, 1);
     assert_eq!(m.compact_boundary_count, 1);
+    // away_summary/compact_boundary는 활성 turn(turn_duration)이 아닌 별도 레코드다 —
+    // away_summary_count로 노출해 turn_duration_count가 전체 turn이 아님을 정직화한다
+    // (dogfooding 2026-06-11: 6a254a2a는 turn_duration 27 + away 10 + compact 1 = user_turns 38).
+    assert_eq!(m.away_summary_count, 2);
 }
 
 #[tokio::test]
