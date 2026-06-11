@@ -4352,9 +4352,12 @@ vitest: 69 passed
         (<code>pricing_estimate@2026-06-11</code>) — usage API가 이 날짜를 그대로 노출해 추정의 신선도를 보인다. <strong>주의</strong>: 비용은 usage 핸들러의 read-path 계산
         (저장된 <code>usage_facet</code> 토큰 합 × 코드의 가격표)이라 verification/signal과 달리 재ingest 불필요 —
         serve 재시작(새 바이너리)만으로 반영된다.</li>
-      <li><strong>trace_id 상관 공백</strong>: transcript 유래 이벤트(tool_call/result/thinking/hook 등)는
-        trace_id가 공란이라 OTel span과 trace_id로 조인 불가(otel_span·log_record만 33% 보유).
-        OTel-first 원칙과 부분 충돌.</li>
+      <li><strong>trace_id 상관 — won't-fix (소스 한계, 2026-06-11 확정)</strong>: transcript 유래
+        이벤트(tool_call/result/thinking/hook 등)에는 correlation용 trace_id가 <strong>없다</strong>
+        — 파싱해 보면 본문에 우연히 든 문자열 몇 건뿐(top-level 키 아님). OTel span/log_record만
+        trace_id를 보유하므로 transcript↔OTel을 trace_id로 조인할 수 없다. timestamp/tool_use_id
+        근사 조인은 부정확(동시 다발 span에서 오매칭)해 채택하지 않는다. Claude Code transcript가
+        trace_id를 싣기 전까지 구현 불가 — OTel-first 원칙은 OTel 유래 이벤트에 한해 적용된다.</li>
       <li><strong>turn_duration 결손</strong>: 6a254a2a <code>turn_duration_count 27 &lt; user_turns 38</code>
         (11턴 누락 — compaction/summary 미발화 추정).</li>
     </ul>
