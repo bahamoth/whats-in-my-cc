@@ -18,6 +18,9 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
+          # PAT를 쓰면 release-please가 만든 PR에서도 CI가 트리거된다.
+          # 미설정 시 기본 GITHUB_TOKEN으로 동작(릴리스 PR에 CI 미트리거).
+          token: ${{ secrets.RELEASE_PLEASE || secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
 
