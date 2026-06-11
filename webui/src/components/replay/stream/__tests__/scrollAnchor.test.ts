@@ -52,6 +52,26 @@ describe('shouldLoadOlder — page older history only on an upward near-top user
   it('default prefetch zone is roughly a viewport (>= 800px)', () => {
     expect(LOAD_OLDER_TOP_PX).toBeGreaterThanOrEqual(800);
   });
+
+  // Stuck-at-top recovery (2026-06-11): fast upward scroll + a slow older-fetch
+  // drop the near-top trigger (loadOlder no-ops while a prior load is in
+  // flight); the reader reaches the ABSOLUTE top (scrollTop 0) and an
+  // under-anchored prepend leaves them there. At scrollTop 0 you cannot produce
+  // `scrollTop < prevScrollTop`, AND no further scroll event fires (you cannot
+  // scroll past the top) — so the strict upward-delta rule can never re-trigger
+  // and older history stops loading until you scroll DOWN then UP. Being pinned
+  // at the absolute top must therefore page older history regardless of delta.
+  it('true: pinned at the absolute top even with no upward delta (stuck-at-top recovery)', () => {
+    expect(shouldLoadOlder({ ...base, scrollTop: 0, prevScrollTop: 0 })).toBe(true);
+  });
+
+  it('false: at the absolute top but not yet interacted (mount on a short session)', () => {
+    expect(shouldLoadOlder({ ...base, hasInteracted: false, scrollTop: 0, prevScrollTop: 0 })).toBe(false);
+  });
+
+  it('false: at the absolute top but no older pages remain', () => {
+    expect(shouldLoadOlder({ ...base, canLoadOlder: false, scrollTop: 0, prevScrollTop: 0 })).toBe(false);
+  });
 });
 
 describe('shouldAdjustOnItemResize — measurement growth must not eat upward scroll (2026-06-11 freeze)', () => {
