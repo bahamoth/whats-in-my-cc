@@ -185,7 +185,10 @@ fn fold_manifest_rows(rows: &[sqlx::sqlite::SqliteRow]) -> RedactionSummary {
                         }
                     }
                 }
-                if v["has_unredacted_sensitive_payload"].as_bool().unwrap_or(false) {
+                if v["has_unredacted_sensitive_payload"]
+                    .as_bool()
+                    .unwrap_or(false)
+                {
                     any_unredacted = true;
                 }
             }

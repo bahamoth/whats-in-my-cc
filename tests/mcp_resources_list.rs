@@ -55,7 +55,12 @@ async fn resources_templates_list_has_three_templates() {
     let templates = body["result"]["resourceTemplates"]
         .as_array()
         .expect("resourceTemplates must be an array");
-    assert_eq!(templates.len(), 3, "expected 3 resource templates, got {}", templates.len());
+    assert_eq!(
+        templates.len(),
+        3,
+        "expected 3 resource templates, got {}",
+        templates.len()
+    );
 }
 
 #[tokio::test]
@@ -122,6 +127,11 @@ async fn prompts_list_returns_empty_array() {
         .await;
     r.assert_status_ok();
     let body: Value = r.json();
-    let prompts = body["result"]["prompts"].as_array().expect("prompts must be array");
-    assert!(prompts.is_empty(), "prompts/list must return empty array (DEV-S17-06)");
+    let prompts = body["result"]["prompts"]
+        .as_array()
+        .expect("prompts must be array");
+    assert!(
+        prompts.is_empty(),
+        "prompts/list must return empty array (DEV-S17-06)"
+    );
 }

@@ -52,8 +52,15 @@ async fn tools_list_returns_four_tools() {
         .await;
     r.assert_status_ok();
     let body: Value = r.json();
-    let tools = body["result"]["tools"].as_array().expect("tools must be an array");
-    assert_eq!(tools.len(), 4, "expected exactly 4 tools (Plan 4: +list_detectors), got {}", tools.len());
+    let tools = body["result"]["tools"]
+        .as_array()
+        .expect("tools must be an array");
+    assert_eq!(
+        tools.len(),
+        4,
+        "expected exactly 4 tools (Plan 4: +list_detectors), got {}",
+        tools.len()
+    );
 }
 
 #[tokio::test]
@@ -71,10 +78,7 @@ async fn tools_list_contains_required_tool_names() {
         .await;
     let body: Value = r.json();
     let tools = body["result"]["tools"].as_array().unwrap();
-    let names: Vec<&str> = tools
-        .iter()
-        .map(|t| t["name"].as_str().unwrap())
-        .collect();
+    let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
 
     let required = [
         "whats_in_my_cc.get_file_lineage",

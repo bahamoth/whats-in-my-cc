@@ -140,12 +140,18 @@ async fn list_detectors_returns_four_manifests() {
         .await;
     r.assert_status_ok();
     let body: Value = r.json();
-    assert_eq!(body["result"]["isError"], false, "list_detectors must not return isError");
+    assert_eq!(
+        body["result"]["isError"], false,
+        "list_detectors must not return isError"
+    );
     let text = body["result"]["content"][0]["text"].as_str().unwrap();
     let env: Value = serde_json::from_str(text).unwrap();
-    let data = env["data"].as_array().expect("list_detectors data must be array");
+    let data = env["data"]
+        .as_array()
+        .expect("list_detectors data must be array");
     assert_eq!(
-        data.len(), 5,
+        data.len(),
+        5,
         "list_detectors must return 5 manifests; got {}",
         data.len()
     );

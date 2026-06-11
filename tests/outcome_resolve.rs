@@ -305,13 +305,13 @@ fn otlp_beats_hook_in_fallback_order() {
         )
     };
     // OTLP says Failed, hook says Passed — OTLP wins.
-    let events = vec![
-        tool_result(0, "tid_8", false, ""),
-        otlp_event,
-        hook_event,
-    ];
+    let events = vec![tool_result(0, "tid_8", false, ""), otlp_event, hook_event];
     let outcome = resolve_outcome(&events, "tid_8");
-    assert_eq!(outcome.status, OutcomeStatus::Failed, "OTLP must take priority over hook");
+    assert_eq!(
+        outcome.status,
+        OutcomeStatus::Failed,
+        "OTLP must take priority over hook"
+    );
     assert_eq!(outcome.provenance, OutcomeProvenance::Measured);
 }
 
@@ -329,10 +329,11 @@ fn does_not_match_different_tool_use_id() {
             }),
         )
     };
-    let events = vec![
-        tool_result(0, "tid_target", false, "ok"),
-        otlp_event,
-    ];
+    let events = vec![tool_result(0, "tid_target", false, "ok"), otlp_event];
     let outcome = resolve_outcome(&events, "tid_target");
-    assert_eq!(outcome.status, OutcomeStatus::Unknown, "must not use OTLP for different tool_use_id");
+    assert_eq!(
+        outcome.status,
+        OutcomeStatus::Unknown,
+        "must not use OTLP for different tool_use_id"
+    );
 }

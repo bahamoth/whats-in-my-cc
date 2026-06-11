@@ -43,7 +43,10 @@ async fn initialize_returns_protocol_version_and_session_id() {
     let body: Value = r.json();
     assert_eq!(body["result"]["protocolVersion"], "2024-11-05");
     assert!(body["result"]["capabilities"]["tools"].is_object());
-    assert_eq!(body["result"]["capabilities"]["resources"]["subscribe"], true);
+    assert_eq!(
+        body["result"]["capabilities"]["resources"]["subscribe"],
+        true
+    );
     assert!(body["result"]["serverInfo"]["name"].is_string());
 
     let sid = r.header("Mcp-Session-Id");

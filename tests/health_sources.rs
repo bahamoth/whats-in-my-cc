@@ -36,7 +36,13 @@ async fn health_sources_returns_full_taxonomy_when_db_empty() {
     // transcript toolUseResult.structuredPatch instead.
     assert_eq!(
         labels,
-        vec!["transcript", "otel-traces", "otel-metrics", "otel-logs", "hook"]
+        vec![
+            "transcript",
+            "otel-traces",
+            "otel-metrics",
+            "otel-logs",
+            "hook"
+        ]
     );
     for src in sources {
         assert!(src["last_ingested_at"].is_null());

@@ -98,7 +98,9 @@ async fn re_read_signal_stable_across_growing_reads() {
     // First pass: file read twice → one re_read signal (read_count=2).
     insert_read(&pool, 0, "src/a.rs").await;
     insert_read(&pool, 1, "src/a.rs").await;
-    wimcc::insight::pipeline::run_detectors(&pool, SESS).await.unwrap();
+    wimcc::insight::pipeline::run_detectors(&pool, SESS)
+        .await
+        .unwrap();
 
     let after_first = re_read_rows(&pool).await;
     assert_eq!(
@@ -111,7 +113,9 @@ async fn re_read_signal_stable_across_growing_reads() {
     // The evidence set grows (r0,r1 -> r0,r1,r2); the signal must REMAIN a single
     // row with the updated read_count, not spawn a second row.
     insert_read(&pool, 2, "src/a.rs").await;
-    wimcc::insight::pipeline::run_detectors(&pool, SESS).await.unwrap();
+    wimcc::insight::pipeline::run_detectors(&pool, SESS)
+        .await
+        .unwrap();
 
     let after_second = re_read_rows(&pool).await;
     assert_eq!(
@@ -158,7 +162,9 @@ async fn run_detectors_reconciles_stale_signals() {
     insert_read(&pool, 0, "src/real.rs").await;
     insert_read(&pool, 1, "src/real.rs").await;
 
-    wimcc::insight::pipeline::run_detectors(&pool, SESS).await.unwrap();
+    wimcc::insight::pipeline::run_detectors(&pool, SESS)
+        .await
+        .unwrap();
 
     let stale_survives: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM signal WHERE signal_id='sig_stale_phantom'")

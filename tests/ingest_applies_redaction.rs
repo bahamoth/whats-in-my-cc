@@ -16,8 +16,8 @@ async fn test_pool() -> sqlx::SqlitePool {
 
 #[tokio::test]
 async fn ingest_masks_anthropic_key_in_stored_payload() {
-    use wimcc::live::NoopSink;
     use wimcc::ingest::store;
+    use wimcc::live::NoopSink;
 
     let pool = test_pool().await;
     // Use the synthetic fixture which contains sk-ant-api03-SYNTHETIC_KEY_...
@@ -30,11 +30,10 @@ async fn ingest_masks_anthropic_key_in_stored_payload() {
     .unwrap();
 
     // Verify no raw_event payload contains the original key suffix
-    let payloads: Vec<Vec<u8>> =
-        sqlx::query_scalar("SELECT payload FROM raw_event")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+    let payloads: Vec<Vec<u8>> = sqlx::query_scalar("SELECT payload FROM raw_event")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
 
     for p in &payloads {
         let text = String::from_utf8_lossy(p);
@@ -47,8 +46,8 @@ async fn ingest_masks_anthropic_key_in_stored_payload() {
 
 #[tokio::test]
 async fn ingest_masks_private_key_pem_in_stored_payload() {
-    use wimcc::live::NoopSink;
     use wimcc::ingest::store;
+    use wimcc::live::NoopSink;
 
     let pool = test_pool().await;
     store::ingest_file(
@@ -59,11 +58,10 @@ async fn ingest_masks_private_key_pem_in_stored_payload() {
     .await
     .unwrap();
 
-    let payloads: Vec<Vec<u8>> =
-        sqlx::query_scalar("SELECT payload FROM raw_event")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+    let payloads: Vec<Vec<u8>> = sqlx::query_scalar("SELECT payload FROM raw_event")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
 
     for p in &payloads {
         let text = String::from_utf8_lossy(p);
@@ -76,8 +74,8 @@ async fn ingest_masks_private_key_pem_in_stored_payload() {
 
 #[tokio::test]
 async fn ingest_writes_redaction_manifest_column() {
-    use wimcc::live::NoopSink;
     use wimcc::ingest::store;
+    use wimcc::live::NoopSink;
 
     let pool = test_pool().await;
     store::ingest_file(
@@ -89,12 +87,11 @@ async fn ingest_writes_redaction_manifest_column() {
     .unwrap();
 
     // At least one row must have a non-NULL redaction_manifest
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM raw_event WHERE redaction_manifest IS NOT NULL",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM raw_event WHERE redaction_manifest IS NOT NULL")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     assert!(
         count >= 1,
@@ -104,8 +101,8 @@ async fn ingest_writes_redaction_manifest_column() {
 
 #[tokio::test]
 async fn ingest_sets_redaction_state_to_redacted_when_secret_found() {
-    use wimcc::live::NoopSink;
     use wimcc::ingest::store;
+    use wimcc::live::NoopSink;
 
     let pool = test_pool().await;
     store::ingest_file(
@@ -117,12 +114,11 @@ async fn ingest_sets_redaction_state_to_redacted_when_secret_found() {
     .unwrap();
 
     // No row should have the old placeholder "unredacted"
-    let unredacted_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM raw_event WHERE redaction_state = 'unredacted'",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let unredacted_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM raw_event WHERE redaction_state = 'unredacted'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(
         unredacted_count, 0,
         "no raw_event must have old placeholder redaction_state='unredacted' after slice-18"

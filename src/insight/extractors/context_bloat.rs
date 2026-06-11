@@ -64,10 +64,8 @@ impl Detector for ContextBloat {
     fn detect(&self, view: &SessionInsightView<'_>, cfg: &DetectorConfig) -> Vec<SignalCandidate> {
         let threshold_bytes =
             cfg.usize_param("context_bloat", "threshold_bytes", BLOAT_THRESHOLD_BYTES);
-        let next_window =
-            cfg.usize_param("context_bloat", "next_event_window", NEXT_EVENT_WINDOW);
-        let min_overlap =
-            cfg.usize_param("context_bloat", "min_overlap_stems", MIN_OVERLAP_STEMS);
+        let next_window = cfg.usize_param("context_bloat", "next_event_window", NEXT_EVENT_WINDOW);
+        let min_overlap = cfg.usize_param("context_bloat", "min_overlap_stems", MIN_OVERLAP_STEMS);
 
         let events = view.events;
         let mut candidates: Vec<SignalCandidate> = Vec::new();
@@ -223,7 +221,11 @@ fn extract_assistant_text(payload: &serde_json::Value) -> String {
         if let Some(arr) = content.as_array() {
             return arr
                 .iter()
-                .filter_map(|item| item.get("text").and_then(|t| t.as_str()).map(str::to_string))
+                .filter_map(|item| {
+                    item.get("text")
+                        .and_then(|t| t.as_str())
+                        .map(str::to_string)
+                })
                 .collect::<Vec<_>>()
                 .join(" ");
         }

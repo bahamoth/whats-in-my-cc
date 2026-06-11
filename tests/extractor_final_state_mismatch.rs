@@ -130,7 +130,11 @@ fn fires_on_implement_goal_with_failed_verification() {
     let runs = vec![vr];
     let view = view_with_runs(&events, &runs);
     let cands = FinalStateMismatch.detect(&view, &DetectorConfig::default());
-    assert_eq!(cands.len(), 1, "implement goal + failed verification must fire");
+    assert_eq!(
+        cands.len(),
+        1,
+        "implement goal + failed verification must fire"
+    );
 }
 
 /// Closing verification PASSED → must NOT fire.
@@ -144,7 +148,10 @@ fn does_not_fire_when_closing_verification_passed() {
     let runs = vec![vr];
     let view = view_with_runs(&events, &runs);
     let cands = FinalStateMismatch.detect(&view, &DetectorConfig::default());
-    assert!(cands.is_empty(), "passed verification must not fire final_state_mismatch");
+    assert!(
+        cands.is_empty(),
+        "passed verification must not fire final_state_mismatch"
+    );
 }
 
 /// Final assistant_message contains a completion marker → must NOT fire.
@@ -157,7 +164,10 @@ fn does_not_fire_when_final_message_has_completion_marker_done() {
     // No verification run
     let view = view_with_runs(&events, &[]);
     let cands = FinalStateMismatch.detect(&view, &DetectorConfig::default());
-    assert!(cands.is_empty(), "completion marker 'done' must suppress firing");
+    assert!(
+        cands.is_empty(),
+        "completion marker 'done' must suppress firing"
+    );
 }
 
 /// No goal verb in user message → must NOT fire.
@@ -189,7 +199,11 @@ fn fires_at_most_once_per_session() {
     let runs = vec![vr1, vr2];
     let view = view_with_runs(&events, &runs);
     let cands = FinalStateMismatch.detect(&view, &DetectorConfig::default());
-    assert!(cands.len() <= 1, "at most 1 finding per session, got {}", cands.len());
+    assert!(
+        cands.len() <= 1,
+        "at most 1 finding per session, got {}",
+        cands.len()
+    );
 }
 
 /// Empty session → no fire.

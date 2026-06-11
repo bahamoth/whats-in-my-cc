@@ -73,7 +73,10 @@ pub fn parse_request(body: &Value) -> Vec<LogRecordItem> {
                     .get("event.name")
                     .and_then(|v| v.as_str())
                     .map(String::from);
-                let severity_number = lr.get("severityNumber").and_then(|v| v.as_i64()).map(|n| n as i32);
+                let severity_number = lr
+                    .get("severityNumber")
+                    .and_then(|v| v.as_i64())
+                    .map(|n| n as i32);
                 let severity_text = lr
                     .get("severityText")
                     .and_then(|v| v.as_str())
@@ -270,8 +273,14 @@ mod tests {
 
     #[test]
     fn hook_event_actor_is_hook() {
-        assert!(matches!(pick_actor(Some("hook_execution_complete")), Actor::Hook));
-        assert!(matches!(pick_actor(Some("mcp_server_connection")), Actor::System));
+        assert!(matches!(
+            pick_actor(Some("hook_execution_complete")),
+            Actor::Hook
+        ));
+        assert!(matches!(
+            pick_actor(Some("mcp_server_connection")),
+            Actor::System
+        ));
         assert!(matches!(pick_actor(None), Actor::System));
     }
 

@@ -183,7 +183,8 @@ fn map_assistant(
         match ty {
             "text" => {
                 e.kind = EventKind::AssistantMessage;
-                e.payload = json!({"content_ordinal": ord, "text": item.get("text"), "model": model});
+                e.payload =
+                    json!({"content_ordinal": ord, "text": item.get("text"), "model": model});
             }
             "thinking" => {
                 e.kind = EventKind::Thinking;

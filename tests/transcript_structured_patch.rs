@@ -55,8 +55,8 @@ fn fixture_tool_use_id(line: &Value) -> Option<&str> {
 fn structured_patch_invariant_holds_for_real_fixtures() {
     for (i, line) in fixture_lines().iter().enumerate() {
         let result_val = fixture_tool_use_result(line);
-        let parsed: TranscriptToolUseResult =
-            serde_json::from_value(result_val.clone()).unwrap_or_else(|e| {
+        let parsed: TranscriptToolUseResult = serde_json::from_value(result_val.clone())
+            .unwrap_or_else(|e| {
                 panic!(
                     "fixture {} failed invariant: {e}\nvalue: {result_val}",
                     i + 1
@@ -169,7 +169,11 @@ fn extract_multiple_hunks_from_multi_hunk_edit_fixture() {
     let mut ids: Vec<&str> = recs.iter().map(|r| r.diff_hunk_id.as_str()).collect();
     ids.sort();
     ids.dedup();
-    assert_eq!(ids.len(), expected_n, "diff_hunk_id must be unique per hunk");
+    assert_eq!(
+        ids.len(),
+        expected_n,
+        "diff_hunk_id must be unique per hunk"
+    );
 }
 
 /// Task 6 — non-edit tool results: extractor produces zero hunks and does not

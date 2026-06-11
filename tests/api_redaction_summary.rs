@@ -102,11 +102,10 @@ async fn session_events_endpoint_includes_redaction_summary() {
     let server = build_server(pool.clone());
 
     // Get the session id
-    let sid: String =
-        sqlx::query_scalar("SELECT DISTINCT session_id FROM observed_event LIMIT 1")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let sid: String = sqlx::query_scalar("SELECT DISTINCT session_id FROM observed_event LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
 
     let r = server.get(&format!("/v1/sessions/{sid}/events")).await;
     r.assert_status_ok();
@@ -129,11 +128,10 @@ async fn session_events_endpoint_includes_redaction_summary() {
 async fn session_events_redaction_summary_has_required_fields() {
     let pool = pool_with_redacted_session().await;
     let server = build_server(pool.clone());
-    let sid: String =
-        sqlx::query_scalar("SELECT DISTINCT session_id FROM observed_event LIMIT 1")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let sid: String = sqlx::query_scalar("SELECT DISTINCT session_id FROM observed_event LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     let r = server.get(&format!("/v1/sessions/{sid}/events")).await;
     r.assert_status_ok();
     let body: Value = r.json();

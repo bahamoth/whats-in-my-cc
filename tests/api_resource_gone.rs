@@ -34,10 +34,7 @@ async fn pull_api_returns_410_for_tombstoned_signal() {
 
     let r = server
         .get("/v1/signals/sig_demo")
-        .add_header(
-            axum::http::header::AUTHORIZATION,
-            format!("Bearer {token}"),
-        )
+        .add_header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
         .await;
     r.assert_status(axum::http::StatusCode::GONE);
 }
@@ -48,10 +45,7 @@ async fn pull_api_returns_404_for_nonexistent_nontombstoned_signal() {
 
     let r = server
         .get("/v1/signals/sig_never_existed")
-        .add_header(
-            axum::http::header::AUTHORIZATION,
-            format!("Bearer {token}"),
-        )
+        .add_header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
         .await;
     r.assert_status(axum::http::StatusCode::NOT_FOUND);
 }

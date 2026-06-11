@@ -9,8 +9,8 @@ use crate::error::Result;
 use crate::ids::MonotonicUlidGen;
 use crate::live::{LiveEvent, LiveSink};
 use crate::model::meta::{PARSER_VERSION_HOOK, SCHEMA_VERSION};
-use crate::security::redaction::engine::scan;
 use crate::model::observed::{Actor, EventKind, ObservedEvent};
+use crate::security::redaction::engine::scan;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
@@ -88,10 +88,7 @@ fn parse_one(item: &Value, out: &mut ParseResult) {
         .get("tool_use_id")
         .and_then(|v| v.as_str())
         .map(String::from);
-    let cwd = item
-        .get("cwd")
-        .and_then(|v| v.as_str())
-        .map(String::from);
+    let cwd = item.get("cwd").and_then(|v| v.as_str()).map(String::from);
     let timestamp = item
         .get("timestamp")
         .and_then(|v| v.as_str())
@@ -346,13 +343,17 @@ mod tests {
 
         let body = pre_tool_use_fixture();
         let parsed = parse_body(&body);
-        let first = store(&pool, parsed, Utc::now(), &crate::live::NoopSink).await.unwrap();
+        let first = store(&pool, parsed, Utc::now(), &crate::live::NoopSink)
+            .await
+            .unwrap();
         assert_eq!(first.accepted_events, 1);
         assert_eq!(first.duplicate_events, 0);
         assert_eq!(first.sessions_touched, vec!["sess_A".to_string()]);
 
         let parsed2 = parse_body(&body);
-        let second = store(&pool, parsed2, Utc::now(), &crate::live::NoopSink).await.unwrap();
+        let second = store(&pool, parsed2, Utc::now(), &crate::live::NoopSink)
+            .await
+            .unwrap();
         assert_eq!(second.accepted_events, 0);
         assert_eq!(second.duplicate_events, 1);
         // Self-heal (DEV-S3-07): even on full duplicate, session is still touched.

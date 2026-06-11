@@ -130,9 +130,8 @@ fn http_get(host: &str, path: &str, token: Option<&str>) -> String {
     let auth_header = token
         .map(|t| format!("Authorization: Bearer {t}\r\n"))
         .unwrap_or_default();
-    let req = format!(
-        "GET {path} HTTP/1.1\r\nHost: {host}\r\n{auth_header}Connection: close\r\n\r\n",
-    );
+    let req =
+        format!("GET {path} HTTP/1.1\r\nHost: {host}\r\n{auth_header}Connection: close\r\n\r\n",);
     s.write_all(req.as_bytes()).expect("write");
     let mut buf = Vec::new();
     s.read_to_end(&mut buf).ok();
@@ -193,17 +192,17 @@ async fn paginate_backwards_reconstructs_full_session() {
         }
         prev_first_id = Some(events[0]["event_id"].as_str().unwrap().to_string());
     }
-    let initial_newest_cursor = data["data"]["events"]
-        .as_array()
-        .unwrap()
-        .last()
-        .map(|e| format!("{}|{}", e["observed_at"].as_str().unwrap(), e["event_id"].as_str().unwrap()));
+    let initial_newest_cursor = data["data"]["events"].as_array().unwrap().last().map(|e| {
+        format!(
+            "{}|{}",
+            e["observed_at"].as_str().unwrap(),
+            e["event_id"].as_str().unwrap()
+        )
+    });
 
     // 4. Page backwards using prev_cursor until the response shrinks below
     //    PAGE_LIMIT or we hit the start.
-    let mut prev_cursor = data["data"]["prev_cursor"]
-        .as_str()
-        .map(str::to_string);
+    let mut prev_cursor = data["data"]["prev_cursor"].as_str().map(str::to_string);
     let mut pages = 1;
     while let Some(cur) = prev_cursor.take() {
         let url = format!(
@@ -240,7 +239,10 @@ async fn paginate_backwards_reconstructs_full_session() {
         }
         prev_cursor = data["data"]["prev_cursor"].as_str().map(str::to_string);
         pages += 1;
-        assert!(pages < 20, "runaway paging (test seed only has {SEED_N} events)");
+        assert!(
+            pages < 20,
+            "runaway paging (test seed only has {SEED_N} events)"
+        );
     }
 
     // 5. Union must equal the seed set.
@@ -316,13 +318,23 @@ async fn paging_remains_consistent_through_live_activity() {
     let v1 = json_body(&r1);
     let initial_first_cursor = {
         let e = &v1["data"]["events"].as_array().unwrap()[0];
-        format!("{}|{}", e["observed_at"].as_str().unwrap(), e["event_id"].as_str().unwrap())
+        format!(
+            "{}|{}",
+            e["observed_at"].as_str().unwrap(),
+            e["event_id"].as_str().unwrap()
+        )
     };
     let initial_newest = v1["data"]["events"]
         .as_array()
         .unwrap()
         .last()
-        .map(|e| format!("{}|{}", e["observed_at"].as_str().unwrap(), e["event_id"].as_str().unwrap()))
+        .map(|e| {
+            format!(
+                "{}|{}",
+                e["observed_at"].as_str().unwrap(),
+                e["event_id"].as_str().unwrap()
+            )
+        })
         .expect("initial newest");
 
     // 2. Burst of live activity — 50 hook POSTs against the same session.

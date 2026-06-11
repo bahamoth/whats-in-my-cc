@@ -64,7 +64,9 @@ async fn resources_read_session_returns_contents_with_uri() {
         .await;
     r.assert_status_ok();
     let body: Value = r.json();
-    let contents = body["result"]["contents"].as_array().expect("contents must be array");
+    let contents = body["result"]["contents"]
+        .as_array()
+        .expect("contents must be array");
     assert!(!contents.is_empty(), "contents must not be empty");
     let first = &contents[0];
     assert_eq!(first["uri"], "whats-in-my-cc://sessions/sess-A");
@@ -93,6 +95,9 @@ async fn resources_read_unknown_uri_returns_is_error() {
     // Unknown resource URI: either error in JSON-RPC error field, or isError in result
     let has_error = !body["error"].is_null()
         || body["result"]["isError"].as_bool().unwrap_or(false)
-        || body["result"]["contents"].as_array().map(|a| a.is_empty()).unwrap_or(true);
+        || body["result"]["contents"]
+            .as_array()
+            .map(|a| a.is_empty())
+            .unwrap_or(true);
     assert!(has_error, "unknown URI must result in an error response");
 }

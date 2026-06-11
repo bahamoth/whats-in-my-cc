@@ -1,6 +1,6 @@
 use sqlx::sqlite::SqlitePoolOptions;
-use wimcc::db::{migrate, repo_signal};
 use wimcc::db::repo_signal::SignalRow;
+use wimcc::db::{migrate, repo_signal};
 
 #[tokio::test]
 async fn insert_and_list_by_session() {

@@ -188,7 +188,10 @@ fn does_not_fire_if_no_is_error_field() {
     ];
     let view = view_from_events(&events);
     let cands = ToolFailure.detect(&view, &DetectorConfig::default());
-    assert!(cands.is_empty(), "absent is_error + no OTLP → Unknown → no fire");
+    assert!(
+        cands.is_empty(),
+        "absent is_error + no OTLP → Unknown → no fire"
+    );
 }
 
 /// Session with OTLP-confirmed passing results → no signals.
@@ -261,7 +264,10 @@ fn error_excerpt_is_raw_fact() {
     let cands = ToolFailure.detect(&view, &DetectorConfig::default());
     assert_eq!(cands.len(), 1);
     // Raw excerpt, NOT classified as benign_nonzero_exit (assumption removed).
-    assert_eq!(cands[0].facts["error_excerpt"], json!("grep: no matches found"));
+    assert_eq!(
+        cands[0].facts["error_excerpt"],
+        json!("grep: no matches found")
+    );
     assert!(cands[0].facts.get("failure_class").is_none());
 }
 

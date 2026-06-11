@@ -90,7 +90,10 @@ async fn risky_action_promotes_without_judge() {
         .await
         .unwrap();
 
-    let risky: Vec<_> = rows.iter().filter(|r| r.detector == "risky_action").collect();
+    let risky: Vec<_> = rows
+        .iter()
+        .filter(|r| r.detector == "risky_action")
+        .collect();
     assert!(
         !risky.is_empty(),
         "risky_action must promote without a judge; got 0 signals (rows={:?})",

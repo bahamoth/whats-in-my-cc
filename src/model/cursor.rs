@@ -93,7 +93,9 @@ mod tests {
 
     #[test]
     fn parse_control_chars_rejected() {
-        assert!("2026-05-21T11:42:33.012Z|\x01abc".parse::<Cursor>().is_err());
+        assert!("2026-05-21T11:42:33.012Z|\x01abc"
+            .parse::<Cursor>()
+            .is_err());
     }
 
     #[test]

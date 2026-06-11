@@ -190,7 +190,6 @@ async fn missing_root_does_not_error() {
     let cancel = CancellationToken::new();
     let (live_tx, _) = tokio::sync::broadcast::channel::<wimcc::live::LiveEvent>(64);
     let live_tx = std::sync::Arc::new(live_tx);
-    let res =
-        wimcc::transcript_tail::run(pool.clone(), nonexistent, live_tx, cancel).await;
+    let res = wimcc::transcript_tail::run(pool.clone(), nonexistent, live_tx, cancel).await;
     assert!(res.is_ok());
 }

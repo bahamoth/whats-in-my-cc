@@ -171,7 +171,10 @@ async fn metrics_count_session_facts_from_real_payloads() {
         .unwrap();
     assert_eq!(m.tool_result_truncated_count, 1);
     // 잘린 실패 출력은 disposition(미실행 축)이 아니다.
-    assert_eq!(m.tool_user_rejected + m.tool_cancelled + m.tool_backgrounded, 0);
+    assert_eq!(
+        m.tool_user_rejected + m.tool_cancelled + m.tool_backgrounded,
+        0
+    );
 
     let m = compute_session_metrics(&pool, "77eb6194-53f8-494b-b6d9-a21494ccc0a2")
         .await

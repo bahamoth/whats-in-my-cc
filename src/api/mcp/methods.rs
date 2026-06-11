@@ -95,18 +95,12 @@ pub async fn handle(
                 Ok(contents) => HandleResult::Response(AnyResponse::ok(id_val, contents)),
                 Err(msg) => {
                     // Unknown or not-found resource — return as an error result
-                    HandleResult::Response(AnyResponse::err(
-                        id_val,
-                        codes::INVALID_PARAMS,
-                        msg,
-                    ))
+                    HandleResult::Response(AnyResponse::err(id_val, codes::INVALID_PARAMS, msg))
                 }
             }
         }
 
-        "prompts/list" => {
-            HandleResult::Response(AnyResponse::ok(id_val, json!({ "prompts": [] })))
-        }
+        "prompts/list" => HandleResult::Response(AnyResponse::ok(id_val, json!({ "prompts": [] }))),
 
         _ => {
             // Notifications with unknown method: silent ignore.

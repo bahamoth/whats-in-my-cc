@@ -53,7 +53,11 @@ async fn diff_hunk_schema_matches_slice10a_shape() {
         );
     }
     // Legacy slice-5 columns must be absent.
-    for legacy in ["introduced_by_commit_sha", "line_start_after", "line_end_after"] {
+    for legacy in [
+        "introduced_by_commit_sha",
+        "line_start_after",
+        "line_end_after",
+    ] {
         assert!(
             !cols.iter().any(|c| c == legacy),
             "diff_hunk still has legacy column `{legacy}`; columns: {cols:?}"
@@ -61,10 +65,7 @@ async fn diff_hunk_schema_matches_slice10a_shape() {
     }
     // slice-5 attribution column `introduced_by_node_id` is gone — attribution
     // is now event/tool-use only.
-    for legacy in [
-        "introduced_by_node_id",
-        "related_observed_event_id",
-    ] {
+    for legacy in ["introduced_by_node_id", "related_observed_event_id"] {
         assert!(
             !cols.iter().any(|c| c == legacy),
             "diff_hunk still has legacy attribution column `{legacy}`; columns: {cols:?}"
@@ -117,17 +118,20 @@ async fn judge_and_graph_tables_are_absent() {
 #[tokio::test]
 async fn diff_hunk_indexes_present() {
     let pool = fresh_pool().await;
-    let rows = sqlx::query(
-        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='diff_hunk'",
-    )
-    .fetch_all(&pool)
-    .await
-    .unwrap();
+    let rows =
+        sqlx::query("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='diff_hunk'")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
     let names: Vec<String> = rows
         .into_iter()
         .map(|r| r.get::<String, _>("name"))
         .collect();
-    for must in ["file_lineage_idx", "diff_hunk_event_idx", "diff_hunk_tool_use_idx"] {
+    for must in [
+        "file_lineage_idx",
+        "diff_hunk_event_idx",
+        "diff_hunk_tool_use_idx",
+    ] {
         assert!(
             names.iter().any(|n| n == must),
             "diff_hunk missing index `{must}`; indexes: {names:?}"

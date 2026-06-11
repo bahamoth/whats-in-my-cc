@@ -206,7 +206,11 @@ fn find_goal_verbs(text: &str) -> Vec<String> {
             while let Some(idx) = lower[pos..].find(verb) {
                 let abs = pos + idx;
                 let before_ok = abs == 0
-                    || !lower.chars().nth(abs - 1).map(|c| c.is_alphabetic()).unwrap_or(false);
+                    || !lower
+                        .chars()
+                        .nth(abs - 1)
+                        .map(|c| c.is_alphabetic())
+                        .unwrap_or(false);
                 let after_ok = abs + verb.len() >= lower.len()
                     || !lower
                         .chars()
@@ -227,7 +231,9 @@ fn find_goal_verbs(text: &str) -> Vec<String> {
 /// Check if `text` (lowercased) contains any completion marker.
 fn has_any_completion_marker(text: &str) -> bool {
     let lower = text.to_lowercase();
-    COMPLETION_MARKERS.iter().any(|&marker| lower.contains(marker))
+    COMPLETION_MARKERS
+        .iter()
+        .any(|&marker| lower.contains(marker))
 }
 
 /// Extract plain text from a message's content array.
@@ -236,7 +242,11 @@ fn extract_message_text(payload: &serde_json::Value) -> String {
         if let Some(arr) = content.as_array() {
             return arr
                 .iter()
-                .filter_map(|item| item.get("text").and_then(|t| t.as_str()).map(str::to_string))
+                .filter_map(|item| {
+                    item.get("text")
+                        .and_then(|t| t.as_str())
+                        .map(str::to_string)
+                })
                 .collect::<Vec<_>>()
                 .join(" ");
         }

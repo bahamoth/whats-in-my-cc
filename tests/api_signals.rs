@@ -50,7 +50,12 @@ async fn session_signals_returns_inserted() {
     r.assert_status_ok();
     let body: Value = r.json();
     let data = body["data"].as_array().unwrap();
-    assert_eq!(data.len(), 1, "expected exactly 1 signal, got {}", data.len());
+    assert_eq!(
+        data.len(),
+        1,
+        "expected exactly 1 signal, got {}",
+        data.len()
+    );
     assert_eq!(data[0]["detector"].as_str().unwrap(), "tool_failure");
     // evidence_refs and facts are parsed JSON, not strings.
     assert!(data[0]["evidence_refs"].is_array());
@@ -66,9 +71,18 @@ async fn signal_response_has_no_judgment_fields() {
     let body: Value = r.json();
     let signal = &body["data"][0];
     // Signals carry facts only — no severity/confidence/status judgments.
-    assert!(signal.get("severity").is_none(), "signal must NOT have a severity field");
-    assert!(signal.get("confidence").is_none(), "signal must NOT have a confidence field");
-    assert!(signal.get("status").is_none(), "signal must NOT have a status field");
+    assert!(
+        signal.get("severity").is_none(),
+        "signal must NOT have a severity field"
+    );
+    assert!(
+        signal.get("confidence").is_none(),
+        "signal must NOT have a confidence field"
+    );
+    assert!(
+        signal.get("status").is_none(),
+        "signal must NOT have a status field"
+    );
 }
 
 #[tokio::test]

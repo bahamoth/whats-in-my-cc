@@ -122,7 +122,10 @@ async fn round_trip_preserves_telemetry_facet() {
     assert_eq!(rows.len(), 1);
     let got = &rows[0];
     assert_eq!(got.kind, EventKind::OtelSpan);
-    assert_eq!(got.trace_id.as_deref(), Some("5b8aa5a2d2c872e8321cf37308d69df2"));
+    assert_eq!(
+        got.trace_id.as_deref(),
+        Some("5b8aa5a2d2c872e8321cf37308d69df2")
+    );
     assert_eq!(got.span_id.as_deref(), Some("051581bf3cb55c13"));
     assert_eq!(got.parent_span_id.as_deref(), Some("0000000000000001"));
     assert_eq!(got.latency_ms, Some(123));

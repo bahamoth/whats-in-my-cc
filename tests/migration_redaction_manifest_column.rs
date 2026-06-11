@@ -5,11 +5,10 @@
 async fn migration_adds_redaction_manifest_column() {
     let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
     sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-    let cols: Vec<String> =
-        sqlx::query_scalar("SELECT name FROM pragma_table_info('raw_event')")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+    let cols: Vec<String> = sqlx::query_scalar("SELECT name FROM pragma_table_info('raw_event')")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
     assert!(
         cols.iter().any(|c| c == "redaction_manifest"),
         "raw_event must have redaction_manifest column; columns: {cols:?}"

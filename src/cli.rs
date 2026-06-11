@@ -11,20 +11,18 @@ pub enum AuthMode {
     On,
 }
 
-
 #[derive(Debug, Parser)]
-#[command(name = "wimcc", version, about = "What's in My Claude Code — local execution inspection")]
+#[command(
+    name = "wimcc",
+    version,
+    about = "What's in My Claude Code — local execution inspection"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
 
     /// Path to the SQLite database file.
-    #[arg(
-        long,
-        global = true,
-        default_value = ".wimcc.sqlite",
-        env = "WIMCC_DB"
-    )]
+    #[arg(long, global = true, default_value = ".wimcc.sqlite", env = "WIMCC_DB")]
     pub db_path: PathBuf,
 
     /// Log output format.

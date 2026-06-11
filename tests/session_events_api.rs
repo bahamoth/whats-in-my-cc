@@ -78,7 +78,10 @@ async fn no_cursor_returns_newest_window_asc() {
     let events = v["data"]["events"].as_array().unwrap();
     assert_eq!(events.len(), 50);
     // newest 50 of 100 = ids 50..=99 ASC
-    assert_eq!(events.first().unwrap()["event_id"], format!("01J{:023}", 50));
+    assert_eq!(
+        events.first().unwrap()["event_id"],
+        format!("01J{:023}", 50)
+    );
     assert_eq!(events.last().unwrap()["event_id"], format!("01J{:023}", 99));
     // prev_cursor points to the oldest row in this page (consumer paginates older with it)
     assert!(v["data"]["prev_cursor"].is_string());
@@ -105,8 +108,14 @@ async fn before_cursor_paginates_backwards_no_overlap() {
     let events2 = page2["data"]["events"].as_array().unwrap();
     assert_eq!(events2.len(), 50);
     // page2 = ids 0..=49 ASC. page2_last < page1_first lexicographically and chronologically.
-    assert_eq!(events2.first().unwrap()["event_id"], format!("01J{:023}", 0));
-    assert_eq!(events2.last().unwrap()["event_id"], format!("01J{:023}", 49));
+    assert_eq!(
+        events2.first().unwrap()["event_id"],
+        format!("01J{:023}", 0)
+    );
+    assert_eq!(
+        events2.last().unwrap()["event_id"],
+        format!("01J{:023}", 49)
+    );
     // No overlap: page2_last comes strictly before page1_first.
     let page2_last_id = events2.last().unwrap()["event_id"].as_str().unwrap();
     assert!(page2_last_id < page1_first_id);
@@ -130,7 +139,10 @@ async fn after_cursor_paginates_forward() {
         .json();
     let events = v["data"]["events"].as_array().unwrap();
     assert_eq!(events.len(), 50);
-    assert_eq!(events.first().unwrap()["event_id"], format!("01J{:023}", 31));
+    assert_eq!(
+        events.first().unwrap()["event_id"],
+        format!("01J{:023}", 31)
+    );
     assert_eq!(events.last().unwrap()["event_id"], format!("01J{:023}", 80));
 }
 
@@ -153,7 +165,10 @@ async fn around_returns_window_containing_target_event() {
     let events = v["data"]["events"].as_array().unwrap();
     // centered: 10 before + target + 10 after = ids 20..=40 ASC
     assert_eq!(events.len(), 21);
-    assert_eq!(events.first().unwrap()["event_id"], format!("01J{:023}", 20));
+    assert_eq!(
+        events.first().unwrap()["event_id"],
+        format!("01J{:023}", 20)
+    );
     assert_eq!(events.last().unwrap()["event_id"], format!("01J{:023}", 40));
     assert!(events.iter().any(|e| e["event_id"] == target.as_str()));
     // Both cursors present → subsequent older/newer pagination keeps working.

@@ -31,7 +31,7 @@ async fn seeded_pool() -> sqlx::SqlitePool {
             verification_run_id, schema_version, session_id, source, command,
             command_kind, trigger_event_id, trigger_tool_use_id, status,
             started_at, raw_event_id, parser_version)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
     )
     .bind("vr_t1_001")
     .bind("verification_run.v1")
@@ -54,7 +54,7 @@ async fn seeded_pool() -> sqlx::SqlitePool {
             verification_run_id, schema_version, session_id, source, command,
             command_kind, trigger_event_id, status,
             started_at, raw_event_id, parser_version)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)",
     )
     .bind("vr_t1_002")
     .bind("verification_run.v1")
@@ -84,7 +84,12 @@ async fn list_endpoint_returns_runs_for_session() {
     resp.assert_status_ok();
     let body: Value = resp.json();
     let data = body["data"].as_array().unwrap();
-    assert_eq!(data.len(), 2, "expected 2 runs for sess_t1, got {}", data.len());
+    assert_eq!(
+        data.len(),
+        2,
+        "expected 2 runs for sess_t1, got {}",
+        data.len()
+    );
 
     // Verify shape of first item
     let first = &data[0];
@@ -116,7 +121,9 @@ async fn list_endpoint_returns_empty_for_unknown_session() {
     let app = router(AppState::new_for_tests(pool));
     let server = TestServer::new(app).unwrap();
 
-    let resp = server.get("/v1/sessions/unknown_session_xyz/verification-runs").await;
+    let resp = server
+        .get("/v1/sessions/unknown_session_xyz/verification-runs")
+        .await;
     resp.assert_status_ok();
     let body: Value = resp.json();
     let data = body["data"].as_array().unwrap();

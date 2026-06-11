@@ -1,5 +1,5 @@
-use wimcc::model::observed::EventKind;
 use strum::IntoEnumIterator;
+use wimcc::model::observed::EventKind;
 
 #[test]
 fn diffhunk_variant_removed() {

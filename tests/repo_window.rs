@@ -122,15 +122,10 @@ async fn both_cursors_returns_slice() {
     let pool = seed_pool().await;
     let after_cur = cursor_at(100);
     let before_cur = cursor_at(200);
-    let rows = repo_observed::list_session_window(
-        &pool,
-        SESS,
-        Some(&before_cur),
-        Some(&after_cur),
-        500,
-    )
-    .await
-    .unwrap();
+    let rows =
+        repo_observed::list_session_window(&pool, SESS, Some(&before_cur), Some(&after_cur), 500)
+            .await
+            .unwrap();
     // Strictly between row[100] and row[200]. rows[101..200].
     assert_eq!(rows.len(), 99);
     assert_eq!(rows.first().unwrap().event_id, format!("01J{:023}", 101));
@@ -288,10 +283,26 @@ async fn no_cursor_window_anchors_at_last_conversation_skipping_telemetry_tail()
     let sess = "sess-anchor";
     // 3 conversation events, then a 5-event telemetry burst AFTER them.
     for i in 0..3 {
-        seed_one(&pool, &run_id, sess, i, EventKind::UserMessage, &format!("c{i}")).await;
+        seed_one(
+            &pool,
+            &run_id,
+            sess,
+            i,
+            EventKind::UserMessage,
+            &format!("c{i}"),
+        )
+        .await;
     }
     for i in 3..8 {
-        seed_one(&pool, &run_id, sess, i, EventKind::MetricSample, &format!("m{i}")).await;
+        seed_one(
+            &pool,
+            &run_id,
+            sess,
+            i,
+            EventKind::MetricSample,
+            &format!("m{i}"),
+        )
+        .await;
     }
     let rows = repo_observed::list_session_window(&pool, sess, None, None, 100)
         .await
@@ -313,7 +324,15 @@ async fn no_cursor_window_falls_back_to_newest_when_telemetry_only() {
     let run_id = repo_runs::start(&pool).await.unwrap();
     let sess = "sess-telem-only";
     for i in 0..4 {
-        seed_one(&pool, &run_id, sess, i, EventKind::MetricSample, &format!("m{i}")).await;
+        seed_one(
+            &pool,
+            &run_id,
+            sess,
+            i,
+            EventKind::MetricSample,
+            &format!("m{i}"),
+        )
+        .await;
     }
     let rows = repo_observed::list_session_window(&pool, sess, None, None, 100)
         .await
@@ -408,12 +427,30 @@ async fn events_correlated_by_tool_use_id_matches_payload_attributes() {
     let run_id = repo_runs::start(&pool).await.unwrap();
     let sess = "sess-corr-tool";
     // tool_use_id column populated (C2 ingest now sets it for OTel log_records).
-    seed_payload_with_cols(&pool, &run_id, sess, 0, EventKind::LogRecord, "tr",
+    seed_payload_with_cols(
+        &pool,
+        &run_id,
+        sess,
+        0,
+        EventKind::LogRecord,
+        "tr",
         json!({"event_name":"tool_result","attributes":{"tool_use_id":"u1","duration_ms":"57"}}),
-        Some("u1"), None).await;
-    seed_payload_with_cols(&pool, &run_id, sess, 1, EventKind::LogRecord, "other",
+        Some("u1"),
+        None,
+    )
+    .await;
+    seed_payload_with_cols(
+        &pool,
+        &run_id,
+        sess,
+        1,
+        EventKind::LogRecord,
+        "other",
         json!({"event_name":"tool_result","attributes":{"tool_use_id":"OTHER"}}),
-        Some("OTHER"), None).await;
+        Some("OTHER"),
+        None,
+    )
+    .await;
     let rows = repo_observed::events_correlated(&pool, sess, Some("u1"), None)
         .await
         .unwrap();
@@ -448,8 +485,14 @@ async fn events_correlated_by_tool_use_id_matches_transcript_tool_result() {
         .await
         .unwrap();
     let ids: Vec<&str> = rows.iter().map(|r| r.event_id.as_str()).collect();
-    assert!(ids.contains(&"tres"), "transcript tool_result matched by tool_use_id column");
-    assert!(!ids.contains(&"other"), "non-matching transcript tool_result excluded");
+    assert!(
+        ids.contains(&"tres"),
+        "transcript tool_result matched by tool_use_id column"
+    );
+    assert!(
+        !ids.contains(&"other"),
+        "non-matching transcript tool_result excluded"
+    );
 }
 
 /// Column-based contract (Tier 2-2 perf refactor lock):
@@ -469,42 +512,93 @@ async fn events_correlated_column_based_contract() {
     let sess = "sess-corr-col";
 
     // OTel log_record — tool_use_id column set by C2 ingest
-    seed_payload_with_cols(&pool, &run_id, sess, 0, EventKind::LogRecord, "otel_log",
+    seed_payload_with_cols(
+        &pool,
+        &run_id,
+        sess,
+        0,
+        EventKind::LogRecord,
+        "otel_log",
         json!({"event_name":"tool_result","attributes":{"tool_use_id":"tuid1","duration_ms":"42"}}),
-        Some("tuid1"), None).await;
+        Some("tuid1"),
+        None,
+    )
+    .await;
     // transcript tool_result — tool_use_id column set by mapping.rs
     seed_payload_with_cols(&pool, &run_id, sess, 1, EventKind::ToolResult, "t_result",
         json!({"content_ordinal":0,"tool_result":{"type":"tool_result","tool_use_id":"tuid1","content":"ok"}}),
         Some("tuid1"), None).await;
     // transcript tool_call — tool_use_id column set by mapping.rs, but MUST be excluded
-    seed_payload_with_cols(&pool, &run_id, sess, 2, EventKind::ToolCall, "t_call",
+    seed_payload_with_cols(
+        &pool,
+        &run_id,
+        sess,
+        2,
+        EventKind::ToolCall,
+        "t_call",
         json!({"content_ordinal":0,"tool_name":"Bash","input":{}}),
-        Some("tuid1"), None).await;
+        Some("tuid1"),
+        None,
+    )
+    .await;
     // transcript assistant_message — request_id column set, but NOT matched by request_id arm
-    seed_payload_with_cols(&pool, &run_id, sess, 3, EventKind::AssistantMessage, "a_msg",
+    seed_payload_with_cols(
+        &pool,
+        &run_id,
+        sess,
+        3,
+        EventKind::AssistantMessage,
+        "a_msg",
         json!({"content_ordinal":0,"text":"hello","model":"claude-opus-4-5"}),
-        None, Some("rid1")).await;
+        None,
+        Some("rid1"),
+    )
+    .await;
     // OTel log_record — request_id column set
-    seed_payload_with_cols(&pool, &run_id, sess, 4, EventKind::LogRecord, "otel_req_log",
+    seed_payload_with_cols(
+        &pool,
+        &run_id,
+        sess,
+        4,
+        EventKind::LogRecord,
+        "otel_req_log",
         json!({"event_name":"api_request","attributes":{"request_id":"rid1"}}),
-        None, Some("rid1")).await;
+        None,
+        Some("rid1"),
+    )
+    .await;
 
     // tool_use_id arm: OTel log + transcript tool_result included; tool_call excluded
     let by_tuid = repo_observed::events_correlated(&pool, sess, Some("tuid1"), None)
         .await
         .unwrap();
     let tuid_ids: Vec<&str> = by_tuid.iter().map(|r| r.event_id.as_str()).collect();
-    assert!(tuid_ids.contains(&"otel_log"), "OTel log_record must be included by tool_use_id column");
-    assert!(tuid_ids.contains(&"t_result"), "transcript tool_result must be included by tool_use_id column");
-    assert!(!tuid_ids.contains(&"t_call"), "transcript tool_call must be EXCLUDED (kind guard)");
+    assert!(
+        tuid_ids.contains(&"otel_log"),
+        "OTel log_record must be included by tool_use_id column"
+    );
+    assert!(
+        tuid_ids.contains(&"t_result"),
+        "transcript tool_result must be included by tool_use_id column"
+    );
+    assert!(
+        !tuid_ids.contains(&"t_call"),
+        "transcript tool_call must be EXCLUDED (kind guard)"
+    );
 
     // request_id arm: OTel log_record included; transcript assistant_message excluded
     let by_rid = repo_observed::events_correlated(&pool, sess, None, Some("rid1"))
         .await
         .unwrap();
     let rid_ids: Vec<&str> = by_rid.iter().map(|r| r.event_id.as_str()).collect();
-    assert!(rid_ids.contains(&"otel_req_log"), "OTel log_record must be included by request_id column");
-    assert!(!rid_ids.contains(&"a_msg"), "transcript assistant_message must be EXCLUDED from request_id arm");
+    assert!(
+        rid_ids.contains(&"otel_req_log"),
+        "OTel log_record must be included by request_id column"
+    );
+    assert!(
+        !rid_ids.contains(&"a_msg"),
+        "transcript assistant_message must be EXCLUDED from request_id arm"
+    );
 }
 
 #[tokio::test]
@@ -514,23 +608,58 @@ async fn events_correlated_by_request_id_matches_api_log_and_span() {
     let run_id = repo_runs::start(&pool).await.unwrap();
     let sess = "sess-corr-req";
     // request_id column populated (C2 ingest now sets it for OTel log_records and otel_spans).
-    seed_payload_with_cols(&pool, &run_id, sess, 0, EventKind::LogRecord, "apilog",
+    seed_payload_with_cols(
+        &pool,
+        &run_id,
+        sess,
+        0,
+        EventKind::LogRecord,
+        "apilog",
         json!({"event_name":"api_request","attributes":{"request_id":"r1","output_tokens":"2300"}}),
-        None, Some("r1")).await;
+        None,
+        Some("r1"),
+    )
+    .await;
     // Tier 3-1: otel_span events no longer re-embed `payload.raw_span`; the
     // span data lives in the telemetry facet and request_id is matched by the
     // INDEXED column (set here), not by payload JSON — so the stored payload is
     // the empty object the ingest path now produces.
-    seed_payload_with_cols(&pool, &run_id, sess, 1, EventKind::OtelSpan, "span",
-        json!({}), None, Some("r1")).await;
-    seed_payload_with_cols(&pool, &run_id, sess, 2, EventKind::OtelSpan, "otherspan",
-        json!({}), None, Some("r2")).await;
+    seed_payload_with_cols(
+        &pool,
+        &run_id,
+        sess,
+        1,
+        EventKind::OtelSpan,
+        "span",
+        json!({}),
+        None,
+        Some("r1"),
+    )
+    .await;
+    seed_payload_with_cols(
+        &pool,
+        &run_id,
+        sess,
+        2,
+        EventKind::OtelSpan,
+        "otherspan",
+        json!({}),
+        None,
+        Some("r2"),
+    )
+    .await;
     let rows = repo_observed::events_correlated(&pool, sess, None, Some("r1"))
         .await
         .unwrap();
     let ids: Vec<&str> = rows.iter().map(|r| r.event_id.as_str()).collect();
-    assert!(ids.contains(&"apilog"), "api_request log matched by request_id column");
-    assert!(ids.contains(&"span"), "llm_request span matched by request_id column");
+    assert!(
+        ids.contains(&"apilog"),
+        "api_request log matched by request_id column"
+    );
+    assert!(
+        ids.contains(&"span"),
+        "llm_request span matched by request_id column"
+    );
     assert!(!ids.contains(&"otherspan"), "non-matching span excluded");
 }
 
@@ -568,13 +697,25 @@ async fn no_cursor_window_bounds_rendered_count_and_keeps_interleaved_telemetry(
         .filter(|e| e.kind == EventKind::UserMessage)
         .count();
     assert_eq!(rendered, 2, "limit must bound RENDERED events, got {ids:?}");
-    assert!(ids.contains(&"c1") && ids.contains(&"c2"), "newest 2 rendered, got {ids:?}");
-    assert!(!ids.contains(&"c0"), "the limit+1-th oldest rendered must be excluded (off-by-one)");
+    assert!(
+        ids.contains(&"c1") && ids.contains(&"c2"),
+        "newest 2 rendered, got {ids:?}"
+    );
+    assert!(
+        !ids.contains(&"c0"),
+        "the limit+1-th oldest rendered must be excluded (off-by-one)"
+    );
 
     // telemetry interleaved INSIDE the range stays loaded; telemetry before the
     // lower bound does not.
-    assert!(ids.contains(&"m2"), "interleaved telemetry inside the window must be retained");
-    assert!(!ids.contains(&"m1"), "telemetry before the window's lower bound must be excluded");
+    assert!(
+        ids.contains(&"m2"),
+        "interleaved telemetry inside the window must be retained"
+    );
+    assert!(
+        !ids.contains(&"m1"),
+        "telemetry before the window's lower bound must be excluded"
+    );
 
     // returned ASC → newest rendered event is last.
     assert_eq!(rows.last().unwrap().event_id, "c2");

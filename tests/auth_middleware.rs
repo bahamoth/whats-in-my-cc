@@ -36,10 +36,7 @@ async fn accepts_request_with_correct_bearer() {
     let (server, token) = build_auth_test_server().await;
     let r = server
         .get("/v1/health")
-        .add_header(
-            axum::http::header::AUTHORIZATION,
-            format!("Bearer {token}"),
-        )
+        .add_header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
         .await;
     r.assert_status_ok();
 }
@@ -59,10 +56,7 @@ async fn health_endpoint_has_security_block() {
     let (server, token) = build_auth_test_server().await;
     let r = server
         .get("/v1/health")
-        .add_header(
-            axum::http::header::AUTHORIZATION,
-            format!("Bearer {token}"),
-        )
+        .add_header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
         .await;
     r.assert_status_ok();
     let body: serde_json::Value = r.json();
@@ -72,7 +66,8 @@ async fn health_endpoint_has_security_block() {
     );
     let sec = &body["security"];
     assert_eq!(
-        sec["auth_required"], json!(true),
+        sec["auth_required"],
+        json!(true),
         "security.auth_required should be true"
     );
     assert!(
@@ -105,10 +100,7 @@ async fn mcp_endpoint_accepts_correct_bearer() {
     let (server, token) = build_auth_test_server().await;
     let r = server
         .post("/mcp")
-        .add_header(
-            axum::http::header::AUTHORIZATION,
-            format!("Bearer {token}"),
-        )
+        .add_header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
         .json(&json!({
             "jsonrpc": "2.0",
             "id": 1,

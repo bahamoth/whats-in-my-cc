@@ -102,18 +102,10 @@ pub fn tools_list_response() -> Value {
 /// Dispatch a tools/call request to the appropriate handler.
 pub async fn dispatch(name: &str, args: &Value, pool: &SqlitePool) -> Value {
     match name {
-        "whats_in_my_cc.search_sessions" => {
-            search_sessions::call(args, pool).await
-        }
-        "whats_in_my_cc.get_file_lineage" => {
-            get_file_lineage::call(args, pool).await
-        }
-        "whats_in_my_cc.get_otel_trace" => {
-            get_otel_trace::call(args, pool).await
-        }
-        "whats_in_my_cc.list_detectors" => {
-            list_detectors::call(args, pool).await
-        }
+        "whats_in_my_cc.search_sessions" => search_sessions::call(args, pool).await,
+        "whats_in_my_cc.get_file_lineage" => get_file_lineage::call(args, pool).await,
+        "whats_in_my_cc.get_otel_trace" => get_otel_trace::call(args, pool).await,
+        "whats_in_my_cc.list_detectors" => list_detectors::call(args, pool).await,
         _ => tool_error(format!("unknown tool: {name}")),
     }
 }

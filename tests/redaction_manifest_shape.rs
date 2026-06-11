@@ -8,7 +8,10 @@ use wimcc::security::redaction::{engine::scan, manifest::RedactionState};
 #[test]
 fn manifest_records_rules_applied_and_counts() {
     let result = scan("alice@acme.com and Bearer abc-def-12345-67890-zzzz123456789");
-    assert!(result.applied, "scan must report applied=true when secrets present");
+    assert!(
+        result.applied,
+        "scan must report applied=true when secrets present"
+    );
     let m = result.manifest;
     assert!(
         m.rules_applied.iter().any(|s| s == "email.v1"),

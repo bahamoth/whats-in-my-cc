@@ -137,9 +137,11 @@ async fn hook_post_accepts_single_pretooluse() {
     let events = s.get("/v1/sessions/sess_HK1/events").await;
     events.assert_status_ok();
     let ev: Value = events.json();
-    let has_hook = ev["data"]["events"].as_array().unwrap().iter().any(|e| {
-        e["kind"] == "hook_event" && e["subkind"] == "pre_tool_use"
-    });
+    let has_hook = ev["data"]["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["kind"] == "hook_event" && e["subkind"] == "pre_tool_use");
     assert!(has_hook, "hook_event with subkind=pre_tool_use missing");
 }
 

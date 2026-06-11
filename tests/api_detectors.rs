@@ -34,7 +34,9 @@ async fn detectors_returns_five_manifests() {
     let r = server.get("/v1/detectors").await;
     r.assert_status_ok();
     let body: Value = r.json();
-    let data = body["data"].as_array().expect("response must have a 'data' array");
+    let data = body["data"]
+        .as_array()
+        .expect("response must have a 'data' array");
     assert_eq!(
         data.len(),
         5,
@@ -60,10 +62,7 @@ async fn detectors_includes_expected_ids() {
         "re_read",
     ];
     for exp in &expected {
-        assert!(
-            ids.contains(exp),
-            "detectors missing '{exp}'; got: {ids:?}",
-        );
+        assert!(ids.contains(exp), "detectors missing '{exp}'; got: {ids:?}",);
     }
 }
 

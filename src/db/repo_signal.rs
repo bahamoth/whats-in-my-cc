@@ -88,11 +88,10 @@ pub async fn reconcile(
 
 /// List all signals for a session (ordered by created_at DESC).
 pub async fn list_by_session(pool: &SqlitePool, session_id: &str) -> Result<Vec<SignalRow>> {
-    let rows =
-        sqlx::query("SELECT * FROM signal WHERE session_id=? ORDER BY created_at DESC")
-            .bind(session_id)
-            .fetch_all(pool)
-            .await?;
+    let rows = sqlx::query("SELECT * FROM signal WHERE session_id=? ORDER BY created_at DESC")
+        .bind(session_id)
+        .fetch_all(pool)
+        .await?;
     Ok(rows.into_iter().map(map_row).collect())
 }
 

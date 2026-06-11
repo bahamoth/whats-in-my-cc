@@ -23,7 +23,9 @@ async fn store_single_span_inserts_one_observed_event() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
     let parsed = otel::parse_otlp_json(&body);
-    let res = otel::store(&pool, parsed, Utc::now(), &wimcc::live::NoopSink).await.unwrap();
+    let res = otel::store(&pool, parsed, Utc::now(), &wimcc::live::NoopSink)
+        .await
+        .unwrap();
     assert_eq!(res.accepted_spans, 1);
     assert_eq!(res.rejected_spans, 0);
     assert_eq!(res.sessions_touched, vec!["sess-otel-A".to_string()]);
@@ -61,18 +63,22 @@ async fn store_single_span_inserts_one_observed_event() {
 async fn store_does_not_re_embed_raw_span_in_payload() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
-    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink)
-        .await
-        .unwrap();
+    otel::store(
+        &pool,
+        otel::parse_otlp_json(&body),
+        Utc::now(),
+        &wimcc::live::NoopSink,
+    )
+    .await
+    .unwrap();
 
     // Raw stored payload column: may carry the merged `telemetry` facet, but
     // never the verbatim-span re-embed.
-    let raw: (String,) = sqlx::query_as(
-        "SELECT payload FROM observed_event WHERE kind = 'otel_span' LIMIT 1",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let raw: (String,) =
+        sqlx::query_as("SELECT payload FROM observed_event WHERE kind = 'otel_span' LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     let stored: serde_json::Value = serde_json::from_str(&raw.0).unwrap();
     assert!(
         stored.get("raw_span").is_none(),
@@ -104,12 +110,22 @@ async fn store_does_not_re_embed_raw_span_in_payload() {
 async fn store_is_idempotent() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
-    let r1 = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink)
-        .await
-        .unwrap();
-    let r2 = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink)
-        .await
-        .unwrap();
+    let r1 = otel::store(
+        &pool,
+        otel::parse_otlp_json(&body),
+        Utc::now(),
+        &wimcc::live::NoopSink,
+    )
+    .await
+    .unwrap();
+    let r2 = otel::store(
+        &pool,
+        otel::parse_otlp_json(&body),
+        Utc::now(),
+        &wimcc::live::NoopSink,
+    )
+    .await
+    .unwrap();
     assert_eq!(r1.accepted_spans, 1);
     assert_eq!(r2.accepted_spans, 0);
     assert_eq!(r2.duplicate_spans, 1);
@@ -127,9 +143,14 @@ async fn store_is_idempotent() {
 async fn spans_are_persisted_to_observed_event() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/parent_child.json");
-    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink)
-        .await
-        .unwrap();
+    otel::store(
+        &pool,
+        otel::parse_otlp_json(&body),
+        Utc::now(),
+        &wimcc::live::NoopSink,
+    )
+    .await
+    .unwrap();
 
     // SSOT: both spans are observed_event rows.
     let observed: (i64,) =
@@ -137,7 +158,10 @@ async fn spans_are_persisted_to_observed_event() {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(observed.0, 2, "two otel_span observed_events from parent_child fixture");
+    assert_eq!(
+        observed.0, 2,
+        "two otel_span observed_events from parent_child fixture"
+    );
 }
 
 async fn http_setup() -> TestServer {
@@ -150,10 +174,7 @@ async fn http_setup() -> TestServer {
 async fn post_traces_returns_accepted_count() {
     let s = http_setup().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
-    let resp = s
-        .post("/otel/v1/traces")
-        .json(&body)
-        .await;
+    let resp = s.post("/otel/v1/traces").json(&body).await;
     resp.assert_status_ok();
     let v: serde_json::Value = resp.json();
     assert_eq!(v["meta"]["schema_version"], "0.5.0");
@@ -232,9 +253,14 @@ async fn post_traces_without_session_id_skips_session_listing() {
 async fn session_detail_returns_otel_span_with_telemetry() {
     let pool = make_pool().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
-    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink)
-        .await
-        .unwrap();
+    otel::store(
+        &pool,
+        otel::parse_otlp_json(&body),
+        Utc::now(),
+        &wimcc::live::NoopSink,
+    )
+    .await
+    .unwrap();
 
     let app = wimcc::api::router(wimcc::api::AppState::new_for_tests(pool));
     let server = TestServer::new(app).unwrap();
@@ -265,7 +291,10 @@ async fn post_traces_makes_session_events_reachable_for_otel_sessions() {
     // surfaced by the events endpoint (observed_event SSOT).
     let s = http_setup().await;
     let body = fixture("tests/fixtures/otel/single_span.json");
-    s.post("/otel/v1/traces").json(&body).await.assert_status_ok();
+    s.post("/otel/v1/traces")
+        .json(&body)
+        .await
+        .assert_status_ok();
 
     // SSOT: the span is an observed_event the events endpoint can surface.
     let ev: serde_json::Value = s.get("/v1/sessions/sess-otel-A/events").await.json();
@@ -288,14 +317,31 @@ async fn re_post_marks_session_touched_when_raw_dedup_skips_insert() {
     let body = fixture("tests/fixtures/otel/single_span.json");
 
     // First store — observed inserted.
-    otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink).await.unwrap();
+    otel::store(
+        &pool,
+        otel::parse_otlp_json(&body),
+        Utc::now(),
+        &wimcc::live::NoopSink,
+    )
+    .await
+    .unwrap();
 
-    let observed: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM observed_event WHERE kind = 'otel_span'")
-        .fetch_one(&pool).await.unwrap();
+    let observed: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM observed_event WHERE kind = 'otel_span'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(observed.0, 1);
 
     // Re-POST — raw is duplicate, but session must still be marked touched.
-    let res = otel::store(&pool, otel::parse_otlp_json(&body), Utc::now(), &wimcc::live::NoopSink).await.unwrap();
+    let res = otel::store(
+        &pool,
+        otel::parse_otlp_json(&body),
+        Utc::now(),
+        &wimcc::live::NoopSink,
+    )
+    .await
+    .unwrap();
     assert_eq!(res.duplicate_spans, 1);
     assert_eq!(res.accepted_spans, 0);
     assert_eq!(

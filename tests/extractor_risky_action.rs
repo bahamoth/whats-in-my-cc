@@ -149,7 +149,10 @@ fn fires_on_rm_rf() {
     assert_eq!(cands.len(), 1, "rm -rf must fire risky_action");
     let c = &cands[0];
     assert_eq!(c.detector, "risky_action");
-    assert!(!c.evidence_refs.is_empty(), "evidence_refs must be non-empty");
+    assert!(
+        !c.evidence_refs.is_empty(),
+        "evidence_refs must be non-empty"
+    );
     assert!(c.subkind.is_none());
     // No severity/confidence judgment leaks into the facts.
     assert!(c.facts.get("severity").is_none());
@@ -217,7 +220,10 @@ fn does_not_fire_on_non_bash_tool() {
     let events = vec![ev];
     let view = synth_view_with_bash(&events, &[]);
     let cands = detect(&view);
-    assert!(cands.is_empty(), "non-Bash tool with destructive text must not fire");
+    assert!(
+        cands.is_empty(),
+        "non-Bash tool with destructive text must not fire"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -260,14 +266,24 @@ fn does_not_panic_on_multibyte_utf8_command() {
     // "rm -rf " (7) + "한" (3) * 25 = 7 + 75 = 82 bytes total — 80th byte is
     // byte 80 which is the 2nd byte of the 25th "한" (0xED 0xED 0x95), i.e. mid-char.
     let command = format!("rm -rf {}", "한".repeat(25));
-    assert!(command.len() > 80, "command must exceed 80 bytes for the slice to be reached");
+    assert!(
+        command.len() > 80,
+        "command must exceed 80 bytes for the slice to be reached"
+    );
 
     let events = vec![bash_tool_call(0, &command)];
     let view = synth_view_with_bash(&events, &[]);
     // Must not panic; must fire exactly one signal.
     let cands = detect(&view);
-    assert_eq!(cands.len(), 1, "Korean UTF-8 destructive command must fire one signal without panic");
-    assert_eq!(cands[0].facts["trigger"]["kind"], serde_json::json!("destructive_bash"));
+    assert_eq!(
+        cands.len(),
+        1,
+        "Korean UTF-8 destructive command must fire one signal without panic"
+    );
+    assert_eq!(
+        cands[0].facts["trigger"]["kind"],
+        serde_json::json!("destructive_bash")
+    );
 }
 
 // ---------------------------------------------------------------------------

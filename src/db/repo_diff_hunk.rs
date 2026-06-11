@@ -149,7 +149,10 @@ mod tests {
         assert_eq!(out[0].line_range_after_start, Some(42));
         assert_eq!(out[0].line_range_after_end, Some(57));
         assert_eq!(out[0].introduced_by_event_id, "ev_42");
-        assert_eq!(out[0].introduced_by_tool_use_id.as_deref(), Some("toolu_xyz"));
+        assert_eq!(
+            out[0].introduced_by_tool_use_id.as_deref(),
+            Some("toolu_xyz")
+        );
         assert_eq!(out[0].lines_added, 2);
         assert_eq!(out[0].lines_removed, 0);
         assert!(!out[0].user_modified);

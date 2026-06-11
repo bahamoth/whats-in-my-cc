@@ -88,7 +88,7 @@ async fn pipeline_signals_omit_judge_fields() {
             "INSERT OR IGNORE INTO raw_event \
              (raw_event_id, ingest_run_id, source_type, source_uri, source_line_no, \
               source_byte_offset, payload_sha256, payload, captured_at) \
-             VALUES (?,?,?,?,?,?,?,?,?)"
+             VALUES (?,?,?,?,?,?,?,?,?)",
         )
         .bind(format!("raw_p{i}"))
         .bind("run_0")
@@ -99,7 +99,9 @@ async fn pipeline_signals_omit_judge_fields() {
         .bind(format!("sha_{i}"))
         .bind(b"{}" as &[u8])
         .bind(ts(i))
-        .execute(&pool).await.unwrap();
+        .execute(&pool)
+        .await
+        .unwrap();
     }
 
     // ev_p0: assistant Bash tool_call.
@@ -107,15 +109,22 @@ async fn pipeline_signals_omit_judge_fields() {
         "INSERT OR IGNORE INTO observed_event \
          (event_id, raw_event_id, schema_version, session_id, observed_at, \
           actor, kind, tool_name, tool_use_id, parser_version, payload) \
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)",
     )
-    .bind("ev_p0").bind("raw_p0")
-    .bind("observed_event.v1").bind(sess)
+    .bind("ev_p0")
+    .bind("raw_p0")
+    .bind("observed_event.v1")
+    .bind(sess)
     .bind(ts(0))
-    .bind("assistant").bind("tool_call").bind("Bash").bind("tid_p0")
+    .bind("assistant")
+    .bind("tool_call")
+    .bind("Bash")
+    .bind("tid_p0")
     .bind("test")
     .bind(r#"{"tool_use_id":"tid_p0","name":"Bash","input":{"command":"cargo test"}}"#)
-    .execute(&pool).await.unwrap();
+    .execute(&pool)
+    .await
+    .unwrap();
 
     // ev_p1: failing tool_result for the same tool_use_id (no successful retry follows).
     // Plan 6: ToolFailure fires on resolve_outcome==Failed. The "exit code: 1" in
@@ -135,7 +144,9 @@ async fn pipeline_signals_omit_judge_fields() {
     .bind(r#"{"tool_result":{"tool_use_id":"tid_p0","is_error":true,"content":"compile error E0001\nexit code: 1"}}"#)
     .execute(&pool).await.unwrap();
 
-    wimcc::insight::pipeline::run_detectors(&pool, sess).await.unwrap();
+    wimcc::insight::pipeline::run_detectors(&pool, sess)
+        .await
+        .unwrap();
 
     let provenance_rows: Vec<(String,)> =
         sqlx::query_as("SELECT provenance FROM signal WHERE session_id = ?")
@@ -144,22 +155,34 @@ async fn pipeline_signals_omit_judge_fields() {
             .await
             .unwrap();
 
-    assert!(!provenance_rows.is_empty(), "pipeline must produce at least one signal");
+    assert!(
+        !provenance_rows.is_empty(),
+        "pipeline must produce at least one signal"
+    );
 
     // The deterministic tool_failure signal must be present with correct provenance.
     let mut saw_tool_failure = false;
     for (prov_str,) in &provenance_rows {
         let prov: serde_json::Value = serde_json::from_str(prov_str).unwrap();
-        assert_eq!(prov["version"].as_str().unwrap(), "L1",
-            "all pipeline-generated signals must have version=L1");
-        assert!(prov.get("judge").is_none(),
-            "pipeline signals must omit the judge field entirely, got: {prov}");
-        assert!(prov.get("judge_template_version").is_none(),
-            "pipeline signals must omit judge_template_version, got: {prov}");
+        assert_eq!(
+            prov["version"].as_str().unwrap(),
+            "L1",
+            "all pipeline-generated signals must have version=L1"
+        );
+        assert!(
+            prov.get("judge").is_none(),
+            "pipeline signals must omit the judge field entirely, got: {prov}"
+        );
+        assert!(
+            prov.get("judge_template_version").is_none(),
+            "pipeline signals must omit judge_template_version, got: {prov}"
+        );
         if prov["detector"].as_str() == Some("tool_failure@v1") {
             saw_tool_failure = true;
         }
     }
-    assert!(saw_tool_failure,
-        "expected a signal stamped with detector=tool_failure@v1 in provenance");
+    assert!(
+        saw_tool_failure,
+        "expected a signal stamped with detector=tool_failure@v1 in provenance"
+    );
 }

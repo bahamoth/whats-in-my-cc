@@ -328,27 +328,48 @@ async fn disposition_counts_from_tool_result_markers() {
     let run_id = repo_runs::start(&pool).await.unwrap();
 
     seed_tool_result_with_content(
-        &pool, &run_id, "sess_d", "e1",
+        &pool,
+        &run_id,
+        "sess_d",
+        "e1",
         "The user doesn't want to proceed with this tool use. The tool use was rejected.",
-    ).await;
+    )
+    .await;
     seed_tool_result_with_content(
-        &pool, &run_id, "sess_d", "e2",
+        &pool,
+        &run_id,
+        "sess_d",
+        "e2",
         "Hook PreToolUse:Bash denied this tool",
-    ).await;
+    )
+    .await;
     seed_tool_result_with_content(
-        &pool, &run_id, "sess_d", "e3",
+        &pool,
+        &run_id,
+        "sess_d",
+        "e3",
         "<tool_use_error>Cancelled: parallel tool call Bash(x)</tool_use_error>",
-    ).await;
+    )
+    .await;
     seed_tool_result_with_content(
-        &pool, &run_id, "sess_d", "e4",
+        &pool,
+        &run_id,
+        "sess_d",
+        "e4",
         "Command running in background with ID: abc123. Output is being written to: /tmp/t.output.",
-    ).await;
+    )
+    .await;
     // 일반 출력 + 일반 tool_use_error(실행 실패)는 disposition 카운트에 포함되지 않는다.
-    seed_tool_result_with_content(&pool, &run_id, "sess_d", "e5", "test result: ok. 1 passed").await;
+    seed_tool_result_with_content(&pool, &run_id, "sess_d", "e5", "test result: ok. 1 passed")
+        .await;
     seed_tool_result_with_content(
-        &pool, &run_id, "sess_d", "e6",
+        &pool,
+        &run_id,
+        "sess_d",
+        "e6",
         "<tool_use_error>File has been modified since read</tool_use_error>",
-    ).await;
+    )
+    .await;
 
     let m = compute_session_metrics(&pool, "sess_d").await.unwrap();
     assert_eq!(m.tool_user_rejected, 1);
@@ -416,20 +437,35 @@ async fn system_summary_facts_counted_by_subkind() {
     let sid = "sess_sysfacts";
 
     seed_event_with_payload(
-        &pool, &run_id, sid, "td1",
-        EventKind::SystemSummary, Some("turn_duration"),
+        &pool,
+        &run_id,
+        sid,
+        "td1",
+        EventKind::SystemSummary,
+        Some("turn_duration"),
         serde_json::json!({"durationMs": 139516, "messageCount": 100}),
-    ).await;
+    )
+    .await;
     seed_event_with_payload(
-        &pool, &run_id, sid, "td2",
-        EventKind::SystemSummary, Some("turn_duration"),
+        &pool,
+        &run_id,
+        sid,
+        "td2",
+        EventKind::SystemSummary,
+        Some("turn_duration"),
         serde_json::json!({"durationMs": 454567, "messageCount": 334}),
-    ).await;
+    )
+    .await;
     seed_event_with_payload(
-        &pool, &run_id, sid, "ae1",
-        EventKind::SystemSummary, Some("api_error"),
+        &pool,
+        &run_id,
+        sid,
+        "ae1",
+        EventKind::SystemSummary,
+        Some("api_error"),
         serde_json::json!({"level": "error", "error": {"status": 529}}),
-    ).await;
+    )
+    .await;
     seed_event_with_payload(
         &pool, &run_id, sid, "cb1",
         EventKind::SystemSummary, Some("compact_boundary"),
@@ -437,21 +473,36 @@ async fn system_summary_facts_counted_by_subkind() {
     ).await;
     // away_summary: 사용자 자리비움 turn — turn_duration 대신 기록된다.
     seed_event_with_payload(
-        &pool, &run_id, sid, "aw1",
-        EventKind::SystemSummary, Some("away_summary"),
+        &pool,
+        &run_id,
+        sid,
+        "aw1",
+        EventKind::SystemSummary,
+        Some("away_summary"),
         serde_json::json!({"content": "User stepped away"}),
-    ).await;
+    )
+    .await;
     seed_event_with_payload(
-        &pool, &run_id, sid, "aw2",
-        EventKind::SystemSummary, Some("away_summary"),
+        &pool,
+        &run_id,
+        sid,
+        "aw2",
+        EventKind::SystemSummary,
+        Some("away_summary"),
         serde_json::json!({"content": "User stepped away"}),
-    ).await;
+    )
+    .await;
     // 다른 subkind의 system 레코드는 어느 카운트에도 들어가지 않는다.
     seed_event_with_payload(
-        &pool, &run_id, sid, "sh1",
-        EventKind::SystemSummary, Some("stop_hook_summary"),
+        &pool,
+        &run_id,
+        sid,
+        "sh1",
+        EventKind::SystemSummary,
+        Some("stop_hook_summary"),
         serde_json::json!({}),
-    ).await;
+    )
+    .await;
 
     let m = compute_session_metrics(&pool, sid).await.unwrap();
     assert_eq!(m.turn_duration_count, 2);
@@ -472,14 +523,22 @@ async fn truncated_tool_result_marker_counted() {
 
     // 진성 마커 — 본문 중간 "\n\n... [N characters truncated] ...\n\n" (실 6건 전수 동일 형태).
     seed_tool_result_with_content(
-        &pool, &run_id, sid, "tr1",
+        &pool,
+        &run_id,
+        sid,
+        "tr1",
         "modified: a.md\n\n... [5882 characters truncated] ...\n\nmodified: b.md",
-    ).await;
+    )
+    .await;
     // 숫자 대신 리터럴 N으로 인용된 문구(코퍼스의 문서 인용 형태)는 매칭되지 않는다.
     seed_tool_result_with_content(
-        &pool, &run_id, sid, "tr2",
+        &pool,
+        &run_id,
+        sid,
+        "tr2",
         "<code>... [N characters truncated] ...</code> 잘림 fact(6건)",
-    ).await;
+    )
+    .await;
     // 마커 없는 일반 출력.
     seed_tool_result_with_content(&pool, &run_id, sid, "tr3", "test result: ok").await;
 
@@ -515,13 +574,24 @@ async fn user_interruption_markers_counted() {
 
     // 두 실측 변형 (session_facts_v01.jsonl) — 둘 다 카운트.
     seed_user_text(&pool, &run_id, sid, "ui1", "[Request interrupted by user]").await;
-    seed_user_text(&pool, &run_id, sid, "ui2", "[Request interrupted by user for tool use]").await;
+    seed_user_text(
+        &pool,
+        &run_id,
+        sid,
+        "ui2",
+        "[Request interrupted by user for tool use]",
+    )
+    .await;
     // 일반 사용자 메시지 + mid-content 인용은 카운트되지 않는다.
     seed_user_text(&pool, &run_id, sid, "ui3", "please fix the bug").await;
     seed_user_text(
-        &pool, &run_id, sid, "ui4",
+        &pool,
+        &run_id,
+        sid,
+        "ui4",
         "코퍼스에서 [Request interrupted by user] 마커를 세어줘",
-    ).await;
+    )
+    .await;
 
     let m = compute_session_metrics(&pool, sid).await.unwrap();
     assert_eq!(m.user_interruption_count, 2);

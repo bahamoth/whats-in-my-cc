@@ -39,7 +39,10 @@ async fn batch_three_ingests_all_to_observed_event() {
         .iter()
         .filter(|e| e["kind"] == "hook_event")
         .count();
-    assert_eq!(hook_events, 3, "hook events remain in observed_event (SSOT)");
+    assert_eq!(
+        hook_events, 3,
+        "hook events remain in observed_event (SSOT)"
+    );
 }
 
 #[tokio::test]

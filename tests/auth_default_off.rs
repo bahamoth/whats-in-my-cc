@@ -15,7 +15,10 @@ async fn build_anonymous_test_server() -> TestServer {
 
     // new_for_tests() leaves token = "" by default — this is the auth-off shape.
     let state = wimcc::api::AppState::new_for_tests(pool);
-    assert!(state.token.is_empty(), "auth-off invariant: token must be empty");
+    assert!(
+        state.token.is_empty(),
+        "auth-off invariant: token must be empty"
+    );
 
     let app = wimcc::api::router(state);
     TestServer::new(app).unwrap()

@@ -42,40 +42,46 @@ static COMPILED: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
 /// - Disallow `|`, `;`, `&` via `[^|;&]+` in argument position.
 pub const PATTERNS: &[(&str, &str)] = &[
     // 1. npm / pnpm / yarn — `test` and `run test` forms
-    (r"^(?:npm|pnpm|yarn)(?: run)? test(?:[: ][^|;&]+)?$",   "test_suite_js"),
+    (
+        r"^(?:npm|pnpm|yarn)(?: run)? test(?:[: ][^|;&]+)?$",
+        "test_suite_js",
+    ),
     // 2. vitest — with or without `run` subcommand
-    (r"^vitest(?: run)?(?:[: ][^|;&]+)?$",                    "test_suite_js"),
+    (r"^vitest(?: run)?(?:[: ][^|;&]+)?$", "test_suite_js"),
     // 3. jest
-    (r"^jest(?:[: ][^|;&]+)?$",                               "test_suite_js"),
+    (r"^jest(?:[: ][^|;&]+)?$", "test_suite_js"),
     // 4. mocha
-    (r"^mocha(?:[: ][^|;&]+)?$",                              "test_suite_js"),
+    (r"^mocha(?:[: ][^|;&]+)?$", "test_suite_js"),
     // 5. cargo test and cargo nextest
-    (r"^cargo (?:test|nextest)(?:[: ][^|;&]+)?$",             "test_suite_rust"),
+    (
+        r"^cargo (?:test|nextest)(?:[: ][^|;&]+)?$",
+        "test_suite_rust",
+    ),
     // 6. cargo check
-    (r"^cargo check(?:[: ][^|;&]+)?$",                        "build_check"),
+    (r"^cargo check(?:[: ][^|;&]+)?$", "build_check"),
     // 7. cargo build — `cargo build --doc` is excluded via the classify()
     //    post-match guard (regex crate does not support lookahead assertions)
-    (r"^cargo build(?:[: ][^|;&]+)?$",                        "build"),
+    (r"^cargo build(?:[: ][^|;&]+)?$", "build"),
     // 8. cargo clippy
-    (r"^cargo clippy(?:[: ][^|;&]+)?$",                       "lint"),
+    (r"^cargo clippy(?:[: ][^|;&]+)?$", "lint"),
     // 9. cargo fmt (with or without --check flag)
-    (r"^cargo fmt(?: --check)?(?:[: ][^|;&]+)?$",             "format_check"),
+    (r"^cargo fmt(?: --check)?(?:[: ][^|;&]+)?$", "format_check"),
     // 10. pytest
-    (r"^pytest(?:[: ][^|;&]+)?$",                             "test_suite_py"),
+    (r"^pytest(?:[: ][^|;&]+)?$", "test_suite_py"),
     // 11. python -m pytest
-    (r"^python -m pytest(?:[: ][^|;&]+)?$",                   "test_suite_py"),
+    (r"^python -m pytest(?:[: ][^|;&]+)?$", "test_suite_py"),
     // 12. go test
-    (r"^go test(?:[: ][^|;&]+)?$",                            "test_suite_go"),
+    (r"^go test(?:[: ][^|;&]+)?$", "test_suite_go"),
     // 13. mvn test
-    (r"^mvn test(?:[: ][^|;&]+)?$",                           "test_suite_java"),
+    (r"^mvn test(?:[: ][^|;&]+)?$", "test_suite_java"),
     // 14. gradle test
-    (r"^gradle test(?:[: ][^|;&]+)?$",                        "test_suite_java"),
+    (r"^gradle test(?:[: ][^|;&]+)?$", "test_suite_java"),
     // 15. cargo build --release (real-data anchor: appears in verification_v01.jsonl
     //     from session aac68973). Also matched by pattern 7; listed here for
     //     explicit documentation of the real-data fixture command.
-    (r"^cargo build --release(?:[: ][^|;&]+)?$",              "build"),
+    (r"^cargo build --release(?:[: ][^|;&]+)?$", "build"),
     // 16. cargo fmt without --check (real-data anchor: `cargo fmt` form)
-    (r"^cargo fmt$",                                          "format_check"),
+    (r"^cargo fmt$", "format_check"),
 ];
 
 /// Returns the full allowlist as `(regex_pattern, command_kind)` pairs.
@@ -132,9 +138,10 @@ const WRAPPER_PREFIXES: &[&[&str]] = &[
 fn is_dry_run(segment: &str) -> bool {
     let tokens: Vec<&str> = segment.split_whitespace().collect();
     // flag-style dry-run markers
-    if tokens.iter().any(|t| {
-        *t == "--no-run" || *t == "--collect-only" || *t == "--list-tests"
-    }) {
+    if tokens
+        .iter()
+        .any(|t| *t == "--no-run" || *t == "--collect-only" || *t == "--list-tests")
+    {
         return true;
     }
     // `--list` is dry-run for cargo test / nextest (lists test names).
@@ -305,7 +312,10 @@ mod tests {
         assert_eq!(strip_wrappers("sudo cargo test"), "cargo test");
         assert_eq!(strip_wrappers("time cargo build"), "cargo build");
         // env VAR=.. (one or more assignments) is stripped
-        assert_eq!(strip_wrappers("env RUST_LOG=debug cargo test"), "cargo test");
+        assert_eq!(
+            strip_wrappers("env RUST_LOG=debug cargo test"),
+            "cargo test"
+        );
         assert_eq!(strip_wrappers("env A=1 B=2 pytest"), "pytest");
         // nested wrappers strip left-to-right
         assert_eq!(strip_wrappers("sudo npx vitest run"), "vitest run");
@@ -341,7 +351,9 @@ mod tests {
             None
         );
         assert_eq!(
-            classify_segment("- SA1 Metica activation was previously gated on completion of Airflux test"),
+            classify_segment(
+                "- SA1 Metica activation was previously gated on completion of Airflux test"
+            ),
             None
         );
         assert_eq!(
@@ -352,8 +364,14 @@ mod tests {
 
     #[test]
     fn classify_segment_known_tool_still_matches() {
-        assert_eq!(classify_segment("cargo test"), Some(("test_suite_rust", "known_tool")));
-        assert_eq!(classify_segment("npx vitest run"), Some(("test_suite_js", "known_tool")));
+        assert_eq!(
+            classify_segment("cargo test"),
+            Some(("test_suite_rust", "known_tool"))
+        );
+        assert_eq!(
+            classify_segment("npx vitest run"),
+            Some(("test_suite_js", "known_tool"))
+        );
     }
 
     #[test]
@@ -373,7 +391,9 @@ mod tests {
         // was a Tier-2 false-positive class before the keyword fallback was
         // removed — spec F2; now None falls out of the allowlist miss directly.)
         assert_eq!(
-            classify_segment("./target/debug/wimcc ingest tests/fixtures/transcripts/minimal_session.jsonl"),
+            classify_segment(
+                "./target/debug/wimcc ingest tests/fixtures/transcripts/minimal_session.jsonl"
+            ),
             None
         );
         assert_eq!(

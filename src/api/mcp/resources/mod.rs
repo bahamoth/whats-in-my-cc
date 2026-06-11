@@ -71,7 +71,12 @@ pub async fn read_resource(uri: &str, pool: &SqlitePool) -> Result<Value, String
 ///
 /// `session_id` is used to aggregate the redaction summary from the DB.
 /// If `None` (e.g., OTel trace resources), no summary is included.
-async fn make_contents(uri: &str, data: Value, session_id: Option<&str>, pool: &SqlitePool) -> Value {
+async fn make_contents(
+    uri: &str,
+    data: Value,
+    session_id: Option<&str>,
+    pool: &SqlitePool,
+) -> Value {
     let text = serde_json::to_string(&json!({
         "meta": { "schema_version": SCHEMA_VERSION },
         "data": data
@@ -110,33 +115,52 @@ async fn read_session(session_id: &str, uri: &str, pool: &SqlitePool) -> Result<
         .map_err(|e| e.to_string())?;
     match summary {
         None => Err(format!("session not found: {session_id}")),
-        Some((event_count, first_obs, last_obs)) => {
-            Ok(make_contents(uri, json!({
+        Some((event_count, first_obs, last_obs)) => Ok(make_contents(
+            uri,
+            json!({
                 "session_id": session_id,
                 "event_count": event_count,
                 "first_observed_at": first_obs,
                 "last_observed_at": last_obs
-            }), Some(session_id), pool).await)
-        }
+            }),
+            Some(session_id),
+            pool,
+        )
+        .await),
     }
 }
 
-async fn read_file_lineage(session_id: &str, uri: &str, pool: &SqlitePool) -> Result<Value, String> {
+async fn read_file_lineage(
+    session_id: &str,
+    uri: &str,
+    pool: &SqlitePool,
+) -> Result<Value, String> {
     let hunks = repo_diff_hunk::list_session(pool, session_id)
         .await
         .map_err(|e| e.to_string())?;
-    let hunks_json: Vec<Value> = hunks.into_iter().map(|h| json!({
-        "diff_hunk_id": h.diff_hunk_id,
-        "file_path": h.file_path,
-        "change_type": h.change_type,
-        "lines_added": h.lines_added,
-        "lines_removed": h.lines_removed,
-        "introduced_by_event_id": h.introduced_by_event_id
-    })).collect();
-    Ok(make_contents(uri, json!({
-        "session_id": session_id,
-        "diff_hunks": hunks_json
-    }), Some(session_id), pool).await)
+    let hunks_json: Vec<Value> = hunks
+        .into_iter()
+        .map(|h| {
+            json!({
+                "diff_hunk_id": h.diff_hunk_id,
+                "file_path": h.file_path,
+                "change_type": h.change_type,
+                "lines_added": h.lines_added,
+                "lines_removed": h.lines_removed,
+                "introduced_by_event_id": h.introduced_by_event_id
+            })
+        })
+        .collect();
+    Ok(make_contents(
+        uri,
+        json!({
+            "session_id": session_id,
+            "diff_hunks": hunks_json
+        }),
+        Some(session_id),
+        pool,
+    )
+    .await)
 }
 
 async fn read_otel_trace(trace_id: &str, uri: &str, pool: &SqlitePool) -> Result<Value, String> {
@@ -154,26 +178,35 @@ async fn read_otel_trace(trace_id: &str, uri: &str, pool: &SqlitePool) -> Result
     .map_err(|e| e.to_string())?;
 
     let mut first_session_id: Option<String> = None;
-    let spans: Vec<Value> = rows.into_iter().map(|r| {
-        let event_id: String = r.get("event_id");
-        let session_id: String = r.get("session_id");
-        let observed_at: String = r.get("observed_at");
-        let span_id: Option<String> = r.try_get("span_id").ok().flatten();
-        let parent_span_id: Option<String> = r.try_get("parent_span_id").ok().flatten();
-        if first_session_id.is_none() {
-            first_session_id = Some(session_id.clone());
-        }
-        json!({
-            "event_id": event_id,
-            "session_id": session_id,
-            "observed_at": observed_at,
-            "span_id": span_id,
-            "parent_span_id": parent_span_id
+    let spans: Vec<Value> = rows
+        .into_iter()
+        .map(|r| {
+            let event_id: String = r.get("event_id");
+            let session_id: String = r.get("session_id");
+            let observed_at: String = r.get("observed_at");
+            let span_id: Option<String> = r.try_get("span_id").ok().flatten();
+            let parent_span_id: Option<String> = r.try_get("parent_span_id").ok().flatten();
+            if first_session_id.is_none() {
+                first_session_id = Some(session_id.clone());
+            }
+            json!({
+                "event_id": event_id,
+                "session_id": session_id,
+                "observed_at": observed_at,
+                "span_id": span_id,
+                "parent_span_id": parent_span_id
+            })
         })
-    }).collect();
+        .collect();
 
-    Ok(make_contents(uri, json!({
-        "trace_id": trace_id,
-        "spans": spans
-    }), first_session_id.as_deref(), pool).await)
+    Ok(make_contents(
+        uri,
+        json!({
+            "trace_id": trace_id,
+            "spans": spans
+        }),
+        first_session_id.as_deref(),
+        pool,
+    )
+    .await)
 }

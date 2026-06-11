@@ -84,13 +84,14 @@ fn empty_view<'a>(events: &'a [ObservedEvent]) -> SessionInsightView<'a> {
 /// 100KB output followed by a short assistant message with no downstream overlap → fires.
 #[test]
 fn fires_on_large_tool_result_with_no_downstream_use() {
-    let events = vec![
-        large_tool_result(0, 100_000),
-        short_assistant_msg(1),
-    ];
+    let events = vec![large_tool_result(0, 100_000), short_assistant_msg(1)];
     let view = empty_view(&events);
     let cands = ContextBloat.detect(&view, &DetectorConfig::default());
-    assert_eq!(cands.len(), 1, "100KB bloat with short assistant reply must fire");
+    assert_eq!(
+        cands.len(),
+        1,
+        "100KB bloat with short assistant reply must fire"
+    );
     let c = &cands[0];
     assert_eq!(c.detector, "context_bloat");
     assert!(c.subkind.is_none());
@@ -136,7 +137,10 @@ fn does_not_fire_when_downstream_uses_content() {
     let events = vec![result_ev, assistant_ev, downstream_call];
     let view = empty_view(&events);
     let cands = ContextBloat.detect(&view, &DetectorConfig::default());
-    assert!(cands.is_empty(), "downstream use with ≥3 stems must not fire");
+    assert!(
+        cands.is_empty(),
+        "downstream use with ≥3 stems must not fire"
+    );
 }
 
 /// Large result but no following assistant message within M=3 events → no fire.
@@ -153,7 +157,10 @@ fn does_not_fire_without_following_assistant_message() {
     // No assistant_message in next 3 events → does not fire per spec §4.3
     let cands = ContextBloat.detect(&view, &DetectorConfig::default());
     // The bloat has no following assistant_message in M=3, so no candidate
-    assert!(cands.is_empty(), "no assistant message in next 3 events → no fire");
+    assert!(
+        cands.is_empty(),
+        "no assistant message in next 3 events → no fire"
+    );
 }
 
 /// Empty session → no fire.
@@ -170,10 +177,7 @@ fn does_not_fire_on_empty_session() {
 
 #[test]
 fn facts_include_required_fields() {
-    let events = vec![
-        large_tool_result(0, 100_000),
-        short_assistant_msg(1),
-    ];
+    let events = vec![large_tool_result(0, 100_000), short_assistant_msg(1)];
     let view = empty_view(&events);
     let cands = ContextBloat.detect(&view, &DetectorConfig::default());
     assert_eq!(cands.len(), 1);
@@ -223,20 +227,23 @@ fn does_not_panic_on_multibyte_utf8_content() {
     let view = empty_view(&events);
     // Must not panic; must fire exactly one signal.
     let cands = ContextBloat.detect(&view, &DetectorConfig::default());
-    assert_eq!(cands.len(), 1, "Korean UTF-8 bloat must fire one signal without panic");
+    assert_eq!(
+        cands.len(),
+        1,
+        "Korean UTF-8 bloat must fire one signal without panic"
+    );
 }
 
 /// The byte threshold is config-driven: a 10KB result is below the default 50KB
 /// (no fire) but a config that lowers `threshold_bytes` to 5KB makes it fire.
 #[test]
 fn threshold_bytes_from_config() {
-    let events = vec![
-        large_tool_result(0, 10_000),
-        short_assistant_msg(1),
-    ];
+    let events = vec![large_tool_result(0, 10_000), short_assistant_msg(1)];
     let view = empty_view(&events);
     assert!(
-        ContextBloat.detect(&view, &DetectorConfig::default()).is_empty(),
+        ContextBloat
+            .detect(&view, &DetectorConfig::default())
+            .is_empty(),
         "10KB is below default 50KB threshold"
     );
     let cfg = DetectorConfig::from_toml_str("[detector.context_bloat]\nthreshold_bytes = 5000\n");
@@ -278,7 +285,10 @@ fn does_not_fire_when_downstream_real_shape_overlaps() {
     // With the buggy pointer the real-shape downstream input reads as "" →
     // overlap = 0 → fires. After fix overlap = 3 → no fire.
     let cands = ContextBloat.detect(&view, &DetectorConfig::default());
-    assert!(cands.is_empty(), "real-shape downstream use with ≥3 stems must suppress context_bloat");
+    assert!(
+        cands.is_empty(),
+        "real-shape downstream use with ≥3 stems must suppress context_bloat"
+    );
 }
 
 /// Large bloat + short assistant + downstream tool_call using REAL shape with
@@ -293,5 +303,9 @@ fn fires_on_large_bloat_downstream_real_shape_no_overlap() {
     ];
     let view = empty_view(&events);
     let cands = ContextBloat.detect(&view, &DetectorConfig::default());
-    assert_eq!(cands.len(), 1, "100KB bloat with real-shape downstream (no overlap) must fire");
+    assert_eq!(
+        cands.len(),
+        1,
+        "100KB bloat with real-shape downstream (no overlap) must fire"
+    );
 }

@@ -74,10 +74,7 @@ pub fn parse_request(body: &Value) -> Vec<MetricSampleRecord> {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
-                let unit = m
-                    .get("unit")
-                    .and_then(|v| v.as_str())
-                    .map(String::from);
+                let unit = m.get("unit").and_then(|v| v.as_str()).map(String::from);
                 let description = m
                     .get("description")
                     .and_then(|v| v.as_str())
@@ -147,9 +144,11 @@ fn push_for_instrument(
         let attrs = flatten_attrs(dp.get("attributes"));
         let time_unix_nano = parse_unix_nano(dp.get("timeUnixNano")).unwrap_or(0);
         let start_time_unix_nano = parse_unix_nano(dp.get("startTimeUnixNano"));
-        let value_int = dp
-            .get("asInt")
-            .and_then(|v| v.as_str().and_then(|s| s.parse::<i64>().ok()).or_else(|| v.as_i64()));
+        let value_int = dp.get("asInt").and_then(|v| {
+            v.as_str()
+                .and_then(|s| s.parse::<i64>().ok())
+                .or_else(|| v.as_i64())
+        });
         let value_float = dp.get("asDouble").and_then(|v| v.as_f64());
         let histogram = if matches!(kind_str, "histogram" | "exponential_histogram" | "summary") {
             Some(dp.clone())
@@ -189,7 +188,12 @@ fn push_for_instrument(
             time_unix_nano,
             start_time_unix_nano,
         };
-        out.push(MetricSampleRecord { facet, session_id, tool_use_id, request_id });
+        out.push(MetricSampleRecord {
+            facet,
+            session_id,
+            tool_use_id,
+            request_id,
+        });
     }
 }
 
@@ -270,8 +274,7 @@ pub(crate) fn unwrap_any_value(v: &Value) -> Value {
     {
         let mut m = serde_json::Map::new();
         for kv in kvs {
-            if let (Some(k), Some(val)) =
-                (kv.get("key").and_then(|x| x.as_str()), kv.get("value"))
+            if let (Some(k), Some(val)) = (kv.get("key").and_then(|x| x.as_str()), kv.get("value"))
             {
                 m.insert(k.to_string(), unwrap_any_value(val));
             }
@@ -392,9 +395,16 @@ mod tests {
         assert!(!recs.is_empty(), "real metrics fixture has data points");
         // Every Claude Code metric in the real fixture is a sum (counter).
         for r in &recs {
-            assert_eq!(r.facet.instrument_kind, "sum", "instrument {} → {}", r.facet.instrument_name, r.facet.instrument_kind);
+            assert_eq!(
+                r.facet.instrument_kind, "sum",
+                "instrument {} → {}",
+                r.facet.instrument_name, r.facet.instrument_kind
+            );
         }
-        let names: BTreeSet<String> = recs.iter().map(|r| r.facet.instrument_name.clone()).collect();
+        let names: BTreeSet<String> = recs
+            .iter()
+            .map(|r| r.facet.instrument_name.clone())
+            .collect();
         assert!(names.contains("claude_code.cost.usage"));
     }
 
@@ -403,7 +413,10 @@ mod tests {
         let body = load_real();
         let recs = parse_request(&body);
         for r in &recs {
-            assert!(!r.session_id.is_empty(), "every data point in the real fixture has session.id");
+            assert!(
+                !r.session_id.is_empty(),
+                "every data point in the real fixture has session.id"
+            );
         }
     }
 
@@ -415,7 +428,10 @@ mod tests {
             .find(|r| r.facet.instrument_name == "claude_code.cost.usage")
             .expect("cost.usage instrument present");
         assert!(cost.facet.value_float.is_some(), "cost.usage uses asDouble");
-        assert!(cost.facet.is_monotonic == Some(true), "cost.usage is monotonic");
+        assert!(
+            cost.facet.is_monotonic == Some(true),
+            "cost.usage is monotonic"
+        );
     }
 
     #[test]

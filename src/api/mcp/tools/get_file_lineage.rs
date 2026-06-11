@@ -25,17 +25,19 @@ pub async fn call(args: &Value, pool: &SqlitePool) -> Value {
     let filtered: Vec<Value> = hunks
         .into_iter()
         .filter(|h| h.file_path == file_path)
-        .map(|h| json!({
-            "diff_hunk_id": h.diff_hunk_id,
-            "file_path": h.file_path,
-            "change_type": h.change_type,
-            "lines_added": h.lines_added,
-            "lines_removed": h.lines_removed,
-            "line_range_after_start": h.line_range_after_start,
-            "line_range_after_end": h.line_range_after_end,
-            "introduced_by_event_id": h.introduced_by_event_id,
-            "user_modified": h.user_modified
-        }))
+        .map(|h| {
+            json!({
+                "diff_hunk_id": h.diff_hunk_id,
+                "file_path": h.file_path,
+                "change_type": h.change_type,
+                "lines_added": h.lines_added,
+                "lines_removed": h.lines_removed,
+                "line_range_after_start": h.line_range_after_start,
+                "line_range_after_end": h.line_range_after_end,
+                "introduced_by_event_id": h.introduced_by_event_id,
+                "user_modified": h.user_modified
+            })
+        })
         .collect();
 
     tool_success(json!({

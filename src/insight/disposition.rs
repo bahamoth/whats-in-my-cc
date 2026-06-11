@@ -79,7 +79,8 @@ mod tests {
     #[test]
     fn classifies_cancelled_prefix() {
         // 실 payload 형태 (disposition_v01.jsonl, session ed82aee9)
-        let c = "<tool_use_error>Cancelled: parallel tool call Bash(F=$(ls -S ...))</tool_use_error>";
+        let c =
+            "<tool_use_error>Cancelled: parallel tool call Bash(F=$(ls -S ...))</tool_use_error>";
         assert_eq!(classify_disposition(c), Some(Disposition::Cancelled));
     }
 
@@ -104,7 +105,9 @@ mod tests {
         assert_eq!(classify_disposition("test result: ok. 1 passed"), None);
         // Cancelled 이외의 tool_use_error는 disposition이 아니라 실행 실패(outcome Failed).
         assert_eq!(
-            classify_disposition("<tool_use_error>File has been modified since read</tool_use_error>"),
+            classify_disposition(
+                "<tool_use_error>File has been modified since read</tool_use_error>"
+            ),
             None
         );
     }

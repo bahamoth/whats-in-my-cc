@@ -114,7 +114,12 @@ fn is_error_false_with_failure_content_yields_failed_estimated() {
     let evs = vec![
         tool_call_bash(0, "tid_1b", "cargo test --all"),
         // is_error=false is the normal case for a failing cargo test (the bug).
-        tool_result_ev(1, "tid_1b", false, "FAILED\n\nerror[E0308]: mismatched types"),
+        tool_result_ev(
+            1,
+            "tid_1b",
+            false,
+            "FAILED\n\nerror[E0308]: mismatched types",
+        ),
     ];
     let runs = extract_verification_runs(&evs);
     assert_eq!(runs.len(), 1);

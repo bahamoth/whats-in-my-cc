@@ -7,7 +7,6 @@ pub mod routes;
 pub mod sse;
 pub mod static_assets;
 
-
 use std::sync::Arc;
 
 use axum::{
@@ -106,10 +105,7 @@ pub fn router(state: AppState) -> Router {
             "/v1/sessions/:id/verification-runs",
             get(routes::session_verification_runs),
         )
-        .route(
-            "/v1/sessions/:id/usage",
-            get(routes::session_usage),
-        )
+        .route("/v1/sessions/:id/usage", get(routes::session_usage))
         .route("/v1/usage/baseline", get(routes::usage_baseline))
         .route(
             "/v1/verification-runs/:id",

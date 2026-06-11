@@ -43,7 +43,8 @@ async fn protocol_compat_initialize_shape() {
     let compat_path = "tests/fixtures/mcp/protocol_compat.json";
     let compat_str = std::fs::read_to_string(compat_path)
         .expect("tests/fixtures/mcp/protocol_compat.json must exist");
-    let compat: Value = serde_json::from_str(&compat_str).expect("compat fixture must be valid JSON");
+    let compat: Value =
+        serde_json::from_str(&compat_str).expect("compat fixture must be valid JSON");
 
     let expected_initialize = &compat["initialize_response"];
 
@@ -65,18 +66,15 @@ async fn protocol_compat_initialize_shape() {
     // Compare the structural shape (capabilities, protocolVersion)
     // Placeholders: serverInfo.version is dynamic, Mcp-Session-Id is dynamic.
     assert_eq!(
-        body["result"]["protocolVersion"],
-        expected_initialize["result"]["protocolVersion"],
+        body["result"]["protocolVersion"], expected_initialize["result"]["protocolVersion"],
         "protocolVersion must match compat fixture"
     );
     assert_eq!(
-        body["result"]["capabilities"],
-        expected_initialize["result"]["capabilities"],
+        body["result"]["capabilities"], expected_initialize["result"]["capabilities"],
         "capabilities must match compat fixture"
     );
     assert_eq!(
-        body["result"]["serverInfo"]["name"],
-        expected_initialize["result"]["serverInfo"]["name"],
+        body["result"]["serverInfo"]["name"], expected_initialize["result"]["serverInfo"]["name"],
         "serverInfo.name must match compat fixture"
     );
 }
@@ -104,8 +102,14 @@ async fn protocol_compat_tools_list_shape() {
     let body: Value = r.json();
     let got_tools = body["result"]["tools"].as_array().unwrap();
 
-    let mut got_names: Vec<&str> = got_tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-    let mut exp_names: Vec<&str> = expected_tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    let mut got_names: Vec<&str> = got_tools
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    let mut exp_names: Vec<&str> = expected_tools
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
     got_names.sort();
     exp_names.sort();
 
@@ -138,8 +142,14 @@ async fn protocol_compat_resource_templates_shape() {
     let body: Value = r.json();
     let got = body["result"]["resourceTemplates"].as_array().unwrap();
 
-    let mut got_uris: Vec<&str> = got.iter().map(|t| t["uriTemplate"].as_str().unwrap()).collect();
-    let mut exp_uris: Vec<&str> = expected_templates.iter().map(|t| t["uriTemplate"].as_str().unwrap()).collect();
+    let mut got_uris: Vec<&str> = got
+        .iter()
+        .map(|t| t["uriTemplate"].as_str().unwrap())
+        .collect();
+    let mut exp_uris: Vec<&str> = expected_templates
+        .iter()
+        .map(|t| t["uriTemplate"].as_str().unwrap())
+        .collect();
     got_uris.sort();
     exp_uris.sort();
 

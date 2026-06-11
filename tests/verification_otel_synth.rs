@@ -98,8 +98,8 @@ fn otel_span_missing_trace_id_is_dropped_synthetic() {
         observed_at: Utc::now(),
         actor: Actor::System,
         kind: EventKind::OtelSpan,
-        trace_id: None,  // absent
-        span_id: None,   // absent
+        trace_id: None, // absent
+        span_id: None,  // absent
         payload: json!({"telemetry": {"attributes": {"verification.kind": "build"}}}),
         parser_version: "otel@0.1.0".into(),
         ..Default::default()

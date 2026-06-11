@@ -55,6 +55,8 @@ async fn backfill_agent_id_fills_from_raw_payload() {
     let n = repo_observed::backfill_agent_id(&pool).await.unwrap();
     assert_eq!(n, 1, "one NULL-agent_id row backfilled");
 
-    let rows = repo_observed::list_session(&pool, "sess", 10).await.unwrap();
+    let rows = repo_observed::list_session(&pool, "sess", 10)
+        .await
+        .unwrap();
     assert_eq!(rows[0].agent_id.as_deref(), Some("agentX"));
 }

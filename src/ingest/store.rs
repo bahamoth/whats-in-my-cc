@@ -5,7 +5,9 @@ use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use std::path::Path;
 
-use crate::db::{repo_diff_hunk, repo_observed, repo_raw, repo_runs, repo_usage_facet, repo_verification_run};
+use crate::db::{
+    repo_diff_hunk, repo_observed, repo_raw, repo_runs, repo_usage_facet, repo_verification_run,
+};
 use crate::live::{LiveEvent, LiveSink};
 use crate::security::redaction::engine::scan;
 
@@ -14,8 +16,8 @@ type TurnBackfillRow = (String, Option<String>, Option<String>, Option<String>);
 use crate::error::{Result, WimccError};
 use crate::ids::MonotonicUlidGen;
 use crate::ingest::{diff_hunk, mapping, transcript, usage_facet, verification_run};
-use crate::model::observed::EventKind;
 use crate::model::meta::SCHEMA_VERSION;
+use crate::model::observed::EventKind;
 
 #[derive(Debug, Default, Serialize)]
 pub struct IngestStats {
@@ -76,15 +78,14 @@ async fn ingest_one_file(
     stats: &mut IngestStats,
 ) -> Result<()> {
     tracing::info!(path = %path.display(), "ingesting");
-    let mut stream =
-        Box::pin(
-            transcript::stream_file(path)
-                .await
-                .map_err(|e| WimccError::Io {
-                    path: path.to_path_buf(),
-                    source: e,
-                })?,
-        );
+    let mut stream = Box::pin(
+        transcript::stream_file(path)
+            .await
+            .map_err(|e| WimccError::Io {
+                path: path.to_path_buf(),
+                source: e,
+            })?,
+    );
 
     while let Some(item) = stream.next().await {
         match item {
@@ -101,8 +102,7 @@ async fn ingest_one_file(
                 let payload_sha = hex::encode(Sha256::digest(&stored_payload));
                 let raw_id = gen.generate();
                 let redaction_state = scan_result.manifest.redaction_state.as_str().to_owned();
-                let redaction_manifest =
-                    serde_json::to_string(&scan_result.manifest).ok();
+                let redaction_manifest = serde_json::to_string(&scan_result.manifest).ok();
                 let inserted = repo_raw::insert_dedup(
                     pool,
                     &repo_raw::NewRaw {
@@ -149,8 +149,7 @@ async fn ingest_one_file(
                     if scan_result.applied {
                         let payload_str = ev.payload.to_string();
                         let redacted_str = scan(&payload_str).masked_text;
-                        ev.payload = serde_json::from_str(&redacted_str)
-                            .unwrap_or(ev.payload);
+                        ev.payload = serde_json::from_str(&redacted_str).unwrap_or(ev.payload);
                     }
                     repo_observed::insert(pool, &ev).await?;
                     stats.observed_inserted += 1;
