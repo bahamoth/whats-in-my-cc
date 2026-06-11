@@ -31,9 +31,51 @@ pub async fn ingest_file(
     path: &Path,
     sink: &dyn LiveSink,
 ) -> Result<IngestStats> {
+    ingest_paths(pool, &[path.to_path_buf()], sink).await
+}
+
+/// Ingest one or more transcript files in a single run. All raw lines land
+/// first; each touched session's insights are then recomputed EXACTLY ONCE over
+/// the session's full event set — not once per file. Dogfooding 2026-06-11:
+/// `ingest --all` previously re-ran a session's insight pipeline for every
+/// subagent file it touched (e.g. 58×). `recompute_session` is idempotent, so
+/// 1× over the union equals the old last-file recompute — results unchanged.
+pub async fn ingest_paths(
+    pool: &SqlitePool,
+    paths: &[std::path::PathBuf],
+    sink: &dyn LiveSink,
+) -> Result<IngestStats> {
     let mut gen = MonotonicUlidGen::new();
     let run_id = repo_runs::start(pool).await?;
     let mut stats = IngestStats::default();
+    for path in paths {
+        ingest_one_file(pool, path, sink, &mut gen, &run_id, &mut stats).await?;
+    }
+    for session_id in &stats.sessions_touched {
+        recompute_session(pool, session_id).await?;
+    }
+    repo_runs::finish(
+        pool,
+        &run_id,
+        "ok",
+        serde_json::to_value(&stats).unwrap_or(serde_json::Value::Null),
+    )
+    .await?;
+    Ok(stats)
+}
+
+/// Ingest a single transcript file's raw lines (+ observed/diff_hunk rows). No
+/// insight recompute — the caller recomputes each touched session ONCE after a
+/// batch of files lands (see `ingest_paths`).
+async fn ingest_one_file(
+    pool: &SqlitePool,
+    path: &Path,
+    sink: &dyn LiveSink,
+    gen: &mut MonotonicUlidGen,
+    run_id: &str,
+    stats: &mut IngestStats,
+) -> Result<()> {
+    tracing::info!(path = %path.display(), "ingesting");
     let mut stream =
         Box::pin(
             transcript::stream_file(path)
@@ -65,7 +107,7 @@ pub async fn ingest_file(
                     pool,
                     &repo_raw::NewRaw {
                         raw_event_id: raw_id.clone(),
-                        ingest_run_id: run_id.clone(),
+                        ingest_run_id: run_id.to_string(),
                         source_type: "claude_transcript".into(),
                         source_uri: meta.source_uri.display().to_string(),
                         source_line_no: meta.line_no as i64,
@@ -97,7 +139,7 @@ pub async fn ingest_file(
                     transcript::ParsedRecord::User(u) => u.tool_use_result.clone(),
                     _ => None,
                 };
-                let evs = mapping::map_record(&meta, &rec, &raw_id, &mut gen)?;
+                let evs = mapping::map_record(&meta, &rec, &raw_id, gen)?;
                 for mut ev in evs {
                     stats.sessions_touched.insert(ev.session_id.clone());
                     // Slice-18: redact observed_event.payload too.
@@ -172,7 +214,7 @@ pub async fn ingest_file(
                     pool,
                     &repo_raw::NewRaw {
                         raw_event_id: raw_id,
-                        ingest_run_id: run_id.clone(),
+                        ingest_run_id: run_id.to_string(),
                         source_type: "unparseable".into(),
                         source_uri,
                         source_line_no: line_no as i64,
@@ -190,89 +232,85 @@ pub async fn ingest_file(
             Err(other) => return Err(other),
         }
     }
+    Ok(())
+}
 
-    for session_id in &stats.sessions_touched {
-        backfill_turn_ids(pool, session_id).await?;
+/// Recompute a single session's derived insights from its full event set.
+/// Idempotent (list_session-based reads + insert_or_replace / raw_event_id
+/// dedupe / dedup_key+reconcile), so calling it once per touched session after
+/// a batch of raw inserts yields the same result as the old per-file recompute.
+async fn recompute_session(pool: &SqlitePool, session_id: &str) -> Result<()> {
+    backfill_turn_ids(pool, session_id).await?;
 
-        // Slice-11 — extract verification runs for this session and persist
-        // them before the insight pipeline reads them (the pipeline's view
-        // loads verification_run + diff_hunk side-tables).
-        if !session_id.is_empty() {
-            let evs = repo_observed::list_session(pool, session_id, 100_000).await?;
-            let vr_records = verification_run::extract_verification_runs(&evs);
-            for rec in vr_records {
-                repo_verification_run::insert(
-                    pool,
-                    &repo_verification_run::VerificationRunRow {
-                        verification_run_id: rec.verification_run_id,
-                        schema_version: rec.schema_version.to_string(),
-                        session_id: rec.session_id,
-                        source: rec.source,
-                        command: rec.command,
-                        command_kind: rec.command_kind,
-                        trigger_event_id: rec.trigger_event_id,
-                        trigger_tool_use_id: rec.trigger_tool_use_id,
-                        status: rec.status,
-                        status_provenance: rec.status_provenance,
-                        detection_basis: rec.detection_basis,
-                        status_basis: rec.status_basis,
-                        started_at: rec.started_at,
-                        ended_at: rec.ended_at,
-                        exit_code: rec.exit_code,
-                        failure_summary: rec.failure_summary,
-                        raw_event_id: rec.raw_event_id,
-                        parser_version: rec.parser_version.to_string(),
-                    },
-                )
-                .await?;
-            }
+    // Slice-11 — extract verification runs for this session and persist
+    // them before the insight pipeline reads them (the pipeline's view
+    // loads verification_run + diff_hunk side-tables).
+    if !session_id.is_empty() {
+        let evs = repo_observed::list_session(pool, session_id, 100_000).await?;
+        let vr_records = verification_run::extract_verification_runs(&evs);
+        for rec in vr_records {
+            repo_verification_run::insert(
+                pool,
+                &repo_verification_run::VerificationRunRow {
+                    verification_run_id: rec.verification_run_id,
+                    schema_version: rec.schema_version.to_string(),
+                    session_id: rec.session_id,
+                    source: rec.source,
+                    command: rec.command,
+                    command_kind: rec.command_kind,
+                    trigger_event_id: rec.trigger_event_id,
+                    trigger_tool_use_id: rec.trigger_tool_use_id,
+                    status: rec.status,
+                    status_provenance: rec.status_provenance,
+                    detection_basis: rec.detection_basis,
+                    status_basis: rec.status_basis,
+                    started_at: rec.started_at,
+                    ended_at: rec.ended_at,
+                    exit_code: rec.exit_code,
+                    failure_summary: rec.failure_summary,
+                    raw_event_id: rec.raw_event_id,
+                    parser_version: rec.parser_version.to_string(),
+                },
+            )
+            .await?;
         }
-
-        // insight-redesign #1 — populate usage_facet from raw transcript lines.
-        // Usage lives only in raw_event.payload, so we read the joined raw line
-        // and parse it; dedupe is by raw_event_id (one assistant turn = one row).
-        if !session_id.is_empty() {
-            let lines = repo_usage_facet::assistant_raw_lines(pool, session_id).await?;
-            for line in lines {
-                let Ok(val) = serde_json::from_str::<serde_json::Value>(&line.raw) else {
-                    continue;
-                };
-                let Some(u) = usage_facet::parse_usage(&val) else {
-                    continue;
-                };
-                repo_usage_facet::insert(
-                    pool,
-                    &repo_usage_facet::UsageFacetRow {
-                        raw_event_id: line.raw_event_id,
-                        schema_version: usage_facet::SCHEMA_VERSION.to_string(),
-                        session_id: line.session_id,
-                        model: u.model.or(line.model),
-                        input_tokens: u.input_tokens,
-                        cache_creation_input_tokens: u.cache_creation_input_tokens,
-                        cache_read_input_tokens: u.cache_read_input_tokens,
-                        output_tokens: u.output_tokens,
-                        observed_at: line.observed_at,
-                        parser_version: usage_facet::PARSER_VERSION.to_string(),
-                    },
-                )
-                .await?;
-            }
-        }
-
-        // Run the deterministic signal detector pipeline for each touched
-        // session so signals are refreshed immediately after ingest. (Previously
-        // this was a side effect of the now-removed graph rebuild.)
-        crate::insight::pipeline::run_detectors(pool, session_id).await?;
     }
 
-    repo_runs::finish(
-        pool,
-        &run_id,
-        "ok",
-        serde_json::to_value(&stats).unwrap_or(serde_json::Value::Null),
-    )
-    .await?;
-    Ok(stats)
+    // insight-redesign #1 — populate usage_facet from raw transcript lines.
+    // Usage lives only in raw_event.payload, so we read the joined raw line
+    // and parse it; dedupe is by raw_event_id (one assistant turn = one row).
+    if !session_id.is_empty() {
+        let lines = repo_usage_facet::assistant_raw_lines(pool, session_id).await?;
+        for line in lines {
+            let Ok(val) = serde_json::from_str::<serde_json::Value>(&line.raw) else {
+                continue;
+            };
+            let Some(u) = usage_facet::parse_usage(&val) else {
+                continue;
+            };
+            repo_usage_facet::insert(
+                pool,
+                &repo_usage_facet::UsageFacetRow {
+                    raw_event_id: line.raw_event_id,
+                    schema_version: usage_facet::SCHEMA_VERSION.to_string(),
+                    session_id: line.session_id,
+                    model: u.model.or(line.model),
+                    input_tokens: u.input_tokens,
+                    cache_creation_input_tokens: u.cache_creation_input_tokens,
+                    cache_read_input_tokens: u.cache_read_input_tokens,
+                    output_tokens: u.output_tokens,
+                    observed_at: line.observed_at,
+                    parser_version: usage_facet::PARSER_VERSION.to_string(),
+                },
+            )
+            .await?;
+        }
+    }
+
+    // Run the deterministic signal detector pipeline so signals are refreshed
+    // immediately after ingest. (Previously a side effect of the removed graph rebuild.)
+    crate::insight::pipeline::run_detectors(pool, session_id).await?;
+    Ok(())
 }
 
 pub async fn backfill_turn_ids(pool: &SqlitePool, session_id: &str) -> Result<u64> {
