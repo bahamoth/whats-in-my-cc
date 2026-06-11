@@ -10,18 +10,23 @@
 //! events currently arrive for transcript-ingested sessions — spec §6.5).
 //!
 //! Rates are US dollars per 1,000,000 tokens (1 Mtoken).
-//! Source: Anthropic public pricing page (claude.com/pricing), captured
-//! 2026-05-30. Values are ESTIMATES and may drift — when they change, update
-//! `PRICING` and bump `PRICING_VERSION`, and re-anchor the unit test.
+//! Source: Anthropic public pricing page
+//! (platform.claude.com/docs/en/about-claude/pricing), captured 2026-06-11.
+//! Values are ESTIMATES and may drift — when they change, update `PRICING` and
+//! bump `PRICING_VERSION`, and re-anchor the unit test.
 //!
 //! cache_read is billed at a discount; cache_creation at a premium; both are
 //! kept as separate line items here because they have different rates.
 
 use crate::db::repo_usage_facet::ModelUsage;
 
-/// Bump when the table or the estimation method changes. Surfaced as
-/// provenance so a stored/exported estimate can be traced to its rate set.
-pub const PRICING_VERSION: &str = "pricing_estimate@v1";
+/// Pricing-table provenance, formatted `pricing_estimate@<YYYY-MM-DD>` where the
+/// date is when `PRICING` was last refreshed from the public pricing page. The
+/// update date IS the version — no arbitrary v-numbering — so a stored/exported
+/// estimate's staleness is visible directly. List rates change over time (e.g.
+/// Opus dropped from 15/75 to 5/25), so refresh `PRICING` and this date together.
+/// Surfaced via the usage API.
+pub const PRICING_VERSION: &str = "pricing_estimate@2026-06-11";
 
 /// Marker placed on the API response so the UI shows the 추정 badge and never
 /// presents this as actual billing.
@@ -44,24 +49,45 @@ pub struct ModelRates {
 /// dev-DB model ids called out in the redesign spec. Unknown models fall
 /// through to $0 and are flagged (see `estimate_session_cost`).
 pub const PRICING: &[(&str, ModelRates)] = &[
-    // Opus-tier ESTIMATE: input $15, cache_creation $18.75 (1.25×),
-    // cache_read $1.50 (0.1×), output $75 per Mtoken.
+    // Fable/Mythos-tier: input $10, 5m cache write $12.50, cache read $1,
+    // output $50 per Mtoken. Mythos 5 shares Fable 5's published rates.
+    (
+        "claude-fable-5",
+        ModelRates {
+            input_per_mtok: 10.0,
+            cache_creation_per_mtok: 12.5,
+            cache_read_per_mtok: 1.0,
+            output_per_mtok: 50.0,
+        },
+    ),
+    (
+        "claude-mythos-5",
+        ModelRates {
+            input_per_mtok: 10.0,
+            cache_creation_per_mtok: 12.5,
+            cache_read_per_mtok: 1.0,
+            output_per_mtok: 50.0,
+        },
+    ),
+    // Opus-tier (4.8/4.7): input $5, 5m cache write $6.25, cache read $0.50,
+    // output $25 per Mtoken. (The prior table carried the retired Opus-4.1 rate
+    // 15/18.75/1.5/75 — corrected to the current published rate on 2026-06-11.)
     (
         "claude-opus-4-8",
         ModelRates {
-            input_per_mtok: 15.0,
-            cache_creation_per_mtok: 18.75,
-            cache_read_per_mtok: 1.5,
-            output_per_mtok: 75.0,
+            input_per_mtok: 5.0,
+            cache_creation_per_mtok: 6.25,
+            cache_read_per_mtok: 0.5,
+            output_per_mtok: 25.0,
         },
     ),
     (
         "claude-opus-4-7",
         ModelRates {
-            input_per_mtok: 15.0,
-            cache_creation_per_mtok: 18.75,
-            cache_read_per_mtok: 1.5,
-            output_per_mtok: 75.0,
+            input_per_mtok: 5.0,
+            cache_creation_per_mtok: 6.25,
+            cache_read_per_mtok: 0.5,
+            output_per_mtok: 25.0,
         },
     ),
     // Sonnet-tier ESTIMATE: input $3, cache_creation $3.75, cache_read $0.30,
@@ -161,7 +187,8 @@ mod tests {
 
     #[test]
     fn deterministic_cost_for_known_model() {
-        // 1,000,000 of each class for opus-4-8: 15 + 18.75 + 1.5 + 75 = 110.25
+        // 1,000,000 of each class for opus-4-8: 5 + 6.25 + 0.5 + 25 = 36.75
+        // (platform.claude.com/docs/en/about-claude/pricing, captured 2026-06-11)
         let est = estimate_session_cost(&[mu(
             "claude-opus-4-8",
             1_000_000,
@@ -170,7 +197,7 @@ mod tests {
             1_000_000,
         )]);
         assert!(
-            (est.total_usd - 110.25).abs() < 1e-9,
+            (est.total_usd - 36.75).abs() < 1e-9,
             "got {}",
             est.total_usd
         );
@@ -181,16 +208,16 @@ mod tests {
 
     #[test]
     fn cache_read_is_cheap_relative_to_output() {
-        // 1M cache_read on opus = $1.50; 1M output = $75. Locks the rate split.
+        // 1M cache_read on opus = $0.50; 1M output = $25. Locks the rate split.
         let read = estimate_session_cost(&[mu("claude-opus-4-8", 0, 0, 1_000_000, 0)]);
         let out = estimate_session_cost(&[mu("claude-opus-4-8", 0, 0, 0, 1_000_000)]);
         assert!(
-            (read.total_usd - 1.5).abs() < 1e-9,
+            (read.total_usd - 0.5).abs() < 1e-9,
             "cache_read got {}",
             read.total_usd
         );
         assert!(
-            (out.total_usd - 75.0).abs() < 1e-9,
+            (out.total_usd - 25.0).abs() < 1e-9,
             "output got {}",
             out.total_usd
         );
@@ -213,11 +240,11 @@ mod tests {
     #[test]
     fn mixed_models_sum_only_priced() {
         let est = estimate_session_cost(&[
-            mu("claude-opus-4-8", 0, 0, 0, 1_000_000),           // $75
+            mu("claude-opus-4-8", 0, 0, 0, 1_000_000),           // $25
             mu("claude-haiku-4-5-20251001", 0, 0, 0, 1_000_000), // $5
             mu("unknown-y", 0, 0, 0, 1_000_000),                 // $0, flagged
         ]);
-        assert!((est.total_usd - 80.0).abs() < 1e-9, "got {}", est.total_usd);
+        assert!((est.total_usd - 30.0).abs() < 1e-9, "got {}", est.total_usd);
         assert_eq!(est.models_without_pricing, vec!["unknown-y".to_string()]);
         assert_eq!(est.per_model.len(), 3);
     }
@@ -235,5 +262,22 @@ mod tests {
         // Real fixture verification_v01.jsonl carries claude-opus-4-7 — it MUST
         // be in the table or the endpoint test would see $0.
         assert!(rates_for("claude-opus-4-7").is_some());
+    }
+
+    #[test]
+    fn fable_5_is_priced_from_public_rates() {
+        // platform.claude.com/docs/en/about-claude/pricing (captured 2026-06-11):
+        // fable-5 input $10, 5m cache write $12.50, cache read $1, output $50.
+        // 1M of each class → 10 + 12.5 + 1 + 50 = 73.5.
+        let est = estimate_session_cost(&[mu(
+            "claude-fable-5",
+            1_000_000,
+            1_000_000,
+            1_000_000,
+            1_000_000,
+        )]);
+        assert!((est.total_usd - 73.5).abs() < 1e-9, "got {}", est.total_usd);
+        assert!(est.per_model[0].priced);
+        assert!(est.models_without_pricing.is_empty());
     }
 }

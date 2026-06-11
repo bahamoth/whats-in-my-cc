@@ -235,7 +235,9 @@ pub struct SessionUsageDto {
     pub estimated_cost_usd: f64,
     /// Always "estimate_public_pricing" for this slice — drives the 추정 badge.
     pub cost_basis: String,
-    /// Rate-table version the estimate was computed against.
+    /// Pricing-table provenance `pricing_estimate@<YYYY-MM-DD>` — the date is the
+    /// last refresh of the rate table (no arbitrary v-numbering), so the UI can
+    /// show/flag the estimate's age directly.
     pub pricing_version: String,
     /// Models in this session we could not price (excluded from the total);
     /// surfaced so the UI can disclose incomplete cost coverage.
