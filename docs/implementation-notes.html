@@ -4215,6 +4215,88 @@ vitest: 69 passed
         귀속할 수 없다. 검증은 위의 "이전에 존재할 수 없던 클래스" 기준으로만 했다.</li>
     </ul>
 
+    <h2 id="dogfooding-otel-2026-06-11">개밥먹기(OTel 두 세션) 기반 수정 — re_read 멱등 · piped estimated · 분석 drill-down (2026-06-11)</h2>
+    <p>
+      OTel 정보가 있는 두 세션(<code>e8d51785</code>, <code>6a254a2a</code>)을 API·뷰 양쪽에서 분석해 4개
+      트랙을 고쳤다. 핵심은 evidence로 잠근 두 가지: <strong>re_read 신호가 154행으로 부풀려져 있었고
+      (distinct 파일 53), piped 검증 명령 50건이 전부 unknown</strong>이었다는 것.
+    </p>
+    <h3>T1 — re_read signal 멱등화 (dedup_key + reconcile)</h3>
+    <p>
+      <code>signal_id = derive_signal_id(detector, session, evidence_refs)</code>였다. re_read처럼 evidence가
+      재ingest마다 누적되는 detector는 읽기가 늘 때마다 evidence set이 바뀌어 새 id가 생겼고, 옛 행이
+      <code>INSERT OR REPLACE</code>되지 못해 누적됐다(한 파일 <code>verification_run.rs</code>에 read_count
+      7→…→54로 19행). <strong>read_count 값 자체는 evidence-backed로 정확</strong>(count=54 signal의
+      evidence_refs에 distinct event 54개) — 행 수만 오염이었다.
+    </p>
+    <ul>
+      <li><code>SignalCandidate.dedup_key: Option&lt;String&gt;</code> 추가. re_read는 <code>file_path</code>를
+        안정키로 → 읽기가 늘어도 같은 signal_id → REPLACE로 read_count만 갱신. 나머지 detector는
+        <code>None</code>(evidence 고정이라 현행 id 유지).</li>
+      <li><code>repo_signal::reconcile(session, detector, keep_ids)</code> — <code>run_detectors</code>가 매
+        패스 후 현재 패스에 없는 그 detector의 signal을 삭제. 각 run은 전체 세션 뷰를 로드하므로 현재
+        패스가 권위 집합. 기존 누적 중복은 재ingest 때 self-heal.</li>
+      <li><strong>실측(6a254a2a 재ingest 후)</strong>: re_read 신호 <code>154 → 53</code>(= distinct 파일 수와
+        일치). detector_firing·분석 패널 막대가 정확해졌다. e8d51785도 4→3(교차-ingest 중복 1 제거).</li>
+    </ul>
+    <h3>T2 — verification piped → estimated (design §6.2 완화)</h3>
+    <p>
+      <code>verification_run.rs</code>의 piped 분기가 tier-4(<code>looks_like_success/failure</code>)가 이미
+      계산한 estimated 결과를 무조건 폐기하고 unknown으로 강제했다. piped는 exit code가 가려질 뿐,
+      파이프를 통과해 남은 도구 요약줄(<code>test result: ok</code>, <code>Test Files … passed</code>)이 있으면
+      estimated로 해소 가능하다. disposition(거부/차단/취소/백그라운드)은 그대로 unknown 유지,
+      <code>status_basis</code>는 <code>piped</code>로 남겨 exit 미관측을 투명하게 보존.
+      <code>docs/03_data_model_spec.html</code> §6.2도 갱신.
+    </p>
+    <ul>
+      <li><strong>실측(6a254a2a)</strong>: verification unknown <code>66 → 40</code>(piped 26건이 estimated로 승격;
+        passed 17→31, failed 14→26). 미측정 비율 68% → 41%.</li>
+    </ul>
+    <h3>T4 — 분석 패널 detector drill-down + 검증 헤드라인 정직화 (webui)</h3>
+    <ul>
+      <li><code>AnalysisPanel</code> detector 분포 막대를 펼치면 그 detector의 signal 목록(re_read=file_path·
+        read_count) 표시, 클릭 시 evidence 이벤트로 딥링크(기존 load-around 재사용). 브라우저 smoke로
+        <code>/tmp/pr41.diff · 25회</code> 클릭 → <code>?selected=…</code> 딥링크 + DetailPanel/SIGNALS 교차참조 확인.</li>
+      <li>insight strip 검증 카드 value를 측정분 분모로(<code>가드 N · 통과 P/measured</code>) + detail에
+        <code>미측정 U</code> 노출 → "통과 P"가 총 가드 수 대비로 오독되지 않게.</li>
+    </ul>
+
+    <h2 id="unknown-verification-loop">Verification unknown 루프 — 파서 강화 (untagged-bash의 형제)</h2>
+    <p>
+      검증 가드 outcome이 <code>unknown</code>으로 남은 run을 모아 파서를 어떻게 강화할지 제안하는
+      read-only 루프. <code>webui/scripts/unknown-verification.ts</code>가 Pull API
+      (<code>/v1/sessions/:id/verification-runs</code> + <code>/v1/events/:id/raw</code>)에서 데이터를 끌어와
+      순수 SSOT <code>collectUnknownVerification</code>(<code>webui/src/lib/unknownVerification.ts</code>,
+      vitest로 잠금)로 분류해 <code>[{commandKind, statusBasis, count, sampleCommand, sampleContentTail, hint}]</code>
+      JSON을 낸다. 권위 파싱은 Rust에 있고 스크립트는 후보 surfacing만 한다(untagged-bash와 동일 철학).
+      <code>npm run unknown-verification</code>(node 직접 실행 권장 — 배너 없는 클린 JSON).
+    </p>
+    <p><strong>첫 라운드 발견(6a254a2a, 이번 PR에서는 미적용 — 후보로 기록):</strong></p>
+    <ul>
+      <li><code>build exit</code> 5건: <code>cargo build 2>&amp;1</code> 출력 tail이 "Finished `dev` profile …
+        target(s)"인데 <code>looks_like_success</code>가 미인식 → cargo build 성공 패턴 추가 후보.</li>
+      <li><code>lint</code>: <code>cargo clippy</code>도 동일하게 "Finished …" 미인식.</li>
+      <li><strong>false-positive 주의</strong>: cargo <code>test</code>도 빌드 단계에서 "Finished … profile"을
+        찍으므로, build-success 패턴을 무분별 추가하면 실패한 테스트를 통과로 오판한다. 패턴은
+        command_kind로 범위를 한정(build/build_check에서만)하고 <code>looks_like_failure</code>가 먼저
+        검사됨을 활용해야 한다. 신중한 다음 라운드 + 잠그는 테스트로 처리할 것.</li>
+      <li><code>요약 없음</code>(rust 테스트 piped 8건 등): tool_result content가 잘려 요약줄이 사라진 경우 —
+        복구 불가(정직하게 unknown 유지).</li>
+      <li><code>disposition(policy_denied)</code> 4건: 정상 unknown(조치 불필요).</li>
+    </ul>
+
+    <h2 id="dogfooding-deferred-2026-06-11">개밥먹기 분석 — 이번 범위 외(deferred)</h2>
+    <ul>
+      <li><strong>비용 미가격</strong>: 6a254a2a 지배 모델 <code>claude-fable-5</code>가 <code>priced:false</code>($0)라
+        헤드라인 비용($27.70)이 과소추정. <code>models_without_pricing</code> 플래그는 있으나 숫자 자체가
+        오해를 부른다(<code>src/insight/pricing.rs</code>).</li>
+      <li><strong>trace_id 상관 공백</strong>: transcript 유래 이벤트(tool_call/result/thinking/hook 등)는
+        trace_id가 공란이라 OTel span과 trace_id로 조인 불가(otel_span·log_record만 33% 보유).
+        OTel-first 원칙과 부분 충돌.</li>
+      <li><strong>turn_duration 결손</strong>: 6a254a2a <code>turn_duration_count 27 &lt; user_turns 38</code>
+        (11턴 누락 — compaction/summary 미발화 추정).</li>
+    </ul>
+
 </main>
 </div>
 </body></html>

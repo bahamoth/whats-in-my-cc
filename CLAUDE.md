@@ -84,6 +84,30 @@ transcript가 아닌 **execution replay**로 "무엇이, 왜 그렇게 됐는가
 
 상세·설계 근거: `docs/implementation-notes.html#untagged-bash-loop`.
 
+## Verification unknown loop — 파서 강화 제안 (untagged-bash의 형제)
+
+검증 가드(test/build/lint/format)의 outcome이 `unknown`으로 남은 run을 모아 파서를
+어떻게 강화할지 **제안**한다(자율 파서 개선 루프를 닫는다). tier-4 휴리스틱 추가는
+소스 편집이라 read-only API 원칙과 충돌하지 않는다.
+
+1. `cd webui && node scripts/unknown-verification.ts --all`(특정 세션만 보려면 끝에 `<sessionId>`).
+   stdout이 **깨끗한 JSON**(npm 배너 없음 — node 직접 실행). read-only Pull API
+   (`/v1/sessions/:id/verification-runs` + `/v1/events/:id/raw`)와 프론트 `collectUnknownVerification`
+   (SSOT, `webui/src/lib/unknownVerification.ts`)를 재사용. 권위 파싱은 Rust에 있고
+   스크립트는 후보 surfacing만 한다.
+   출력: `[{commandKind, statusBasis, count, sampleCommand, sampleContentTail, hint}]` (count 내림차순).
+2. `hint`별로 분류한다: `piped`인데 요약 텍스트가 보이면 `src/ingest/verification_run.rs`의
+   `looks_like_success`/`looks_like_failure`에 패턴 추가 후보. `요약 없음`은 하위 필터(grep/wc)나
+   tool_result 잘림으로 복구 불가. `disposition(...)`은 정상 unknown(조치 불필요). `exit basis인데
+   미해소`는 exit-code 라인·요약 둘 다 미인식 — content tail을 보고 새 패턴 검토.
+3. **주의(false-positive)**: cargo `test`도 빌드 단계에서 "Finished … profile"을 찍으므로
+   build-success 패턴을 무분별 추가하면 실패한 테스트를 통과로 오판한다. 패턴은 command_kind로
+   범위를 한정하고(예: build/build_check에서만 "Finished … target(s)"), `looks_like_failure`가
+   먼저 검사됨을 활용한다. 추가 시 `verification_run.rs` 테스트에 잠그는 케이스를 함께 둘 것(TDD).
+4. 사용자 승인 후 패턴을 추가하고 재ingest → 스크립트를 다시 실행해 unknown이 줄었는지 확인 — 루프가 닫힌다.
+
+상세·설계 근거: `docs/implementation-notes.html#unknown-verification-loop`.
+
 ## Non-goals (절대 만들지 말 것)
 
 - Claude Code 설정 / hook / command / skill / memory 변경
