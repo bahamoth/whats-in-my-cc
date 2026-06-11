@@ -4342,9 +4342,16 @@ vitest: 69 passed
 
     <h2 id="dogfooding-deferred-2026-06-11">개밥먹기 분석 — 이번 범위 외(deferred)</h2>
     <ul>
-      <li><strong>비용 미가격</strong>: 6a254a2a 지배 모델 <code>claude-fable-5</code>가 <code>priced:false</code>($0)라
-        헤드라인 비용($27.70)이 과소추정. <code>models_without_pricing</code> 플래그는 있으나 숫자 자체가
-        오해를 부른다(<code>src/insight/pricing.rs</code>).</li>
+      <li><strong>비용 미가격·Opus 과대 — 2026-06-11 적용</strong>: 6a254a2a 지배 모델
+        <code>claude-fable-5</code>가 가격표에 없어 <code>priced:false</code>($0)로 빠져 헤드라인 비용($27.70)이
+        과소했다. 공식 가격표(platform.claude.com/docs/en/about-claude/pricing)에서 fable/mythos
+        (input $10·5m write $12.50·cache read $1·output $50)를 추가했다. 같이 발견: <code>pricing.rs</code>가
+        <code>opus-4-8/4-7</code>을 은퇴한 Opus-4.1 요금(15/18.75/1.5/75)으로 들고 있어 <strong>3배 과대</strong>였다 —
+        현 공개가 5/6.25/0.5/25로 정정(e8d51785 opus 단독 추정 $189→약 $63). 가격은 주기 갱신이 필요하므로
+        <code>PRICING_VERSION</code>을 임의 v 번호 대신 갱신 날짜로 단일화했다
+        (<code>pricing_estimate@2026-06-11</code>) — usage API가 이 날짜를 그대로 노출해 추정의 신선도를 보인다. <strong>주의</strong>: 비용은 usage 핸들러의 read-path 계산
+        (저장된 <code>usage_facet</code> 토큰 합 × 코드의 가격표)이라 verification/signal과 달리 재ingest 불필요 —
+        serve 재시작(새 바이너리)만으로 반영된다.</li>
       <li><strong>trace_id 상관 공백</strong>: transcript 유래 이벤트(tool_call/result/thinking/hook 등)는
         trace_id가 공란이라 OTel span과 trace_id로 조인 불가(otel_span·log_record만 33% 보유).
         OTel-first 원칙과 부분 충돌.</li>

@@ -75,9 +75,12 @@ async fn usage_endpoint_returns_public_pricing_estimate() {
         data["cost_basis"].as_str().unwrap(),
         "estimate_public_pricing"
     );
+    // Pricing is a periodic-refresh public-rate estimate; the version IS the
+    // update date (YYYY-MM-DD) — no arbitrary v-numbering — so staleness is
+    // visible in the API/UI.
     assert_eq!(
         data["pricing_version"].as_str().unwrap(),
-        "pricing_estimate@v1"
+        "pricing_estimate@2026-06-11"
     );
     // claude-opus-4-7 is in the table → nothing unpriced for this fixture.
     assert!(data["models_without_pricing"]
