@@ -3695,6 +3695,24 @@ vitest: 69 passed
         </ul>
       </li>
     </ul>
+
+    <h3>루프 2회차 — Read/Write 경로 오분류 정정 (2026-06-11 개밥먹기, commit 061ebe3)</h3>
+    <p>
+      위 1회차에서 "잔존 <code>/Users/…</code> 절대경로 토큰 = heredoc 본문 파편(추적 비권장)"이라 본 합의는
+      부분적으로 틀렸다. 상위 2개(<code>/tmp/pr41.diff</code> 25, <code>.gitignore</code> 21)는 heredoc이 아니라
+      <strong>unmatched Read/Edit/Write의 file_path</strong>였다. <code>collectUntagged</code>가 파일 도구를
+      file_path 전체를 토큰으로 잡고 <code>untaggedHint</code>가 공백 없는 토큰이면 무조건
+      <code>BASH_FIRST_TOKEN_TAGS</code>를 가리켜, Read 경로에 "Bash 태그를 추가하라"는 틀린 hint를 냈다.
+    </p>
+    <ul>
+      <li>파일 도구(Read/Edit/Write)는 확장자(또는 dotfile basename)로 aggregate하고 도구별 EXTENSION 맵
+        (<code>READ_EXT_TAGS</code>/<code>WRITE_EXT_TAGS</code>)을 가리키도록 분기. hint를 토큰별로 저장.</li>
+      <li>효과(<code>untagged-bash --all</code>): rows <strong>209→138</strong>, 1·2위가 full-path+BASH hint에서
+        <code>jpg</code>/<code>png</code>/<code>diff</code>(READ_EXT_TAGS)·<code>.gitignore</code>(WRITE_EXT_TAGS, no-ext)로 정정.
+        부수 관찰: <code>jpg</code>(29)·<code>png</code>(26) Read가 많아 READ_EXT_TAGS 후보로 떠오른다.</li>
+      <li>남은 Bash 노이즈(<code>-u</code>/<code>-s</code>/<code>(cd</code>/<code>break</code> — 1회차 line-continuation·서브셸·루프제어 파편)는
+        다음 회차 후보로 유지.</li>
+    </ul>
   </section>
 
   <section id="detector-improvement-loop">
@@ -4283,6 +4301,24 @@ vitest: 69 passed
       <li><code>요약 없음</code>(rust 테스트 piped 8건 등): tool_result content가 잘려 요약줄이 사라진 경우 —
         복구 불가(정직하게 unknown 유지).</li>
       <li><code>disposition(policy_denied)</code> 4건: 정상 unknown(조치 불필요).</li>
+    </ul>
+
+    <p><strong>2차 라운드(2026-06-11 개밥먹기, 적용 — commit 3ddc934):</strong></p>
+    <ul>
+      <li><code>lint</code>(clippy)에만 "Finished … target(s)" 성공 인식을 추가했다
+        (<code>looks_like_lint_success</code>, 호출부에서 <code>command_kind=="lint"</code> 게이트).
+        build/test_suite_*는 위 false-positive 주의대로 제외 — 빌드 단계 "Finished"로 실패 테스트를
+        통과로 오판하기 때문. real fixture: <code>vr_774831107e0b78fd</code>(warning-only 성공).</li>
+      <li><strong>검증으로 본 복구 가능 상한</strong>: 임시 DB 재처리에서 6a254a2a 메인의 clippy 5건 중
+        원본 출력이 보존된 2건만 unknown→passed(estimated)로 승격됐고, 나머지 3건은 <code>grep</code>/
+        <code>wc</code>로 "Finished" 라인이 소실돼 복구 불가. 파서 강화로 줄일 수 있는 unknown에는
+        구조적 바닥이 있다(출력이 가공·소실된 run은 영원히 unknown).</li>
+      <li><strong>재ingest 사실 정정</strong>: 앞서 "raw가 skip되면 파서 변경이 반영 안 된다"고 본 진단은
+        틀렸다. <code>src/ingest/store.rs</code>의 ingest 경로는 <code>sessions_touched</code>의 모든
+        verification_run을 <code>observed_inserted==0</code>(raw 전부 skip)이어도 항상 재계산해
+        <code>insert_or_replace</code>한다. 따라서 insight(verification_run·signal) 레벨 파서 변경은
+        <code>wimcc ingest --all</code>(raw skip + insight 재derive, init-db 불필요, 가벼움)만으로 반영된다.
+        <code>init-db</code> 전체 재생성은 observed 레벨 파싱(payload 필드 추출 등)이 바뀔 때만 필요하다.</li>
     </ul>
 
     <h2 id="dogfooding-deferred-2026-06-11">개밥먹기 분석 — 이번 범위 외(deferred)</h2>
