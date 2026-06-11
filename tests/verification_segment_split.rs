@@ -101,10 +101,12 @@ async fn tsc_typecheck_is_not_detected_honest_gap() {
 
 #[tokio::test]
 async fn piped_to_nonpager_yields_unknown_status() {
-    // Synthetic piped-to-grep case locking the status_basis=piped → unknown
-    // rule at the extractor level. (Isolates the pipe-masking semantics on a
-    // known tool; no genuine `npm test | grep` line exists in this user's
-    // transcripts, so this case is explicitly synthetic.)
+    // Synthetic piped-to-grep case. The content "FAIL src/x.test.ts" carries NO
+    // recognizable success/failure SUMMARY (looks_like_failure matches "FAILED",
+    // "Tests failed", … — not a bare "FAIL <path>"), so the piped run stays
+    // unknown. Since the 2026-06-11 relaxation, piped only stays unknown when no
+    // summary survives the pipe (here it doesn't); a recognized summary upgrades
+    // to estimated. status_basis stays "piped" either way.
     use std::io::Write;
     use tempfile::NamedTempFile;
     let session = "s_piped_unknown";
@@ -143,5 +145,8 @@ async fn piped_to_nonpager_yields_unknown_status() {
         .expect("npm test detected even when piped");
     assert_eq!(m.command_kind, "test_suite_js");
     assert_eq!(m.status_basis, "piped");
-    assert_eq!(m.status, "unknown", "pipe masks exit → status unknown");
+    assert_eq!(
+        m.status, "unknown",
+        "pipe masks exit AND no summary survived → status unknown"
+    );
 }
