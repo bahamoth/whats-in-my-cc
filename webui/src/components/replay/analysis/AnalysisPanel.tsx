@@ -5,11 +5,16 @@
  * Shows deterministic, fact-only metrics — NO judgment/threshold coloring (spec §6.3).
  * props: { metrics: SessionMetricsDto | null }
  */
-import type { SessionMetricsDto } from '../../../api/types';
+import { useMemo, useState } from 'react';
+import type { SessionMetricsDto, SignalDto, EvidenceRef } from '../../../api/types';
 import styles from './AnalysisPanel.module.css';
 
 interface AnalysisPanelProps {
   metrics: SessionMetricsDto | null;
+  /** Session signals — drive the detector drill-down (grouped by detector). */
+  signals?: SignalDto[];
+  /** Select/deep-link an evidence event when a drilled signal is clicked. */
+  onSelectEvent?: (eventId: string) => void;
   /** Forwarded to root div for test selection (e.g. data-testid). */
   'data-testid'?: string;
 }
@@ -18,7 +23,49 @@ function pct(rate: number): string {
   return Math.round(rate * 100) + '%';
 }
 
-export function AnalysisPanel({ metrics, 'data-testid': testId }: AnalysisPanelProps) {
+/** First evidence event id of a signal (refs are bare-string or {event_id}). */
+function firstEvidenceEventId(s: SignalDto): string | null {
+  for (const ref of s.evidence_refs) {
+    if (typeof ref === 'string') return ref;
+    if (ref && typeof (ref as Exclude<EvidenceRef, string>).event_id === 'string') {
+      return (ref as Exclude<EvidenceRef, string>).event_id as string;
+    }
+  }
+  return null;
+}
+
+/** One-line, fact-only label for a drilled signal (no judgment words). */
+function signalLabel(s: SignalDto): string {
+  if (s.detector === 're_read') {
+    const fp = s.facts.file_path;
+    const rc = s.facts.read_count;
+    if (typeof fp === 'string') return `${fp} · ${rc ?? '?'}회`;
+  }
+  if (s.detector === 'tool_failure') {
+    const tool = s.facts.tool_name;
+    const excerpt = s.facts.error_excerpt;
+    if (typeof tool === 'string') {
+      return typeof excerpt === 'string' ? `${tool} · ${excerpt}` : tool;
+    }
+  }
+  return s.summary;
+}
+
+export function AnalysisPanel({
+  metrics,
+  signals,
+  onSelectEvent,
+  'data-testid': testId,
+}: AnalysisPanelProps) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  // Group signals by detector for the drill-down under each bar.
+  const signalsByDetector = useMemo(() => {
+    const m: Record<string, SignalDto[]> = {};
+    for (const s of signals ?? []) (m[s.detector] ??= []).push(s);
+    return m;
+  }, [signals]);
+
   if (!metrics) {
     return (
       <div className={styles.root} data-testid={testId}>
@@ -82,19 +129,51 @@ export function AnalysisPanel({ metrics, 'data-testid': testId }: AnalysisPanelP
           <p className={styles.noDetectors}>감지된 신호 없음</p>
         ) : (
           <div className={styles.detectorList}>
-            {detectorEntries.map(([detector, count]) => (
-              <div key={detector} className={styles.detectorRow}>
-                <span className={styles.detectorName}>{detector}</span>
-                <div className={styles.detectorBarTrack}>
-                  <div
-                    className={styles.bar}
-                    style={{ width: `${Math.round((count / maxCount) * 100)}%` }}
-                    aria-label={`${detector}: ${count}`}
-                  />
+            {detectorEntries.map(([detector, count]) => {
+              const sigs = signalsByDetector[detector] ?? [];
+              const canExpand = sigs.length > 0;
+              const isOpen = expanded === detector;
+              return (
+                <div key={detector}>
+                  <button
+                    type="button"
+                    className={styles.detectorRow}
+                    aria-expanded={canExpand ? isOpen : undefined}
+                    disabled={!canExpand}
+                    onClick={() => canExpand && setExpanded(isOpen ? null : detector)}
+                  >
+                    <span className={styles.detectorName}>{detector}</span>
+                    <div className={styles.detectorBarTrack}>
+                      <div
+                        className={styles.bar}
+                        style={{ width: `${Math.round((count / maxCount) * 100)}%` }}
+                        aria-label={`${detector}: ${count}`}
+                      />
+                    </div>
+                    <span className={styles.detectorCount}>{count}</span>
+                  </button>
+                  {isOpen && (
+                    <ul className={styles.signalList}>
+                      {sigs.map((s) => {
+                        const eid = firstEvidenceEventId(s);
+                        return (
+                          <li key={s.signal_id}>
+                            <button
+                              type="button"
+                              className={styles.signalItem}
+                              disabled={!eid || !onSelectEvent}
+                              onClick={() => eid && onSelectEvent?.(eid)}
+                            >
+                              {signalLabel(s)}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </div>
-                <span className={styles.detectorCount}>{count}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

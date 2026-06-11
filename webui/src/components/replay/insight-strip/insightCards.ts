@@ -157,21 +157,31 @@ function verificationCard(inputs: InsightInputs): InsightCardModel {
   }
   const byKind: Record<string, number> = {};
   let passed = 0;
+  let failed = 0;
+  let unknown = 0;
   let allMeasured = true;
   for (const r of runs) {
     const k = GUARD_KIND[r.command_kind] ?? 'test';
     byKind[k] = (byKind[k] ?? 0) + 1;
     if (r.status === 'passed') passed += 1;
+    else if (r.status === 'failed') failed += 1;
+    else if (r.status === 'unknown') unknown += 1;
     // slice-2 fields: measured only when every run is a known-tool match with a
     // direct exit-code status. Keyword guesses or piped (masked) exits → mixed.
     if (r.detection_basis !== 'known_tool' || r.status_basis !== 'exit') {
       allMeasured = false;
     }
   }
+  // Pass rate is over MEASURED runs (passed+failed), NOT the total — most guards
+  // can be unmeasured (piped, no exit). Surface that denominator + the unmeasured
+  // count so "통과 N" can't be misread against the total (dogfooding 2026-06-11).
+  const measured = passed + failed;
+  const detailParts = Object.entries(byKind).map(([k, n]) => `${k} ${n}`);
+  if (unknown > 0) detailParts.push(`미측정 ${unknown}`);
   return {
     id: 'verification', title: '검증',
-    value: `가드 ${runs.length} · 통과 ${passed}`,
-    detail: Object.entries(byKind).map(([k, n]) => `${k} ${n}`).join(' · '),
+    value: measured > 0 ? `가드 ${runs.length} · 통과 ${passed}/${measured}` : `가드 ${runs.length} · 측정 없음`,
+    detail: detailParts.join(' · '),
     provenance: allMeasured ? 'measured' : 'mixed', tooltip: tip,
     drill: {
       // status_provenance (0022) = how each run's STATUS was determined — a

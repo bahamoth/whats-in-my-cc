@@ -151,12 +151,27 @@ describe('buildInsightCards — verification guards (Q4)', () => {
       vr('format_check', 'skipped'),
     ];
     const c = byId({ ...EMPTY, verificationRuns: runs }).get('verification')!;
-    // 5 guards, 3 passed
-    expect(c.value).toBe('가드 5 · 통과 3');
+    // 5 guards, 3 passed / 1 failed → measured 4 (the 'skipped' run is neither).
+    expect(c.value).toBe('가드 5 · 통과 3/4');
     // all known_tool + exit basis → measured (slice-2 fields present)
     expect(c.provenance).toBe('measured');
     // by-kind breakdown is carried for the drill
     expect(c.drill?.byKind).toEqual({ test: 2, build: 1, lint: 1, format: 1 });
+  });
+
+  it('surfaces the measured denominator and 미측정 count in the headline (dogfooding 2026-06-11)', () => {
+    // The headline must not read "가드 N · 통과 P" with N as the implicit
+    // denominator — most guards can be unmeasured (piped, no exit). Pass rate is
+    // over MEASURED runs (passed+failed); unmeasured count is surfaced.
+    const runs = [
+      vr('test_suite_rust', 'passed'),
+      vr('test_suite_js', 'failed'),
+      vr('build', 'unknown', 'known_tool', 'piped', 'unknown'),
+      vr('lint', 'unknown', 'known_tool', 'piped', 'unknown'),
+    ];
+    const c = byId({ ...EMPTY, verificationRuns: runs }).get('verification')!;
+    expect(c.value).toBe('가드 4 · 통과 1/2');
+    expect(c.detail).toContain('미측정 2');
   });
 
   it('degrades to 혼합 (mixed) when any run was keyword-detected or piped (slice-2 basis)', () => {
