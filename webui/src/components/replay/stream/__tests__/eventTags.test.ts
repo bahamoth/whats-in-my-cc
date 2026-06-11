@@ -251,4 +251,24 @@ describe('collectUntagged', () => {
     const rows = collectUntagged([bash('frobnicate one'), bash('frobnicate two')]);
     expect(rows[0].eventId).toBe('frobnicate one');
   });
+
+  // Dogfooding 2026-06-11: an unmatched Read was surfaced as its FULL PATH with a
+  // BASH_FIRST_TOKEN_TAGS hint (/tmp/pr41.diff was the #1, .gitignore the #2 untagged
+  // "token"). A Read must aggregate by EXTENSION and point the loop at READ_EXT_TAGS.
+  it('surfaces an unmatched Read by EXTENSION under READ_EXT_TAGS, not the full path under BASH', () => {
+    const rows = collectUntagged([read('/tmp/pr41.diff'), read('/other/x.diff')]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ token: 'diff', count: 2 });
+    expect(rows[0].hint).toContain('READ_EXT_TAGS');
+    expect(rows[0].hint).not.toContain('BASH_FIRST_TOKEN_TAGS');
+  });
+
+  it('surfaces an extensionless Read (dotfile) by basename under READ_EXT_TAGS, not BASH', () => {
+    const rows = collectUntagged([read('/repo/.gitignore'), read('/other/.gitignore')]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].count).toBe(2);
+    expect(rows[0].token).toBe('.gitignore');
+    expect(rows[0].hint).toContain('READ_EXT_TAGS');
+    expect(rows[0].hint).not.toContain('BASH_FIRST_TOKEN_TAGS');
+  });
 });
