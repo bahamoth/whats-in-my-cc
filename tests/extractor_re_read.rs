@@ -43,6 +43,34 @@ fn read_call(i: usize, tid: &str, path: &str) -> ObservedEvent {
     }
 }
 
+/// Read ToolCall with optional offset/limit (pagination range) and a sidechain flag.
+/// Dogfooding 2026-06-11: re_read must scope by (main|sidechain) and distinguish
+/// distinct read ranges so pagination is not mistaken for context-loss re-reads.
+fn read_call_ext(
+    i: usize,
+    tid: &str,
+    path: &str,
+    offset: Option<i64>,
+    limit: Option<i64>,
+    sidechain: bool,
+) -> ObservedEvent {
+    let mut input = serde_json::Map::new();
+    input.insert("file_path".into(), json!(path));
+    if let Some(o) = offset {
+        input.insert("offset".into(), json!(o));
+    }
+    if let Some(l) = limit {
+        input.insert("limit".into(), json!(l));
+    }
+    ObservedEvent {
+        tool_use_id: Some(tid.into()),
+        tool_name: Some("Read".into()),
+        is_sidechain: sidechain,
+        payload: json!({ "content_ordinal": i, "tool_name": "Read", "input": input }),
+        ..base_event(i, Actor::Assistant, EventKind::ToolCall)
+    }
+}
+
 fn view_from_events(events: &[ObservedEvent]) -> SessionInsightView<'_> {
     SessionInsightView {
         session_id: "sess_t",
@@ -162,4 +190,62 @@ fn manifest_config_keys_includes_min_reads() {
         "config_keys must include min_reads; got: {:?}",
         m.config_keys
     );
+}
+
+// ── Dogfooding 2026-06-11: pagination ranges + main/sidechain scope (③) ──
+
+/// 같은 파일을 서로 다른 구간(offset)으로 읽는 것은 페이지네이션 — context-loss 아님.
+/// corpus: /tmp/pr41.diff를 offset 1326 등으로 25회 순차 읽음 → 종전엔 re-read로 오판.
+#[test]
+fn pagination_distinct_ranges_does_not_fire() {
+    let events = vec![
+        read_call_ext(0, "t0", "/big.diff", Some(0), Some(200), false),
+        read_call_ext(1, "t1", "/big.diff", Some(200), Some(200), false),
+    ];
+    assert_eq!(
+        ReRead
+            .detect(&view_from_events(&events), &DetectorConfig::default())
+            .len(),
+        0
+    );
+}
+
+/// 같은 파일의 같은 구간을 반복해 읽으면 재읽기로 발화.
+#[test]
+fn same_range_repeated_fires() {
+    let events = vec![
+        read_call_ext(0, "t0", "/big.diff", Some(0), Some(200), false),
+        read_call_ext(1, "t1", "/big.diff", Some(0), Some(200), false),
+    ];
+    let cands = ReRead.detect(&view_from_events(&events), &DetectorConfig::default());
+    assert_eq!(cands.len(), 1);
+    assert_eq!(cands[0].facts["read_count"], json!(2));
+}
+
+/// 메인 1회 + subagent 1회(같은 파일·구간)는 scope가 달라 합산되지 않는다 →
+/// 메인 세션 신호가 subagent 읽기로 오염되지 않는다.
+#[test]
+fn main_and_sidechain_not_merged() {
+    let events = vec![
+        read_call_ext(0, "t0", "/a.rs", None, None, false),
+        read_call_ext(1, "t1", "/a.rs", None, None, true),
+    ];
+    assert_eq!(
+        ReRead
+            .detect(&view_from_events(&events), &DetectorConfig::default())
+            .len(),
+        0
+    );
+}
+
+/// subagent가 같은 파일·구간을 반복하면 sidechain scope로 발화 — subagent 재읽기도 측정된다.
+#[test]
+fn sidechain_re_read_fires_with_sidechain_scope() {
+    let events = vec![
+        read_call_ext(0, "t0", "/a.rs", None, None, true),
+        read_call_ext(1, "t1", "/a.rs", None, None, true),
+    ];
+    let cands = ReRead.detect(&view_from_events(&events), &DetectorConfig::default());
+    assert_eq!(cands.len(), 1);
+    assert_eq!(cands[0].facts["scope"], json!("sidechain"));
 }
