@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tagForEvent, collectUntagged, meaningfulCommand, tagVerb, BASH_FIRST_TOKEN_TAGS, TOOL_SUBCOMMAND_TAGS } from '../eventTags';
+import { tagForEvent, collectUntagged, meaningfulCommand, segmentCommand, tagVerb, BASH_FIRST_TOKEN_TAGS, TOOL_SUBCOMMAND_TAGS } from '../eventTags';
 import type { ObservedEventDto } from '../../../../api/types';
 
 const bash = (command: string): ObservedEventDto =>
@@ -112,6 +112,16 @@ describe('tagForEvent — verb.object taxonomy', () => {
   // ── classifier hardening (tokenizer noise) ──
   it('strips leading whole-line comments before classifying', () => {
     expect(tagForEvent(bash('# explore\ngrep -r x src')).tag).toBe('read.file');
+  });
+  it('date — system-state read (untagged-loop 2026-06-11, corpus 29건)', () => {
+    expect(tagForEvent(bash('date -u +"%Y-%m-%dT%H:%M:%SZ"')).tag).toBe('read.proc');
+  });
+  it('joins backslash line-continuations before segmenting (no bare-\\ segment)', () => {
+    // corpus: `\` was the #2 untagged token (28건) — continuation lines split
+    // on \n produced a lone-backslash segment and flag/path-led segments.
+    expect(tagForEvent(bash('cargo build \\\n  --release')).tag).toBe('build.code');
+    expect(tagForEvent(bash('grep -n foo \\\n  src/lib.rs | \\\n  head -5')).tag).toBe('read.file');
+    expect(segmentCommand('grep foo \\\n  bar')).toEqual(['grep foo bar']);
   });
   it('splits compounds on NEWLINES', () => {
     expect(tagForEvent(bash('cd /x\ngrep y')).tag).toBe('read.file');
