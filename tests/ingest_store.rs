@@ -16,8 +16,12 @@ async fn make_pool() -> sqlx::SqlitePool {
 async fn ingest_minimal_fixture_twice_is_idempotent() {
     let pool = make_pool().await;
     let path = std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl");
-    let stats1 = store::ingest_file(&pool, path, &wimcc::live::NoopSink).await.unwrap();
-    let stats2 = store::ingest_file(&pool, path, &wimcc::live::NoopSink).await.unwrap();
+    let stats1 = store::ingest_file(&pool, path, &wimcc::live::NoopSink)
+        .await
+        .unwrap();
+    let stats2 = store::ingest_file(&pool, path, &wimcc::live::NoopSink)
+        .await
+        .unwrap();
     assert!(stats1.observed_inserted > 0);
     assert_eq!(stats2.raw_inserted, 0, "second run inserts no new raw rows");
     let evs = repo_observed::list_session(&pool, "sess-A", 100)
@@ -33,8 +37,12 @@ async fn ingest_minimal_fixture_twice_is_idempotent() {
 async fn ingest_file_populates_observed_events() {
     let pool = make_pool().await;
     let path = std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl");
-    store::ingest_file(&pool, path, &wimcc::live::NoopSink).await.unwrap();
-    let evs = repo_observed::list_session(&pool, "sess-A", 100).await.unwrap();
+    store::ingest_file(&pool, path, &wimcc::live::NoopSink)
+        .await
+        .unwrap();
+    let evs = repo_observed::list_session(&pool, "sess-A", 100)
+        .await
+        .unwrap();
     assert!(
         !evs.is_empty(),
         "observed_event must be populated after ingest_file; got 0"
@@ -47,9 +55,19 @@ async fn ingest_file_populates_observed_events() {
 async fn ingest_file_observed_events_are_idempotent() {
     let pool = make_pool().await;
     let path = std::path::Path::new("tests/fixtures/transcripts/minimal_session.jsonl");
-    store::ingest_file(&pool, path, &wimcc::live::NoopSink).await.unwrap();
-    let first = repo_observed::list_session(&pool, "sess-A", 100).await.unwrap().len();
-    store::ingest_file(&pool, path, &wimcc::live::NoopSink).await.unwrap();
-    let second = repo_observed::list_session(&pool, "sess-A", 100).await.unwrap().len();
+    store::ingest_file(&pool, path, &wimcc::live::NoopSink)
+        .await
+        .unwrap();
+    let first = repo_observed::list_session(&pool, "sess-A", 100)
+        .await
+        .unwrap()
+        .len();
+    store::ingest_file(&pool, path, &wimcc::live::NoopSink)
+        .await
+        .unwrap();
+    let second = repo_observed::list_session(&pool, "sess-A", 100)
+        .await
+        .unwrap()
+        .len();
     assert_eq!(first, second, "observed_event count must be stable");
 }

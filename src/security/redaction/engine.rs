@@ -179,7 +179,11 @@ fn replace_all_email(text: &str, re: &Regex) -> String {
         if let Some(at_pos) = matched.find('@') {
             let local = &matched[..at_pos];
             let domain = &matched[at_pos..]; // includes '@'
-            let first = local.chars().next().map(|c| c.to_string()).unwrap_or_default();
+            let first = local
+                .chars()
+                .next()
+                .map(|c| c.to_string())
+                .unwrap_or_default();
             result.push_str(&first);
             result.push_str("***");
             result.push_str(domain);

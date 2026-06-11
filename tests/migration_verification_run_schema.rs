@@ -62,11 +62,22 @@ async fn migration_creates_verification_run_table_with_expected_columns() {
     );
 
     // status, session_id, source, command, trigger_event_id must be NOT NULL
-    for notnull_col in &["session_id", "source", "command", "command_kind",
-                          "trigger_event_id", "status", "started_at",
-                          "raw_event_id", "parser_version",
-                          "detection_basis", "status_basis"] {
-        let col = cols.iter().find(|c| c.0 == *notnull_col)
+    for notnull_col in &[
+        "session_id",
+        "source",
+        "command",
+        "command_kind",
+        "trigger_event_id",
+        "status",
+        "started_at",
+        "raw_event_id",
+        "parser_version",
+        "detection_basis",
+        "status_basis",
+    ] {
+        let col = cols
+            .iter()
+            .find(|c| c.0 == *notnull_col)
             .unwrap_or_else(|| panic!("column {notnull_col} must exist"));
         assert_eq!(col.2, 1, "column '{notnull_col}' must be NOT NULL");
     }

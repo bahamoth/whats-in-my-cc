@@ -11,8 +11,7 @@
 fn redaction_engine_masks_in_projection_path() {
     // Calling through the shim module path (insight::redaction_shim::apply_text)
     // must now invoke the real gate and redact secrets.
-    let projected =
-        wimcc::insight::redaction_shim::apply_text("alice@acme.com triggered rm -rf");
+    let projected = wimcc::insight::redaction_shim::apply_text("alice@acme.com triggered rm -rf");
     assert!(
         !projected.contains("alice@acme.com"),
         "real gate must mask emails; shim must no longer be a no-op. got: {projected}"
@@ -21,9 +20,8 @@ fn redaction_engine_masks_in_projection_path() {
 
 #[test]
 fn redaction_engine_replaces_shim_anthropic_key() {
-    let projected = wimcc::insight::redaction_shim::apply_text(
-        "key=sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    );
+    let projected =
+        wimcc::insight::redaction_shim::apply_text("key=sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     assert!(
         !projected.contains("aaaaaaaaaaaaaaaaaaaaaaaaaaa"),
         "real gate must mask Anthropic keys via shim path; got: {projected}"

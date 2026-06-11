@@ -115,7 +115,10 @@ async fn post_logs_real_fixture_normalises_records_to_observed_event() {
     resp.assert_status_ok();
     let v: serde_json::Value = resp.json();
     let accepted = v["data"]["accepted_log_records"].as_u64().unwrap_or(0);
-    assert!(accepted >= 1, "real fixture has ≥1 log record; got {accepted}");
+    assert!(
+        accepted >= 1,
+        "real fixture has ≥1 log record; got {accepted}"
+    );
     let touched = v["data"]["sessions_touched"].as_array().unwrap();
     assert_eq!(touched.len(), 1);
 

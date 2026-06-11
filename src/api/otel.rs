@@ -4,9 +4,7 @@ use serde_json::json;
 use crate::api::dto::{OtelIngestResponse, OtelLogsRawResponse, OtelMetricsRawResponse};
 use crate::ingest::{otel, otel_logs, otel_metrics};
 use crate::live::BroadcastSink;
-use crate::model::meta::{
-    Envelope, ResponseMeta, SOURCE_TYPE_OTEL_LOGS, SOURCE_TYPE_OTEL_METRICS,
-};
+use crate::model::meta::{Envelope, ResponseMeta, SOURCE_TYPE_OTEL_LOGS, SOURCE_TYPE_OTEL_METRICS};
 
 const MAX_DECOMPRESSED_BYTES: usize = 4 * 1024 * 1024;
 

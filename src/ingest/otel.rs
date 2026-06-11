@@ -10,8 +10,8 @@ use crate::error::Result;
 use crate::ids::MonotonicUlidGen;
 use crate::live::{LiveEvent, LiveSink};
 use crate::model::meta::{PARSER_VERSION_OTEL, SCHEMA_VERSION};
-use crate::security::redaction::engine::scan;
 use crate::model::observed::{Actor, EventKind, ObservedEvent, TelemetryFacet};
+use crate::security::redaction::engine::scan;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
@@ -214,9 +214,7 @@ fn flatten_kv(attrs: Option<&Value>) -> Value {
 }
 
 fn string_from(obj: &Value, key: &str) -> Option<String> {
-    obj.get(key)
-        .and_then(|v| v.as_str())
-        .map(String::from)
+    obj.get(key).and_then(|v| v.as_str()).map(String::from)
 }
 
 fn normalize_kind(s: &str) -> &str {

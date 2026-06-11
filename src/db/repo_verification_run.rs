@@ -71,10 +71,7 @@ pub async fn insert(pool: &SqlitePool, row: &NewVerificationRun) -> Result<()> {
 }
 
 /// List all verification runs for a session, ordered by `started_at`.
-pub async fn list_session(
-    pool: &SqlitePool,
-    session_id: &str,
-) -> Result<Vec<VerificationRunRow>> {
+pub async fn list_session(pool: &SqlitePool, session_id: &str) -> Result<Vec<VerificationRunRow>> {
     let rows = sqlx::query(
         "SELECT verification_run_id, schema_version, session_id, source, command,
                 command_kind, trigger_event_id, trigger_tool_use_id, status,

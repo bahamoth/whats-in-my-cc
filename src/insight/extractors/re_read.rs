@@ -29,11 +29,7 @@ impl Detector for ReRead {
         "re_read"
     }
 
-    fn detect(
-        &self,
-        view: &SessionInsightView<'_>,
-        cfg: &DetectorConfig,
-    ) -> Vec<SignalCandidate> {
+    fn detect(&self, view: &SessionInsightView<'_>, cfg: &DetectorConfig) -> Vec<SignalCandidate> {
         let min_reads = cfg.usize_param("re_read", "min_reads", MIN_READS_DEFAULT);
 
         // Group Read tool_calls by (scope, file_path), then by read RANGE
@@ -62,7 +58,9 @@ impl Detector for ReRead {
                 .payload
                 .pointer("/input")
                 .or_else(|| ev.payload.pointer("/tool_use/input"));
-            let Some(path) = input.and_then(|i| i.get("file_path")).and_then(|v| v.as_str())
+            let Some(path) = input
+                .and_then(|i| i.get("file_path"))
+                .and_then(|v| v.as_str())
             else {
                 continue;
             };

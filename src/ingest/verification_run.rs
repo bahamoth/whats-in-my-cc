@@ -32,19 +32,19 @@ pub struct VerificationRunRecord {
     pub verification_run_id: String,
     pub schema_version: &'static str,
     pub session_id: String,
-    pub source: String,              // "bash" | "hook" | "otel"
+    pub source: String, // "bash" | "hook" | "otel"
     pub command: String,
     pub command_kind: String,
     pub trigger_event_id: String,
     pub trigger_tool_use_id: Option<String>,
-    pub status: String,              // "passed" | "failed" | "unknown"
+    pub status: String,                    // "passed" | "failed" | "unknown"
     pub status_provenance: Option<String>, // "measured" | "estimated" | "unknown"
-    pub detection_basis: String,     // "known_tool"  ("test_keyword" is a legacy
-                                     // value that may persist only in older rows;
-                                     // the Tier-2 fallback was removed — spec F2)
-    pub status_basis: String,        // "exit" | "piped" | disposition
-                                     // ("user_rejected"|"policy_denied"|"cancelled"|"background")
-    pub started_at: String,          // ISO 8601 UTC
+    pub detection_basis: String,           // "known_tool"  ("test_keyword" is a legacy
+    // value that may persist only in older rows;
+    // the Tier-2 fallback was removed — spec F2)
+    pub status_basis: String, // "exit" | "piped" | disposition
+    // ("user_rejected"|"policy_denied"|"cancelled"|"background")
+    pub started_at: String, // ISO 8601 UTC
     pub ended_at: Option<String>,
     pub exit_code: Option<i32>,
     pub failure_summary: Option<String>,
@@ -78,8 +78,7 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
     }
 
     // Track produced trigger_event_ids to deduplicate hook vs bash rows.
-    let mut seen_trigger_ids: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut seen_trigger_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut out: Vec<VerificationRunRecord> = Vec::new();
 
     // --- Bash branch ---
@@ -224,7 +223,11 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             (status, status_provenance_str.to_string())
         };
         let status_provenance = Some(status_provenance);
-        let failure_summary = if status == "failed" { failure_summary } else { None };
+        let failure_summary = if status == "failed" {
+            failure_summary
+        } else {
+            None
+        };
 
         // trigger_event_id = the tool_result event (or the tool_call if no result)
         let trigger_event_id = result_ev
@@ -419,9 +422,9 @@ pub struct MatchedSegment {
     pub command: String,
     pub command_kind: &'static str,
     pub detection_basis: &'static str, // "known_tool" (extractor only emits this;
-                                       // "test_keyword" is a legacy value that may
-                                       // persist only in older rows — spec F2)
-    pub status_basis: &'static str,    // "exit" | "piped"
+    // "test_keyword" is a legacy value that may
+    // persist only in older rows — spec F2)
+    pub status_basis: &'static str, // "exit" | "piped"
 }
 
 /// Pager / output-filter commands. When the matched segment is piped INTO one
@@ -535,10 +538,7 @@ fn normalise_command(cmd: &str) -> &str {
     // Find the first occurrence of shell metacharacter sequences.
     // We scan for: " 2>&1", " |", " ;", " &&", " &"
     let seps = [" 2>&1", " |", " ;", " &&", " &"];
-    let cut = seps
-        .iter()
-        .filter_map(|sep| cmd.find(sep))
-        .min();
+    let cut = seps.iter().filter_map(|sep| cmd.find(sep)).min();
     if let Some(pos) = cut {
         cmd[..pos].trim_end()
     } else {
@@ -632,8 +632,8 @@ fn truncate(s: &str, max_bytes: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{TimeZone, Utc};
     use crate::model::observed::{Actor, EventKind, ObservedEvent};
+    use chrono::{TimeZone, Utc};
 
     fn ts_inline(i: i64) -> chrono::DateTime<Utc> {
         Utc.timestamp_opt(1_700_000_000 + i * 10, 0).unwrap()
@@ -745,10 +745,7 @@ mod tests {
         let runs = extract_verification_runs(&evs);
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].status, "passed");
-        assert_eq!(
-            runs[0].status_provenance.as_deref(),
-            Some("estimated")
-        );
+        assert_eq!(runs[0].status_provenance.as_deref(), Some("estimated"));
     }
 
     /// piped helper: a Bash run whose command is piped to a non-pager (so the
@@ -807,7 +804,10 @@ mod tests {
         );
         let runs = extract_verification_runs(&evs);
         assert_eq!(runs.len(), 1);
-        assert_eq!(runs[0].status, "unknown", "no summary in piped output → unknown");
+        assert_eq!(
+            runs[0].status, "unknown",
+            "no summary in piped output → unknown"
+        );
         assert_eq!(runs[0].status_basis, "piped");
     }
 
@@ -926,8 +926,7 @@ mod tests {
     #[test]
     fn matched_segment_picks_known_tool_after_cd_newline_real_data() {
         // Real-data shape (newline connector). Pager pipe (tail) keeps exit basis.
-        let m = matched_segment("cd /tmp/webui\nnpx vitest run 2>&1 | tail -12")
-            .expect("match");
+        let m = matched_segment("cd /tmp/webui\nnpx vitest run 2>&1 | tail -12").expect("match");
         assert_eq!(m.command, "npx vitest run 2>&1");
         assert_eq!(m.command_kind, "test_suite_js");
         assert_eq!(m.detection_basis, "known_tool");

@@ -102,9 +102,7 @@ fn build_record(
     let line_range_after = if h.new_lines > 0 {
         Some((
             h.new_start,
-            h.new_start
-                .saturating_add(h.new_lines)
-                .saturating_sub(1),
+            h.new_start.saturating_add(h.new_lines).saturating_sub(1),
         ))
     } else {
         None

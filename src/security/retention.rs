@@ -72,7 +72,9 @@ impl std::str::FromStr for Profile {
             "none" => Ok(Profile::None),
             "default" => Ok(Profile::Default),
             "strict" => Ok(Profile::Strict),
-            _ => Err(anyhow::anyhow!("unknown retention profile: {s}; expected none|default|strict")),
+            _ => Err(anyhow::anyhow!(
+                "unknown retention profile: {s}; expected none|default|strict"
+            )),
         }
     }
 }
@@ -158,8 +160,7 @@ pub fn spawn_sweep_task(
         if policy.profile == Profile::None {
             return;
         }
-        let mut interval =
-            tokio::time::interval(std::time::Duration::from_secs(6 * 60 * 60));
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(6 * 60 * 60));
         loop {
             tokio::select! {
                 _ = cancel.cancelled() => {

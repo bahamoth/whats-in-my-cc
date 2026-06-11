@@ -7,12 +7,11 @@ async fn audit_table_has_expected_columns() {
     let pool = wimcc::db::connect(":memory:").await.unwrap();
     wimcc::db::migrate(&pool).await.unwrap();
 
-    let rows: Vec<(String,)> = sqlx::query_as(
-        "SELECT name FROM pragma_table_info('audit') ORDER BY name",
-    )
-    .fetch_all(&pool)
-    .await
-    .unwrap();
+    let rows: Vec<(String,)> =
+        sqlx::query_as("SELECT name FROM pragma_table_info('audit') ORDER BY name")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
     let cols: Vec<&str> = rows.iter().map(|(n,)| n.as_str()).collect();
     assert!(cols.contains(&"audit_id"), "should have audit_id");
     assert!(cols.contains(&"event"), "should have event");
@@ -33,10 +32,9 @@ async fn audit_insert_and_query_works() {
     .await
     .unwrap();
 
-    let (event,): (String,) =
-        sqlx::query_as("SELECT event FROM audit WHERE audit_id = 'aud_001'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let (event,): (String,) = sqlx::query_as("SELECT event FROM audit WHERE audit_id = 'aud_001'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(event, "test.event");
 }

@@ -95,11 +95,13 @@ async fn episode_detail_route_is_gone() {
 #[tokio::test]
 async fn episode_table_dropped_by_migration() {
     let pool = make_pool().await;
-    let (count,): (i64,) = sqlx::query_as(
-        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='episode'",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(count, 0, "episode table must not exist after migration 0017");
+    let (count,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='episode'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        count, 0,
+        "episode table must not exist after migration 0017"
+    );
 }

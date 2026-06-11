@@ -116,10 +116,7 @@ fn check_env(key: &str, expected: Option<&str>) -> EnvCheck {
     let value = std::env::var(key).ok();
     let (status, note) = match (&value, expected) {
         (Some(v), Some(want)) if v == want => ("ok", None),
-        (Some(v), Some(want)) => (
-            "wrong",
-            Some(format!("got {v:?}, expected {want:?}")),
-        ),
+        (Some(v), Some(want)) => ("wrong", Some(format!("got {v:?}, expected {want:?}"))),
         (Some(_), None) => ("ok", None),
         (None, _) => ("unset", None),
     };
@@ -309,8 +306,7 @@ async fn probe_server(server: &str) -> ServerProbe {
                 if let Ok(j) = r.json::<serde_json::Value>().await {
                     if let Some(sources) = j["data"]["sources"].as_array() {
                         for s in sources {
-                            let label =
-                                s["label"].as_str().unwrap_or("?").to_string();
+                            let label = s["label"].as_str().unwrap_or("?").to_string();
                             let last = s["last_ingested_at"].as_str().map(String::from);
                             let r24 = s["row_count_24h"].as_i64().unwrap_or(0);
                             let tot = s["total_rows"].as_i64().unwrap_or(0);
@@ -366,7 +362,11 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
     let endpoint_ok_file = report
         .effective_env
         .get("OTEL_EXPORTER_OTLP_ENDPOINT")
-        .map(|v| v.value.trim_end_matches('/').ends_with(EXPECTED_ENDPOINT_SUFFIX))
+        .map(|v| {
+            v.value
+                .trim_end_matches('/')
+                .ends_with(EXPECTED_ENDPOINT_SUFFIX)
+        })
         .unwrap_or(false);
     let endpoint_ok_process = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
         .ok()
@@ -414,9 +414,7 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
     }
 
     if !report.server.reachable {
-        out.push(
-            "wimcc server unreachable. Start it with: `wimcc serve --auto-migrate`.".into(),
-        );
+        out.push("wimcc server unreachable. Start it with: `wimcc serve --auto-migrate`.".into());
     } else {
         // Hook is user-configured and intentionally excluded from the
         // "no data, do X" recommendation — doctor doesn't know X.
@@ -532,7 +530,11 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
         for s in &sp.sources {
             let info = INFO_SOURCES.contains(&s.label.as_str());
             let marker = if info {
-                if s.status == "no_data" { dim("ℹ") } else { green("✓") }
+                if s.status == "no_data" {
+                    dim("ℹ")
+                } else {
+                    green("✓")
+                }
             } else {
                 match s.status {
                     "recent" => green("✓"),
@@ -541,7 +543,11 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
                 }
             };
             let last = s.last_ingested_at.as_deref().unwrap_or("—");
-            let suffix = if info { dim("  (info-only)") } else { String::new() };
+            let suffix = if info {
+                dim("  (info-only)")
+            } else {
+                String::new()
+            };
             writeln!(
                 w,
                 "  {marker} {:<12} {:<28} {:>9} {:>8}{}",
@@ -562,9 +568,17 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
     writeln!(w)?;
 
     // ---- slice-7 v0.2 sections ----
-    writeln!(w, "{}", dim("# Settings files probed (Claude Code hierarchy)"))?;
+    writeln!(
+        w,
+        "{}",
+        dim("# Settings files probed (Claude Code hierarchy)")
+    )?;
     for s in &report.settings_scopes {
-        let marker = if s.present { green("✓") } else { yellow("∅") };
+        let marker = if s.present {
+            green("✓")
+        } else {
+            yellow("∅")
+        };
         writeln!(w, "  {marker} {:<10} {}", s.label, s.path.display())?;
         if let Some(n) = &s.note {
             writeln!(w, "      {}", dim(n))?;
@@ -572,17 +586,32 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
     }
     writeln!(w)?;
 
-    writeln!(w, "{}", dim("# Effective OTel env (file scope = what `claude` will see)"))?;
+    writeln!(
+        w,
+        "{}",
+        dim("# Effective OTel env (file scope = what `claude` will see)")
+    )?;
     if report.effective_env.is_empty() {
         writeln!(w, "  {} no env block in any scope", yellow("∅"))?;
     } else {
         for (k, src) in &report.effective_env {
-            writeln!(w, "  {} {:<40} = {:<24} ({})", green("✓"), k, src.value, src.scope)?;
+            writeln!(
+                w,
+                "  {} {:<40} = {:<24} ({})",
+                green("✓"),
+                k,
+                src.value,
+                src.scope
+            )?;
         }
     }
     if !report.env_divergence.is_empty() {
         writeln!(w)?;
-        writeln!(w, "  {}", dim("env divergence between file scope and current shell:"))?;
+        writeln!(
+            w,
+            "  {}",
+            dim("env divergence between file scope and current shell:")
+        )?;
         for d in &report.env_divergence {
             let file = d
                 .file_value
@@ -602,8 +631,7 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
     writeln!(w, "{}", dim("# Hook forwarding to wimcc"))?;
     let mut all_hooks = report.hook_entries.clone();
     all_hooks.extend(report.plugin_hooks.iter().cloned());
-    let wimcc_hooks: Vec<&HookEntry> =
-        all_hooks.iter().filter(|h| h.forwards_to_wimcc).collect();
+    let wimcc_hooks: Vec<&HookEntry> = all_hooks.iter().filter(|h| h.forwards_to_wimcc).collect();
     if wimcc_hooks.is_empty() {
         writeln!(
             w,
@@ -612,14 +640,24 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
         )?;
     } else {
         for h in &wimcc_hooks {
-            writeln!(w, "  {} {:<14} → {} ({})", green("✓"), h.event, h.command, h.scope)?;
+            writeln!(
+                w,
+                "  {} {:<14} → {} ({})",
+                green("✓"),
+                h.event,
+                h.command,
+                h.scope
+            )?;
         }
     }
     // surface non-wimcc hooks too if present
-    let other_hooks: Vec<&HookEntry> =
-        all_hooks.iter().filter(|h| !h.forwards_to_wimcc).collect();
+    let other_hooks: Vec<&HookEntry> = all_hooks.iter().filter(|h| !h.forwards_to_wimcc).collect();
     if !other_hooks.is_empty() {
-        writeln!(w, "  {}", dim("(other hooks observed; not relevant to wimcc):"))?;
+        writeln!(
+            w,
+            "  {}",
+            dim("(other hooks observed; not relevant to wimcc):")
+        )?;
         for h in other_hooks.iter().take(5) {
             writeln!(w, "    {:<14} {} ({})", h.event, h.command, h.scope)?;
         }
@@ -629,12 +667,18 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
     }
     writeln!(w)?;
 
-    if report.managed_policy.allow_managed_hooks_only
-        || report.managed_policy.disable_all_hooks
-    {
-        writeln!(w, "{}", dim("# Managed policy (may silence user/project hooks)"))?;
+    if report.managed_policy.allow_managed_hooks_only || report.managed_policy.disable_all_hooks {
+        writeln!(
+            w,
+            "{}",
+            dim("# Managed policy (may silence user/project hooks)")
+        )?;
         if report.managed_policy.disable_all_hooks {
-            writeln!(w, "  {} disableAllHooks = true — no hooks will fire", red("✗"))?;
+            writeln!(
+                w,
+                "  {} disableAllHooks = true — no hooks will fire",
+                red("✗")
+            )?;
         }
         if report.managed_policy.allow_managed_hooks_only {
             writeln!(
@@ -647,7 +691,11 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
     }
 
     if !report.recommendations.is_empty() {
-        writeln!(w, "{}", dim("# Recommendations (none of these will be applied automatically)"))?;
+        writeln!(
+            w,
+            "{}",
+            dim("# Recommendations (none of these will be applied automatically)")
+        )?;
         for r in &report.recommendations {
             for line in r.lines() {
                 writeln!(w, "  {line}")?;
@@ -681,8 +729,9 @@ pub async fn run(opts: DoctorOpts) -> std::io::Result<i32> {
         .or_else(settings::default_plugins_root)
         .unwrap_or_else(|| PathBuf::from("/nonexistent"));
     let all_hooks = settings::hook_entries(&settings_scopes, &plugins_root);
-    let (plugin_hooks, hook_entries): (Vec<HookEntry>, Vec<HookEntry>) =
-        all_hooks.into_iter().partition(|h| h.scope.starts_with("plugin:"));
+    let (plugin_hooks, hook_entries): (Vec<HookEntry>, Vec<HookEntry>) = all_hooks
+        .into_iter()
+        .partition(|h| h.scope.starts_with("plugin:"));
     let managed_policy = settings::managed_policy(&settings_scopes);
 
     // env divergence: file-effective vs process env, for keys relevant to OTel.

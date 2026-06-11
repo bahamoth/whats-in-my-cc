@@ -1,8 +1,8 @@
 //! Slice-17 — MCP tool: whats_in_my_cc.get_otel_trace
 
 use serde_json::{json, Value};
-use sqlx::SqlitePool;
 use sqlx::Row;
+use sqlx::SqlitePool;
 
 use crate::api::mcp::tools::{tool_error, tool_success};
 

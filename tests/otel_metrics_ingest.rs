@@ -115,7 +115,10 @@ async fn post_metrics_real_fixture_normalises_data_points_to_observed_event() {
     resp.assert_status_ok();
     let v: serde_json::Value = resp.json();
     let accepted = v["data"]["accepted_data_points"].as_u64().unwrap_or(0);
-    assert!(accepted >= 3, "real fixture has ≥3 data points; got {accepted}");
+    assert!(
+        accepted >= 3,
+        "real fixture has ≥3 data points; got {accepted}"
+    );
     let touched = v["data"]["sessions_touched"].as_array().unwrap();
     assert_eq!(touched.len(), 1, "real fixture has one session");
 

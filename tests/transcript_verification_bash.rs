@@ -39,10 +39,7 @@ async fn extracts_verification_runs_from_real_bash_fixture() {
     // Real fixture: 3 pairs from aac68973 — 2 x cargo test, 1 x cargo build --release.
     // All 3 have is_error=false (passed). No real failed tests in this transcript
     // (DEV-S11-06: real transcript has no failing Bash test commands; all 3 are passed).
-    let evs = load_fixture_events(
-        "tests/fixtures/transcripts/real/verification_v01.jsonl",
-    )
-    .await;
+    let evs = load_fixture_events("tests/fixtures/transcripts/real/verification_v01.jsonl").await;
 
     let runs = extract_verification_runs(&evs);
 
@@ -69,20 +66,21 @@ async fn extracts_verification_runs_from_real_bash_fixture() {
     let failed = runs.iter().filter(|r| r.status == "failed").count();
     let unknown = runs.iter().filter(|r| r.status == "unknown").count();
     assert_eq!(
-        failed,
-        2,
+        failed, 2,
         "2 real-fixture test runs have failure content (Tier-4 estimated)"
     );
     assert_eq!(
-        unknown,
-        1,
+        unknown, 1,
         "1 real-fixture build run has no failure content → unknown"
     );
 
     // Validate common fields on every run
     for r in &runs {
         assert!(!r.session_id.is_empty(), "session_id must not be empty");
-        assert!(!r.trigger_event_id.is_empty(), "trigger_event_id must not be empty");
+        assert!(
+            !r.trigger_event_id.is_empty(),
+            "trigger_event_id must not be empty"
+        );
         assert!(!r.command.is_empty(), "command must not be empty");
         assert!(!r.command_kind.is_empty(), "command_kind must not be empty");
         assert!(
@@ -164,7 +162,9 @@ async fn produces_no_runs_for_non_test_bash() {
         .await
         .unwrap();
     migrate(&pool).await.unwrap();
-    store::ingest_file(&pool, f.path(), &NoopSink).await.unwrap();
+    store::ingest_file(&pool, f.path(), &NoopSink)
+        .await
+        .unwrap();
     let evs = repo_observed::list_session(&pool, session_id, 1000)
         .await
         .unwrap();
@@ -181,17 +181,23 @@ async fn produces_no_runs_for_non_test_bash() {
 async fn deduplicates_by_trigger_event_id() {
     // Two calls to extract_verification_runs on the same events must produce
     // identical IDs (deterministic IDs keyed on trigger_event_id).
-    let evs = load_fixture_events(
-        "tests/fixtures/transcripts/real/verification_v01.jsonl",
-    )
-    .await;
+    let evs = load_fixture_events("tests/fixtures/transcripts/real/verification_v01.jsonl").await;
 
     let runs1 = extract_verification_runs(&evs);
     let runs2 = extract_verification_runs(&evs);
 
     assert_eq!(runs1.len(), runs2.len(), "run counts must be deterministic");
 
-    let ids1: Vec<&str> = runs1.iter().map(|r| r.verification_run_id.as_str()).collect();
-    let ids2: Vec<&str> = runs2.iter().map(|r| r.verification_run_id.as_str()).collect();
-    assert_eq!(ids1, ids2, "run IDs must be deterministic across two extractions");
+    let ids1: Vec<&str> = runs1
+        .iter()
+        .map(|r| r.verification_run_id.as_str())
+        .collect();
+    let ids2: Vec<&str> = runs2
+        .iter()
+        .map(|r| r.verification_run_id.as_str())
+        .collect();
+    assert_eq!(
+        ids1, ids2,
+        "run IDs must be deterministic across two extractions"
+    );
 }

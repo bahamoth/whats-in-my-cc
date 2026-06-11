@@ -9,11 +9,7 @@ async fn migrate_creates_expected_tables() {
         .await
         .unwrap();
     wimcc::db::migrate(&pool).await.unwrap();
-    for t in [
-        "ingest_run",
-        "raw_event",
-        "observed_event",
-    ] {
+    for t in ["ingest_run", "raw_event", "observed_event"] {
         let row: (i64,) =
             sqlx::query_as("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?")
                 .bind(t)

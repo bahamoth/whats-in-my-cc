@@ -138,10 +138,7 @@ fn is_well_formed_event_id(s: &str) -> bool {
     // `log:<resource>:<time>:<trace>:<span>`. So we accept anything that looks
     // like a printable ASCII id of reasonable length. Truly malformed
     // (control chars, > 200 bytes) → 400; unknown-but-well-formed → resync.
-    !s.is_empty()
-        && s.len() <= 200
-        && s.chars()
-            .all(|c| c.is_ascii() && !c.is_ascii_control())
+    !s.is_empty() && s.len() <= 200 && s.chars().all(|c| c.is_ascii() && !c.is_ascii_control())
 }
 
 async fn load_backfill(
@@ -256,7 +253,9 @@ mod tests {
         // 400 → onerror → reconnect loop with no data ever delivered. Observed live
         // on bahamoth's server when the WebUI sent
         // `last_event_id=metric:595247aa:claude_code.token.usage:...`.
-        assert!(ok("metric:abc:claude_code.token.usage:1779340143371000000:c334b58e"));
+        assert!(ok(
+            "metric:abc:claude_code.token.usage:1779340143371000000:c334b58e"
+        ));
         assert!(ok("log:abc:1779340143371000000:trace:span"));
     }
 
@@ -267,9 +266,9 @@ mod tests {
 
     #[test]
     fn rejected_inputs() {
-        assert!(!ok(""));                  // empty
-        assert!(!ok("with\ncontrol"));     // control char
-        assert!(!ok(&"x".repeat(300)));    // too long
-        assert!(!ok("non-ascii: 한글"));    // non-ASCII
+        assert!(!ok("")); // empty
+        assert!(!ok("with\ncontrol")); // control char
+        assert!(!ok(&"x".repeat(300))); // too long
+        assert!(!ok("non-ascii: 한글")); // non-ASCII
     }
 }

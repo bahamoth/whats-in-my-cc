@@ -136,8 +136,12 @@ async fn piped_to_nonpager_yields_unknown_status() {
         .await
         .unwrap();
     migrate(&pool).await.unwrap();
-    store::ingest_file(&pool, f.path(), &NoopSink).await.unwrap();
-    let evs = repo_observed::list_session(&pool, session, 1000).await.unwrap();
+    store::ingest_file(&pool, f.path(), &NoopSink)
+        .await
+        .unwrap();
+    let evs = repo_observed::list_session(&pool, session, 1000)
+        .await
+        .unwrap();
     let runs = extract_verification_runs(&evs);
     let m = runs
         .iter()

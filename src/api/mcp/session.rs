@@ -6,10 +6,10 @@
 //!
 //! DEV-S17-04: sessions are in-memory only; server restart invalidates them.
 
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
-use serde_json::Value;
 
 /// Notification sent over the SSE channel to MCP clients.
 #[derive(Debug, Clone)]

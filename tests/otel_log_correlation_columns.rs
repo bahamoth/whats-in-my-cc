@@ -53,7 +53,12 @@ async fn otel_log_record_attributes_tool_use_id_and_request_id_land_in_columns()
     .await
     .unwrap();
 
-    assert_eq!(rows.len(), 2, "expected 2 log_record rows; got {}", rows.len());
+    assert_eq!(
+        rows.len(),
+        2,
+        "expected 2 log_record rows; got {}",
+        rows.len()
+    );
 
     // First record carries both correlation keys.
     let (tool_use_id, request_id) = &rows[0];

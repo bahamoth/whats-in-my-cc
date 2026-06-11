@@ -3,9 +3,9 @@
 
 use sqlx::SqlitePool;
 
-use crate::db::{repo_diff_hunk, repo_observed, repo_verification_run};
 use crate::db::repo_diff_hunk::DiffHunkRow;
 use crate::db::repo_verification_run::VerificationRunRow;
+use crate::db::{repo_diff_hunk, repo_observed, repo_verification_run};
 use crate::error::Result;
 use crate::model::observed::ObservedEvent;
 

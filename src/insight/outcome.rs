@@ -83,11 +83,8 @@ pub fn resolve_outcome(events: &[ObservedEvent], tool_use_id: &str) -> Outcome {
         if ev.tool_use_id.as_deref() != Some(tool_use_id) {
             continue;
         }
-        let is_tool_result_log = ev
-            .payload
-            .pointer("/event_name")
-            .and_then(|v| v.as_str())
-            == Some("tool_result");
+        let is_tool_result_log =
+            ev.payload.pointer("/event_name").and_then(|v| v.as_str()) == Some("tool_result");
         if !is_tool_result_log {
             continue;
         }
@@ -261,8 +258,14 @@ mod tests {
         // values seen: 1, 2, 5, 7, 101, 127, 128, 143. The colon-only parser
         // silently dropped every one of these (measured failures lost). The parser
         // MUST recognise the real CC format.
-        assert_eq!(parse_exit_code("Exit code 101\nthread 'main' panicked"), Some(101));
-        assert_eq!(parse_exit_code("Exit code 7\nintentional non-zero exit"), Some(7));
+        assert_eq!(
+            parse_exit_code("Exit code 101\nthread 'main' panicked"),
+            Some(101)
+        );
+        assert_eq!(
+            parse_exit_code("Exit code 7\nintentional non-zero exit"),
+            Some(7)
+        );
         assert_eq!(parse_exit_code("Exit code 1"), Some(1));
     }
 
@@ -314,7 +317,13 @@ mod tests {
         // line counts. Prose mentioning "exit code" mid-line must NOT match, so a
         // command whose OUTPUT happens to contain the phrase isn't misread as the
         // command's own outcome (4 such mid-line cases observed in real data).
-        assert_eq!(parse_exit_code("see the returned exit code 5 in the log"), None);
-        assert_eq!(parse_exit_code("the script printed exit code: 9 to stdout"), None);
+        assert_eq!(
+            parse_exit_code("see the returned exit code 5 in the log"),
+            None
+        );
+        assert_eq!(
+            parse_exit_code("the script printed exit code: 9 to stdout"),
+            None
+        );
     }
 }

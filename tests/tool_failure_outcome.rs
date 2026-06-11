@@ -39,13 +39,17 @@ fn mk(i: i64, kind: EventKind, payload: serde_json::Value) -> ObservedEvent {
 fn tool_result(i: i64, tid: &str, is_error: bool, content: &str) -> ObservedEvent {
     ObservedEvent {
         tool_use_id: Some(tid.into()),
-        ..mk(i, EventKind::ToolResult, json!({
-            "tool_result": {
-                "tool_use_id": tid,
-                "is_error": is_error,
-                "content": content
-            }
-        }))
+        ..mk(
+            i,
+            EventKind::ToolResult,
+            json!({
+                "tool_result": {
+                    "tool_use_id": tid,
+                    "is_error": is_error,
+                    "content": content
+                }
+            }),
+        )
     }
 }
 
@@ -76,13 +80,17 @@ fn tool_call_cmd(i: i64, tid: &str, name: &str, cmd: &str) -> ObservedEvent {
 fn otlp_log(i: i64, tid: &str, success: &str) -> ObservedEvent {
     ObservedEvent {
         tool_use_id: Some(tid.into()),
-        ..mk(i, EventKind::LogRecord, json!({
-            "event_name": "tool_result",
-            "attributes": {
-                "tool_use_id": tid,
-                "success": success
-            }
-        }))
+        ..mk(
+            i,
+            EventKind::LogRecord,
+            json!({
+                "event_name": "tool_result",
+                "attributes": {
+                    "tool_use_id": tid,
+                    "success": success
+                }
+            }),
+        )
     }
 }
 

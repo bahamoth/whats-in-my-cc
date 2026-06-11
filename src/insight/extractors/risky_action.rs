@@ -26,15 +26,15 @@ use crate::model::observed::EventKind;
 /// Locked by synthetic fixture; no real `rm -rf` observed in 9-transcript survey
 /// (DEV-S16-01).
 pub const DESTRUCTIVE_PATTERNS: &[&str] = &[
-    r"\brm\s+-[rRfF]*[rR][fF]?\b",  // rm -rf, rm -fr, rm -r, rm -f variants
-    r"\bsudo\s+rm\b",                // sudo rm (any form)
+    r"\brm\s+-[rRfF]*[rR][fF]?\b", // rm -rf, rm -fr, rm -r, rm -f variants
+    r"\bsudo\s+rm\b",              // sudo rm (any form)
     r"\bgit\s+push\s+(--force|-f)\b", // git push --force or git push -f
-    r"\bgit\s+reset\s+--hard\b",     // git reset --hard
-    r"\bgit\s+clean\s+-[fdFD]+\b",   // git clean -fd, -fD, etc.
+    r"\bgit\s+reset\s+--hard\b",   // git reset --hard
+    r"\bgit\s+clean\s+-[fdFD]+\b", // git clean -fd, -fD, etc.
     r"\bgit\s+checkout\s+(-{1,2}\s+)?\.\b", // git checkout -- . or git checkout .
-    r"\bdd\s+if=",                   // dd if=... (disk copy/wipe)
-    r"\bmkfs\.",                     // mkfs.ext4, mkfs.vfat, etc.
-    r"\bshred\b",                    // shred (secure delete)
+    r"\bdd\s+if=",                 // dd if=... (disk copy/wipe)
+    r"\bmkfs\.",                   // mkfs.ext4, mkfs.vfat, etc.
+    r"\bshred\b",                  // shred (secure delete)
 ];
 
 pub struct RiskyAction;
@@ -73,7 +73,8 @@ impl Detector for RiskyAction {
             .collect();
 
         let mut candidates: Vec<SignalCandidate> = Vec::new();
-        let mut emitted_events: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut emitted_events: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
 
         // --- Branch (a): destructive Bash tool_call ---
         for ev in view.events {
@@ -129,8 +130,7 @@ impl Detector for RiskyAction {
             let command_preview: String = command.chars().take(80).collect();
             let summary = format!(
                 "Destructive Bash command detected (tool_use_id={:?}): {}",
-                ev.tool_use_id,
-                command_preview
+                ev.tool_use_id, command_preview
             );
 
             candidates.push(SignalCandidate {
@@ -200,7 +200,11 @@ impl Detector for RiskyAction {
 /// Extract up to 256 chars from the most recent user_message before `event_id`.
 fn find_preceding_user_excerpt(view: &SessionInsightView<'_>, event_id: &str) -> String {
     use crate::model::observed::{Actor, EventKind};
-    let pos = view.events.iter().position(|e| e.event_id == event_id).unwrap_or(0);
+    let pos = view
+        .events
+        .iter()
+        .position(|e| e.event_id == event_id)
+        .unwrap_or(0);
     for ev in view.events[..pos].iter().rev() {
         if ev.actor == Actor::User && ev.kind == EventKind::UserMessage {
             let text = extract_message_text(&ev.payload);
@@ -213,7 +217,11 @@ fn find_preceding_user_excerpt(view: &SessionInsightView<'_>, event_id: &str) ->
 /// Extract up to 256 chars from the most recent assistant_message before `event_id`.
 fn find_preceding_assistant_excerpt(view: &SessionInsightView<'_>, event_id: &str) -> String {
     use crate::model::observed::{Actor, EventKind};
-    let pos = view.events.iter().position(|e| e.event_id == event_id).unwrap_or(0);
+    let pos = view
+        .events
+        .iter()
+        .position(|e| e.event_id == event_id)
+        .unwrap_or(0);
     for ev in view.events[..pos].iter().rev() {
         if ev.actor == Actor::Assistant && ev.kind == EventKind::AssistantMessage {
             let text = extract_message_text(&ev.payload);
@@ -230,7 +238,9 @@ fn extract_message_text(payload: &serde_json::Value) -> String {
             return arr
                 .iter()
                 .filter_map(|item| {
-                    item.get("text").and_then(|t| t.as_str()).map(|s| s.to_string())
+                    item.get("text")
+                        .and_then(|t| t.as_str())
+                        .map(|s| s.to_string())
                 })
                 .collect::<Vec<_>>()
                 .join(" ");

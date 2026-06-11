@@ -7,12 +7,11 @@ async fn retention_tombstone_table_has_expected_columns() {
     let pool = wimcc::db::connect(":memory:").await.unwrap();
     wimcc::db::migrate(&pool).await.unwrap();
 
-    let rows: Vec<(String,)> = sqlx::query_as(
-        "SELECT name FROM pragma_table_info('retention_tombstone') ORDER BY name",
-    )
-    .fetch_all(&pool)
-    .await
-    .unwrap();
+    let rows: Vec<(String,)> =
+        sqlx::query_as("SELECT name FROM pragma_table_info('retention_tombstone') ORDER BY name")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
     let cols: Vec<&str> = rows.iter().map(|(n,)| n.as_str()).collect();
     assert!(cols.contains(&"resource_id"), "should have resource_id");
     assert!(cols.contains(&"resource_kind"), "should have resource_kind");
@@ -38,5 +37,8 @@ async fn retention_tombstone_resource_id_is_primary_key() {
     )
     .execute(&pool)
     .await;
-    assert!(r.is_err(), "duplicate resource_id should fail (PRIMARY KEY constraint)");
+    assert!(
+        r.is_err(),
+        "duplicate resource_id should fail (PRIMARY KEY constraint)"
+    );
 }

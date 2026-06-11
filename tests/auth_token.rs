@@ -15,7 +15,10 @@ async fn token_is_generated_on_first_call() {
     let dir = tempfile::tempdir().unwrap();
     std::env::set_var("WIMCC_CONFIG_DIR", dir.path());
     let token = wimcc::security::token::ensure_token().unwrap();
-    assert!(token.starts_with("wimcc_"), "token should have wimcc_ prefix, got: {token}");
+    assert!(
+        token.starts_with("wimcc_"),
+        "token should have wimcc_ prefix, got: {token}"
+    );
     assert!(token.len() > 20, "token should be long, got: {token}");
     std::env::remove_var("WIMCC_CONFIG_DIR");
 }
@@ -52,7 +55,10 @@ async fn token_is_reused_across_calls() {
     std::env::set_var("WIMCC_CONFIG_DIR", dir.path());
     let a = wimcc::security::token::ensure_token().unwrap();
     let b = wimcc::security::token::ensure_token().unwrap();
-    assert_eq!(a, b, "ensure_token should return the same token on repeated calls");
+    assert_eq!(
+        a, b,
+        "ensure_token should return the same token on repeated calls"
+    );
     std::env::remove_var("WIMCC_CONFIG_DIR");
 }
 
@@ -67,7 +73,10 @@ async fn refuses_to_load_when_file_overpermissive() {
     std::fs::set_permissions(&tf, std::fs::Permissions::from_mode(0o644)).unwrap();
     std::env::set_var("WIMCC_CONFIG_DIR", dir.path());
     let r = wimcc::security::token::load_token_or_err();
-    assert!(r.is_err(), "should refuse to load overpermissive token file");
+    assert!(
+        r.is_err(),
+        "should refuse to load overpermissive token file"
+    );
     std::env::remove_var("WIMCC_CONFIG_DIR");
 }
 
@@ -79,7 +88,10 @@ async fn rotate_token_generates_a_new_token() {
     let t1 = wimcc::security::token::ensure_token().unwrap();
     let t2 = wimcc::security::token::rotate_token().unwrap();
     assert_ne!(t1, t2, "rotate_token should generate a new token");
-    assert!(t2.starts_with("wimcc_"), "rotated token should have wimcc_ prefix");
+    assert!(
+        t2.starts_with("wimcc_"),
+        "rotated token should have wimcc_ prefix"
+    );
     std::env::remove_var("WIMCC_CONFIG_DIR");
 }
 
@@ -92,6 +104,9 @@ async fn rotate_token_persists_new_token() {
     let t2 = wimcc::security::token::rotate_token().unwrap();
     // After rotation, ensure_token should return the new token
     let t3 = wimcc::security::token::ensure_token().unwrap();
-    assert_eq!(t2, t3, "ensure_token after rotate should return the rotated token");
+    assert_eq!(
+        t2, t3,
+        "ensure_token after rotate should return the rotated token"
+    );
     std::env::remove_var("WIMCC_CONFIG_DIR");
 }

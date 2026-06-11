@@ -39,15 +39,15 @@ async fn audit_endpoint_returns_rows() {
 
     let r = server
         .get("/v1/audit")
-        .add_header(
-            axum::http::header::AUTHORIZATION,
-            format!("Bearer {token}"),
-        )
+        .add_header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
         .await;
     r.assert_status_ok();
     let body: serde_json::Value = r.json();
     let data = body["data"].as_array().unwrap();
-    assert!(!data.is_empty(), "audit endpoint should return at least 1 row");
+    assert!(
+        !data.is_empty(),
+        "audit endpoint should return at least 1 row"
+    );
     assert_eq!(data[0]["event"], json!("api.accessed"));
 }
 
@@ -56,13 +56,14 @@ async fn audit_endpoint_returns_empty_when_no_rows() {
     let (server, _, token) = build_auth_server_with_pool().await;
     let r = server
         .get("/v1/audit")
-        .add_header(
-            axum::http::header::AUTHORIZATION,
-            format!("Bearer {token}"),
-        )
+        .add_header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
         .await;
     r.assert_status_ok();
     let body: serde_json::Value = r.json();
     let data = body["data"].as_array().unwrap();
-    assert_eq!(data.len(), 0, "audit endpoint should return empty array when no rows");
+    assert_eq!(
+        data.len(),
+        0,
+        "audit endpoint should return empty array when no rows"
+    );
 }

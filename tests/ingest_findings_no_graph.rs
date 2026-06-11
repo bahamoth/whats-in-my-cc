@@ -46,6 +46,9 @@ async fn ingest_produces_signals_without_graph() {
     assert!(
         signals.iter().any(|s| s.detector == "tool_failure"),
         "expected a tool_failure signal from the failing cargo build; got {:?}",
-        signals.iter().map(|s| s.detector.as_str()).collect::<Vec<_>>()
+        signals
+            .iter()
+            .map(|s| s.detector.as_str())
+            .collect::<Vec<_>>()
     );
 }

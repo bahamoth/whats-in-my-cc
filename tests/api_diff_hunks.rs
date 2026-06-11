@@ -73,7 +73,9 @@ async fn setup() -> TestServer {
         .unwrap();
     migrate(&pool).await.unwrap();
     let f = write_synth_transcript();
-    store::ingest_file(&pool, f.path(), &NoopSink).await.unwrap();
+    store::ingest_file(&pool, f.path(), &NoopSink)
+        .await
+        .unwrap();
     let app = wimcc::api::router(wimcc::api::AppState::new_for_tests(pool));
     TestServer::new(app).unwrap()
 }

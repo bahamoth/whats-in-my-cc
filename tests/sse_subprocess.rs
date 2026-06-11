@@ -20,7 +20,13 @@ fn pick_port() -> u16 {
 /// (child, host:port, db file, token, config_dir). Keep db + config_dir alive.
 fn spawn_serve_with(
     extra_args: &[&str],
-) -> (Child, String, tempfile::NamedTempFile, String, tempfile::TempDir) {
+) -> (
+    Child,
+    String,
+    tempfile::NamedTempFile,
+    String,
+    tempfile::TempDir,
+) {
     let port = pick_port();
     let db = tempfile::NamedTempFile::new().expect("tempfile");
     let config_dir = tempfile::tempdir().expect("config tempdir");
@@ -49,7 +55,8 @@ fn spawn_serve_with(
     // Poll /v1/health to confirm readiness.
     let deadline = Instant::now() + Duration::from_secs(3);
     while Instant::now() < deadline {
-        if let Ok(s) = TcpStream::connect_timeout(&host.parse().unwrap(), Duration::from_millis(200))
+        if let Ok(s) =
+            TcpStream::connect_timeout(&host.parse().unwrap(), Duration::from_millis(200))
         {
             drop(s);
             if http_health_ok(&host) {

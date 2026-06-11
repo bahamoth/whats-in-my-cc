@@ -154,10 +154,7 @@ fn masks_korean_rrn() {
 fn does_not_modify_safe_text() {
     let input = "regular log line with no secrets";
     let masked = apply_text(input);
-    assert_eq!(
-        masked, input,
-        "safe text must pass through unchanged"
-    );
+    assert_eq!(masked, input, "safe text must pass through unchanged");
 }
 
 #[test]

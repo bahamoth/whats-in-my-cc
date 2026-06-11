@@ -29,11 +29,10 @@ async fn synthetic_fixture_anthropic_key_is_redacted_at_ingest() {
     .await
     .unwrap();
 
-    let payloads: Vec<Vec<u8>> =
-        sqlx::query_scalar("SELECT payload FROM raw_event")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+    let payloads: Vec<Vec<u8>> = sqlx::query_scalar("SELECT payload FROM raw_event")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
 
     for (i, p) in payloads.iter().enumerate() {
         let text = String::from_utf8_lossy(p);
@@ -55,11 +54,10 @@ async fn synthetic_fixture_pem_block_is_redacted_at_ingest() {
     .await
     .unwrap();
 
-    let payloads: Vec<Vec<u8>> =
-        sqlx::query_scalar("SELECT payload FROM raw_event")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+    let payloads: Vec<Vec<u8>> = sqlx::query_scalar("SELECT payload FROM raw_event")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
 
     for (i, p) in payloads.iter().enumerate() {
         let text = String::from_utf8_lossy(p);
@@ -85,11 +83,10 @@ async fn synthetic_fixture_email_is_redacted_at_ingest() {
     .await
     .unwrap();
 
-    let payloads: Vec<Vec<u8>> =
-        sqlx::query_scalar("SELECT payload FROM raw_event")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+    let payloads: Vec<Vec<u8>> = sqlx::query_scalar("SELECT payload FROM raw_event")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
 
     for (i, p) in payloads.iter().enumerate() {
         let text = String::from_utf8_lossy(p);

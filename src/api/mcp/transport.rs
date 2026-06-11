@@ -20,11 +20,11 @@ use futures::stream::{self, StreamExt};
 use serde_json::{json, Value};
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::api::AppState;
 use crate::api::mcp::{
     jsonrpc::{AnyResponse, Request as RpcRequest},
     methods::{handle, HandleResult},
 };
+use crate::api::AppState;
 
 /// MCP Origin allowlist: only localhost origins are permitted.
 /// Absent Origin header (curl-style) is allowed (DEV-S17-07 context).
@@ -49,12 +49,14 @@ pub async fn post_handler(
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
     // Origin check: reject cross-origin requests.
-    if let Some(origin) = headers
-        .get("origin")
-        .and_then(|v| v.to_str().ok())
-    {
+    if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
         if !is_allowed_origin(origin) {
-            return (StatusCode::FORBIDDEN, HeaderMap::new(), axum::body::Bytes::new()).into_response();
+            return (
+                StatusCode::FORBIDDEN,
+                HeaderMap::new(),
+                axum::body::Bytes::new(),
+            )
+                .into_response();
         }
     }
 
@@ -68,7 +70,8 @@ pub async fn post_handler(
                 StatusCode::OK,
                 HeaderMap::new(),
                 axum::body::Bytes::from(payload),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 
@@ -91,7 +94,12 @@ pub async fn post_handler(
     match result {
         HandleResult::Silent | HandleResult::Initialized => {
             // Notification — 202 Accepted, no body.
-            (StatusCode::ACCEPTED, HeaderMap::new(), axum::body::Bytes::new()).into_response()
+            (
+                StatusCode::ACCEPTED,
+                HeaderMap::new(),
+                axum::body::Bytes::new(),
+            )
+                .into_response()
         }
         HandleResult::Response(resp) => {
             // Extract the new session id if this was an initialize response.
@@ -126,14 +134,16 @@ pub async fn post_handler(
             );
             if let Some(sid) = new_session_id {
                 if let Ok(hv) = HeaderValue::from_str(&sid) {
-                    resp_headers.insert(
-                        HeaderName::from_static("mcp-session-id"),
-                        hv,
-                    );
+                    resp_headers.insert(HeaderName::from_static("mcp-session-id"), hv);
                 }
             }
 
-            (StatusCode::OK, resp_headers, axum::body::Bytes::from(wire_value)).into_response()
+            (
+                StatusCode::OK,
+                resp_headers,
+                axum::body::Bytes::from(wire_value),
+            )
+                .into_response()
         }
     }
 }
@@ -142,10 +152,7 @@ pub async fn post_handler(
 ///
 /// Requires `Mcp-Session-Id` header. Unknown session → 404.
 /// Emits notifications/initialized on connect, then resources/updated on rebuild.
-pub async fn get_handler(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+pub async fn get_handler(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     // Origin check.
     if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
         if !is_allowed_origin(origin) {
@@ -182,13 +189,13 @@ pub async fn get_handler(
 
     // First frame: synthetic notifications/initialized to confirm channel is live.
     let init_event = Ok::<_, Infallible>(
-        Event::default()
-            .event("message")
-            .data(serde_json::to_string(&json!({
+        Event::default().event("message").data(
+            serde_json::to_string(&json!({
                 "jsonrpc": "2.0",
                 "method": "notifications/initialized"
             }))
-            .unwrap_or_default()),
+            .unwrap_or_default(),
+        ),
     );
     let first = stream::once(async move { init_event });
 
@@ -202,7 +209,9 @@ pub async fn get_handler(
                     "params": notif.params
                 }))
                 .ok()?;
-                Some(Ok::<_, Infallible>(Event::default().event("message").data(payload)))
+                Some(Ok::<_, Infallible>(
+                    Event::default().event("message").data(payload),
+                ))
             }
             Err(_) => None,
         }

@@ -168,7 +168,9 @@ async fn serve_cmd(
     // --auth on → ensure token exists, print on first boot.
     let token = match auth {
         cli::AuthMode::Off => {
-            tracing::info!("auth disabled (single-user dev); pass --auth on to enforce bearer token");
+            tracing::info!(
+                "auth disabled (single-user dev); pass --auth on to enforce bearer token"
+            );
             String::new()
         }
         cli::AuthMode::On => {
@@ -179,11 +181,12 @@ async fn serve_cmd(
     };
 
     // Slice-19: Parse retention profile and spawn sweep if enabled.
-    let profile: wimcc::security::retention::Profile = retention_profile
-        .parse()?;
+    let profile: wimcc::security::retention::Profile = retention_profile.parse()?;
     if profile != wimcc::security::retention::Profile::None {
         let pool_cl = pool.clone();
-        let policy = wimcc::security::retention::RetentionPolicy { profile: profile.clone() };
+        let policy = wimcc::security::retention::RetentionPolicy {
+            profile: profile.clone(),
+        };
         bg_handles.push(wimcc::security::retention::spawn_sweep_task(
             pool_cl,
             policy,
@@ -274,9 +277,7 @@ fn collect_files(
             .ok_or_else(|| error::WimccError::Invalid("HOME not set".into()))?;
         Ok(walk_jsonl(&root))
     } else {
-        Err(error::WimccError::Invalid(
-            "provide --path or --all".into(),
-        ))
+        Err(error::WimccError::Invalid("provide --path or --all".into()))
     }
 }
 

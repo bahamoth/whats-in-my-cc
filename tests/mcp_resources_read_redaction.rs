@@ -22,12 +22,10 @@ async fn make_server_with_session() -> (TestServer, String) {
     )
     .await
     .unwrap();
-    let sid: String = sqlx::query_scalar(
-        "SELECT DISTINCT session_id FROM observed_event LIMIT 1",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let sid: String = sqlx::query_scalar("SELECT DISTINCT session_id FROM observed_event LIMIT 1")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     let state = AppState::new_for_tests(pool);
     let server = TestServer::new(wimcc::api::router(state)).unwrap();
     (server, sid)
@@ -94,4 +92,3 @@ async fn resources_read_session_carries_redaction_annotation() {
         "redaction_policy.applied must be true"
     );
 }
-

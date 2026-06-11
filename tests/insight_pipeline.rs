@@ -8,8 +8,8 @@
 //! integrity (which is covered by ingest_store.rs).
 
 use sqlx::sqlite::SqlitePoolOptions;
-use wimcc::db::{migrate, repo_diff_hunk};
 use wimcc::db::repo_diff_hunk::NewDiffHunk;
+use wimcc::db::{migrate, repo_diff_hunk};
 
 async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -37,7 +37,7 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
             "INSERT OR IGNORE INTO raw_event \
              (raw_event_id, ingest_run_id, source_type, source_uri, source_line_no, \
               source_byte_offset, payload_sha256, payload, captured_at) \
-             VALUES (?,?,?,?,?,?,?,?,?)"
+             VALUES (?,?,?,?,?,?,?,?,?)",
         )
         .bind(raw_id(i))
         .bind("run_0")
@@ -48,7 +48,9 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
         .bind(format!("sha256_{i}"))
         .bind(b"{}" as &[u8])
         .bind(ts(i))
-        .execute(&pool).await.unwrap();
+        .execute(&pool)
+        .await
+        .unwrap();
     }
 
     // observed_event rows.
@@ -76,60 +78,86 @@ async fn seeded_pool_with_failing_session() -> sqlx::SqlitePool {
                 "INSERT OR IGNORE INTO observed_event \
                  (event_id, raw_event_id, schema_version, session_id, observed_at, \
                   actor, kind, tool_name, tool_use_id, parser_version, payload) \
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             )
-            .bind(ev_id(i)).bind(raw_id(i))
-            .bind("observed_event.v1").bind(sess)
+            .bind(ev_id(i))
+            .bind(raw_id(i))
+            .bind("observed_event.v1")
+            .bind(sess)
             .bind(ts(i))
-            .bind(actor).bind(kind).bind("Bash").bind("tid_0")
-            .bind("test").bind(&payload)
-            .execute(&pool).await.unwrap()
+            .bind(actor)
+            .bind(kind)
+            .bind("Bash")
+            .bind("tid_0")
+            .bind("test")
+            .bind(&payload)
+            .execute(&pool)
+            .await
+            .unwrap()
         } else if kind == "tool_result" {
             sqlx::query(
                 "INSERT OR IGNORE INTO observed_event \
                  (event_id, raw_event_id, schema_version, session_id, observed_at, \
                   actor, kind, tool_use_id, parser_version, payload) \
-                 VALUES (?,?,?,?,?,?,?,?,?,?)"
+                 VALUES (?,?,?,?,?,?,?,?,?,?)",
             )
-            .bind(ev_id(i)).bind(raw_id(i))
-            .bind("observed_event.v1").bind(sess)
+            .bind(ev_id(i))
+            .bind(raw_id(i))
+            .bind("observed_event.v1")
+            .bind(sess)
             .bind(ts(i))
-            .bind(actor).bind(kind).bind("tid_0")
-            .bind("test").bind(&payload)
-            .execute(&pool).await.unwrap()
+            .bind(actor)
+            .bind(kind)
+            .bind("tid_0")
+            .bind("test")
+            .bind(&payload)
+            .execute(&pool)
+            .await
+            .unwrap()
         } else {
             sqlx::query(
                 "INSERT OR IGNORE INTO observed_event \
                  (event_id, raw_event_id, schema_version, session_id, observed_at, \
                   actor, kind, parser_version, payload) \
-                 VALUES (?,?,?,?,?,?,?,?,?)"
+                 VALUES (?,?,?,?,?,?,?,?,?)",
             )
-            .bind(ev_id(i)).bind(raw_id(i))
-            .bind("observed_event.v1").bind(sess)
+            .bind(ev_id(i))
+            .bind(raw_id(i))
+            .bind("observed_event.v1")
+            .bind(sess)
             .bind(ts(i))
-            .bind(actor).bind(kind)
-            .bind("test").bind(&payload)
-            .execute(&pool).await.unwrap()
+            .bind(actor)
+            .bind(kind)
+            .bind("test")
+            .bind(&payload)
+            .execute(&pool)
+            .await
+            .unwrap()
         };
         let _ = q;
     }
 
     // diff_hunk introduced by the tool_call event (ev_001).
-    repo_diff_hunk::insert(&pool, &NewDiffHunk {
-        diff_hunk_id: "dh_001".into(),
-        schema_version: "diff_hunk.v1".into(),
-        session_id: sess.into(),
-        file_path: "src/foo.rs".into(),
-        change_type: "modify".into(),
-        line_range_after_start: Some(1),
-        line_range_after_end: Some(5),
-        introduced_by_event_id: ev_id(1),
-        introduced_by_tool_use_id: Some("tid_0".into()),
-        patch_preview: "+test_line".into(),
-        lines_added: 1,
-        lines_removed: 0,
-        user_modified: false,
-    }).await.unwrap();
+    repo_diff_hunk::insert(
+        &pool,
+        &NewDiffHunk {
+            diff_hunk_id: "dh_001".into(),
+            schema_version: "diff_hunk.v1".into(),
+            session_id: sess.into(),
+            file_path: "src/foo.rs".into(),
+            change_type: "modify".into(),
+            line_range_after_start: Some(1),
+            line_range_after_end: Some(5),
+            introduced_by_event_id: ev_id(1),
+            introduced_by_tool_use_id: Some("tid_0".into()),
+            patch_preview: "+test_line".into(),
+            lines_added: 1,
+            lines_removed: 0,
+            user_modified: false,
+        },
+    )
+    .await
+    .unwrap();
 
     pool
 }
@@ -150,13 +178,21 @@ async fn pipeline_writes_signal_rows() {
 async fn pipeline_dedupes_via_signal_id() {
     let pool = seeded_pool_with_failing_session().await;
 
-    wimcc::insight::pipeline::run_detectors(&pool, "sess_t").await.unwrap();
+    wimcc::insight::pipeline::run_detectors(&pool, "sess_t")
+        .await
+        .unwrap();
     let count_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM signal")
-        .fetch_one(&pool).await.unwrap();
+        .fetch_one(&pool)
+        .await
+        .unwrap();
 
-    wimcc::insight::pipeline::run_detectors(&pool, "sess_t").await.unwrap();
+    wimcc::insight::pipeline::run_detectors(&pool, "sess_t")
+        .await
+        .unwrap();
     let count_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM signal")
-        .fetch_one(&pool).await.unwrap();
+        .fetch_one(&pool)
+        .await
+        .unwrap();
 
     assert_eq!(
         count_before, count_after,
@@ -167,7 +203,9 @@ async fn pipeline_dedupes_via_signal_id() {
 #[tokio::test]
 async fn pipeline_signals_carry_facts_not_severity() {
     let pool = seeded_pool_with_failing_session().await;
-    wimcc::insight::pipeline::run_detectors(&pool, "sess_t").await.unwrap();
+    wimcc::insight::pipeline::run_detectors(&pool, "sess_t")
+        .await
+        .unwrap();
     // The signal schema has no severity/confidence columns: facts is the only
     // detector-specific projection. Assert every row has non-empty facts JSON.
     let bad: i64 = sqlx::query_scalar(
@@ -176,5 +214,8 @@ async fn pipeline_signals_carry_facts_not_severity() {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(bad, 0, "every signal must carry facts + non-empty evidence_refs");
+    assert_eq!(
+        bad, 0,
+        "every signal must carry facts + non-empty evidence_refs"
+    );
 }

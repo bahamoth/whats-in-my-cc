@@ -16,12 +16,14 @@ pub async fn call(args: &Value, pool: &SqlitePool) -> Value {
 
     let data: Vec<Value> = rows
         .into_iter()
-        .map(|r| json!({
-            "session_id": r.session_id,
-            "first_observed_at": r.first_observed_at,
-            "last_observed_at": r.last_observed_at,
-            "event_count": r.event_count
-        }))
+        .map(|r| {
+            json!({
+                "session_id": r.session_id,
+                "first_observed_at": r.first_observed_at,
+                "last_observed_at": r.last_observed_at,
+                "event_count": r.event_count
+            })
+        })
         .collect();
 
     tool_success(json!({ "data": data }))

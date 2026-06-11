@@ -75,7 +75,7 @@ pub struct EnvSource {
 pub struct HookEntry {
     pub event: String,
     pub command: String,
-    pub scope: String,        // scope label
+    pub scope: String,           // scope label
     pub forwards_to_wimcc: bool, // command contains "hooks/v1/events"
 }
 
@@ -196,7 +196,10 @@ pub fn scopes(project_start: &Path) -> Vec<SettingsScope> {
         let label = if p.file_name().and_then(|x| x.to_str()) == Some("managed-settings.json") {
             "managed".to_string()
         } else {
-            format!("managed:{}", p.file_name().and_then(|x| x.to_str()).unwrap_or("?"))
+            format!(
+                "managed:{}",
+                p.file_name().and_then(|x| x.to_str()).unwrap_or("?")
+            )
         };
         out.push(read_scope(ScopeKind::Managed, p, Some(label)));
     }
@@ -258,13 +261,12 @@ fn collect_hooks_into(scope: &SettingsScope, out: &mut Vec<HookEntry>) {
         for entry in arr {
             // settings.json shape: hooks.<Event>[].hooks[].command  OR
             // settings.json shape: hooks.<Event>[].command (older docs variant)
-            let inner_candidates: Vec<&Value> = if let Some(inner) =
-                entry.get("hooks").and_then(|v| v.as_array())
-            {
-                inner.iter().collect()
-            } else {
-                vec![entry]
-            };
+            let inner_candidates: Vec<&Value> =
+                if let Some(inner) = entry.get("hooks").and_then(|v| v.as_array()) {
+                    inner.iter().collect()
+                } else {
+                    vec![entry]
+                };
             for h in inner_candidates {
                 let cmd = h
                     .get("command")
@@ -337,7 +339,10 @@ pub fn managed_policy(scopes: &[SettingsScope]) -> ManagedPolicy {
             Some(v) => v,
             None => continue,
         };
-        if let Some(b) = parsed.get("allowManagedHooksOnly").and_then(|v| v.as_bool()) {
+        if let Some(b) = parsed
+            .get("allowManagedHooksOnly")
+            .and_then(|v| v.as_bool())
+        {
             policy.allow_managed_hooks_only = policy.allow_managed_hooks_only || b;
         }
         if let Some(b) = parsed.get("disableAllHooks").and_then(|v| v.as_bool()) {
@@ -444,7 +449,10 @@ mod tests {
         let p1 = tmp.path().join("m1.json");
         write(&p1, &json!({"allowManagedHooksOnly": true}));
         let p2 = tmp.path().join("m2.json");
-        write(&p2, &json!({"allowedHttpHookUrls": ["https://allow.example/*"]}));
+        write(
+            &p2,
+            &json!({"allowedHttpHookUrls": ["https://allow.example/*"]}),
+        );
         let scopes = vec![
             read_scope(ScopeKind::Managed, p1, Some("managed".into())),
             read_scope(ScopeKind::Managed, p2, Some("managed:m2".into())),

@@ -47,10 +47,7 @@ async fn shutdown_propagates_cancel_to_outer_token() {
 
 #[test]
 fn default_shutdown_grace_is_five_seconds() {
-    assert_eq!(
-        wimcc::serve::DEFAULT_SHUTDOWN_GRACE,
-        Duration::from_secs(5)
-    );
+    assert_eq!(wimcc::serve::DEFAULT_SHUTDOWN_GRACE, Duration::from_secs(5));
 }
 
 #[tokio::test]

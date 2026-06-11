@@ -15,7 +15,12 @@ fn pick_port() -> u16 {
 /// child + the URL + the config dir tempdir (held to keep the dir alive).
 fn spawn_server(
     extra_env: &[(&str, &str)],
-) -> (std::process::Child, String, tempfile::NamedTempFile, tempfile::TempDir) {
+) -> (
+    std::process::Child,
+    String,
+    tempfile::NamedTempFile,
+    tempfile::TempDir,
+) {
     let port = pick_port();
     let db = tempfile::NamedTempFile::new().expect("tempfile");
     // Slice-19: give the server its own config dir so the token file is isolated
@@ -69,7 +74,9 @@ fn ureq_get(url: &str) -> std::io::Result<bool> {
     let url = url.trim_start_matches("http://");
     let (host, rest) = url.split_once('/').unwrap_or((url, ""));
     let stream = std::net::TcpStream::connect_timeout(
-        &host.parse().map_err(|_| std::io::Error::other("bad addr"))?,
+        &host
+            .parse()
+            .map_err(|_| std::io::Error::other("bad addr"))?,
         Duration::from_millis(200),
     )?;
     stream
@@ -77,7 +84,10 @@ fn ureq_get(url: &str) -> std::io::Result<bool> {
         .ok();
     use std::io::{Read, Write};
     let mut s = stream;
-    write!(s, "GET /{rest} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n")?;
+    write!(
+        s,
+        "GET /{rest} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
+    )?;
     let mut buf = String::new();
     let _ = s.take(256).read_to_string(&mut buf);
     // Slice-19: 401 means the server is up but token auth is required.
@@ -168,7 +178,10 @@ fn doctor_v02_project_scope_env_attribution() {
         ])
         .env_remove("OTEL_METRICS_EXPORTER")
         .env_remove("OTEL_EXPORTER_OTLP_ENDPOINT")
-        .env("WIMCC_DOCTOR_PLUGINS_ROOT", project.path().join("noplugins"))
+        .env(
+            "WIMCC_DOCTOR_PLUGINS_ROOT",
+            project.path().join("noplugins"),
+        )
         .output()
         .expect("doctor");
     let _ = child.kill();
@@ -208,7 +221,10 @@ fn doctor_v02_local_overrides_project_scope() {
             project.path().to_str().unwrap(),
         ])
         .env_remove("OTEL_EXPORTER_OTLP_ENDPOINT")
-        .env("WIMCC_DOCTOR_PLUGINS_ROOT", project.path().join("noplugins"))
+        .env(
+            "WIMCC_DOCTOR_PLUGINS_ROOT",
+            project.path().join("noplugins"),
+        )
         .output()
         .expect("doctor");
     let _ = child.kill();
@@ -258,7 +274,10 @@ fn doctor_v02_plugin_manifest_hook_picked_up() {
     let any_wimcc = plugin_hooks
         .iter()
         .any(|h| h["forwards_to_wimcc"].as_bool().unwrap_or(false));
-    assert!(any_wimcc, "plugin hook forwarding to /hooks/v1/events should be flagged");
+    assert!(
+        any_wimcc,
+        "plugin hook forwarding to /hooks/v1/events should be flagged"
+    );
     assert!(plugin_hooks
         .iter()
         .any(|h| h["scope"].as_str().unwrap_or("").starts_with("plugin:")));
@@ -284,13 +303,18 @@ fn doctor_v02_env_divergence_when_settings_has_more_than_shell() {
             project.path().to_str().unwrap(),
         ])
         .env_remove("OTEL_METRICS_EXPORTER")
-        .env("WIMCC_DOCTOR_PLUGINS_ROOT", project.path().join("noplugins"))
+        .env(
+            "WIMCC_DOCTOR_PLUGINS_ROOT",
+            project.path().join("noplugins"),
+        )
         .output()
         .expect("doctor");
     let _ = child.kill();
     let v: serde_json::Value =
         serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).expect("json");
-    let divergence = v["env_divergence"].as_array().expect("env_divergence array");
+    let divergence = v["env_divergence"]
+        .as_array()
+        .expect("env_divergence array");
     assert!(
         divergence
             .iter()
@@ -325,8 +349,8 @@ fn doctor_recommendations_omit_hook_and_file_git() {
         "hook forward substring should not be in recommendations; got:\n{recs}"
     );
     assert!(
-        !recs.to_lowercase().contains("no data yet from") || !recs.contains("hook")
-            && !recs.contains("file-git"),
+        !recs.to_lowercase().contains("no data yet from")
+            || !recs.contains("hook") && !recs.contains("file-git"),
         "'no data yet from' should never list hook or file-git; got:\n{recs}"
     );
 }
@@ -387,7 +411,9 @@ fn doctor_exit_ignores_hook_only_data() {
         .join()
         .unwrap()
         {
-            if r { break; }
+            if r {
+                break;
+            }
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
@@ -428,7 +454,10 @@ impl RusqliteShim {
     }
     fn execute(&self, sql: &str, _: [(); 0]) -> Result<u64, sqlx::Error> {
         self.rt.block_on(async {
-            sqlx::query(sql).execute(&self.pool).await.map(|r| r.rows_affected())
+            sqlx::query(sql)
+                .execute(&self.pool)
+                .await
+                .map(|r| r.rows_affected())
         })
     }
 }

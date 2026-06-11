@@ -95,7 +95,9 @@ fn fires_when_same_file_read_twice() {
 fn no_fire_for_distinct_files() {
     let events = vec![read_call(0, "t0", "/a.rs"), read_call(1, "t1", "/b.rs")];
     assert_eq!(
-        ReRead.detect(&view_from_events(&events), &DetectorConfig::default()).len(),
+        ReRead
+            .detect(&view_from_events(&events), &DetectorConfig::default())
+            .len(),
         0
     );
 }
@@ -132,7 +134,10 @@ fn fires_for_each_re_read_path() {
     ];
     let cands = ReRead.detect(&view_from_events(&events), &DetectorConfig::default());
     assert_eq!(cands.len(), 2);
-    let paths: Vec<&str> = cands.iter().map(|c| c.facts["file_path"].as_str().unwrap()).collect();
+    let paths: Vec<&str> = cands
+        .iter()
+        .map(|c| c.facts["file_path"].as_str().unwrap())
+        .collect();
     assert!(paths.contains(&"/a.rs"));
     assert!(paths.contains(&"/b.rs"));
 }
@@ -150,7 +155,9 @@ fn ignores_non_read_tool_calls() {
         read_call(1, "t1", "/a.rs"),
     ];
     assert_eq!(
-        ReRead.detect(&view_from_events(&events), &DetectorConfig::default()).len(),
+        ReRead
+            .detect(&view_from_events(&events), &DetectorConfig::default())
+            .len(),
         0
     );
 }
@@ -168,7 +175,9 @@ fn ignores_non_tool_call_events() {
     ];
     // Only one ToolCall for /a.rs → no fire.
     assert_eq!(
-        ReRead.detect(&view_from_events(&events), &DetectorConfig::default()).len(),
+        ReRead
+            .detect(&view_from_events(&events), &DetectorConfig::default())
+            .len(),
         0
     );
 }

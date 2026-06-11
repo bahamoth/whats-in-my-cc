@@ -77,9 +77,7 @@ async fn read_sse_until(body: axum::body::Body, expected: &str) -> String {
                 expected,
                 collected
             ),
-            Ok(None) => panic!(
-                "SSE stream closed before seeing {expected:?}. Got: {collected:?}"
-            ),
+            Ok(None) => panic!("SSE stream closed before seeing {expected:?}. Got: {collected:?}"),
             Ok(Some(Err(e))) => panic!("SSE body error: {e}"),
             Ok(Some(Ok(frame))) => {
                 if let Ok(data) = frame.into_data() {

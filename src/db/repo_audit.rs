@@ -43,14 +43,12 @@ pub async fn insert(
     actor: Option<&str>,
     payload: &str,
 ) -> Result<()> {
-    sqlx::query(
-        "INSERT INTO audit (audit_id, event, actor, payload) VALUES (?, ?, ?, ?)",
-    )
-    .bind(audit_id)
-    .bind(event)
-    .bind(actor)
-    .bind(payload)
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT INTO audit (audit_id, event, actor, payload) VALUES (?, ?, ?, ?)")
+        .bind(audit_id)
+        .bind(event)
+        .bind(actor)
+        .bind(payload)
+        .execute(pool)
+        .await?;
     Ok(())
 }

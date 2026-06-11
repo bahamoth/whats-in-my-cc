@@ -21,7 +21,10 @@ pub struct RedactionPolicy {
 
 impl RedactionPolicy {
     pub fn standard() -> Self {
-        Self { applied: true, level: "standard" }
+        Self {
+            applied: true,
+            level: "standard",
+        }
     }
 }
 

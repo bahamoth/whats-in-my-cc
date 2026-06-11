@@ -106,7 +106,9 @@ async fn fresh_pool() -> sqlx::SqlitePool {
 async fn ingest_writes_diff_hunk_row_per_structured_patch_hunk() {
     let pool = fresh_pool().await;
     let tmp = write_synth_transcript();
-    store::ingest_file(&pool, tmp.path(), &NoopSink).await.unwrap();
+    store::ingest_file(&pool, tmp.path(), &NoopSink)
+        .await
+        .unwrap();
 
     let rows = repo_diff_hunk::list_session(&pool, "s_ingest_test")
         .await
@@ -129,7 +131,9 @@ async fn no_diff_hunk_uses_synthetic_filesystem_session() {
     // "filesystem". Ingest a transcript; query directly.
     let pool = fresh_pool().await;
     let tmp = write_synth_transcript();
-    store::ingest_file(&pool, tmp.path(), &NoopSink).await.unwrap();
+    store::ingest_file(&pool, tmp.path(), &NoopSink)
+        .await
+        .unwrap();
     let row = sqlx::query("SELECT COUNT(*) AS c FROM diff_hunk WHERE session_id = 'filesystem'")
         .fetch_one(&pool)
         .await
@@ -141,17 +145,24 @@ async fn no_diff_hunk_uses_synthetic_filesystem_session() {
 async fn reingest_is_idempotent_on_diff_hunk() {
     let pool = fresh_pool().await;
     let tmp = write_synth_transcript();
-    store::ingest_file(&pool, tmp.path(), &NoopSink).await.unwrap();
+    store::ingest_file(&pool, tmp.path(), &NoopSink)
+        .await
+        .unwrap();
     let before = repo_diff_hunk::count_by_session(&pool, "s_ingest_test")
         .await
         .unwrap();
     // Re-ingest the same file — raw rows dedupe by (source_uri, line_no,
     // payload_sha), so observed/diff_hunk should also stay stable.
-    store::ingest_file(&pool, tmp.path(), &NoopSink).await.unwrap();
+    store::ingest_file(&pool, tmp.path(), &NoopSink)
+        .await
+        .unwrap();
     let after = repo_diff_hunk::count_by_session(&pool, "s_ingest_test")
         .await
         .unwrap();
-    assert_eq!(before, after, "diff_hunk row count must stay stable on re-ingest");
+    assert_eq!(
+        before, after,
+        "diff_hunk row count must stay stable on re-ingest"
+    );
 }
 
 #[tokio::test]
@@ -192,7 +203,11 @@ async fn write_tool_result_produces_no_hunks() {
     writeln!(f, "{assistant}").unwrap();
     writeln!(f, "{result}").unwrap();
     let pool = fresh_pool().await;
-    store::ingest_file(&pool, f.path(), &NoopSink).await.unwrap();
-    let n = repo_diff_hunk::count_by_session(&pool, session_id).await.unwrap();
+    store::ingest_file(&pool, f.path(), &NoopSink)
+        .await
+        .unwrap();
+    let n = repo_diff_hunk::count_by_session(&pool, session_id)
+        .await
+        .unwrap();
     assert_eq!(n, 0, "Write must produce zero hunks (structuredPatch=[])");
 }

@@ -95,7 +95,9 @@ fn final_state_mismatch_manifest_is_self_describing() {
     assert_eq!(m.id, "final_state_mismatch");
     assert!(!m.intent.is_empty());
     assert!(
-        m.inputs.iter().any(|i| i.contains("user_message") || i.contains("goal")),
+        m.inputs
+            .iter()
+            .any(|i| i.contains("user_message") || i.contains("goal")),
         "inputs must reference user_message/goal; got: {:?}",
         m.inputs
     );
@@ -118,11 +120,7 @@ fn all_manifests_have_stable_ids() {
             "manifest.id must match detector.id(); got {}",
             m.id
         );
-        assert_eq!(
-            m.id,
-            det.id(),
-            "manifest.id must equal detector.id()"
-        );
+        assert_eq!(m.id, det.id(), "manifest.id must equal detector.id()");
     }
 }
 
