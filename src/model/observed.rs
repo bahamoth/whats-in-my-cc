@@ -149,6 +149,9 @@ pub struct ObservedEvent {
     pub source_tool_assistant_uuid: Option<String>,
     pub source_tool_use_id: Option<String>,
     pub is_sidechain: bool,
+    /// Subagent identifier for sidechain events (transcript `agentId`). None for
+    /// main-session events. Lets re_read scope by individual subagent.
+    pub agent_id: Option<String>,
     pub is_meta: bool,
     pub cwd: Option<String>,
     pub git_branch: Option<String>,

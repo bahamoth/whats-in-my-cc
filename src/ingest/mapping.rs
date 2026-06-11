@@ -80,6 +80,7 @@ fn map_user(
                 e.source_tool_assistant_uuid = u.source_tool_assistant_uuid.clone();
                 e.source_tool_use_id = u.source_tool_use_id.clone();
                 e.is_sidechain = u.is_sidechain;
+                e.agent_id = u.agent_id.clone();
                 e.is_meta = u.is_meta;
                 e.cwd = u.cwd.clone();
                 e.git_branch = u.git_branch.clone();
@@ -128,6 +129,7 @@ fn user_message(
     e.kind = EventKind::UserMessage;
     e.turn_id = u.prompt_id.clone();
     e.is_sidechain = u.is_sidechain;
+    e.agent_id = u.agent_id.clone();
     e.is_meta = u.is_meta;
     e.cwd = u.cwd.clone();
     e.git_branch = u.git_branch.clone();
@@ -172,6 +174,7 @@ fn map_assistant(
         e.request_id = a.request_id.clone();
         e.message_id = message_id.clone();
         e.is_sidechain = a.is_sidechain;
+        e.agent_id = a.agent_id.clone();
         e.cwd = a.cwd.clone();
         e.git_branch = a.git_branch.clone();
         e.user_type = a.user_type.clone();
@@ -231,6 +234,7 @@ fn attachment_meta(
     e.parent_uuid = a.parent_uuid.clone();
     e.observed_at = a.timestamp;
     e.is_sidechain = a.is_sidechain;
+    e.agent_id = a.agent_id.clone();
     e.cwd = a.cwd.clone();
     e.git_branch = a.git_branch.clone();
     e.user_type = a.user_type.clone();

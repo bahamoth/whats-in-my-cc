@@ -249,3 +249,41 @@ fn sidechain_re_read_fires_with_sidechain_scope() {
     assert_eq!(cands.len(), 1);
     assert_eq!(cands[0].facts["scope"], json!("sidechain"));
 }
+
+/// Read ToolCall in a subagent with a specific agent_id. Dogfooding 2026-06-11:
+/// re_read should scope by INDIVIDUAL subagent (agent_id), not lump every
+/// sidechain read together — else two distinct subagents reading the same file
+/// once each would falsely look like a re-read.
+fn read_call_agent(i: usize, tid: &str, path: &str, agent_id: &str) -> ObservedEvent {
+    ObservedEvent {
+        agent_id: Some(agent_id.into()),
+        ..read_call_ext(i, tid, path, None, None, true)
+    }
+}
+
+/// 서로 다른 agent가 같은 파일·구간을 1회씩 → agent별로 분리되어 발화하지 않는다.
+#[test]
+fn different_agents_same_file_not_merged() {
+    let events = vec![
+        read_call_agent(0, "t0", "/a.rs", "agentA"),
+        read_call_agent(1, "t1", "/a.rs", "agentB"),
+    ];
+    assert_eq!(
+        ReRead
+            .detect(&view_from_events(&events), &DetectorConfig::default())
+            .len(),
+        0
+    );
+}
+
+/// 같은 agent가 같은 파일·구간을 반복 → agent:<id> scope로 발화.
+#[test]
+fn same_agent_re_read_fires_with_agent_scope() {
+    let events = vec![
+        read_call_agent(0, "t0", "/a.rs", "agentA"),
+        read_call_agent(1, "t1", "/a.rs", "agentA"),
+    ];
+    let cands = ReRead.detect(&view_from_events(&events), &DetectorConfig::default());
+    assert_eq!(cands.len(), 1);
+    assert_eq!(cands[0].facts["scope"], json!("agent:agentA"));
+}

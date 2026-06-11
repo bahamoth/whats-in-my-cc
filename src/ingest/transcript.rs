@@ -66,6 +66,9 @@ pub struct UserRecord {
     #[serde(rename = "isSidechain")]
     #[serde(default)]
     pub is_sidechain: bool,
+    #[serde(rename = "agentId")]
+    #[serde(default)]
+    pub agent_id: Option<String>,
     #[serde(rename = "isMeta")]
     #[serde(default)]
     pub is_meta: bool,
@@ -103,6 +106,9 @@ pub struct AssistantRecord {
     #[serde(rename = "isSidechain")]
     #[serde(default)]
     pub is_sidechain: bool,
+    #[serde(rename = "agentId")]
+    #[serde(default)]
+    pub agent_id: Option<String>,
     #[serde(rename = "requestId")]
     pub request_id: Option<String>,
     pub message: Value,
@@ -126,6 +132,9 @@ pub struct AttachmentRecord {
     #[serde(rename = "isSidechain")]
     #[serde(default)]
     pub is_sidechain: bool,
+    #[serde(rename = "agentId")]
+    #[serde(default)]
+    pub agent_id: Option<String>,
     pub attachment: Value,
 }
 
