@@ -4173,6 +4173,48 @@ vitest: 69 passed
         도구 고유 프로즈라 결정론 하니스 마커가 아니어서 일반화하지 않았다.</li>
     </ul>
 
+    <h2 id="tagging-loop-2026-06-11">untagged-Bash 루프 라운드 — date 태그 + 행 연속 접합 (2026-06-11)</h2>
+    <p>
+      CLAUDE.md 태깅 루프 절차에 따라 untagged 상위 토큰 2종을 처리했다
+      (<code>node scripts/untagged-bash.ts --all</code> 실측: <code>date</code> 29건 ·
+      <code>\</code> 28건). 규칙 변경은 <code>eventTags.test.ts</code>에 red 확인 후 잠금.
+    </p>
+    <ul>
+      <li><strong><code>date</code> → <code>read.proc</code></strong> — 시스템 상태(시각) 조회.
+        <code>BASH_FIRST_TOKEN_TAGS</code>에 추가(read.proc 주석을 "process / port / system-state"로 확장).</li>
+      <li><strong><code>\</code> 토큰은 태그가 아니라 tokenizer 결함</strong> — 세그먼트 분할이
+        <code>\n</code> 기준이라 셸 행 연속(<code>\</code>+개행)이 lone-backslash 세그먼트와
+        flag/path 선두 세그먼트를 만들었다(이전에 관찰된 path-token 누수도 같은 원인).
+        <code>joinContinuations()</code>를 추가해 분할 전에 backslash-newline(+선행 공백, 후행 들여쓰기)을
+        공백 1개로 접합 — POSIX 의미론. <code>segmentCommand</code>·<code>meaningfulCommand</code> 양쪽 적용.</li>
+      <li><strong>루프 닫기 실측</strong> — 규칙 추가 + DB 전체 재구축 후 CLI 재실행에서
+        <code>date</code>·<code>\</code> 모두 untagged 목록에서 소멸. 다음 라운드 후보(미구현, 제안만):
+        <code>printf</code> 16건(→ CONTROL_TOKENS, echo와 동급) · <code>pnpm vitest</code> 12건(→
+        TOOL_SUBCOMMAND_TAGS pnpm에 vitest: test.code) · path/flag 선두 토큰 다수(<code>/tmp/pr41.diff</code> 25,
+        <code>-u</code> 17 등)는 heredoc 본문·따옴표 내부 개행을 quote-비인지 분할기가 쪼개는 더 깊은
+        tokenizer 결함으로 추정 — 별도 라운드에서 quote/heredoc-aware 분할 필요.</li>
+    </ul>
+
+    <h2 id="reingest-2026-06-11">dev DB 전체 재구축 — PR #42 회수분 신호 반영 실측 (2026-06-11)</h2>
+    <p>
+      <code>&lt;tool_use_error&gt;</code> 회수·disposition basis는 ingest 시점 산출물이라 재ingest가
+      필요했다. <strong>주의: <code>wimcc init-db</code>는 migrate-only(비파괴)다</strong> — 기존 DB 위에
+      <code>ingest --all</code>을 돌리면 dedupe(<code>raw_skipped</code>)로 전부 스킵되는 no-op이 된다
+      (이번에 실측으로 재확인). 진짜 재생성은 <code>.wimcc.sqlite*</code> 삭제 → <code>init-db</code> →
+      <code>ingest --all</code>. release 빌드로 전체 코퍼스(74 세션) 약 3.5분.
+    </p>
+    <ul>
+      <li><strong>회수 입증(신규 클래스의 존재)</strong>: tool_failure 신호 972건의 도구 분포가
+        <code>Edit 626 · Bash 290 · Write 26 · Read 21 · 기타 9</code> — exit code가 없어 이전엔 전부
+        Unknown이던 Edit/Write/Read 실패가 <code>&lt;tool_use_error&gt;</code> 채널로 잡힌다.
+        972건 전수 <code>outcome_provenance=measured</code>.</li>
+      <li><strong>legacy 행 소거</strong>: verification_run의 <code>status_provenance</code> NULL(pre-0022)
+        444건 → 0건. 현행 분포 estimated 734 · unknown 687 · measured 50.</li>
+      <li><strong>절대 수 비교는 무효</strong>: 재구축 사이 transcript 로테이션으로 raw_event
+        155,291 → 133,117 — 코퍼스 자체가 줄어 detector별 증감(re_read 1,788→2,823 등)을 회수 효과로
+        귀속할 수 없다. 검증은 위의 "이전에 존재할 수 없던 클래스" 기준으로만 했다.</li>
+    </ul>
+
 </main>
 </div>
 </body></html>

@@ -52,8 +52,8 @@ export const BASH_FIRST_TOKEN_TAGS: Record<string, Tag> = {
   ls: 'read.file', cat: 'read.file', head: 'read.file', tail: 'read.file', wc: 'read.file',
   jq: 'read.file', tree: 'read.file', which: 'read.file', file: 'read.file', stat: 'read.file',
   du: 'read.file', df: 'read.file', sed: 'read.file', awk: 'read.file', pwd: 'read.file', realpath: 'read.file',
-  // read.proc — process / port inspection
-  ps: 'read.proc', lsof: 'read.proc',
+  // read.proc — process / port / system-state inspection
+  ps: 'read.proc', lsof: 'read.proc', date: 'read.proc',
   // read.db
   sqlite3: 'read.db', psql: 'read.db', mysql: 'read.db',
   // read.web
@@ -159,6 +159,15 @@ function firstToken(cmd: string): string {
   return (sp > 0 ? t.slice(0, sp) : t).toLowerCase();
 }
 
+/** Join shell line-continuations (`\` at end of line) into one logical line
+ *  BEFORE any newline-based splitting — POSIX removes the backslash-newline
+ *  pair entirely; we collapse it (plus the next line's indentation) to a single
+ *  space. Without this, `cmd \\\n --flag` segments into a lone-`\` token and a
+ *  flag-led segment (corpus: `\` was the #2 untagged token, 28건). */
+function joinContinuations(cmd: string): string {
+  return cmd.replace(/[ \t]*\\\r?\n\s*/g, ' ');
+}
+
 /** Drop whole-line `#` comments before any analysis, so a command that leads
  *  with a comment line (`# note\ngrep …`) classifies by the real command, not
  *  by the `#` token. Only lines that START with `#` are removed (a `#` mid-line
@@ -222,7 +231,7 @@ function commandOf(segment: string): string {
 
 /** Split a compound shell command into its sequenced sub-commands. */
 export function segmentCommand(cmd: string): string[] {
-  return cmd.split(COMMAND_SEPARATORS).map((s) => s.trim()).filter(Boolean);
+  return joinContinuations(cmd).split(COMMAND_SEPARATORS).map((s) => s.trim()).filter(Boolean);
 }
 
 /** The first segment that carries real work — its command (assignments/prefix
@@ -242,7 +251,7 @@ function firstMeaningfulSegment(segments: string[]): string | null {
  *  leads with the actual work. Falls back to the trimmed original when every
  *  sub-command is control (e.g. a bare `cd /tmp`). */
 export function meaningfulCommand(cmd: string): string {
-  let s = cmd.trim();
+  let s = joinContinuations(cmd).trim();
   for (let guard = 0; guard < 6; guard++) {
     const m = s.match(/^(.*?)(?:&&|\|\||;|\|)(.*)$/s); // split at the FIRST separator (no bare &)
     if (!m) break;
