@@ -32,6 +32,22 @@ function clipBottomFor(el: HTMLElement): number {
   return window.innerHeight;
 }
 
+/** The x where the bubble visually gets cut off on the right: the nearest
+ *  ancestor that clips horizontal overflow, falling back to the viewport.
+ *  Dogfooding 2026-06-11: the rightmost card (cost) and 요청출처 tooltips opened
+ *  left-anchored and ran off the viewport's right edge. */
+function clipRightFor(el: HTMLElement): number {
+  let n = el.parentElement;
+  while (n && n !== document.body) {
+    const overflowX = getComputedStyle(n).overflowX;
+    if (overflowX === 'auto' || overflowX === 'scroll' || overflowX === 'hidden') {
+      return Math.min(n.getBoundingClientRect().right, window.innerWidth);
+    }
+    n = n.parentElement;
+  }
+  return window.innerWidth;
+}
+
 interface InfoTipProps {
   /** Short subject (used for the aria-label, e.g. the card title). */
   label: string;
@@ -43,6 +59,7 @@ export function InfoTip({ label, text }: InfoTipProps) {
   const [hovered, setHovered] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [placement, setPlacement] = useState<Placement>('below');
+  const [align, setAlign] = useState<'left' | 'right'>('left');
   const bubbleRef = useRef<HTMLSpanElement | null>(null);
   const open = hovered || pinned;
 
@@ -53,6 +70,7 @@ export function InfoTip({ label, text }: InfoTipProps) {
   useLayoutEffect(() => {
     if (!open) {
       setPlacement('below');
+      setAlign('left');
       return;
     }
     const bubble = bubbleRef.current;
@@ -60,6 +78,9 @@ export function InfoTip({ label, text }: InfoTipProps) {
     const rect = bubble.getBoundingClientRect();
     if (rect.height > 0 && rect.bottom > clipBottomFor(bubble)) {
       setPlacement('above');
+    }
+    if (rect.width > 0 && rect.right > clipRightFor(bubble)) {
+      setAlign('right');
     }
   }, [open, text]);
 
@@ -85,7 +106,14 @@ export function InfoTip({ label, text }: InfoTipProps) {
           role="tooltip"
           ref={bubbleRef}
           data-placement={placement}
-          className={placement === 'above' ? `${styles.bubble} ${styles.bubbleAbove}` : styles.bubble}
+          data-align={align}
+          className={[
+            styles.bubble,
+            placement === 'above' ? styles.bubbleAbove : '',
+            align === 'right' ? styles.bubbleRight : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
         >
           {text}
         </span>

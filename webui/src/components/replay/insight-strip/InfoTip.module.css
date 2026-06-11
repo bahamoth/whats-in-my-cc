@@ -29,6 +29,13 @@
   bottom: calc(100% + 6px);
 }
 
+/* Right-aligned placement: anchored to the trigger's right edge when the bubble
+ * would overflow the viewport's right side (rightmost card / 요청출처). */
+.bubbleRight {
+  left: auto;
+  right: 0;
+}
+
 .bubble,
 .bubbleAbove {
   z-index: 10;
