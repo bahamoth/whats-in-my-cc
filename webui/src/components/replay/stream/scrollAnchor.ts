@@ -72,11 +72,25 @@ export function shouldAdjustOnItemResize(args: {
   return args.itemEnd <= args.scrollOffset + args.scrollAdjustments;
 }
 
-/** Whether a scroll event should trigger loading the next older window: the
- *  reader must have interacted (so mount/programmatic scrolls are excluded), be
- *  scrolling UP (so the manual prepend re-anchor and the initial bottom-pin —
- *  both downward — are excluded, preventing a self-retriggering cascade), land
- *  near the top, and older pages must still remain. */
+/** Distance (px) from the absolute top within which the viewport counts as
+ *  "pinned at the top". At/under this, older history pages in regardless of
+ *  scroll direction (see `shouldLoadOlder`). Small (sub-pixel + HiDPI slack)
+ *  so it never overlaps the downward-near-top exclusion. */
+export const AT_TOP_PX = 4;
+
+/** Whether to trigger loading the next older window. The reader must have
+ *  interacted (so mount/programmatic scrolls are excluded) and older pages must
+ *  remain. Then it fires when EITHER:
+ *    - pinned at the absolute top (`scrollTop <= AT_TOP_PX`), regardless of
+ *      direction — because at the very top you cannot produce an upward delta
+ *      and no further scroll event fires, so a dropped/under-anchored prepend
+ *      would otherwise strand the reader there with older history un-loadable
+ *      (the "scroll down then up to un-stick" freeze, 2026-06-11); or
+ *    - scrolling UP into the near-top prefetch zone. The upward-delta guard
+ *      still excludes the manual prepend re-anchor and the initial bottom-pin
+ *      (both downward) away from the top, preventing a self-retriggering
+ *      cascade — and the at-top branch does not reopen that cascade because a
+ *      successful prepend anchor scrolls the reader DOWN off the top. */
 export function shouldLoadOlder(args: {
   scrollTop: number;
   prevScrollTop: number;
@@ -85,6 +99,7 @@ export function shouldLoadOlder(args: {
   topThreshold?: number;
 }): boolean {
   if (!args.canLoadOlder || !args.hasInteracted) return false;
+  if (args.scrollTop <= AT_TOP_PX) return true; // pinned at the absolute top
   if (args.scrollTop >= args.prevScrollTop) return false; // not scrolling up
   return args.scrollTop <= (args.topThreshold ?? LOAD_OLDER_TOP_PX);
 }

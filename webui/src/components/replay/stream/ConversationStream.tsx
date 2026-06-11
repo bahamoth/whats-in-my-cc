@@ -210,6 +210,36 @@ export function ConversationStream({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature.first, signature.last]);
 
+  // Stuck-at-top recovery: a fast upward scroll can outrun a slow older-fetch so
+  // the near-top trigger is dropped (loadOlder no-ops while a prior load is in
+  // flight), and an under-anchored prepend can leave the reader pinned at the
+  // ABSOLUTE top. There no further scroll event fires (you cannot scroll past
+  // the top), so onScroll can never re-trigger and older history stops until a
+  // manual scroll-down-then-up. Re-evaluate the trigger after each settle
+  // (items / canLoadOlder change), reading the RESTING scrollTop — passing
+  // prevScrollTop === scrollTop means only shouldLoadOlder's at-top branch can
+  // fire here, so it pages ONLY when pinned at the very top. loadOlder no-ops
+  // while a load is in flight and stops at the session start (canLoadOlder
+  // false); a successful prepend anchor scrolls the reader DOWN off the top,
+  // which ends the re-check — so this cannot cascade. Runs after the manual
+  // anchor (useLayoutEffect above) so it sees the post-anchor position.
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el || !onLoadOlder) return;
+    if (
+      shouldLoadOlder({
+        scrollTop: el.scrollTop,
+        prevScrollTop: el.scrollTop,
+        hasInteracted: hasInteractedRef.current,
+        canLoadOlder,
+      })
+    ) {
+      prependAnchorRef.current = el.scrollHeight;
+      onLoadOlder();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, canLoadOlder]);
+
   // Scroll the selected item into view when selection changes from an external
   // source (e.g. deep link, untagged-bash jump). The satisfied-ref makes this
   // one-shot per selection: appends re-run the effect (items dep) but never

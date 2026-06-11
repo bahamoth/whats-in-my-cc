@@ -373,6 +373,36 @@ describe('ConversationStream', () => {
     expect(onLoadOlder).toHaveBeenCalled();
   });
 
+  // Stuck-at-top recovery (2026-06-11): a fast upward scroll can outrun a slow
+  // older-fetch (the near-top trigger no-ops while a load is in flight) and an
+  // under-anchored prepend can leave the reader pinned at the ABSOLUTE top.
+  // There, no further scroll event fires (you cannot scroll past the top), so
+  // onScroll can never re-trigger — older history stops until the reader
+  // scrolls DOWN then UP. The stream must re-evaluate the trigger after a
+  // prepend settles, directly from the resting scrollTop, so it keeps paging.
+  it('pages older history after a prepend settles while pinned at the absolute top (no new scroll event)', () => {
+    const onLoadOlder = vi.fn();
+    const base = {
+      selectedEventId: null,
+      findingEventIds: new Set<string>(),
+      onSelect: () => {},
+      onLoadOlder,
+      canLoadOlder: true,
+    };
+    const { container, rerender } = render(
+      <ConversationStream items={[msg('b', 'second'), msg('c', 'third')]} {...base} />,
+    );
+    const scroller = container.querySelector('[data-testid="conversation-stream"]') as HTMLElement;
+    fireEvent.wheel(scroller, { deltaY: -120 }); // reader has interacted
+    scroller.scrollTop = 0; // pinned at the absolute top (under-anchored prepend)
+    onLoadOlder.mockClear();
+    // A prepend lands (first id changes, last stays) with NO scroll event.
+    rerender(
+      <ConversationStream items={[msg('a', 'older'), msg('b', 'second'), msg('c', 'third')]} {...base} />,
+    );
+    expect(onLoadOlder).toHaveBeenCalled();
+  });
+
   // Cascade / mount guard: before the reader interacts, the initial bottom-pin
   // and any measurement/programmatic scroll must NOT page older history —
   // otherwise the whole session auto-loads (the windowing bug).
