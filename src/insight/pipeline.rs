@@ -4,8 +4,17 @@
 //! row. No judge, no confidence floor, no pending queue — detectors emit facts,
 //! not judgments (spec §6.3).
 //!
-//! `run_detectors` is idempotent: re-running produces the same `signal_id`s;
-//! `INSERT OR REPLACE` keeps the last writer's version (same content).
+//! `run_detectors` is idempotent at the *session* level: each call loads the full
+//! session view and rebuilds the complete signal set. Two mechanisms keep the
+//! stored set in sync with the latest pass:
+//!   1. Stable `signal_id` — derived from `dedup_key` when a detector provides one
+//!      (aggregating detectors like re_read, keyed by file_path), else from
+//!      `evidence_refs`. `INSERT OR REPLACE` then updates one row as evidence grows.
+//!   2. Reconcile — after inserting a detector's current-pass signals, delete any
+//!      stored signal for that (session, detector) absent from the pass. This
+//!      removes stale rows that a *changed* `signal_id` left orphaned — the
+//!      dogfooding regression (2026-06-11) where re_read evidence grew across
+//!      re-ingests and spawned a fresh row each time (154 rows / 53 files).
 //!
 //! Called directly from each ingest path (transcript / OTel traces·logs·metrics
 //! / hook) once observed events for a session have been committed.
@@ -40,11 +49,21 @@ pub async fn run_detectors(pool: &SqlitePool, session_id: &str) -> Result<Vec<Si
                 continue;
             }
         };
+        // Insert this detector's current-pass signals, then reconcile: delete any
+        // stored signal for (session, this detector) NOT in the current pass.
+        // This makes the pipeline truly idempotent even for *aggregating* detectors
+        // (re_read) whose evidence grows across re-ingests — stale snapshots that
+        // were never REPLACE-d (different signal_id) are removed (dogfooding
+        // regression 2026-06-11). Each run_detectors call loads the FULL session
+        // view, so the current pass is the complete, authoritative set.
+        let mut keep_ids = Vec::with_capacity(cands.len());
         for c in cands {
             let row = build_signal_row(session_id, &c);
+            keep_ids.push(row.signal_id.clone());
             repo_signal::insert(pool, &row).await?;
             rows.push(row);
         }
+        repo_signal::reconcile(pool, session_id, det.id(), &keep_ids).await?;
     }
     Ok(rows)
 }
@@ -58,8 +77,15 @@ fn build_signal_row(session_id: &str, c: &SignalCandidate) -> SignalRow {
         version: "L1",
         rule_pack: None,
     };
+    // Derive `signal_id` from the stable `dedup_key` when the detector provides
+    // one (aggregating detectors like re_read), else from `evidence_refs` (fixed
+    // per signal). A stable key keeps one row as evidence grows across re-ingests.
+    let id_refs: Vec<String> = match &c.dedup_key {
+        Some(k) => vec![k.clone()],
+        None => c.evidence_refs.clone(),
+    };
     SignalRow {
-        signal_id: derive_signal_id(c.detector, session_id, &c.evidence_refs),
+        signal_id: derive_signal_id(c.detector, session_id, &id_refs),
         schema_version: "signal.v1".into(),
         session_id: session_id.to_string(),
         // `SignalRow.detector` stores the bare id (e.g. `tool_failure`) for

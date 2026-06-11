@@ -190,6 +190,7 @@ impl Detector for FinalStateMismatch {
             summary,
             evidence_refs,
             facts,
+            dedup_key: None,
         }]
     }
 }

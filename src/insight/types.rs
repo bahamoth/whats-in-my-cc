@@ -19,6 +19,14 @@ pub struct SignalCandidate {
     pub evidence_refs: Vec<String>,
     /// Deterministic facts projection (no severity/confidence).
     pub facts: serde_json::Value,
+    /// Stable identity for `signal_id` derivation, independent of the (possibly
+    /// growing) `evidence_refs`. `None` → derive from `evidence_refs` (correct for
+    /// detectors whose evidence is fixed per signal, e.g. one failure / one event).
+    /// `Some(key)` → derive from this key, so an *aggregating* detector (e.g.
+    /// `re_read`, keyed by file_path) keeps a single stable `signal_id` as its
+    /// evidence set grows across re-ingests, instead of spawning a new row each
+    /// time (dogfooding regression 2026-06-11).
+    pub dedup_key: Option<String>,
 }
 
 /// Provenance carried by every stored signal.

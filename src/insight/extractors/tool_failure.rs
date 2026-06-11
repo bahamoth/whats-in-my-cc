@@ -192,6 +192,7 @@ impl Detector for ToolFailure {
                 summary,
                 evidence_refs: refs,
                 facts,
+                dedup_key: None,
             });
 
             if let Some(t) = tid {
