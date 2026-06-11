@@ -31,6 +31,22 @@ access is read-only.
 
 ## Quick start
 
+### Prebuilt binary
+
+Grab the archive for your platform from
+[GitHub Releases](https://github.com/bahamoth/whats-in-my-cc/releases/latest)
+— Linux `x86_64` or macOS Apple Silicon. The WebUI is embedded; the single
+binary is all you need.
+
+```bash
+tar -xzf wimcc-v*-aarch64-apple-darwin.tar.gz   # or …-x86_64-unknown-linux-gnu.tar.gz
+./wimcc init-db                # apply migrations, prepare .wimcc.sqlite
+./wimcc serve --auto-migrate   # http://127.0.0.1:7878  (auth off by default)
+./wimcc doctor                 # verify collector wiring
+```
+
+### Build from source
+
 ```bash
 just build-release                            # build the SPA + release binary (target/release/wimcc) in one step
 ./target/release/wimcc init-db                # apply migrations, prepare .wimcc.sqlite
@@ -142,6 +158,9 @@ returns 404.
 - `whats_in_my_cc.get_file_lineage`
 - `whats_in_my_cc.get_otel_trace`
 - `whats_in_my_cc.list_detectors`
+
+It also serves MCP resources: a per-session summary plus file-lineage and
+OTel-trace resource templates.
 
 ## Web UI
 
@@ -291,10 +310,21 @@ cargo test
 tooling script (`webui/scripts/untagged-bash.ts`) needs Node 22+ for native type
 stripping.
 
-**dev DB regeneration** — after a migration change (latest `0022`), run
+**dev DB regeneration** — after a migration change (latest `0023`), run
 `wimcc init-db` and re-ingest. Payload fields stored as JSON BLOBs
 (`tool_call.tool_name`, `assistant_message.model`, …) are added without a schema
 migration, so existing events won't have them until re-ingested.
+
+## CI & releases
+
+- **CI** (GitHub Actions) runs the full gate on every PR: `vitest` + the SPA
+  build, then `cargo fmt --check`, `cargo clippy -- -D warnings`, and
+  `cargo test` against the freshly built `webui/dist`.
+- **Releases** are automated with release-please: conventional commits on
+  `main` accumulate into a release PR; merging it tags `vX.Y.Z`, generates the
+  CHANGELOG, and uploads `wimcc` binaries (Linux `x86_64`, macOS Apple Silicon)
+  to the GitHub Release. Versions in `Cargo.toml` and `webui/package.json` are
+  bumped together — don't edit them by hand.
 
 ## Reference docs
 

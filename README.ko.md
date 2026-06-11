@@ -29,6 +29,21 @@ wimcc로 할 수 있는 것:
 
 ## 빠른 시작
 
+### 빌드된 바이너리
+
+[GitHub Releases](https://github.com/bahamoth/whats-in-my-cc/releases/latest)에서
+플랫폼에 맞는 아카이브를 받는다 — Linux `x86_64` 또는 macOS Apple Silicon.
+WebUI가 임베드되어 있어 단일 바이너리만 있으면 된다.
+
+```bash
+tar -xzf wimcc-v*-aarch64-apple-darwin.tar.gz   # 또는 …-x86_64-unknown-linux-gnu.tar.gz
+./wimcc init-db                # 마이그레이션 적용, .wimcc.sqlite 준비
+./wimcc serve --auto-migrate   # http://127.0.0.1:7878  (auth 기본 off)
+./wimcc doctor                 # collector 연동 점검
+```
+
+### 소스에서 빌드
+
 ```bash
 just build-release                            # WebUI 빌드 + 릴리스 바이너리(target/release/wimcc)를 한 번에
 ./target/release/wimcc init-db                # 마이그레이션 적용, .wimcc.sqlite 준비
@@ -137,6 +152,9 @@ SDK가 `…/v1/metrics`로 POST해서 wimcc가 404를 반환한다.
 - `whats_in_my_cc.get_file_lineage`
 - `whats_in_my_cc.get_otel_trace`
 - `whats_in_my_cc.list_detectors`
+
+MCP resource도 제공한다: 세션별 summary, 그리고 file-lineage·OTel-trace
+resource template.
 
 ## Web UI
 
@@ -281,10 +299,21 @@ cargo test
 **Node 버전** — 빌드는 Node 20 (`webui/.nvmrc`). untagged-Bash 도구 스크립트
 (`webui/scripts/untagged-bash.ts`)는 네이티브 타입 스트리핑을 위해 Node 22+가 필요하다.
 
-**dev DB 재생성** — 마이그레이션 변경(최신 `0022`) 후에는 `wimcc init-db` + 재ingest가
+**dev DB 재생성** — 마이그레이션 변경(최신 `0023`) 후에는 `wimcc init-db` + 재ingest가
 필요하다. JSON BLOB으로 저장되는 payload 필드(`tool_call.tool_name`,
 `assistant_message.model` 등)는 schema migration 없이 추가되므로, 기존 event는
 재ingest해야 채워진다.
+
+## CI & 릴리스
+
+- **CI** (GitHub Actions)는 모든 PR에서 전체 게이트를 돌린다: `vitest` + SPA
+  빌드, 이어서 갓 빌드된 `webui/dist`를 대상으로 `cargo fmt --check`,
+  `cargo clippy -- -D warnings`, `cargo test`.
+- **릴리스**는 release-please로 자동화되어 있다: `main`의 conventional commit이
+  릴리스 PR에 누적되고, 그 PR을 머지하면 `vX.Y.Z` 태그·CHANGELOG 생성과 함께
+  `wimcc` 바이너리(Linux `x86_64`, macOS Apple Silicon)가 GitHub Release에
+  업로드된다. `Cargo.toml`과 `webui/package.json`의 버전은 함께 bump되므로
+  손으로 수정하지 말 것.
 
 ## 참고 문서
 
