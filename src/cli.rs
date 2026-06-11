@@ -104,7 +104,8 @@ pub enum Command {
         #[arg(long, conflicts_with = "print_token")]
         rotate_token: bool,
         /// Slice-19: Retention profile. Default: "none" (no deletion).
-        /// Use "default" (30d/180d/90d) or "strict" (7d/30d/30d) to enable sweeps.
+        /// "default" (raw 30d, normalized+signal 180d, audit 90d) or "strict"
+        /// (raw 7d, others 30d) enables a 6-hourly sweep over all data classes.
         #[arg(long, default_value = "none", value_parser = ["none", "default", "strict"])]
         retention_profile: String,
         /// Whether to require bearer-token auth on /v1 + /mcp. Default: off (single-user dev).
