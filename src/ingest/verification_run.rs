@@ -201,9 +201,23 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             }
             None => m.status_basis.to_string(),
         };
-        let (status, status_provenance) = if m.status_basis == "piped" || result_disposition.is_some()
-        {
+        let (status, status_provenance) = if result_disposition.is_some() {
+            // Disposition (rejected/denied/cancelled/background): the tool didn't
+            // run, or the content isn't real output → genuinely unknown.
             ("unknown", "unknown".to_string())
+        } else if m.status_basis == "piped" {
+            // piped masks the shell exit code (no measured-from-exit), BUT the
+            // command's own deterministic summary may survive the pipe (tier-4
+            // estimated), or an OTLP/hook signal may exist (measured). Keep that
+            // resolution; only force unknown when nothing determined it. The
+            // status_basis above stays "piped" so the masking is transparent.
+            // (Dogfooding fix 2026-06-11; relaxes the prior unconditional
+            // piped→unknown of design §6.2.)
+            if status == "unknown" {
+                ("unknown", "unknown".to_string())
+            } else {
+                (status, status_provenance_str.to_string())
+            }
         } else {
             (status, status_provenance_str.to_string())
         };
@@ -685,6 +699,66 @@ mod tests {
             runs[0].status_provenance.as_deref(),
             Some("estimated")
         );
+    }
+
+    /// piped helper: a Bash run whose command is piped to a non-pager (so the
+    /// matched segment's status_basis = "piped") with the given result content.
+    fn make_piped_run(tid: &str, cmd: &str, result_content: &str) -> Vec<ObservedEvent> {
+        // `cmd` should already contain a pipe to a non-pager (e.g. `2>&1 | tail`).
+        make_bash_run(tid, cmd, result_content)
+    }
+
+    #[test]
+    fn piped_test_with_success_summary_is_passed_estimated() {
+        // Dogfooding fix 2026-06-11: a piped test command (exit code masked) whose
+        // OUTPUT survives the pipe and carries a deterministic success summary must
+        // resolve to passed/estimated — not be discarded to unknown. status_basis
+        // stays "piped" for transparency (exit not measured; summary is estimated).
+        let evs = make_piped_run(
+            "toolu_piped_ok",
+            // piped to grep (a NON-pager) → exit masked → status_basis="piped";
+            // the summary line still survives the grep.
+            "cargo test 2>&1 | grep result",
+            "running 5 tests\ntest result: ok. 5 passed; 0 failed; 0 ignored",
+        );
+        let runs = extract_verification_runs(&evs);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, "passed", "piped success summary → passed");
+        assert_eq!(runs[0].status_provenance.as_deref(), Some("estimated"));
+        assert_eq!(
+            runs[0].status_basis, "piped",
+            "status_basis stays piped — exit code masked, summary is estimated"
+        );
+    }
+
+    #[test]
+    fn piped_test_with_failure_summary_is_failed_estimated() {
+        let evs = make_piped_run(
+            "toolu_piped_fail",
+            "npx vitest run 2>&1 | grep -iE 'fail'",
+            "Tests failed\n FAIL  src/x.test.ts > does a thing",
+        );
+        let runs = extract_verification_runs(&evs);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, "failed", "piped failure summary → failed");
+        assert_eq!(runs[0].status_provenance.as_deref(), Some("estimated"));
+        assert_eq!(runs[0].status_basis, "piped");
+    }
+
+    #[test]
+    fn piped_test_with_no_summary_stays_unknown() {
+        // Guard: when the downstream filter cut the summary (no recognizable
+        // success/failure line survives the pipe), piped stays unknown — we never
+        // guess. Locks that the relaxation only upgrades on a real summary.
+        let evs = make_piped_run(
+            "toolu_piped_blank",
+            "cargo test 2>&1 | grep -c warning",
+            "0",
+        );
+        let runs = extract_verification_runs(&evs);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, "unknown", "no summary in piped output → unknown");
+        assert_eq!(runs[0].status_basis, "piped");
     }
 
     #[test]
