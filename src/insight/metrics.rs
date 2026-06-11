@@ -64,6 +64,10 @@ pub struct SessionMetrics {
     pub api_error_count: i64,
     /// system/compact_boundary 레코드 수 (컨텍스트 압축 발생 횟수).
     pub compact_boundary_count: i64,
+    /// system/away_summary 레코드 수 (사용자 자리비움 turn). away/compact turn은
+    /// turn_duration 대신 별도 레코드를 쓰므로, turn_duration_count는 전체 turn이
+    /// 아니다 — 이 값으로 보완한다.
+    pub away_summary_count: i64,
     /// 하니스 잘림 마커("… [N characters truncated] …")를 포함한 tool_result 수
     /// — 출력이 잘려 보존된 호출의 fact.
     pub tool_result_truncated_count: i64,
@@ -137,6 +141,7 @@ pub async fn compute_session_metrics(
     // 코퍼스 실측 session fact 카운트 (session_facts_v01.jsonl로 잠김).
     let (mut turn_duration_ms_total, mut turn_duration_count) = (0i64, 0i64);
     let (mut api_error_count, mut compact_boundary_count) = (0i64, 0i64);
+    let mut away_summary_count = 0i64;
     let (mut tool_result_truncated_count, mut user_interruption_count) = (0i64, 0i64);
     for e in &events {
         match e.kind {
@@ -172,6 +177,7 @@ pub async fn compute_session_metrics(
                 }
                 Some("api_error") => api_error_count += 1,
                 Some("compact_boundary") => compact_boundary_count += 1,
+                Some("away_summary") => away_summary_count += 1,
                 _ => {}
             },
             EventKind::UserMessage => {
@@ -218,6 +224,7 @@ pub async fn compute_session_metrics(
         turn_duration_count,
         api_error_count,
         compact_boundary_count,
+        away_summary_count,
         tool_result_truncated_count,
         user_interruption_count,
         detector_firing,
