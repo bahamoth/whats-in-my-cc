@@ -355,22 +355,40 @@ function untaggedHint(token: string): string {
 }
 
 export function collectUntagged(events: ObservedEventDto[]): UntaggedRow[] {
-  const byToken = new Map<string, { count: number; sample: string; eventId: string }>();
+  const byToken = new Map<string, { count: number; sample: string; eventId: string; hint: string }>();
   for (const e of events) {
     if (tagForEvent(e).disposition !== 'unmatched') continue;
     const input = ((e.payload as Record<string, unknown>)?.input ?? {}) as Record<string, unknown>;
-    const isCmd = typeof input.command === 'string';
-    const cmd = isCmd
-      ? stripCommentLines(input.command as string)
-      : typeof input.file_path === 'string' ? input.file_path : '';
-    // Aggregate under the first MEANINGFUL command token (or `tool sub` for a
-    // multiplexer), with comments / control prefixes / `VAR=` assignments
-    // stripped — so the hint points at the real command worth tagging.
-    const meaningful = isCmd ? commandOf(firstMeaningfulSegment(segmentCommand(cmd)) ?? cmd) : cmd;
-    const tok = isCmd ? untaggedToken(meaningful) : meaningful;
-    const cur = byToken.get(tok);
+    let token: string;
+    let sample: string;
+    let hint: string;
+    if (typeof input.command === 'string') {
+      // Bash: aggregate under the first MEANINGFUL command token (or `tool sub`
+      // for a multiplexer), with comments / control prefixes / `VAR=` assignments
+      // stripped — so the hint points at the real command worth tagging.
+      const cmd = stripCommentLines(input.command);
+      const meaningful = commandOf(firstMeaningfulSegment(segmentCommand(cmd)) ?? cmd);
+      token = untaggedToken(meaningful);
+      sample = (meaningful || cmd).slice(0, 80);
+      hint = untaggedHint(token);
+    } else {
+      // Read/Edit/Write: classify by file EXTENSION (or basename for dotfiles) and
+      // point the loop at the EXTENSION map for that tool — NOT BASH_FIRST_TOKEN_TAGS.
+      // (Without this, an unmatched Read surfaced as its full path with a bogus Bash
+      // hint — corpus: /tmp/pr41.diff #1, .gitignore #2 untagged "token".)
+      const fp = typeof input.file_path === 'string' ? input.file_path : '';
+      const extn = ext(fp);
+      const base = fp.split('/').pop() ?? '';
+      const map = e.tool_name === 'Read' ? 'READ_EXT_TAGS' : 'WRITE_EXT_TAGS';
+      token = extn || base;
+      sample = fp.slice(0, 80);
+      hint = extn
+        ? `add '${extn}': '<tag>' to ${map} in eventTags.ts`
+        : `add a rule for '${base}' (no extension) to ${map} in eventTags.ts`;
+    }
+    const cur = byToken.get(token);
     if (cur) cur.count++;
-    else byToken.set(tok, { count: 1, sample: (meaningful || cmd).slice(0, 80), eventId: e.event_id });
+    else byToken.set(token, { count: 1, sample, eventId: e.event_id, hint });
   }
   return [...byToken.entries()]
     .map(([token, v]) => ({
@@ -378,7 +396,7 @@ export function collectUntagged(events: ObservedEventDto[]): UntaggedRow[] {
       count: v.count,
       sample: v.sample,
       eventId: v.eventId,
-      hint: untaggedHint(token),
+      hint: v.hint,
     }))
     .sort((a, b) => b.count - a.count);
 }
