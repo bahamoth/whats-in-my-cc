@@ -296,6 +296,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
             <div className={styles.analysis} data-slot="analysis">
               <AnalysisPanel
                 metrics={metricsQuery.data ?? null}
+                signals={signalsData}
+                onSelectEvent={selectStreamCard}
                 data-testid="analysis-panel"
               />
             </div>

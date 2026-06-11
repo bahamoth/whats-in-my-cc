@@ -82,6 +82,63 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
+  /* button reset — the row is a toggle when it has drillable signals */
+  background: none;
+  border: none;
+  padding: 2px 0;
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  border-radius: 4px;
+}
+
+.detectorRow[aria-expanded] {
+  cursor: pointer;
+}
+
+.detectorRow[aria-expanded]:hover {
+  background: var(--wimcc-surface-3, #1b202a);
+}
+
+.detectorRow:disabled {
+  cursor: default;
+}
+
+/* Drilled signal list under an expanded detector bar */
+.signalList {
+  list-style: none;
+  margin: 4px 0 6px;
+  padding: 0 0 0 150px; /* align under the bar, past the detector-name column */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.signalItem {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  color: var(--wimcc-fg-muted, #aab0bd);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.signalItem:hover:not(:disabled) {
+  background: var(--wimcc-surface-3, #1b202a);
+  color: var(--wimcc-fg, #e6e8ee);
+}
+
+.signalItem:disabled {
+  cursor: default;
 }
 
 .detectorName {

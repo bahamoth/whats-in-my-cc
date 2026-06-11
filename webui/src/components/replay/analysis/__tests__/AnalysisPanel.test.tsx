@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { AnalysisPanel } from '../AnalysisPanel';
-import type { SessionMetricsDto } from '../../../../api/types';
+import type { SessionMetricsDto, SignalDto } from '../../../../api/types';
 
 const m: SessionMetricsDto = {
   session_id: 's1',
@@ -74,5 +74,48 @@ describe('AnalysisPanel', () => {
   test('empty state when null', () => {
     render(<AnalysisPanel metrics={null} />);
     expect(screen.getByText(/분석할 지표가 없|no metrics/i)).toBeInTheDocument();
+  });
+
+  // --- drill-down (dogfooding 2026-06-11): detector bars expand to their signals,
+  // each linking to its evidence event ---
+  const reReadSignal: SignalDto = {
+    signal_id: 'sig_rr1',
+    schema_version: 'signal.v1',
+    session_id: 's1',
+    detector: 're_read',
+    subkind: null,
+    summary: 'File src/big.rs read 5 times (re-read, context-loss signal).',
+    evidence_refs: ['ev_read_1'],
+    facts: { file_path: 'src/big.rs', read_count: 5 },
+    provenance: {},
+    created_at: '',
+  };
+  const mWithReRead: SessionMetricsDto = {
+    ...m,
+    detector_firing: { re_read: 1, tool_failure: 2 },
+  };
+
+  test('expanding a detector row reveals its signals (file_path + read_count)', () => {
+    render(<AnalysisPanel metrics={mWithReRead} signals={[reReadSignal]} />);
+    // Collapsed: signal detail not shown yet.
+    expect(screen.queryByText(/src\/big\.rs/)).not.toBeInTheDocument();
+    // Expand the re_read row.
+    fireEvent.click(screen.getByRole('button', { name: /re_read/ }));
+    expect(screen.getByText(/src\/big\.rs/)).toBeInTheDocument();
+    expect(screen.getByText(/5회/)).toBeInTheDocument(); // read_count
+  });
+
+  test('clicking a drilled signal selects its evidence event', () => {
+    const onSelectEvent = vi.fn();
+    render(
+      <AnalysisPanel
+        metrics={mWithReRead}
+        signals={[reReadSignal]}
+        onSelectEvent={onSelectEvent}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /re_read/ }));
+    fireEvent.click(screen.getByText(/src\/big\.rs/));
+    expect(onSelectEvent).toHaveBeenCalledWith('ev_read_1');
   });
 });
