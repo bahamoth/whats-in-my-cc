@@ -149,7 +149,9 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
                     .unwrap_or("");
                 if looks_like_failure(content) {
                     (OutcomeStatus::Failed, OutcomeProvenance::Estimated)
-                } else if looks_like_success(content) {
+                } else if looks_like_success(content)
+                    || (command_kind == "lint" && looks_like_lint_success(content))
+                {
                     // 도구의 결정론 성공 요약 → Passed(Estimated). exit code(Measured)와 구분.
                     (OutcomeStatus::Passed, OutcomeProvenance::Estimated)
                 } else {
@@ -578,6 +580,19 @@ fn looks_like_success(content: &str) -> bool {
         || (content.contains("Test Files") && content.contains("passed"))
 }
 
+/// Tier-4 estimated lint(clippy) success heuristic: clippy emits no "test result: ok"
+/// style summary, only a trailing `Finished … target(s)` line on a successful run
+/// (warnings alone do not fail it unless `-D warnings` promotes them — those produce
+/// `error:` / `aborting due to`, which looks_like_failure catches first).
+///
+/// **lint only.** cargo build/test also print `Finished … target(s)` after their build
+/// step, so applying this to build/test_suite_* would mark a failed test run as passed
+/// (CLAUDE.md §unknown-verification loop, caveat 3). The caller gates on command_kind.
+/// real fixture: 6a254a2a vr_774831107e0b78fd (cargo clippy --all-targets, warning-only success).
+fn looks_like_lint_success(content: &str) -> bool {
+    content.contains("Finished") && content.contains("target(s)")
+}
+
 /// Tier-4 estimated failure heuristic: checks for common failure patterns in
 /// tool output when no OTLP/hook/exit-code signal is available.
 ///
@@ -682,6 +697,41 @@ mod tests {
         // 먼저 검사하므로 실제 경로에선 Failed로 처리된다. 이 의존성을 문서화한다.
         assert!(looks_like_success("1 failed, 41 passed in 1.20s"));
         assert!(looks_like_failure("1 failed, 41 passed in 1.20s"));
+    }
+
+    /// Dogfooding 2026-06-11: clippy 성공 출력은 "test result: ok" 류 요약이 없고
+    /// "Finished … target(s)"로만 끝나므로 기존 looks_like_success가 놓쳐 unknown으로
+    /// 남았다(세션 6a254a2a lint unknown 다수). lint에서는 Passed(estimated)로 승격하되,
+    /// 동일 content라도 build에서는 승격 금지 — cargo build/test도 빌드 단계에서
+    /// "Finished"를 찍으므로 실패한 테스트를 통과로 오판한다(CLAUDE.md §unknown-verification).
+    /// real fixture: 6a254a2a vr_774831107e0b78fd (cargo clippy --all-targets 2>&1,
+    /// warning만 있고 exit 0인 성공).
+    #[test]
+    fn clippy_finished_summary_promotes_lint_only() {
+        let clippy_ok = "warning: doc list item without indentation\n  --> src/insight/outcome.rs:16:5\n   |\nwarning: `wimcc` (lib) generated 1 warning\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.00s";
+
+        let lint = extract_verification_runs(&make_bash_run(
+            "toolu_clippy_ok",
+            "cargo clippy --all-targets 2>&1",
+            clippy_ok,
+        ));
+        assert_eq!(lint.len(), 1);
+        assert_eq!(lint[0].command_kind, "lint");
+        assert_eq!(lint[0].status, "passed", "clippy Finished → lint passed");
+        assert_eq!(lint[0].status_provenance.as_deref(), Some("estimated"));
+
+        // 동일 "Finished" content를 build로 실행하면 승격 금지 → unknown 유지.
+        let build = extract_verification_runs(&make_bash_run(
+            "toolu_build_finished",
+            "cargo build 2>&1",
+            clippy_ok,
+        ));
+        assert_eq!(build.len(), 1);
+        assert_eq!(build[0].command_kind, "build");
+        assert_eq!(
+            build[0].status, "unknown",
+            "build Finished must NOT promote (cargo test 빌드단계 오판 방지)"
+        );
     }
 
     #[test]
