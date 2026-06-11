@@ -188,6 +188,7 @@ impl Detector for ContextBloat {
                 summary,
                 evidence_refs: vec![ev.event_id.clone(), asst_ev.event_id.clone()],
                 facts,
+                dedup_key: None,
             });
         }
 

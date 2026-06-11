@@ -1,9 +1,12 @@
 //! `signal` side-table repo.
 //!
 //! Signals are the output of deterministic detectors (Plan 1: finding → signal).
-//! `signal_id` is derived deterministically so `INSERT OR REPLACE` safely
-//! deduplicates re-runs (idempotent by primary key). NO severity/confidence —
-//! those are judgments; only facts are stored (spec §6.3).
+//! `signal_id` is derived deterministically so `INSERT OR REPLACE` deduplicates
+//! re-runs (idempotent by primary key) — provided the id is stable. Aggregating
+//! detectors derive it from a stable `dedup_key`; the pipeline additionally
+//! `reconcile`s each (session, detector) to drop rows orphaned by a changed id
+//! (dogfooding fix 2026-06-11). NO severity/confidence — those are judgments;
+//! only facts are stored (spec §6.3).
 
 use sqlx::{Row, SqlitePool};
 
@@ -48,6 +51,38 @@ pub async fn insert(pool: &SqlitePool, row: &SignalRow) -> Result<()> {
     .bind(&row.created_at)
     .execute(pool)
     .await?;
+    Ok(())
+}
+
+/// Reconcile a `(session_id, detector)` group to the current pass: delete every
+/// stored signal for that group whose `signal_id` is NOT in `keep_ids`.
+///
+/// `run_detectors` loads the full session view, so the current pass is the
+/// complete authoritative set for each detector. This removes stale signals that
+/// `INSERT OR REPLACE` cannot reach — e.g. an aggregating detector (re_read)
+/// whose evidence grew across re-ingests and thus changed `signal_id`, leaving
+/// the old row orphaned (dogfooding regression 2026-06-11). An empty `keep_ids`
+/// means the detector produced nothing this pass → delete all its signals.
+pub async fn reconcile(
+    pool: &SqlitePool,
+    session_id: &str,
+    detector: &str,
+    keep_ids: &[String],
+) -> Result<()> {
+    // Build a parameterized NOT IN (...) list to avoid SQL injection / quoting.
+    let placeholders = if keep_ids.is_empty() {
+        // No survivors: delete all rows for this (session, detector).
+        String::new()
+    } else {
+        let marks = vec!["?"; keep_ids.len()].join(",");
+        format!(" AND signal_id NOT IN ({marks})")
+    };
+    let sql = format!("DELETE FROM signal WHERE session_id=? AND detector=?{placeholders}");
+    let mut q = sqlx::query(&sql).bind(session_id).bind(detector);
+    for id in keep_ids {
+        q = q.bind(id);
+    }
+    q.execute(pool).await?;
     Ok(())
 }
 

@@ -76,6 +76,10 @@ impl Detector for ReRead {
                 subkind: None,
                 summary,
                 evidence_refs: ids,
+                // re_read aggregates per file: keep a stable signal_id keyed by
+                // file_path so accumulating reads update one row instead of
+                // spawning a new signal each re-ingest (dogfooding fix 2026-06-11).
+                dedup_key: Some(path.clone()),
                 facts: json!({ "file_path": path, "read_count": read_count }),
             });
         }

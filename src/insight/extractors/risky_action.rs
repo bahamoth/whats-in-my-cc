@@ -139,6 +139,7 @@ impl Detector for RiskyAction {
                 summary,
                 evidence_refs: vec![ev.event_id.clone()],
                 facts,
+                dedup_key: None,
             });
         }
 
@@ -188,6 +189,7 @@ impl Detector for RiskyAction {
                 summary,
                 evidence_refs: vec![hunk.introduced_by_event_id.clone()],
                 facts,
+                dedup_key: None,
             });
         }
 

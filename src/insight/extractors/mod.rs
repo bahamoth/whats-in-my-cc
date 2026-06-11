@@ -57,6 +57,7 @@ pub mod noop_test {
                 summary: "noop_test: synthetic candidate for signal testing".to_string(),
                 evidence_refs: vec!["ev_000".to_string()],
                 facts: serde_json::json!({"synthetic": true}),
+                dedup_key: None,
             }]
         }
     }
