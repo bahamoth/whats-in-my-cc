@@ -4358,9 +4358,40 @@ vitest: 69 passed
         trace_id를 보유하므로 transcript↔OTel을 trace_id로 조인할 수 없다. timestamp/tool_use_id
         근사 조인은 부정확(동시 다발 span에서 오매칭)해 채택하지 않는다. Claude Code transcript가
         trace_id를 싣기 전까지 구현 불가 — OTel-first 원칙은 OTel 유래 이벤트에 한해 적용된다.</li>
-      <li><strong>turn_duration 결손</strong>: 6a254a2a <code>turn_duration_count 27 &lt; user_turns 38</code>
-        (11턴 누락 — compaction/summary 미발화 추정).</li>
+      <li><strong>turn_duration 결손 → 분류였음 (2026-06-11 적용)</strong>: 6a254a2a
+        <code>turn_duration_count 27 &lt; user_turns 38</code>은 누락이 아니라 away/compact turn이
+        turn_duration 대신 별도 레코드를 쓴 것이다 — turn_duration 27 + away_summary 10 +
+        compact_boundary 1 = 38. SessionMetrics에 <code>away_summary_count</code>를 노출해 정직화(Task3).</li>
     </ul>
+
+    <h2 id="dogfooding-followup-2026-06-11">개밥먹기 후속 구현 — Task 1~6 (2026-06-11)</h2>
+    <p>
+      위 분석에서 도출된 개선점을 brainstorm→spec→plan→TDD로 일괄 구현했다
+      (spec: <code>docs/superpowers/specs/2026-06-11-dogfooding-improvements-design.md</code>).
+      실데이터(프로덕션 DB) 검증 수치:
+    </p>
+    <ul>
+      <li><strong>Task1 — ingest --all 세션 합집합 1회 재계산</strong>: 파일별 재계산을 세션별 1회로
+        (store.rs를 ingest_one_file/recompute_session/ingest_paths로 분리). 재계산이 멱등이라 결과
+        불변, 중복 제거. 전체 재ingest <strong>37분+ → 101초(~22배)</strong>.</li>
+      <li><strong>Task2 — untagged 노이즈 제거</strong>: 서브셸 <code>(cd</code>·루프 break/continue·줄바꿈
+        분리 플래그줄 <code>-u</code>/<code>-s</code>를 control로 처리(isControlToken). 56+건 소멸.</li>
+      <li><strong>Task3 — turn_duration 정직화</strong>: away_summary/compact_boundary 카운트 노출(위 참조).</li>
+      <li><strong>Task4 — agent_id 세분</strong>: migration 0023 + mapping(agentId) + re_read scope
+        <code>agent:&lt;id&gt;</code>. backfill(raw payload, json_valid 가드로 malformed skip)로 기존 행을
+        init-db 없이 채움 — sidechain <strong>72621행 전부 backfill</strong>, re_read <strong>28→2</strong>
+        (subagent별 분리로 거짓 재읽기 제거; scope=<code>agent:&lt;id&gt;</code> 실측). ingest_cmd·serve
+        startup 둘 다 backfill 호출.</li>
+      <li><strong>Task5 — trace_id won't-fix</strong>(위 deferred 항목 참조).</li>
+      <li><strong>Task6 — InfoTip 수평 클리핑</strong>: 비용·요청출처 툴팁이 뷰포트 오른쪽으로 넘쳐 읽을 수
+        없던 것을 수평 flip(clipRightFor → right-align)으로 수정. 브라우저 smoke로 확인.</li>
+    </ul>
+    <p>
+      <strong>비용 정정(①)</strong> 검증: e8d51785(opus) $189→$63.07, 6a254a2a(fable 지배) $27.70→$701.67.
+      <strong>편차 메모</strong>: (a) backfill이 raw_event의 parse_error 행(비-JSON payload)에서 전체 실패
+      → 실데이터 검증에서 발견해 <code>json_valid</code> 가드 추가. (b) 프로젝트가 rustfmt 미적용으로
+      커밋돼 와(HEAD 348곳) 전체에 cargo fmt 1회 적용(별도 commit) — 이후 변경이 깨끗하게 격리되도록.
+    </p>
 
 </main>
 </div>
