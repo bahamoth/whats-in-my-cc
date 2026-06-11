@@ -3769,6 +3769,25 @@ vitest: 69 passed
       <li><code>src/api/mcp/tools/list_detectors.rs</code> + <code>tools/mod.rs</code> — MCP tool</li>
       <li><code>tests/detector_manifest.rs</code>, <code>tests/api_detectors.rs</code> — TDD 잠금 테스트</li>
     </ul>
+
+    <h3>re_read 정밀도 — 페이지네이션·scope 분리 (2026-06-11 개밥먹기)</h3>
+    <p>
+      개밥먹기에서 re_read가 두 가지로 오판함을 발견: (1) 같은 파일을 다른 <code>offset</code>으로 읽는
+      페이지네이션(예: <code>/tmp/pr41.diff</code>를 offset 1326 등으로 25회 순차 읽음)을 context-loss로
+      발화, (2) subagent(sidechain)의 Read를 메인 세션 신호에 합산.
+    </p>
+    <ul>
+      <li><strong>범위 인지</strong>: Read를 <code>(offset,limit)</code> 범위까지 구분해, 같은 범위가
+        min_reads회 이상 반복될 때만 발화. 다른 범위(페이지네이션)는 제외. offset/limit 없으면
+        <code>(-1,-1)</code>=전체읽기 — 전체 재읽기 반복은 여전히 잡힌다.</li>
+      <li><strong>scope 분리</strong>: <code>(scope, file_path)</code>로 묶고 scope=main|sidechain
+        (<code>is_sidechain</code>). 메인 신호가 subagent 읽기로 오염되지 않으며, subagent의 재읽기는
+        scope="sidechain"으로 따로 측정된다(버리지 않음). <code>facts.scope</code>·<code>dedup_key</code>에 반영.</li>
+      <li><strong>데이터 제약</strong>: observed event에 개별 <code>agent_id</code>가 없어
+        (<code>is_sidechain</code>만 보존) subagent를 agent별로 세분하진 못한다. agent별 분리는
+        mapping/observed 모델 변경 + init-db 전체 재생성이 필요한 후속 작업.</li>
+      <li>insight 레벨 변경이라 <code>wimcc ingest --all</code>로 반영(init-db 불필요).</li>
+    </ul>
   </section>
 
   <section id="tool-metrics-transcript-fallback">
