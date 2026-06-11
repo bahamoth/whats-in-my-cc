@@ -43,6 +43,35 @@ export function isNearTop(m: ScrollMetrics, threshold = LOAD_OLDER_TOP_PX): bool
   return m.scrollTop <= threshold;
 }
 
+/** Whether the virtualizer may shift `scrollTop` to compensate a row's
+ *  measured-size change (estimate 64px → real height). Passed to react-virtual
+ *  as `shouldAdjustScrollPositionOnItemSizeChange`.
+ *
+ *  Geometric rule: adjust ONLY when the resized row sits ENTIRELY above the
+ *  viewport top. Such a row's growth shifts everything at/below the viewport
+ *  down by `delta`, so a `+delta` scroll adjustment keeps the view stable
+ *  (this is what keeps manual prepend anchoring drift-free after the new
+ *  page's rows measure). A row STRADDLING the viewport top is different: its
+ *  own start is fixed, so the content at the viewport top does not move when
+ *  it grows — adjusting would scroll the reader DOWN away from it.
+ *
+ *  This replaces virtual-core's default (`itemStart < offset`, guarded by
+ *  `scrollDirection !== 'backward'`): the direction guard races — a wheel
+ *  burst ends, direction resets to null, THEN the ResizeObserver delivers the
+ *  giant straddling-row measurement, and the adjustment cancels the wheel's
+ *  movement (live-captured 2026-06-11: -1000px wheel + ~+1000 adjustment →
+ *  net zero, perceived as "위로 스크롤이 멈춤"). The geometric rule needs no
+ *  direction tracking, so it cannot race. */
+export function shouldAdjustOnItemResize(args: {
+  /** The resized row's pre-resize end offset (start + old size). */
+  itemEnd: number;
+  scrollOffset: number;
+  /** Adjustments already queued but not yet applied to `scrollOffset`. */
+  scrollAdjustments: number;
+}): boolean {
+  return args.itemEnd <= args.scrollOffset + args.scrollAdjustments;
+}
+
 /** Whether a scroll event should trigger loading the next older window: the
  *  reader must have interacted (so mount/programmatic scrolls are excluded), be
  *  scrolling UP (so the manual prepend re-anchor and the initial bottom-pin —

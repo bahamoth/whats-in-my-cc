@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { InfoTip } from '../InfoTip';
 
@@ -42,5 +42,56 @@ describe('InfoTip', () => {
     );
     fireEvent.click(screen.getByTestId('infotip-trigger'));
     expect(outer).toBe(0); // stopPropagation so opening the tip never expands the card
+  });
+});
+
+describe('InfoTip placement — flips above when the bubble would be clipped below', () => {
+  // Detail-panel rows near the bottom of the scrollable panel: a bubble that
+  // always opens downward (top: 100%) is cut off by the panel overflow. When
+  // there is not enough room below the trigger, the bubble must open upward.
+  // jsdom has no layout, so the bubble rect is stubbed at the prototype level.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  it('opens below by default when there is room', () => {
+    window.innerHeight = 800;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(
+      { top: 100, bottom: 160, left: 0, right: 200, width: 200, height: 60 } as DOMRect,
+    );
+    render(<InfoTip label="m" text="explain" />);
+    fireEvent.mouseEnter(screen.getByTestId('infotip-trigger'));
+    expect(screen.getByRole('tooltip').getAttribute('data-placement')).toBe('below');
+  });
+  it('flips above when the bubble bottom would pass the viewport bottom', () => {
+    window.innerHeight = 800;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(
+      { top: 796, bottom: 856, left: 0, right: 200, width: 200, height: 60 } as DOMRect,
+    );
+    render(<InfoTip label="m" text="explain" />);
+    fireEvent.mouseEnter(screen.getByTestId('infotip-trigger'));
+    expect(screen.getByRole('tooltip').getAttribute('data-placement')).toBe('above');
+  });
+  it('flips above when a scrollable ANCESTOR clips below — even with viewport room (detail panel case)', () => {
+    // Live-captured 2026-06-11: bubble bottom 773 > detail-panel clip bottom 758
+    // while window.innerHeight was 1,485 — a viewport-only check leaves the tip
+    // clipped by the panel overflow. The clip boundary must be the nearest
+    // overflowing ancestor, not the window.
+    window.innerHeight = 2000;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this.getAttribute('role') === 'tooltip') {
+        return { top: 722, bottom: 773, left: 0, right: 200, width: 200, height: 51 } as DOMRect;
+      }
+      if ((this as HTMLElement).dataset?.clip === '1') {
+        return { top: 100, bottom: 758, left: 0, right: 400, width: 400, height: 658 } as DOMRect;
+      }
+      return { top: 700, bottom: 722, left: 0, right: 16, width: 16, height: 16 } as DOMRect;
+    });
+    render(
+      <div data-clip="1" style={{ overflowY: 'auto' }}>
+        <InfoTip label="m" text="explain" />
+      </div>,
+    );
+    fireEvent.mouseEnter(screen.getByTestId('infotip-trigger'));
+    expect(screen.getByRole('tooltip').getAttribute('data-placement')).toBe('above');
   });
 });
