@@ -132,7 +132,15 @@ export const CONTROL_TOKENS = new Set([
   // shell loop/conditional keywords + the test builtin: a segment that IS one of
   // these is control (no work to classify here).
   'while', 'until', 'if', 'case', 'esac', 'done', 'fi', '[', '[[', 'test',
+  // loop-body control: a segment that is just `break`/`continue` carries no command.
+  'break', 'continue',
 ]);
+/** A segment whose first token is a control/loop keyword OR a bare flag carries
+ *  no command to classify. The flag case (`-s`, `-u`) catches newline-split arg
+ *  lines where a flag became a segment's leading token (dogfooding 2026-06-11). */
+function isControlToken(tok: string): boolean {
+  return CONTROL_TOKENS.has(tok) || tok.startsWith('-');
+}
 // Control-flow keywords that PRECEDE a command on the same segment (`do grep …`,
 // `then cat …`). Unlike CONTROL_TOKENS they are stripped as a prefix so the real
 // command after them is classified.
@@ -185,6 +193,8 @@ function stripCommentLines(cmd: string): string {
  *  only assignments/prefixes (e.g. a bare `do` or `FOO=bar`). */
 function commandOf(segment: string): string {
   let s = segment.trim();
+  // Strip leading subshell/group openers: `(cd … ` → `cd …`, `{ cmd` → `cmd`.
+  while (s.startsWith('(') || s.startsWith('{')) s = s.slice(1).trim();
   for (let guard = 0; guard < 12; guard++) {
     if (ASSIGNMENT.test(s)) {
       const sp = s.indexOf(' ');
@@ -241,7 +251,7 @@ function firstMeaningfulSegment(segments: string[]): string | null {
   return (
     segments.find((s) => {
       const c = commandOf(s);
-      return c !== '' && !CONTROL_TOKENS.has(firstToken(c));
+      return c !== '' && !isControlToken(firstToken(c));
     }) ?? null
   );
 }
@@ -256,7 +266,7 @@ export function meaningfulCommand(cmd: string): string {
     const m = s.match(/^(.*?)(?:&&|\|\||;|\|)(.*)$/s); // split at the FIRST separator (no bare &)
     if (!m) break;
     const head = commandOf(m[1].trim());
-    if (head !== '' && !CONTROL_TOKENS.has(firstToken(head))) break;
+    if (head !== '' && !isControlToken(firstToken(head))) break;
     s = m[2].trim();
   }
   return s || cmd.trim();
@@ -318,7 +328,7 @@ export function tagForEvent(e: ObservedEventDto): TagResult {
     for (const seg of segmentCommand(cmd)) {
       const cmdStr = commandOf(seg);
       const tok = firstToken(cmdStr);
-      if (!tok || CONTROL_TOKENS.has(tok)) continue; // empty/assignment-only or control → next segment
+      if (!tok || isControlToken(tok)) continue; // empty/assignment-only/control/flag → next segment
       return classifyCommand(cmdStr);
     }
     return { tag: null, disposition: 'control' }; // every segment was control
