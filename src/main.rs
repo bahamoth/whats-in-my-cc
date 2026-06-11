@@ -115,6 +115,16 @@ async fn serve_cmd(
             ));
         }
     }
+
+    // Dogfooding 2026-06-11: backfill agent_id for rows ingested before migration
+    // 0023 (raw payload → agent_id). Idempotent (only NULL rows); new ingests fill
+    // it via mapping. Non-fatal — a backfill hiccup must not block serve.
+    match db::repo_observed::backfill_agent_id(&pool).await {
+        Ok(n) if n > 0 => tracing::info!(rows = n, "backfilled agent_id from raw payload"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = ?e, "agent_id backfill failed (non-fatal)"),
+    }
+
     let cancel = tokio_util::sync::CancellationToken::new();
     let mut bg_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 

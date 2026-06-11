@@ -47,7 +47,7 @@ impl Detector for ReRead {
         //    is_sidechain so each surfaces on its own (subagent re-reads are still
         //    measured, under scope="sidechain").
         type RangeMap = BTreeMap<(i64, i64), Vec<String>>;
-        let mut groups: BTreeMap<(&'static str, String), RangeMap> = BTreeMap::new();
+        let mut groups: BTreeMap<(String, String), RangeMap> = BTreeMap::new();
 
         for ev in view.events {
             if ev.kind != EventKind::ToolCall {
@@ -74,7 +74,14 @@ impl Detector for ReRead {
                 .and_then(|i| i.get("limit"))
                 .and_then(|v| v.as_i64())
                 .unwrap_or(-1);
-            let scope = if ev.is_sidechain { "sidechain" } else { "main" };
+            // Scope by individual subagent when agent_id is present, else main
+            // vs (un-attributed) sidechain. Two different subagents reading the
+            // same file once each must NOT look like a re-read (dogfooding 2026-06-11).
+            let scope: String = match (ev.agent_id.as_deref(), ev.is_sidechain) {
+                (Some(id), _) => format!("agent:{id}"),
+                (None, true) => "sidechain".to_string(),
+                (None, false) => "main".to_string(),
+            };
             groups
                 .entry((scope, path.to_string()))
                 .or_default()

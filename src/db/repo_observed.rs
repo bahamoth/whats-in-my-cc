@@ -22,19 +22,19 @@ async fn insert_inner(pool: &SqlitePool, e: &ObservedEvent, ignore: bool) -> Res
             event_id, raw_event_id, schema_version, session_id, event_uuid, parent_uuid,
             observed_at, actor, kind, subkind, tool_use_id, tool_name, request_id,
             message_id, turn_id, source_tool_assistant_uuid, source_tool_use_id,
-            is_sidechain, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
+            is_sidechain, agent_id, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
             trace_id, span_id, parent_span_id, latency_ms,
             payload, parser_version)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
     } else {
         "INSERT INTO observed_event(
             event_id, raw_event_id, schema_version, session_id, event_uuid, parent_uuid,
             observed_at, actor, kind, subkind, tool_use_id, tool_name, request_id,
             message_id, turn_id, source_tool_assistant_uuid, source_tool_use_id,
-            is_sidechain, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
+            is_sidechain, agent_id, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
             trace_id, span_id, parent_span_id, latency_ms,
             payload, parser_version)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
     };
     let res = sqlx::query(sql)
         .bind(&e.event_id)
@@ -55,6 +55,7 @@ async fn insert_inner(pool: &SqlitePool, e: &ObservedEvent, ignore: bool) -> Res
         .bind(&e.source_tool_assistant_uuid)
         .bind(&e.source_tool_use_id)
         .bind(e.is_sidechain as i64)
+        .bind(&e.agent_id)
         .bind(e.is_meta as i64)
         .bind(&e.cwd)
         .bind(&e.git_branch)
@@ -70,6 +71,28 @@ async fn insert_inner(pool: &SqlitePool, e: &ObservedEvent, ignore: bool) -> Res
         .execute(pool)
         .await?;
     Ok(res.rows_affected() > 0)
+}
+
+/// Backfill `agent_id` on existing rows from the raw transcript payload's
+/// top-level `agentId` (present on subagent jsonl records). Idempotent — only
+/// touches rows where `agent_id IS NULL`. Lets an already-ingested DB gain
+/// subagent attribution on serve startup without a full init-db / re-ingest.
+/// agentId is a hex id untouched by redaction, so the masked payload still has it.
+pub async fn backfill_agent_id(pool: &SqlitePool) -> Result<u64> {
+    let res = sqlx::query(
+        "UPDATE observed_event
+         SET agent_id = json_extract(
+             CAST(
+                 (SELECT r.payload FROM raw_event r WHERE r.raw_event_id = observed_event.raw_event_id)
+                 AS TEXT
+             ),
+             '$.agentId'
+         )
+         WHERE agent_id IS NULL",
+    )
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
 }
 
 fn merge_payload_with_telemetry(
@@ -578,6 +601,7 @@ fn row_to_observed(r: sqlx::sqlite::SqliteRow) -> ObservedEvent {
         source_tool_assistant_uuid: r.try_get("source_tool_assistant_uuid").ok(),
         source_tool_use_id: r.try_get("source_tool_use_id").ok(),
         is_sidechain: r.get::<i64, _>("is_sidechain") != 0,
+        agent_id: r.try_get("agent_id").ok(),
         is_meta: r.get::<i64, _>("is_meta") != 0,
         cwd: r.try_get("cwd").ok(),
         git_branch: r.try_get("git_branch").ok(),
