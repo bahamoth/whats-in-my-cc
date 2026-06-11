@@ -14,8 +14,9 @@ transcript가 아닌 **execution replay**로 "무엇이, 왜 그렇게 됐는가
 ## Status
 
 - **남은 계획:** UX 재설계 epic (`2026-05-27-wimcc-ux-redesign-epic.md`) + 자기개선 지표 트랙. 구현 상세·이력은 `docs/implementation-notes.html`와 git history.
+- **CI/CD (2026-06-11):** 모든 PR에서 GitHub Actions CI — vitest+SPA build 후 그 dist로 `cargo fmt --check`·`clippy -- -D warnings`·`cargo test`. 릴리스는 release-please: main의 conventional commit이 릴리스 PR로 누적되고, 머지 시 `vX.Y.Z` 태그·CHANGELOG·바이너리(linux x86_64 · macOS arm64) 업로드. `Cargo.toml`·`webui/package.json` 버전은 자동 bump — **손으로 수정 금지**. commit type이 버전을 결정하므로 conventional commit 규칙 준수.
 - **인증 default = `--auth off`** (단일 사용자 dev, DEV-S19-08) — 브라우저로 그대로 접속. 켜려면 `wimcc serve --auth on`: `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요(`/v1/stream`·collectors·SPA는 인증 예외). Token 위치 macOS `~/Library/Application Support/wimcc/token` · Linux `~/.config/wimcc/token` (0600). retention sweep는 `wimcc serve --retention-profile default`.
-- **dev DB 재생성 규칙:** migration 변경(현재 최신 `0022` — 0018 judge drop · 0019 graph drop · 0020 `request_id` 인덱스 · 0021 signal · 0022 verification_run status_provenance) 시 `wimcc init-db` + 재ingest 필요. payload 필드(`tool_call.tool_name`, `assistant_message.model` 등)도 JSON BLOB이라 schema migration 없이 추가되므로 기존 이벤트엔 없음 — 재ingest해야 채워진다.
+- **dev DB 재생성 규칙:** migration 변경(현재 최신 `0023` — 0020 `request_id` 인덱스 · 0021 signal · 0022 verification_run status_provenance · 0023 observed_event `agent_id`, startup backfill이라 init-db 불필요) 시 `wimcc init-db` + 재ingest 필요. payload 필드(`tool_call.tool_name`, `assistant_message.model` 등)도 JSON BLOB이라 schema migration 없이 추가되므로 기존 이벤트엔 없음 — 재ingest해야 채워진다.
 
 ## Document Map
 
