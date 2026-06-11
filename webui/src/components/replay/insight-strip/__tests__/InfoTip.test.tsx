@@ -95,3 +95,30 @@ describe('InfoTip placement — flips above when the bubble would be clipped bel
     expect(screen.getByRole('tooltip').getAttribute('data-placement')).toBe('above');
   });
 });
+
+describe('InfoTip horizontal alignment — flips right when clipped at the right edge', () => {
+  // Dogfooding 2026-06-11: the cost card (rightmost) and 요청출처 tooltips opened
+  // left-anchored (left: 0) and ran off the viewport's right edge, unreadable.
+  // The bubble must right-align when it would pass the right clip boundary.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  it('left-aligned by default when there is room on the right', () => {
+    window.innerWidth = 1000;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(
+      { top: 100, bottom: 160, left: 100, right: 380, width: 280, height: 60 } as DOMRect,
+    );
+    render(<InfoTip label="m" text="explain" />);
+    fireEvent.mouseEnter(screen.getByTestId('infotip-trigger'));
+    expect(screen.getByRole('tooltip').getAttribute('data-align')).toBe('left');
+  });
+  it('flips right-aligned when the bubble right would pass the viewport right edge', () => {
+    window.innerWidth = 1000;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(
+      { top: 100, bottom: 160, left: 900, right: 1180, width: 280, height: 60 } as DOMRect,
+    );
+    render(<InfoTip label="m" text="explain" />);
+    fireEvent.mouseEnter(screen.getByTestId('infotip-trigger'));
+    expect(screen.getByRole('tooltip').getAttribute('data-align')).toBe('right');
+  });
+});
