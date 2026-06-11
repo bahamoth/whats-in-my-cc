@@ -1,5 +1,8 @@
 # wimcc — What's in My Claude Code
 
+[![CI](https://github.com/bahamoth/whats-in-my-cc/actions/workflows/ci.yml/badge.svg)](https://github.com/bahamoth/whats-in-my-cc/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/bahamoth/whats-in-my-cc)](https://github.com/bahamoth/whats-in-my-cc/releases/latest)
+
 [English](README.md) · **한국어**
 
 **Claude Code가 실제로 무엇을 했는지 — 말이 아니라 실행을 다시 본다.**
