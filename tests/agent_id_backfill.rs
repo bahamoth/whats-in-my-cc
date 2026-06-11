@@ -60,3 +60,79 @@ async fn backfill_agent_id_fills_from_raw_payload() {
         .unwrap();
     assert_eq!(rows[0].agent_id.as_deref(), Some("agentX"));
 }
+
+/// raw_event 중 parse_error 행 등은 payload가 비-JSON일 수 있다. backfill이 거기서
+/// 에러를 내 전체 UPDATE를 깨뜨리면 안 된다 — malformed는 건너뛰고 valid 행만 채운다.
+/// 실데이터 2026-06-11: 프로덕션 backfill이 "malformed JSON"으로 전체 실패했다.
+#[tokio::test]
+async fn backfill_skips_malformed_payload() {
+    let pool = empty_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    // malformed payload (parse_error row shape — not valid JSON)
+    repo_raw::insert_dedup(
+        &pool,
+        &repo_raw::NewRaw {
+            raw_event_id: "rbad".into(),
+            ingest_run_id: run_id.clone(),
+            source_type: "unparseable".into(),
+            source_uri: "/t.jsonl".into(),
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: "bad".into(),
+            payload: b"not json at all".to_vec(),
+            parse_error: Some("boom".into()),
+            captured_at: Utc::now(),
+            redaction_state: "not_applicable".into(),
+            redaction_manifest: None,
+        },
+    )
+    .await
+    .unwrap();
+    let bad = ObservedEvent {
+        event_id: "ebad".into(),
+        raw_event_id: "rbad".into(),
+        schema_version: "observed_event.v1".into(),
+        session_id: "sess".into(),
+        kind: EventKind::ToolCall,
+        parser_version: "test".into(),
+        ..Default::default()
+    };
+    repo_observed::insert(&pool, &bad).await.unwrap();
+    // valid agentId row in the same session
+    repo_raw::insert_dedup(
+        &pool,
+        &repo_raw::NewRaw {
+            raw_event_id: "rok".into(),
+            ingest_run_id: run_id,
+            source_type: "claude_transcript".into(),
+            source_uri: "/t.jsonl".into(),
+            source_line_no: 1,
+            source_byte_offset: 0,
+            payload_sha256: "ok".into(),
+            payload: br#"{"agentId":"agentZ"}"#.to_vec(),
+            parse_error: None,
+            captured_at: Utc::now(),
+            redaction_state: "not_applicable".into(),
+            redaction_manifest: None,
+        },
+    )
+    .await
+    .unwrap();
+    let ok = ObservedEvent {
+        event_id: "eok".into(),
+        raw_event_id: "rok".into(),
+        schema_version: "observed_event.v1".into(),
+        session_id: "sess".into(),
+        kind: EventKind::ToolCall,
+        parser_version: "test".into(),
+        ..Default::default()
+    };
+    repo_observed::insert(&pool, &ok).await.unwrap();
+
+    // must NOT error on the malformed row; fills only the valid one
+    let n = repo_observed::backfill_agent_id(&pool).await.unwrap();
+    assert_eq!(
+        n, 1,
+        "only the valid-JSON row backfilled, malformed skipped"
+    );
+}

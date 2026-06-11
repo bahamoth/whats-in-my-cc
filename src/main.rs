@@ -243,6 +243,14 @@ async fn ingest_cmd(
     let url = format!("sqlite://{}?mode=rwc", db_path.display());
     let pool = db::connect(&url).await?;
     db::migrate(&pool).await?;
+    // Backfill agent_id on existing rows (raw payload) BEFORE recompute, so the
+    // per-session insight pass (re_read scope) sees subagent attribution even on
+    // dedup-skipped rows. New rows get it via mapping (dogfooding 2026-06-11).
+    match db::repo_observed::backfill_agent_id(&pool).await {
+        Ok(n) if n > 0 => tracing::info!(rows = n, "backfilled agent_id from raw payload"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = ?e, "agent_id backfill failed (non-fatal)"),
+    }
     let files = collect_files(path, all)?;
     if files.is_empty() {
         tracing::warn!("no JSONL files to ingest");
