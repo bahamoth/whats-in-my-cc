@@ -271,4 +271,25 @@ describe('collectUntagged', () => {
     expect(rows[0].hint).toContain('READ_EXT_TAGS');
     expect(rows[0].hint).not.toContain('BASH_FIRST_TOKEN_TAGS');
   });
+
+  // Dogfooding 2026-06-11 (2nd round): subshell parens, loop-control keywords,
+  // newline-split flag lines, and empty tokens are NOT commands — they must not
+  // surface as untagged tokens (corpus: `(cd` 11, `break` 9, `-u` 17, `-s` 13).
+  it('does not surface subshell/loop-control/flag-line/empty noise as untagged tokens', () => {
+    const rows = collectUntagged([
+      bash('(cd webui && frobnicate run)'), // subshell → frobnicate, not `(cd`
+      bash('break'), // loop control → control
+      bash('continue'), // loop control → control
+      bash('cd /x\n  -s http://y'), // cd(control) + flag line → all control, no `-s`
+      bash('cd a && frobnicate two'), // sanity: meaningful still found
+    ]);
+    const tokens = rows.map((r) => r.token);
+    expect(tokens).not.toContain('(cd');
+    expect(tokens).not.toContain('break');
+    expect(tokens).not.toContain('continue');
+    expect(tokens.some((t) => t.startsWith('-'))).toBe(false);
+    expect(tokens.some((t) => t === '')).toBe(false);
+    // real commands still surface (frobnicate from both subshell and cd&&)
+    expect(tokens).toContain('frobnicate');
+  });
 });
