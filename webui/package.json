@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "untagged": "node scripts/untagged-bash.ts"
+    "untagged": "node scripts/untagged-bash.ts",
+    "unknown-verification": "node scripts/unknown-verification.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",
