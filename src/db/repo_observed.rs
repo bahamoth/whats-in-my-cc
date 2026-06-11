@@ -88,7 +88,15 @@ pub async fn backfill_agent_id(pool: &SqlitePool) -> Result<u64> {
              ),
              '$.agentId'
          )
-         WHERE agent_id IS NULL",
+         WHERE agent_id IS NULL
+           AND (
+             SELECT CASE
+                 WHEN json_valid(CAST(r.payload AS TEXT))
+                 THEN json_extract(CAST(r.payload AS TEXT), '$.agentId') IS NOT NULL
+                 ELSE 0
+             END
+             FROM raw_event r WHERE r.raw_event_id = observed_event.raw_event_id
+           ) = 1",
     )
     .execute(pool)
     .await?;
