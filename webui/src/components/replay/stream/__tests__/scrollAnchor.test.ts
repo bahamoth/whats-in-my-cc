@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isNearTop, shouldLoadOlder, LOAD_OLDER_TOP_PX } from '../scrollAnchor';
+import { isNearTop, shouldLoadOlder, shouldAdjustOnItemResize, LOAD_OLDER_TOP_PX } from '../scrollAnchor';
 
 describe('isNearTop', () => {
   it('true at the very top', () => {
@@ -51,5 +51,31 @@ describe('shouldLoadOlder — page older history only on an upward near-top user
 
   it('default prefetch zone is roughly a viewport (>= 800px)', () => {
     expect(LOAD_OLDER_TOP_PX).toBeGreaterThanOrEqual(800);
+  });
+});
+
+describe('shouldAdjustOnItemResize — measurement growth must not eat upward scroll (2026-06-11 freeze)', () => {
+  // Live-captured freeze: a wheel batch moved scrollTop -1000, then the
+  // ResizeObserver measurement of a row STRADDLING the viewport top fired
+  // applyScrollAdjustment(+delta) and returned the viewport to its origin —
+  // net zero movement, perceived as "scrolling up stops". The core default
+  // (itemStart < offset, guarded by a scrollDirection that races to null
+  // after the wheel ends) adjusts for straddling rows; the geometric rule
+  // below adjusts ONLY for rows entirely above the viewport.
+  it('adjusts when the resized row sits ENTIRELY above the viewport top', () => {
+    expect(
+      shouldAdjustOnItemResize({ itemEnd: 500, scrollOffset: 700, scrollAdjustments: 0 }),
+    ).toBe(true);
+  });
+  it('does NOT adjust when the resized row straddles the viewport top (reader is inside it)', () => {
+    expect(
+      shouldAdjustOnItemResize({ itemEnd: 7300, scrollOffset: 6400, scrollAdjustments: 0 }),
+    ).toBe(false);
+  });
+  it('includes pending scrollAdjustments in the viewport-top frame', () => {
+    // offset 600 + pending +500 → effective top 1100; row ending at 1000 is above.
+    expect(
+      shouldAdjustOnItemResize({ itemEnd: 1000, scrollOffset: 600, scrollAdjustments: 500 }),
+    ).toBe(true);
   });
 });

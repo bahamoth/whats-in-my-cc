@@ -8,7 +8,7 @@ import { SubagentGroup } from './SubagentGroup';
 import { ThinkingMarker } from './ThinkingMarker';
 import { AutoscrollToggle } from './AutoscrollToggle';
 import type { StreamItem } from './streamModel';
-import { shouldLoadOlder, LOAD_OLDER_TOP_PX } from './scrollAnchor';
+import { shouldLoadOlder, shouldAdjustOnItemResize, LOAD_OLDER_TOP_PX } from './scrollAnchor';
 import { useAutoscroll } from '../../../hooks/useAutoscroll';
 import styles from './ConversationStream.module.css';
 
@@ -86,6 +86,26 @@ export function ConversationStream({
     // standard chat-log technique; live-tip following is owned by useAutoscroll.
     scrollMargin,
   });
+
+  // Measurement-resize scroll compensation: geometric rule (entirely-above
+  // rows only) instead of the core default, whose scrollDirection guard races
+  // with the ResizeObserver and eats upward wheel input at giant unmeasured
+  // rows ("위로 스크롤이 멈춤", 2026-06-11). See shouldAdjustOnItemResize for
+  // the captured evidence. This is a PUBLIC INSTANCE FIELD on the virtualizer
+  // (not a constructor option — virtual-core only reads `this.should…`), so it
+  // is assigned every render; `scrollAdjustments` is typed private but is the
+  // exact frame the core's own default uses, hence the narrow cast.
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
+    // getScrollOffset/scrollAdjustments are typed private in this core
+    // version's d.ts but are the exact frame the core's own default predicate
+    // reads — narrow structural cast instead of `any`.
+    const v = instance as unknown as { getScrollOffset(): number; scrollAdjustments: number };
+    return shouldAdjustOnItemResize({
+      itemEnd: item.end,
+      scrollOffset: v.getScrollOffset(),
+      scrollAdjustments: v.scrollAdjustments,
+    });
+  };
 
   const virtualItems = virtualizer.getVirtualItems();
   // jsdom / zero-height container: the virtualizer yields no items. Render all

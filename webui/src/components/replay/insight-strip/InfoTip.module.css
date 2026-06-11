@@ -20,6 +20,17 @@
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
+}
+
+/* Flipped placement: anchored to the trigger's top edge when there is no room
+ * below (the bubble would be clipped by the scrollable panel / viewport). */
+.bubbleAbove {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.bubble,
+.bubbleAbove {
   z-index: 10;
   width: max-content;
   max-width: 280px;
