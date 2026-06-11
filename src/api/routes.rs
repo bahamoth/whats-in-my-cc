@@ -21,6 +21,34 @@ pub struct ListQuery {
     pub limit: Option<i64>,
 }
 
+/// Full-retention (2026-06-11) — 410 gate shared by every handler whose
+/// resource class the sweep tombstones (session, raw payload,
+/// verification_run; signal_detail keeps its inline check). Fail-open on a
+/// tombstone-table error, mirroring signal_detail: a broken gate must not
+/// take down read paths.
+async fn tombstone_gate(
+    pool: &SqlitePool,
+    resource_id: &str,
+    what: &str,
+) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    match repo_retention::is_tombstoned(pool, resource_id).await {
+        Ok(true) => Err((
+            StatusCode::GONE,
+            Json(json!({
+                "type": "about:blank",
+                "title": "RESOURCE_GONE",
+                "detail": format!("{what} {resource_id} was deleted by retention sweep"),
+                "resource_id": resource_id,
+            })),
+        )),
+        Ok(false) => Ok(()),
+        Err(err) => {
+            tracing::warn!(resource_id = %resource_id, err = %err, "tombstone check failed");
+            Ok(())
+        }
+    }
+}
+
 /// Slice-19: adds a `security` block with `auth_required` and `retention_profile`.
 /// `/v1/health` is auth-gated (DEV-S19-02).
 pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
@@ -128,6 +156,7 @@ pub async fn session_detail(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> Result<Json<Envelope<SessionDetail>>, (StatusCode, Json<serde_json::Value>)> {
+    tombstone_gate(&pool, &id, "session").await?;
     // Slice-9 — summary only. Events ship via /v1/sessions/:id/events.
     let Some((event_count, first_obs, last_obs)) = repo_observed::session_summary(&pool, &id)
         .await
@@ -186,6 +215,7 @@ pub async fn session_events(
     Path(id): Path<String>,
     Query(q): Query<EventsQuery>,
 ) -> Result<Json<Envelope<SessionEventsResponse>>, (StatusCode, Json<serde_json::Value>)> {
+    tombstone_gate(&pool, &id, "session").await?;
     use crate::model::cursor::Cursor;
     fn parse_cursor(
         opt: Option<&str>,
@@ -300,6 +330,7 @@ pub async fn session_diff_hunks(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> Result<Json<Envelope<DiffHunksResponse>>, (StatusCode, Json<serde_json::Value>)> {
+    tombstone_gate(&pool, &id, "session").await?;
     let rows = repo_diff_hunk::list_session(&pool, &id).await.expect("db");
     let hunks = rows
         .into_iter()
@@ -344,6 +375,10 @@ pub async fn event_raw(
             ));
         }
     };
+
+    // The retention sweep scrubs the payload but keeps the skeleton row, so
+    // the join above still resolves — the tombstone says the content expired.
+    tombstone_gate(&pool, &row.raw_event_id, "raw payload of event").await?;
 
     let record = match std::str::from_utf8(&row.payload)
         .ok()
@@ -391,6 +426,9 @@ pub async fn session_usage(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
+    if let Err(gone) = tombstone_gate(&pool, &id, "session").await {
+        return gone.into_response();
+    }
     let agg = repo_usage_facet::session_aggregate(&pool, &id)
         .await
         .expect("db");
@@ -440,6 +478,7 @@ pub async fn session_usage(
         meta: ResponseMeta::now(),
         data,
     })
+    .into_response()
 }
 
 /// insight-redesign #6 — `GET /v1/usage/baseline`
@@ -499,6 +538,9 @@ pub async fn session_verification_runs(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
+    if let Err(gone) = tombstone_gate(&pool, &id, "session").await {
+        return gone.into_response();
+    }
     let runs = repo_verification_run::list_session(&pool, &id)
         .await
         .expect("db");
@@ -516,6 +558,7 @@ pub async fn session_verification_runs(
         meta: ResponseMeta::now(),
         data,
     })
+    .into_response()
 }
 
 /// Slice-11 — `GET /v1/verification-runs/:id`
@@ -525,6 +568,7 @@ pub async fn verification_run_detail(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> Result<Json<Envelope<VerificationRunDto>>, (StatusCode, Json<serde_json::Value>)> {
+    tombstone_gate(&pool, &id, "verification_run").await?;
     let row = repo_verification_run::get(&pool, &id).await.expect("db");
     let Some(run) = row else {
         return Err((
@@ -644,6 +688,9 @@ pub async fn session_metrics(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
+    if let Err(gone) = tombstone_gate(&pool, &id, "session").await {
+        return gone.into_response();
+    }
     match crate::insight::metrics::compute_session_metrics(&pool, &id).await {
         Ok(m) => Json(SessionMetricsResponse { data: m }).into_response(),
         Err(err) => {
@@ -689,6 +736,9 @@ pub async fn session_signals(
     State(pool): State<SqlitePool>,
     Path(session_id): Path<String>,
 ) -> impl IntoResponse {
+    if let Err(gone) = tombstone_gate(&pool, &session_id, "session").await {
+        return gone.into_response();
+    }
     match repo_signal::list_by_session(&pool, &session_id).await {
         Ok(rows) => {
             let data: Vec<SignalDto> = rows.into_iter().map(signal_row_to_dto).collect();

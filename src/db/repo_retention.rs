@@ -13,18 +13,5 @@ pub async fn is_tombstoned(pool: &SqlitePool, resource_id: &str) -> Result<bool>
     Ok(count.0 > 0)
 }
 
-/// Insert a tombstone for a deleted resource (idempotent via INSERT OR IGNORE).
-pub async fn insert_tombstone(
-    pool: &SqlitePool,
-    resource_id: &str,
-    resource_kind: &str,
-) -> Result<()> {
-    sqlx::query(
-        "INSERT OR IGNORE INTO retention_tombstone (resource_id, resource_kind) VALUES (?, ?)",
-    )
-    .bind(resource_id)
-    .bind(resource_kind)
-    .execute(pool)
-    .await?;
-    Ok(())
-}
+// Tombstone *writes* happen inside the sweep's transaction —
+// see `insert_tombstone_tx` in `src/security/retention.rs`.

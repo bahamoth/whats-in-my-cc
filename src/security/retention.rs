@@ -1,6 +1,28 @@
-//! Slice-19 — Retention sweep.
+//! Slice-19 + full-retention (2026-06-11) — Retention sweep.
 //!
-//! Stub — will be filled in commit 6 after migrations are in place.
+//! Enforces every data class of the active profile (docs/05 §05):
+//!
+//! - **raw payload** — *scrubbed, not row-deleted*: `payload` is emptied while
+//!   the skeleton row (source_uri / line_no / sha) survives. The skeleton keeps
+//!   the `observed_event.raw_event_id` FK valid (raw expires *before* its
+//!   normalized children) and keeps the ingest dedup triple, so an
+//!   `ingest --all` replay cannot resurrect expired content. Tombstone per
+//!   scrubbed payload → `/v1/events/:id/raw` answers 410.
+//! - **normalized + insight** — session granularity ("delete by session",
+//!   docs/05): a session whose newest `observed_at` is older than the
+//!   normalized cutoff loses its observed_event / diff_hunk / verification_run
+//!   / usage_facet / signal rows. Tombstones: the session id, every signal id,
+//!   every verification_run id. (Per-event tombstones are deliberately not
+//!   written — a session can hold 10k+ events and tombstones live forever,
+//!   DEV-S19-04; expired events answer 404, the session id answers 410.)
+//!   Insight shares the session pass — `insight_window_matches_normalized_window`
+//!   in `tests/retention_sweep.rs` locks the window equality this relies on.
+//! - **audit** — rows older than the audit cutoff are deleted; the sweep's own
+//!   `retention.deleted` row is written afterwards inside the same transaction.
+//!
+//! The whole sweep is ONE sqlx transaction with all cutoffs derived from a
+//! single `Utc::now()`, so cancellation mid-sweep rolls back atomically and
+//! the SELECT/DELETE phases can never disagree about "now".
 
 use std::collections::HashMap;
 
@@ -37,8 +59,9 @@ impl Profile {
         }
     }
 
-    /// Insight (findings) retention in days. (Was `graph_insight_days` before
-    /// the graph layer was removed — see #graph-removal.)
+    /// Insight (signal) retention in days. Swept together with the normalized
+    /// class at session granularity; must stay equal to
+    /// `normalized_event_days` (locked by test) or the sweep needs its own pass.
     pub fn insight_days(&self) -> Option<i64> {
         match self {
             Profile::None => None,
@@ -88,12 +111,48 @@ pub struct RetentionPolicy {
 /// Result of a single sweep pass.
 #[derive(Debug, Default)]
 pub struct SweepReport {
-    /// Counts of deleted rows per class.
+    /// Counts per class: `raw_event` (payloads scrubbed), `session`,
+    /// `observed_event`, `diff_hunk`, `verification_run`, `usage_facet`,
+    /// `signal`, `audit` (rows deleted).
     pub deletions: HashMap<String, u64>,
 }
 
-/// Run a single sweep pass: delete rows older than the configured retention
-/// thresholds, write tombstones, and append an audit row.
+/// Stored timestamps come from two writers: Rust (`to_rfc3339`,
+/// `2026-06-11T12:34:56.789+00:00`) and SQLite column defaults
+/// (`datetime('now')`, `2026-06-11 12:34:56`). Lexical `<` across the two
+/// formats is exact across calendar days (' ' < 'T') and off by at most the
+/// cutoff day itself — immaterial at day-granularity retention windows.
+fn cutoff_rfc3339(now: chrono::DateTime<chrono::Utc>, days: i64) -> String {
+    (now - chrono::Duration::days(days)).to_rfc3339()
+}
+
+/// Cutoff in SQLite `datetime('now')` format, for columns only ever written by
+/// column defaults (`audit.created_at`).
+fn cutoff_sqlite(now: chrono::DateTime<chrono::Utc>, days: i64) -> String {
+    (now - chrono::Duration::days(days))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string()
+}
+
+async fn insert_tombstone_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    resource_id: &str,
+    resource_kind: &str,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT OR IGNORE INTO retention_tombstone (resource_id, resource_kind) VALUES (?, ?)",
+    )
+    .bind(resource_id)
+    .bind(resource_kind)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Run a single sweep pass: scrub expired raw payloads, delete expired
+/// sessions' normalized + insight rows, prune the audit table, write
+/// tombstones, and append one `retention.deleted` audit row — all in one
+/// transaction.
 pub async fn run_sweep(pool: &SqlitePool, policy: &RetentionPolicy) -> Result<SweepReport> {
     let mut report = SweepReport::default();
 
@@ -102,33 +161,98 @@ pub async fn run_sweep(pool: &SqlitePool, policy: &RetentionPolicy) -> Result<Sw
         return Ok(report);
     }
 
-    // ---- raw_event --------------------------------------------------------
+    let now = chrono::Utc::now();
+    let mut tx = pool.begin().await?;
+
+    // ---- raw payload: scrub, keep skeleton -------------------------------
     if let Some(days) = policy.profile.raw_payload_days() {
-        let cutoff = format!("-{days} days");
-        // Collect ids to tombstone before deleting
+        let cutoff = cutoff_rfc3339(now, days);
+        // `length(payload) > 0` makes the scrub idempotent: already-scrubbed
+        // rows (and rows that never had content) are not re-counted.
         let ids: Vec<(String,)> = sqlx::query_as(
-            "SELECT raw_event_id FROM raw_event WHERE captured_at < datetime('now', ?)",
+            "SELECT raw_event_id FROM raw_event \
+             WHERE captured_at < ? AND length(payload) > 0",
         )
         .bind(&cutoff)
-        .fetch_all(pool)
+        .fetch_all(&mut *tx)
         .await?;
 
-        let count = ids.len() as u64;
         for (id,) in &ids {
-            sqlx::query(
-                "INSERT OR IGNORE INTO retention_tombstone (resource_id, resource_kind) VALUES (?, 'raw_event')",
-            )
-            .bind(id)
-            .execute(pool)
-            .await?;
-        }
-        if count > 0 {
-            sqlx::query("DELETE FROM raw_event WHERE captured_at < datetime('now', ?)")
-                .bind(&cutoff)
-                .execute(pool)
+            insert_tombstone_tx(&mut tx, id, "raw_event").await?;
+            sqlx::query("UPDATE raw_event SET payload = x'' WHERE raw_event_id = ?")
+                .bind(id)
+                .execute(&mut *tx)
                 .await?;
         }
-        report.deletions.insert("raw_event".to_string(), count);
+        report
+            .deletions
+            .insert("raw_event".to_string(), ids.len() as u64);
+    }
+
+    // ---- normalized + insight: session granularity -----------------------
+    if let Some(days) = policy.profile.normalized_event_days() {
+        let cutoff = cutoff_rfc3339(now, days);
+        let sessions: Vec<(String,)> = sqlx::query_as(
+            "SELECT session_id FROM observed_event \
+             GROUP BY session_id HAVING MAX(observed_at) < ?",
+        )
+        .bind(&cutoff)
+        .fetch_all(&mut *tx)
+        .await?;
+
+        let mut counts: HashMap<&'static str, u64> = HashMap::new();
+        for (sid,) in &sessions {
+            let signal_ids: Vec<(String,)> =
+                sqlx::query_as("SELECT signal_id FROM signal WHERE session_id = ?")
+                    .bind(sid)
+                    .fetch_all(&mut *tx)
+                    .await?;
+            for (id,) in &signal_ids {
+                insert_tombstone_tx(&mut tx, id, "signal").await?;
+            }
+            let run_ids: Vec<(String,)> = sqlx::query_as(
+                "SELECT verification_run_id FROM verification_run WHERE session_id = ?",
+            )
+            .bind(sid)
+            .fetch_all(&mut *tx)
+            .await?;
+            for (id,) in &run_ids {
+                insert_tombstone_tx(&mut tx, id, "verification_run").await?;
+            }
+
+            for table in [
+                "signal",
+                "verification_run",
+                "diff_hunk",
+                "usage_facet",
+                "observed_event",
+            ] {
+                let res = sqlx::query(&format!("DELETE FROM {table} WHERE session_id = ?"))
+                    .bind(sid)
+                    .execute(&mut *tx)
+                    .await?;
+                *counts.entry(table).or_default() += res.rows_affected();
+            }
+            insert_tombstone_tx(&mut tx, sid, "session").await?;
+        }
+        report
+            .deletions
+            .insert("session".to_string(), sessions.len() as u64);
+        for (table, n) in counts {
+            report.deletions.insert(table.to_string(), n);
+        }
+    }
+
+    // ---- audit ------------------------------------------------------------
+    if let Some(days) = policy.profile.audit_days() {
+        let cutoff = cutoff_sqlite(now, days);
+        let res = sqlx::query("DELETE FROM audit WHERE created_at < ?")
+            .bind(&cutoff)
+            .execute(&mut *tx)
+            .await?;
+        report
+            .deletions
+            .insert("audit".to_string(), res.rows_affected());
     }
 
     // ---- Write audit row --------------------------------------------------
@@ -139,9 +263,10 @@ pub async fn run_sweep(pool: &SqlitePool, policy: &RetentionPolicy) -> Result<Sw
     )
     .bind(&audit_id)
     .bind(&payload)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
 
+    tx.commit().await?;
     Ok(report)
 }
 
