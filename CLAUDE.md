@@ -14,7 +14,7 @@ transcript가 아닌 **execution replay**로 "무엇이, 왜 그렇게 됐는가
 ## Status
 
 - **남은 계획:** UX 재설계 epic (`docs/superpowers/specs/2026-05-27-witmcc-ux-redesign-epic.md` — §3 계약은 2026-06-12 Revision note 기준으로 읽을 것) + 자기개선 지표 트랙 후속(태그 사전 core 이전, in-flight 자기조절 affordance). 구현 상세·이력은 `docs/implementation-notes.html`와 git history.
-- **자기개선 루프 기반 (2026-06-12):** 세션 환경 fingerprint(`/v1/sessions/:id/fingerprint` — models·cc_versions·git_branches·claude_md sha·`instruction_sha256` 코호트 키; SessionStart hook 수신 시각에 서버가 cwd 조상+`~/.claude`의 CLAUDE.md를 해시 capture, 내용 미저장) · 세션 횡단 series(`/v1/metrics`, MCP `get_project_metrics` — 개입 전후 비교의 측정면, `matched_count`로 절단 노출) · detector manifest `metric_class`(process|outcome — Goodhart 가드) · retrospect 스킬 가설 원장(제안 `R-YYYYMMDD-n` + 예측 의무, Step 1.5 이전 원장 로드·Step 5 전후 비교, dogfood 저장 기본). 주의: CLAUDE.md는 transcript에 기록되지 않음(실측 12 transcript 음성) — instruction 관측은 hook 수집 이후 세션만, `models`는 payload 필드라 기존 세션 재ingest 필요. 상세 `docs/implementation-notes.html#self-improvement-loop-2026-06-12`.
+- **자기개선 루프 기반 (2026-06-12):** 세션 환경 fingerprint(`/v1/sessions/:id/fingerprint` — models·cc_versions·git_branches·claude_md sha·`instruction_sha256` 코호트 키; SessionStart hook 수신 시각에 서버가 cwd 조상+`~/.claude`의 CLAUDE.md를 해시 capture, 내용 미저장) · 세션 횡단 series(`/v1/metrics`, MCP `get_project_metrics` — 개입 전후 비교의 측정면, `matched_count`로 절단 노출) · detector manifest `metric_class`(process|outcome — Goodhart 가드) · retrospect 스킬 가설 원장(제안 `R-YYYYMMDD-n` + 예측 의무, Step 1.5 이전 원장 로드·Step 5 전후 비교, dogfood 저장 기본). 주의: CLAUDE.md는 transcript에 기록되지 않음(실측 12 transcript 음성) — instruction 관측은 hook 수집 이후 세션만, `models`는 payload 필드라 기존 세션 재ingest 필요. **태그 어휘도 core로 이전**(events `tag`·turns `tag_histogram` — 규칙·테스트는 `src/insight/event_tags.rs`·`tests/event_tags.rs`, webui는 서버 값 소비). 상세 `docs/implementation-notes.html#self-improvement-loop-2026-06-12`.
 - **개밥먹기 회고 표면 (2026-06-12):** events `?kind=` 필터(미지원 파라미터는 400)·`/v1/sessions?project=`·`/v1/sessions/:id/turns`(턴별 tool histogram·file_churn) + MCP `get_session_turns`/`search_sessions.project`. 리포가 plugin 마켓플레이스 겸업 — `skills/session-retrospect/`(SSOT)를 `plugins/session-retrospect/`가 심링크로 패키징, `.mcp.json`로 wimcc MCP 자동 등록. 원칙: **측정은 wimcc(결정론), 판별은 LLM(온디맨드)** — "교정성 메시지" 류 의미 판별을 lexical 휴리스틱으로 detector에 넣지 말 것. Signal 규칙 `re_edit_churn`·`duplicate_edit_stream`은 표본 1이라 보류 (`docs/implementation-notes.html#dogfood-retrospect-2026-06-12`).
 - **CI/CD (2026-06-11):** 모든 PR에서 GitHub Actions CI — vitest+SPA build 후 그 dist로 `cargo fmt --check`·`clippy -- -D warnings`·`cargo test`. 릴리스는 release-please: main의 conventional commit이 릴리스 PR로 누적되고, 머지 시 `vX.Y.Z` 태그·CHANGELOG·바이너리(linux x86_64 · macOS arm64) 업로드. `Cargo.toml`·`webui/package.json` 버전은 자동 bump — **손으로 수정 금지**. commit type이 버전을 결정하므로 conventional commit 규칙 준수.
 - **인증 default = `--auth off`** (단일 사용자 dev, DEV-S19-08) — 브라우저로 그대로 접속. 켜려면 `wimcc serve --auth on`: `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요(`/v1/stream`·collectors·SPA는 인증 예외). Token 위치 macOS `~/Library/Application Support/wimcc/token` · Linux `~/.config/wimcc/token` (0600). retention sweep는 `wimcc serve --retention-profile default`.
@@ -79,11 +79,14 @@ transcript가 아닌 **execution replay**로 "무엇이, 왜 그렇게 됐는가
    방금 작업한 세션이 맨 위. read-only Pull API + 프론트 `collectUntagged`(SSOT) 재사용.
    출력: `[{token,count,sample,eventId,sessionId,hint}]` (count 내림차순).
 2. count 높은 untagged 토큰부터, 각 row의 `sample`을 근거로 분류가 타당한지 검토한 뒤,
-   `hint`가 가리키는 대로 `webui/src/components/replay/stream/eventTags.ts`에 어떤 태그를
-   추가할지 **제안**한다: 일반 첫 토큰은 `BASH_FIRST_TOKEN_TAGS`, `git` 서브커맨드는
-   `GIT_SUBCOMMAND_TAGS`, Read 확장자는 `READ_EXT_TAGS`. (파괴적 명령은 이미 `DESTRUCTIVE_FIRST_TOKENS`.)
-3. 사용자 승인 후 규칙을 추가하고 CLI를 다시 실행해 untagged가 줄었는지 확인 — 루프가 닫힌다.
-   (분류 변경이므로 `eventTags.test.ts`에 잠그는 테스트를 함께 둘 것 — TDD 원칙.)
+   `hint`가 가리키는 대로 **`src/insight/event_tags.rs`**의 사전에 어떤 태그를 추가할지
+   **제안**한다: 일반 첫 토큰은 `BASH_FIRST_TOKEN_TAGS`, 멀티플렉서(git/cargo/npm/…)
+   서브커맨드는 `TOOL_SUBCOMMAND_TAGS`, Read/Edit 확장자는 `EXT_OBJECT`.
+   (분류기·어휘는 2026-06-12에 webui→core로 이전 — events 응답의 `tag` 필드와 turns의
+   `tag_histogram`이 같은 verb.object 어휘를 쓰고, webui `eventTags.ts`는 표현·집계만 담당.)
+3. 사용자 승인 후 규칙을 추가하고 `tests/event_tags.rs`에 잠그는 테스트를 함께 둔다(TDD).
+   태그는 API 렌더 시점 계산이므로 **서버 재빌드·재기동 후** CLI를 다시 실행해 untagged가
+   줄었는지 확인 — 루프가 닫힌다.
 
 상세·설계 근거: `docs/implementation-notes.html#untagged-bash-loop`.
 

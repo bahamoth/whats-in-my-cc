@@ -4589,6 +4589,19 @@ vitest: 69 passed
         없다. 판별→fixture 승격(<code>tests/fixtures/**/real/</code> 동결 +
         invariant)을 보류 detector 후보의 공식 졸업 관문으로 명문화했다 —
         표본 축적은 annotation이 아니라 fixture로(no-annotation 원칙 유지).</li>
+      <li><strong>태그 어휘 core 이전</strong> (같은 날 2차 — 사용자 지시로 동일 PR에
+        포함, 리뷰 발견 5): webui <code>eventTags.ts</code>의 사전·셸 파서(세그먼트·
+        계속행·주석·할당·timeout 언랩·멀티플렉서 서브커맨드 해석)를
+        <code>src/insight/event_tags.rs</code>로 1:1 이식하고, 분류 테스트 전수를
+        <code>tests/event_tags.rs</code>(29건)로 이전. events 응답의 tool_call에
+        <code>tag {value, disposition, token, display}</code>, turns rollup에
+        <code>tag_histogram</code>을 노출 — MCP 소비자(LLM)와 UI가 같은
+        verb.object 어휘를 본다(종전에는 어휘가 표현 계층에 갇혀 MCP 소비자는
+        raw tool_name뿐이었다). webui는 사전·파서를 삭제하고 서버 값을
+        소비한다(표현 tagVerb·집계 collectUntagged만 잔존, vitest 421 green,
+        브라우저 smoke로 칩·untagged 패널 확인). 운영 주의: 규칙 추가는 이제
+        Rust 사전에 하며 <em>서버 재빌드·재기동 후</em> 반영 — CLAUDE.md 태깅
+        루프 절 동기화.</li>
       <li><strong>문서 정정</strong>: PRD SRV-3 도구 수가 get_session_turns 추가
         후에도 "4종"으로 남아 있던 drift를 6종으로 현행화. Users and Jobs에
         "회고 LLM (frontier judge)" 행 추가 — 목적(자기개선 루프) 소비자의
