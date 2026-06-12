@@ -164,6 +164,21 @@ async fn turns_returns_per_turn_tool_histogram() {
 }
 
 #[tokio::test]
+async fn turns_carry_tag_histogram() {
+    // loop-foundations 2026-06-12 — 태그 어휘 core 이전: 턴별 tag_histogram으로
+    // MCP 소비자(retrospect LLM)가 raw tool 이름이 아닌 verb.object 어휘로
+    // 턴의 작업 구성을 본다. count only — 판단 없음.
+    let (s, _p) = setup().await;
+    let v: Value = s.get(&format!("/v1/sessions/{SESS}/turns")).await.json();
+    let turns = v["data"]["turns"].as_array().unwrap();
+    // turn-1: Edit a.html(write.docs) + Bash ls(read.file)
+    assert_eq!(turns[0]["tag_histogram"]["write.docs"], 1);
+    assert_eq!(turns[0]["tag_histogram"]["read.file"], 1);
+    // turn-2: Edit a.html + Edit b.html + Write c.md — 전부 write.docs
+    assert_eq!(turns[1]["tag_histogram"]["write.docs"], 3);
+}
+
+#[tokio::test]
 async fn turns_carries_user_message_excerpt_and_event_id() {
     let (s, _p) = setup().await;
     let v: Value = s.get(&format!("/v1/sessions/{SESS}/turns")).await.json();

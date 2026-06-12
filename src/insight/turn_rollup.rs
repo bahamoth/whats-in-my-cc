@@ -42,6 +42,9 @@ pub struct TurnRollup {
     pub user_message: Option<TurnUserMessage>,
     pub tool_call_total: i64,
     pub tool_histogram: BTreeMap<String, i64>,
+    /// verb.object 태그별 tool_call 수 (event_tags 분류기 — tagged만 카운트).
+    /// raw tool 이름(tool_histogram)과 달리 작업의 의미 어휘로 본 구성이다.
+    pub tag_histogram: BTreeMap<String, i64>,
     /// Distinct file paths touched by Edit/Write/NotebookEdit in this turn,
     /// in first-touch order.
     pub files_edited: Vec<String>,
@@ -83,6 +86,7 @@ pub fn rollup(session_id: &str, events: &[ObservedEvent]) -> TurnRollupResponse 
         user_message: Option<TurnUserMessage>,
         tool_call_total: i64,
         histogram: BTreeMap<String, i64>,
+        tags: BTreeMap<String, i64>,
         files: Vec<String>,
         order: usize,
     }
@@ -103,6 +107,7 @@ pub fn rollup(session_id: &str, events: &[ObservedEvent]) -> TurnRollupResponse 
                 user_message: None,
                 tool_call_total: 0,
                 histogram: BTreeMap::new(),
+                tags: BTreeMap::new(),
                 files: Vec::new(),
                 order,
             }
@@ -132,6 +137,14 @@ pub fn rollup(session_id: &str, events: &[ObservedEvent]) -> TurnRollupResponse 
                     .filter(|n| !n.is_empty())
                     .unwrap_or("unknown");
                 *acc.histogram.entry(name.to_string()).or_insert(0) += 1;
+                if let Some(tag) = crate::insight::event_tags::classify_tool_call(
+                    ev.tool_name.as_deref(),
+                    &ev.payload,
+                )
+                .value
+                {
+                    *acc.tags.entry(tag.to_string()).or_insert(0) += 1;
+                }
                 if FILE_EDIT_TOOLS.contains(&name) {
                     if let Some(fp) = ev
                         .payload
@@ -188,6 +201,7 @@ pub fn rollup(session_id: &str, events: &[ObservedEvent]) -> TurnRollupResponse 
             user_message: a.user_message,
             tool_call_total: a.tool_call_total,
             tool_histogram: a.histogram,
+            tag_histogram: a.tags,
             files_edited: a.files,
         })
         .collect();
