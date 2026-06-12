@@ -48,7 +48,6 @@ pub struct ResponseMeta {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub redaction_summary: Option<RedactionSummary>,
     pub generated_at: chrono::DateTime<chrono::Utc>,
-    pub next_cursor: Option<String>,
 }
 
 impl ResponseMeta {
@@ -59,7 +58,6 @@ impl ResponseMeta {
             redaction_policy: RedactionPolicy::standard(),
             redaction_summary: None,
             generated_at: chrono::Utc::now(),
-            next_cursor: None,
         }
     }
 

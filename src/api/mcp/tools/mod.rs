@@ -11,6 +11,7 @@ use sqlx::SqlitePool;
 
 pub mod get_file_lineage;
 pub mod get_otel_trace;
+pub mod get_session_turns;
 pub mod list_detectors;
 pub mod search_sessions;
 
@@ -36,7 +37,8 @@ fn search_sessions_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "limit": { "type": "integer", "default": 20, "description": "Max sessions to return" }
+            "limit": { "type": "integer", "default": 20, "description": "Max sessions to return" },
+            "project": { "type": "string", "description": "Project root path — only sessions with ≥1 event whose cwd equals this path (trailing slash ignored)" }
         },
         "required": []
     })
@@ -60,6 +62,16 @@ fn get_otel_trace_schema() -> Value {
             "trace_id": { "type": "string", "description": "OTel trace ID (hex)" }
         },
         "required": ["trace_id"]
+    })
+}
+
+fn get_session_turns_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "session_id": { "type": "string", "description": "Session ID" }
+        },
+        "required": ["session_id"]
     })
 }
 
@@ -91,6 +103,11 @@ pub fn tools_list_response() -> Value {
                 "inputSchema": get_otel_trace_schema()
             },
             {
+                "name": "whats_in_my_cc.get_session_turns",
+                "description": "Turn-level deterministic rollup of a session: per-user-turn tool histogram, edited files, and cross-turn file churn. Counts and redacted excerpts only — judgments (e.g. rework classification) are the caller's.",
+                "inputSchema": get_session_turns_schema()
+            },
+            {
                 "name": "whats_in_my_cc.list_detectors",
                 "description": "Return the manifest catalog for all registered detectors (spec §6.4). Each manifest describes what the detector detects, which raw payload fields it reads, by what rule, and why. Use this before proposing config changes or new detectors.",
                 "inputSchema": list_detectors_schema()
@@ -105,6 +122,7 @@ pub async fn dispatch(name: &str, args: &Value, pool: &SqlitePool) -> Value {
         "whats_in_my_cc.search_sessions" => search_sessions::call(args, pool).await,
         "whats_in_my_cc.get_file_lineage" => get_file_lineage::call(args, pool).await,
         "whats_in_my_cc.get_otel_trace" => get_otel_trace::call(args, pool).await,
+        "whats_in_my_cc.get_session_turns" => get_session_turns::call(args, pool).await,
         "whats_in_my_cc.list_detectors" => list_detectors::call(args, pool).await,
         _ => tool_error(format!("unknown tool: {name}")),
     }

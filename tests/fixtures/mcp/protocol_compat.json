@@ -6,9 +6,16 @@
     "result": {
       "protocolVersion": "2024-11-05",
       "capabilities": {
-        "tools": { "listChanged": false },
-        "resources": { "subscribe": true, "listChanged": false },
-        "prompts": { "listChanged": false },
+        "tools": {
+          "listChanged": false
+        },
+        "resources": {
+          "subscribe": true,
+          "listChanged": false
+        },
+        "prompts": {
+          "listChanged": false
+        },
         "logging": {}
       },
       "serverInfo": {
@@ -19,17 +26,40 @@
   },
   "tools_list_result": {
     "tools": [
-      { "name": "whats_in_my_cc.search_sessions" },
-      { "name": "whats_in_my_cc.get_file_lineage" },
-      { "name": "whats_in_my_cc.get_otel_trace" },
-      { "name": "whats_in_my_cc.list_detectors" }
+      {
+        "name": "whats_in_my_cc.search_sessions"
+      },
+      {
+        "name": "whats_in_my_cc.get_file_lineage"
+      },
+      {
+        "name": "whats_in_my_cc.get_otel_trace"
+      },
+      {
+        "name": "whats_in_my_cc.get_session_turns"
+      },
+      {
+        "name": "whats_in_my_cc.list_detectors"
+      }
     ]
   },
   "resource_templates_result": {
     "resourceTemplates": [
-      { "uriTemplate": "whats-in-my-cc://sessions/{session_id}", "name": "Session summary", "mimeType": "application/json" },
-      { "uriTemplate": "whats-in-my-cc://file-lineage/{session_id}", "name": "File lineage", "mimeType": "application/json" },
-      { "uriTemplate": "whats-in-my-cc://otel/traces/{trace_id}", "name": "OTel trace", "mimeType": "application/json" }
+      {
+        "uriTemplate": "whats-in-my-cc://sessions/{session_id}",
+        "name": "Session summary",
+        "mimeType": "application/json"
+      },
+      {
+        "uriTemplate": "whats-in-my-cc://file-lineage/{session_id}",
+        "name": "File lineage",
+        "mimeType": "application/json"
+      },
+      {
+        "uriTemplate": "whats-in-my-cc://otel/traces/{trace_id}",
+        "name": "OTel trace",
+        "mimeType": "application/json"
+      }
     ]
   }
 }

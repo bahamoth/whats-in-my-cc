@@ -6,7 +6,15 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "limit": { "type": "integer", "default": 20, "description": "Max sessions to return" }
+          "limit": {
+            "type": "integer",
+            "default": 20,
+            "description": "Max sessions to return"
+          },
+          "project": {
+            "type": "string",
+            "description": "Project root path — only sessions with ≥1 event whose cwd equals this path (trailing slash ignored)"
+          }
         },
         "required": []
       }
@@ -17,10 +25,19 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "session_id": { "type": "string", "description": "Session ID" },
-          "file_path": { "type": "string", "description": "File path to trace lineage for" }
+          "session_id": {
+            "type": "string",
+            "description": "Session ID"
+          },
+          "file_path": {
+            "type": "string",
+            "description": "File path to trace lineage for"
+          }
         },
-        "required": ["session_id", "file_path"]
+        "required": [
+          "session_id",
+          "file_path"
+        ]
       }
     },
     {
@@ -29,9 +46,30 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "trace_id": { "type": "string", "description": "OTel trace ID (hex)" }
+          "trace_id": {
+            "type": "string",
+            "description": "OTel trace ID (hex)"
+          }
         },
-        "required": ["trace_id"]
+        "required": [
+          "trace_id"
+        ]
+      }
+    },
+    {
+      "name": "whats_in_my_cc.get_session_turns",
+      "description": "Turn-level deterministic rollup of a session: per-user-turn tool histogram, edited files, and cross-turn file churn. Counts and redacted excerpts only — judgments (e.g. rework classification) are the caller's.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "Session ID"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
       }
     },
     {
