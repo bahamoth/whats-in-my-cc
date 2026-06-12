@@ -113,6 +113,10 @@ pub fn router(state: AppState) -> Router {
             get(routes::verification_run_detail),
         )
         .route("/v1/sessions/:id/metrics", get(routes::session_metrics))
+        .route(
+            "/v1/sessions/:id/fingerprint",
+            get(routes::session_fingerprint),
+        )
         .route("/v1/sessions/:id/signals", get(routes::session_signals))
         .route("/v1/signals/:id", get(routes::signal_detail))
         .route("/v1/events/:event_id/raw", get(routes::event_raw))
