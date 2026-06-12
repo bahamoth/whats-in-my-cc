@@ -115,11 +115,31 @@ pub struct IngestResult {
     pub sessions_touched: Vec<String>,
 }
 
+/// 스냅샷 환경 — 테스트에서 home 경로를 주입하기 위한 분리. 실 경로는
+/// `store`가 `dirs::home_dir()`로 채운다.
+#[derive(Debug, Default)]
+pub struct SnapshotEnv {
+    pub home: Option<std::path::PathBuf>,
+}
+
 pub async fn store(
     pool: &SqlitePool,
     parsed: ParseResult,
     received_at: DateTime<Utc>,
     sink: &dyn LiveSink,
+) -> Result<IngestResult> {
+    let env = SnapshotEnv {
+        home: dirs::home_dir(),
+    };
+    store_with_env(pool, parsed, received_at, sink, &env).await
+}
+
+pub async fn store_with_env(
+    pool: &SqlitePool,
+    parsed: ParseResult,
+    received_at: DateTime<Utc>,
+    sink: &dyn LiveSink,
+    env: &SnapshotEnv,
 ) -> Result<IngestResult> {
     let mut gen = MonotonicUlidGen::new();
     let run_id = repo_runs::start(pool).await?;
@@ -180,6 +200,25 @@ pub async fn store(
         }
 
         let observed_at = ev.timestamp.unwrap_or(received_at);
+        // SessionStart 수신 "그 시점"의 instruction 파일 스냅샷 — 자기개선
+        // 루프의 독립변수 관측. transcript에는 CLAUDE.md가 기록되지 않으므로
+        // (instruction_snapshot.rs 모듈 doc) 이 시점이 유일한 관측 기회다.
+        // cwd가 없으면 관측 불가로 degrade — `captured` 키 자체를 만들지 않는다.
+        let mut payload = serde_json::json!({"hook": ev.raw});
+        if ev.subkind == "session_start" {
+            if let Some(cwd) = ev.cwd.as_deref() {
+                let files = crate::ingest::instruction_snapshot::snapshot(
+                    std::path::Path::new(cwd),
+                    env.home.as_deref(),
+                );
+                if !files.is_empty() {
+                    payload["captured"] = serde_json::json!({
+                        "claude_md": files,
+                        "captured_at": received_at.to_rfc3339(),
+                    });
+                }
+            }
+        }
         let event = ObservedEvent {
             event_id: gen.generate(),
             raw_event_id: raw_id,
@@ -192,7 +231,7 @@ pub async fn store(
             tool_use_id: ev.tool_use_id.clone(),
             tool_name: ev.tool_name.clone(),
             cwd: ev.cwd.clone(),
-            payload: serde_json::json!({"hook": ev.raw}),
+            payload,
             parser_version: PARSER_VERSION_HOOK.into(),
             ..Default::default()
         };
