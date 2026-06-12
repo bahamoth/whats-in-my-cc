@@ -9,6 +9,7 @@ pub mod outcome;
 pub mod pipeline;
 pub mod pricing;
 pub mod redaction_shim;
+pub mod series;
 pub mod turn_rollup;
 pub mod types;
 pub mod verification_allowlist;

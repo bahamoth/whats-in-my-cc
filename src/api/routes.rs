@@ -834,6 +834,76 @@ pub async fn session_metrics(
     }
 }
 
+/// `GET /v1/metrics` — 세션 횡단 metrics+fingerprint series (on-demand).
+///
+/// 개입(하네스/프롬프트 변경) 전후 비교의 측정면. 미지원 쿼리 파라미터는
+/// 400(deny_unknown_fields — dogfood 2026-06-12 계약과 동일), `from`/`to`는
+/// RFC3339가 아니면 400 INVALID_TIME.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MetricsSeriesQuery {
+    pub project: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub limit: Option<i64>,
+}
+
+pub async fn metrics_series(
+    State(pool): State<SqlitePool>,
+    Query(q): Query<MetricsSeriesQuery>,
+) -> impl IntoResponse {
+    fn parse_time(
+        s: Option<&str>,
+        name: &str,
+    ) -> Result<Option<chrono::DateTime<chrono::Utc>>, (StatusCode, Json<serde_json::Value>)> {
+        match s {
+            None => Ok(None),
+            Some(v) => chrono::DateTime::parse_from_rfc3339(v)
+                .map(|d| Some(d.with_timezone(&chrono::Utc)))
+                .map_err(|_| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({
+                            "type": "about:blank",
+                            "title": "INVALID_TIME",
+                            "detail": format!("{name} must be RFC3339"),
+                        })),
+                    )
+                }),
+        }
+    }
+    let from = match parse_time(q.from.as_deref(), "from") {
+        Ok(v) => v,
+        Err(e) => return e.into_response(),
+    };
+    let to = match parse_time(q.to.as_deref(), "to") {
+        Ok(v) => v,
+        Err(e) => return e.into_response(),
+    };
+    let project_norm = q
+        .project
+        .as_deref()
+        .map(|p| p.trim_end_matches('/'))
+        .filter(|p| !p.is_empty())
+        .map(String::from);
+    let limit = q.limit.unwrap_or(crate::insight::series::DEFAULT_LIMIT);
+    match crate::insight::series::collect(&pool, project_norm.as_deref(), from, to, limit).await {
+        Ok(series) => Json(Envelope {
+            meta: ResponseMeta::now(),
+            data: series,
+        })
+        .into_response(),
+        Err(err) => {
+            tracing::error!(err = %err, "metrics_series failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
 /// `GET /v1/sessions/:id/fingerprint` — 세션 환경 fingerprint (on-demand).
 ///
 /// 자기개선 루프의 독립변수 표면: 이 세션이 어떤 모델·CC 버전·branch·
