@@ -79,6 +79,8 @@ impl Detector for FinalStateMismatch {
             // Verified: _cfg not used; no usize_param calls in detect()
             config_keys: vec![],
             rationale: "spec §4.2 D",
+            // 최종 verification 상태를 읽는 유일한 detector — outcome 계열.
+            metric_class: "outcome",
         }
     }
 

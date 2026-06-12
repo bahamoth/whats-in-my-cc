@@ -138,6 +138,7 @@ impl Detector for ReRead {
             // Verified: cfg.usize_param("re_read", "min_reads", MIN_READS_DEFAULT)
             config_keys: vec!["min_reads"],
             rationale: "spec §4.2 E그룹 · §6.1 시퀀스 · §10.5 1차 (실데이터로 임계값 잠금 예정)",
+            metric_class: "process",
         }
     }
 }

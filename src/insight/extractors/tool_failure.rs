@@ -65,6 +65,7 @@ impl Detector for ToolFailure {
             // Verified: cfg.usize_param("tool_failure", "retry_window", RETRY_WINDOW_DEFAULT)
             config_keys: vec!["retry_window"],
             rationale: "tests/fixtures/transcripts/real/tool_failure_v01.jsonl + outcome resolution 체인(src/insight/outcome.rs) + spec §6.3",
+            metric_class: "process",
         }
     }
 
