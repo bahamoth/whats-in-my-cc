@@ -109,8 +109,12 @@ describe('ActivityStack', () => {
   });
 
   it('renders a tag chip for a tagged Bash event (read.file) and none for control', () => {
-    const ev = (command: string, id: string) => ({ event_id: id, kind: 'tool_call', tool_name: 'Bash', observed_at: '2026-05-31T00:00:00Z', payload: { input: { command } } });
-    const stack = { events: [ { event: ev('grep -n x', 'a'), result: null }, { event: ev('cd /tmp', 'b'), result: null } ] };
+    // 칩은 서버가 계산한 `tag` 필드로 렌더된다 (분류는 core 분류기 몫).
+    const ev = (command: string, id: string, tag: unknown) => ({ event_id: id, kind: 'tool_call', tool_name: 'Bash', observed_at: '2026-05-31T00:00:00Z', tag, payload: { input: { command } } });
+    const stack = { events: [
+      { event: ev('grep -n x', 'a', { value: 'read.file', disposition: 'tagged', token: 'grep', display: 'grep -n x' }), result: null },
+      { event: ev('cd /tmp', 'b', { value: null, disposition: 'control', token: null, display: 'cd /tmp' }), result: null },
+    ] };
     render(<ActivityStack stack={stack as any} selectedEventId={'a'} onSelect={() => {}} />); // selected → expanded
     expect(screen.getByText('read.file')).toBeInTheDocument();
     // control event 'cd' produces no chip text

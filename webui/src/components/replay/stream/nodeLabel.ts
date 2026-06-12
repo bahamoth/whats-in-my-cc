@@ -1,5 +1,3 @@
-import { meaningfulCommand } from './eventTags';
-
 export interface NodeLabel {
   kind: 'user' | 'assistant' | 'thinking' | 'tool' | 'hook' | 'span' | 'verify' | 'diff' | 'other';
   primary: string;
@@ -26,7 +24,7 @@ export function formatModel(raw: unknown): string {
 // (browser/computer: `action` + coordinate/text/url) and falls back to the
 // first scalar field so MCP and unknown tools still show *something* instead of
 // a bare tool name. The view truncates with ellipsis, so no length cap here.
-function toolArg(input: unknown): string {
+function toolArg(input: unknown, commandDisplay?: string): string {
   const i = asObj(input);
 
   // Prefer the tool's own human-readable `description` when present (Bash and
@@ -51,7 +49,9 @@ function toolArg(input: unknown): string {
   ]) {
     const val = i[k];
     if (typeof val === 'string' && val) {
-      if (k === 'command') return meaningfulCommand(val); // strip a leading `cd …`
+      // 서버 tag.display가 선행 `cd …`를 제거한 명령을 준다 (core 분류기) —
+      // 없으면(과거 응답·태그 미계산) 원문 그대로.
+      if (k === 'command') return commandDisplay ?? val;
       return k === 'file_path' || k === 'path' ? (val.split('/').pop() ?? val) : val;
     }
   }
@@ -70,6 +70,8 @@ export function nodeLabel(node: {
   // C4 (Tier 3-1): span name lives in the telemetry facet (a sibling of
   // payload), no longer re-embedded under payload.raw_span.
   telemetry?: unknown;
+  /** 서버 분류 태그 (tool_call 한정) — display가 명령 표시에 쓰인다. */
+  tag?: { display?: string | null } | null;
 }): NodeLabel {
   const p = asObj(node.payload);
   switch (node.node_kind) {
@@ -77,7 +79,10 @@ export function nodeLabel(node: {
       return {
         kind: 'tool',
         primary: (p.tool_name as string) || 'tool',
-        secondary: toolArg(p.input),
+        secondary: toolArg(
+          p.input,
+          typeof node.tag?.display === 'string' ? node.tag.display : undefined,
+        ),
       };
     case 'assistant_message':
       return {

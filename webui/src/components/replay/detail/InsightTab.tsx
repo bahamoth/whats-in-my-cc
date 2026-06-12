@@ -59,7 +59,7 @@ export function InsightTab({ signals, event, toolMetrics, llmMetrics, matchedRes
     );
   }
 
-  const label = event ? nodeLabel({ node_kind: event.kind, payload: event.payload, telemetry: event.telemetry }) : null;
+  const label = event ? nodeLabel({ node_kind: event.kind, payload: event.payload, telemetry: event.telemetry, tag: event.tag }) : null;
   const icon = label ? KIND_ICON[label.kind] ?? KIND_ICON.other : null;
   const prov = event ? eventProvenance(event.kind) : null;
 
