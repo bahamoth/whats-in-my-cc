@@ -1,0 +1,8 @@
+{
+  "name": "session-retrospect",
+  "version": "0.1.0",
+  "description": "Session retrospect over the local wimcc observability service: deterministic turn rollups + LLM judgment → project improvement proposals. Requires `wimcc serve` (127.0.0.1:7878).",
+  "author": {
+    "name": "bahamoth"
+  }
+}

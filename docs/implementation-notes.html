@@ -4477,6 +4477,61 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="dogfood-retrospect-2026-06-12">
+    <h2>개밥먹기 회고 반영 — 집계 표면 확장 + session-retrospect plugin (2026-06-12)</h2>
+    <p>
+      세션 <code>191eddf3</code>(lhh-liveops, 6,533 events)를 Pull API로 분석한
+      개밥먹기 회고(<code>dogfood/2026-06-12-retrospect-wimcc.md</code>)의 구현 라운드.
+      핵심 결론 — <strong>측정은 wimcc(결정론), 판별은 LLM(온디맨드)</strong> — 에 따라
+      Signal 규칙 추가가 아니라 집계 표면 확장에 투자했다.
+    </p>
+    <ul>
+      <li><strong>events <code>?kind=</code> 필터 (CSV)</strong> — 종전에는 silently
+        ignored(axum Query가 미정의 파라미터 묵살)되어 분석자가 필터됐다고 오인한 채
+        전체 window를 받았다. 이제 <code>ListQuery</code>·<code>EventsQuery</code> 모두
+        <code>deny_unknown_fields</code> — 미지원 파라미터는 400. 미지의 kind 값은
+        <code>400 INVALID_KIND</code>. <code>around</code>/상관 조회와 조합 불가.
+        필터 window의 tip 규칙: no-cursor window는 정의상 tip(<code>next_cursor: null</code>),
+        forward paging은 limit 미만 반환 시 tip.</li>
+      <li><strong><code>/v1/sessions?project=</code> + MCP <code>search_sessions.project</code></strong>
+        — event의 <code>cwd</code> 일치(trailing slash 정규화)로 "이 프로젝트의 세션"을
+        식별. migration 불필요(<code>cwd</code> 컬럼 기존재).</li>
+      <li><strong><code>/v1/sessions/:id/turns</code> + MCP <code>get_session_turns</code></strong>
+        — 턴별 tool histogram·편집 파일·user_message 발췌(240자, ingest-redacted) +
+        세션 전체 <code>file_churn</code>(파일별 distinct 턴 수·편집 수). 순수 집계는
+        <code>src/insight/turn_rollup.rs</code>. <em>판단 필드 없음</em> — rework 분류는
+        소비자(LLM) 몫. churn 수치는 향후 <code>re_edit_churn</code> Signal 규칙의
+        원재료지만, 규칙 자체는 다른 세션에서 패턴 재확인 전 보류(표본 1 원칙).</li>
+      <li><strong>envelope 정리</strong> — <code>meta.next_cursor</code>는 어디서도
+        세팅되지 않는 dead field였고 실제 커서는 <code>data.prev_cursor/next_cursor</code>.
+        meta에서 제거(04 spec 예시 동기화). webui는 data 쪽만 읽고 있어 영향 없음.</li>
+      <li><strong>context_bloat 품질</strong> — ① tool_result의 빈 <code>tool_name</code>을
+        같은 <code>tool_use_id</code>의 tool_call에서 해석(실측: <code>from ""</code> summary),
+        미해석 시 <code>"unknown"</code>; ② facts에 <code>is_sidechain</code> 노출 —
+        sidechain 대형 read는 보통 <em>권장</em> Agent 위임 패턴이므로 소비자가 판단할
+        근거 제공. 발화 억제는 하지 않음(판단 배제 원칙).</li>
+      <li><strong>session-retrospect plugin</strong> — 리포가 Claude Code plugin
+        마켓플레이스를 겸한다: <code>.claude-plugin/marketplace.json</code> +
+        <code>plugins/session-retrospect/</code>(plugin.json·<code>.mcp.json</code>로
+        wimcc MCP 자동 등록). 스킬 본체 SSOT는 Agent Skills 표준 레이아웃
+        <code>skills/session-retrospect/</code>이고 plugin 쪽은 심링크 — 공식 문서
+        (code.claude.com/docs/en/plugins-reference, "Plugin caching and file resolution")
+        기준 같은 마켓플레이스 내 심링크는 설치 시 역참조(복사)로 지원됨을 확인.
+        글로벌 gitignore의 <code>.claude*</code> 패턴이 manifest를 차단하던 문제는
+        리포 <code>.gitignore</code>의 <code>!.claude-plugin/</code> 부정 패턴으로 해소.
+        스킬은 read-only 소비만 하므로 non-goal(설정/skill 변경 금지)과 충돌 없음 —
+        <code>~/.claude</code> 쓰기 주체는 Claude Code plugin 매니저다.</li>
+    </ul>
+    <p>
+      <strong>이번 범위 외(deferred)</strong>: ① Signal 규칙 <code>re_edit_churn</code>·
+      <code>duplicate_edit_stream</code> — turns 집계로 원재료는 노출됐고, 다른 세션
+      재현 확인 후 착수; ② 브라우저 smoke를 검증 활동으로 분류(verification guard
+      사각지대) — command_kind 분류 체계 설계 필요; ③ <code>rework_loop</code> 류
+      의미 판별 규칙 — 가짜 결정론이므로 영구 비채택(판별은 skill의 LLM 가이드로 정식화,
+      <code>skills/session-retrospect/references/workflow.md</code>).
+    </p>
+  </section>
+
 </main>
 </div>
 </body></html>

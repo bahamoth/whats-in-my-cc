@@ -13,3 +13,7 @@ node_modules/
 # superpowers brainstorm mockups
 .superpowers/
 .wimcc-analysis.sqlite*
+
+# plugin marketplace manifests — un-ignore from the global `.claude*` pattern
+# (~/.gitignore); these MUST ship with the repo for `/plugin marketplace add`.
+!.claude-plugin/
