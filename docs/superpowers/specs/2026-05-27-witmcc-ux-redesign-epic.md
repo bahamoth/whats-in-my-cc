@@ -46,6 +46,31 @@ This is **not** a design spec. It is the list of UX problems the redesign must a
 
 ## 3. Data-contract preconditions (locked by milestone slices)
 
+> **Revision note (2026-06-12, loop-foundations):** 아래 표는 2026-05-27 시점의
+> 데이터 모델(findings·episodes·graph·L2 judge)을 전제한다. 그 뒤 Signal 모델
+> 전환으로 전제 자체가 바뀌었으므로, **재설계 착수 시 이 표를 그대로 소비하면
+> 폐기된 모델 위에서 출발하게 된다.** 행별 현행 상태:
+>
+> - **C1 (episodes)** — 폐기. episode 모델 제거(`tests/episode_removed.rs`).
+> - **C2 (verification-runs covers)** — 유지·구현됨.
+> - **C3 (graph inferred edges)** — 폐기. graph API 표면 제거.
+> - **C4/C5 (findings + confidence/severity/evidence subgraph)** — 폐기.
+>   Signal로 대체: `GET /v1/sessions/:id/signals` · `GET /v1/signals/:id`
+>   (`evidence_refs[]` 필수, severity/confidence 같은 판단 필드는 의도적으로 없음).
+> - **C6/C7 (L2 judge / pending_judge)** — 폐기. 개정 PRD: "비결정·비로컬 LLM
+>   판정 경로는 두지 않는다" — 판단은 MCP를 소비하는 LLM(session-retrospect 스킬)의 몫.
+> - **C8 (MCP)** — 갱신: 도구 6종 — `search_sessions` · `get_file_lineage` ·
+>   `get_otel_trace` · `get_session_turns` · `list_detectors` · `get_project_metrics`
+>   (`get_session_graph`/`search_findings`/`explain_node`는 모델 전환으로 미존재).
+> - **C9 (redaction manifest)** — 유지.
+> - **C10 (auth)** — 갱신: 기본 `--auth off` (단일 사용자 dev, DEV-S19-08).
+> - **신규 전제 (2026-06-12):** 세션 환경 fingerprint
+>   (`GET /v1/sessions/:id/fingerprint`)와 세션 횡단 metrics series
+>   (`GET /v1/metrics`) — 사람 표면(코호트·추이 뷰)도 같은 데이터를 소비할 수 있다.
+>
+> §4 smoke checklist도 같은 이유로 stale(`/graph`·`/findings` 참조) — 재설계
+> 킥오프 시 §3 현행 상태 기준으로 재작성할 것.
+
 Each row here is a contract the milestone path **must** ship so the redesign has the optionality it needs. Each row also points to the slice that lands the contract and the smoke test that proves it ships green.
 
 | # | Contract | Owning slice | Locked-by test (regression) |
