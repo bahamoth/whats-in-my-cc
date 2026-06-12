@@ -3,13 +3,21 @@
 use anyhow::Result;
 use sqlx::SqlitePool;
 
-/// Check whether a resource_id has a tombstone (was deleted by retention sweep).
-pub async fn is_tombstoned(pool: &SqlitePool, resource_id: &str) -> Result<bool> {
-    let count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM retention_tombstone WHERE resource_id = ?")
-            .bind(resource_id)
-            .fetch_one(pool)
-            .await?;
+/// Check whether a resource has a tombstone (was deleted by retention sweep).
+/// Kind-scoped: a tombstone of another class sharing the id must not match —
+/// session ids are caller-supplied, so cross-class collisions are possible.
+pub async fn is_tombstoned(
+    pool: &SqlitePool,
+    resource_id: &str,
+    resource_kind: &str,
+) -> Result<bool> {
+    let count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM retention_tombstone WHERE resource_id = ? AND resource_kind = ?",
+    )
+    .bind(resource_id)
+    .bind(resource_kind)
+    .fetch_one(pool)
+    .await?;
     Ok(count.0 > 0)
 }
 

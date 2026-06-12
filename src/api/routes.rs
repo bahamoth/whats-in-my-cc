@@ -29,9 +29,10 @@ pub struct ListQuery {
 async fn tombstone_gate(
     pool: &SqlitePool,
     resource_id: &str,
+    kind: &str,
     what: &str,
 ) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
-    match repo_retention::is_tombstoned(pool, resource_id).await {
+    match repo_retention::is_tombstoned(pool, resource_id, kind).await {
         Ok(true) => Err((
             StatusCode::GONE,
             Json(json!({
@@ -156,7 +157,7 @@ pub async fn session_detail(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> Result<Json<Envelope<SessionDetail>>, (StatusCode, Json<serde_json::Value>)> {
-    tombstone_gate(&pool, &id, "session").await?;
+    tombstone_gate(&pool, &id, "session", "session").await?;
     // Slice-9 — summary only. Events ship via /v1/sessions/:id/events.
     let Some((event_count, first_obs, last_obs)) = repo_observed::session_summary(&pool, &id)
         .await
@@ -215,7 +216,7 @@ pub async fn session_events(
     Path(id): Path<String>,
     Query(q): Query<EventsQuery>,
 ) -> Result<Json<Envelope<SessionEventsResponse>>, (StatusCode, Json<serde_json::Value>)> {
-    tombstone_gate(&pool, &id, "session").await?;
+    tombstone_gate(&pool, &id, "session", "session").await?;
     use crate::model::cursor::Cursor;
     fn parse_cursor(
         opt: Option<&str>,
@@ -330,7 +331,7 @@ pub async fn session_diff_hunks(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> Result<Json<Envelope<DiffHunksResponse>>, (StatusCode, Json<serde_json::Value>)> {
-    tombstone_gate(&pool, &id, "session").await?;
+    tombstone_gate(&pool, &id, "session", "session").await?;
     let rows = repo_diff_hunk::list_session(&pool, &id).await.expect("db");
     let hunks = rows
         .into_iter()
@@ -378,7 +379,13 @@ pub async fn event_raw(
 
     // The retention sweep scrubs the payload but keeps the skeleton row, so
     // the join above still resolves — the tombstone says the content expired.
-    tombstone_gate(&pool, &row.raw_event_id, "raw payload of event").await?;
+    tombstone_gate(
+        &pool,
+        &row.raw_event_id,
+        "raw_event",
+        "raw payload of event",
+    )
+    .await?;
 
     let record = match std::str::from_utf8(&row.payload)
         .ok()
@@ -426,7 +433,7 @@ pub async fn session_usage(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(gone) = tombstone_gate(&pool, &id, "session").await {
+    if let Err(gone) = tombstone_gate(&pool, &id, "session", "session").await {
         return gone.into_response();
     }
     let agg = repo_usage_facet::session_aggregate(&pool, &id)
@@ -538,7 +545,7 @@ pub async fn session_verification_runs(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(gone) = tombstone_gate(&pool, &id, "session").await {
+    if let Err(gone) = tombstone_gate(&pool, &id, "session", "session").await {
         return gone.into_response();
     }
     let runs = repo_verification_run::list_session(&pool, &id)
@@ -568,7 +575,7 @@ pub async fn verification_run_detail(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> Result<Json<Envelope<VerificationRunDto>>, (StatusCode, Json<serde_json::Value>)> {
-    tombstone_gate(&pool, &id, "verification_run").await?;
+    tombstone_gate(&pool, &id, "verification_run", "verification_run").await?;
     let row = repo_verification_run::get(&pool, &id).await.expect("db");
     let Some(run) = row else {
         return Err((
@@ -688,7 +695,7 @@ pub async fn session_metrics(
     State(pool): State<SqlitePool>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(gone) = tombstone_gate(&pool, &id, "session").await {
+    if let Err(gone) = tombstone_gate(&pool, &id, "session", "session").await {
         return gone.into_response();
     }
     match crate::insight::metrics::compute_session_metrics(&pool, &id).await {
@@ -736,7 +743,7 @@ pub async fn session_signals(
     State(pool): State<SqlitePool>,
     Path(session_id): Path<String>,
 ) -> impl IntoResponse {
-    if let Err(gone) = tombstone_gate(&pool, &session_id, "session").await {
+    if let Err(gone) = tombstone_gate(&pool, &session_id, "session", "session").await {
         return gone.into_response();
     }
     match repo_signal::list_by_session(&pool, &session_id).await {
@@ -765,7 +772,7 @@ pub async fn signal_detail(
     Path(signal_id): Path<String>,
 ) -> impl IntoResponse {
     // Check tombstone first.
-    match repo_retention::is_tombstoned(&pool, &signal_id).await {
+    match repo_retention::is_tombstoned(&pool, &signal_id, "signal").await {
         Ok(true) => {
             return (
                 StatusCode::GONE,
