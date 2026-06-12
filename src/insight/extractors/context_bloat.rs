@@ -52,9 +52,14 @@ impl Detector for ContextBloat {
                 "tool_result.content",
                 "assistant_message.content",
                 "tool_call.input.command",
+                // Dogfood 2026-06-12 (§4): empty tool_result.tool_name is
+                // resolved from the paired tool_call (same tool_use_id);
+                // is_sidechain is surfaced in facts.
+                "tool_call.tool_name",
+                "observed_event.is_sidechain",
             ],
             rule: "tool_result.content.len() > threshold_bytes AND 이후 next_event_window 내 assistant_message 존재 AND 그 이후 next_event_window 내 tool_call들과의 lexical overlap < min_overlap_stems. 셋 다 true일 때 발화.",
-            output: "{tool_result: {event_id, tool_name, payload_size_bytes, payload_excerpt_redacted, payload_tail_excerpt_redacted}, next_assistant: {event_id, estimated_tokens, excerpt_redacted}, downstream_usage_signal: {lexical_overlap_with_next_tool_calls, next_three_tool_call_inputs_redacted}}",
+            output: "{tool_result: {event_id, tool_name, is_sidechain, payload_size_bytes, payload_excerpt_redacted, payload_tail_excerpt_redacted}, next_assistant: {event_id, estimated_tokens, excerpt_redacted}, downstream_usage_signal: {lexical_overlap_with_next_tool_calls, next_three_tool_call_inputs_redacted}}",
             // Verified: all three cfg.usize_param calls in detect()
             config_keys: vec!["threshold_bytes", "next_event_window", "min_overlap_stems"],
             rationale: "spec §4.2 B",
@@ -155,11 +160,36 @@ impl Detector for ContextBloat {
                 })
                 .collect();
 
+            // Dogfood 2026-06-12 (§4) — tool_result rows can carry an empty
+            // tool_name (observed on session 191eddf3: summary printed
+            // `from ""`); resolve it from the paired tool_call via
+            // tool_use_id before giving up to "unknown".
+            let tool_name = ev
+                .tool_name
+                .as_deref()
+                .filter(|n| !n.is_empty())
+                .or_else(|| {
+                    let tuid = ev.tool_use_id.as_deref()?;
+                    events.iter().find_map(|e2| {
+                        if e2.kind == EventKind::ToolCall && e2.tool_use_id.as_deref() == Some(tuid)
+                        {
+                            e2.tool_name.as_deref().filter(|n| !n.is_empty())
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .unwrap_or("unknown");
+
             let facts = json!({
                 "session_id": view.session_id,
                 "tool_result": {
                     "event_id": ev.event_id,
-                    "tool_name": ev.tool_name,
+                    "tool_name": tool_name,
+                    // Sidechain bloat is usually the *recommended* delegation
+                    // pattern (an Agent reading big docs off the main
+                    // context); expose the flag so consumers can judge.
+                    "is_sidechain": ev.is_sidechain,
                     "payload_size_bytes": content_size,
                     "payload_excerpt_redacted": payload_excerpt,
                     "payload_tail_excerpt_redacted": payload_tail
@@ -176,8 +206,7 @@ impl Detector for ContextBloat {
             });
 
             let summary = format!(
-                "Large tool_result ({content_size} bytes) from {:?} not reused in subsequent turn.",
-                ev.tool_name.as_deref().unwrap_or("unknown")
+                "Large tool_result ({content_size} bytes) from {tool_name:?} not reused in subsequent turn."
             );
 
             candidates.push(SignalCandidate {
