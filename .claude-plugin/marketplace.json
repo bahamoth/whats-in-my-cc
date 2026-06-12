@@ -1,0 +1,14 @@
+{
+  "name": "wimcc",
+  "owner": {
+    "name": "bahamoth"
+  },
+  "description": "What's in My Claude Code — local execution observability. Plugins consuming the wimcc read-only Pull API / MCP.",
+  "plugins": [
+    {
+      "name": "session-retrospect",
+      "source": "./plugins/session-retrospect",
+      "description": "Retrospect a project's observed Claude Code sessions via the local wimcc service and propose project improvements. Requires `wimcc serve` running (127.0.0.1:7878)."
+    }
+  ]
+}
