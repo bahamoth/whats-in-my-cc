@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.2.0...v0.3.0) (2026-06-12)
+
+
+### Features
+
+* **security:** retention sweep 전면 구현 — 기간 지난 내용은 전부 삭제 ([4ec0b9e](https://github.com/bahamoth/whats-in-my-cc/commit/4ec0b9ed5a02890fbc095d0290fd02d37fff2e2f))
+
+
+### Bug Fixes
+
+* **security:** 리뷰 후속 — 세션 만료 후보 확대 · tombstone kind 한정 ([eb7bad9](https://github.com/bahamoth/whats-in-my-cc/commit/eb7bad9eb92cbd9e47c33f0ff4cea95d451246b0))
+
 ## [0.2.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.1.0...v0.2.0) (2026-06-11)
 
 
