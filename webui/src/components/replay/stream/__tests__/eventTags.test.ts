@@ -1,166 +1,30 @@
 import { describe, it, expect } from 'vitest';
-import { tagForEvent, collectUntagged, meaningfulCommand, segmentCommand, tagVerb, BASH_FIRST_TOKEN_TAGS, TOOL_SUBCOMMAND_TAGS } from '../eventTags';
-import type { ObservedEventDto } from '../../../../api/types';
+import { tagVerb, collectUntagged } from '../eventTags';
+import type { EventTagDto, ObservedEventDto } from '../../../../api/types';
 
-const bash = (command: string): ObservedEventDto =>
-  ({ event_id: command, kind: 'tool_call', tool_name: 'Bash', observed_at: '2026-05-31T00:00:00Z', payload: { input: { command } } } as unknown as ObservedEventDto);
-const read = (file_path: string): ObservedEventDto =>
-  ({ event_id: file_path, kind: 'tool_call', tool_name: 'Read', observed_at: '2026-05-31T00:00:00Z', payload: { input: { file_path } } } as unknown as ObservedEventDto);
-const edit = (file_path: string): ObservedEventDto =>
-  ({ event_id: file_path, kind: 'tool_call', tool_name: 'Edit', observed_at: '2026-05-31T00:00:00Z', payload: { input: { file_path } } } as unknown as ObservedEventDto);
-const write = (file_path: string): ObservedEventDto =>
-  ({ event_id: file_path, kind: 'tool_call', tool_name: 'Write', observed_at: '2026-05-31T00:00:00Z', payload: { input: { file_path } } } as unknown as ObservedEventDto);
+// 분류(taxonomy·셸 파싱) 테스트는 Rust로 이전됐다 — tests/event_tags.rs가
+// 구 eventTags.test.ts의 케이스를 1:1 잠근다 (loop-foundations 2026-06-12).
+// 여기 남는 것은 표현(tagVerb)과 서버 tag 필드 기반 집계(collectUntagged)뿐.
 
-describe('tagForEvent — verb.object taxonomy', () => {
-  it('read.file — search/inspect files', () => {
-    expect(tagForEvent(bash('grep -n foo src')).tag).toBe('read.file');
-    expect(tagForEvent(bash('find . -name "*.rs"')).tag).toBe('read.file');
-    expect(tagForEvent(bash('ls -la')).tag).toBe('read.file');
-    expect(tagForEvent(bash('cat Cargo.toml')).tag).toBe('read.file');
-    expect(tagForEvent(bash("sed -n '1,5p' x")).tag).toBe('read.file');
-  });
-  it('read.proc / read.db / read.web', () => {
-    expect(tagForEvent(bash('ps -p 1')).tag).toBe('read.proc');
-    expect(tagForEvent(bash('lsof -ti :5175')).tag).toBe('read.proc');
-    expect(tagForEvent(bash('sqlite3 db .tables')).tag).toBe('read.db');
-    expect(tagForEvent(bash('curl -s http://x')).tag).toBe('read.web');
-  });
-  it('git: read vs write by subcommand', () => {
-    expect(tagForEvent(bash('git status')).tag).toBe('read.vcs');
-    expect(tagForEvent(bash('git diff HEAD')).tag).toBe('read.vcs');
-    expect(tagForEvent(bash('git fetch')).tag).toBe('read.vcs'); // fetch is read (download only)
-    expect(tagForEvent(bash('git commit -m x')).tag).toBe('write.vcs');
-    expect(tagForEvent(bash('git push')).tag).toBe('write.vcs');
-    expect(tagForEvent(bash('git mv a b')).tag).toBe('write.vcs');
-    expect(tagForEvent(bash('gh pr create')).tag).toBe('write.vcs');
-  });
-  it('cargo/npm/go: subcommand decides build/test/run/lint/deps', () => {
-    expect(tagForEvent(bash('cargo build --release')).tag).toBe('build.code');
-    expect(tagForEvent(bash('cargo test --all')).tag).toBe('test.code');
-    expect(tagForEvent(bash('cargo run -- serve')).tag).toBe('run.code');
-    expect(tagForEvent(bash('cargo clippy')).tag).toBe('lint.code');
-    expect(tagForEvent(bash('cargo add serde')).tag).toBe('write.deps');
-    expect(tagForEvent(bash('npm test')).tag).toBe('test.code');
-    expect(tagForEvent(bash('npm run dev')).tag).toBe('run.code'); // any npm run → run.code
-    expect(tagForEvent(bash('npm install')).tag).toBe('write.deps');
-    expect(tagForEvent(bash('go build ./...')).tag).toBe('build.code');
-  });
-  it('single-purpose dev tools + tsc --noEmit flips to lint', () => {
-    expect(tagForEvent(bash('make')).tag).toBe('build.code');
-    expect(tagForEvent(bash('vitest run')).tag).toBe('test.code');
-    expect(tagForEvent(bash('eslint .')).tag).toBe('lint.code');
-    expect(tagForEvent(bash('tsc -p .')).tag).toBe('build.code');
-    expect(tagForEvent(bash('tsc --noEmit')).tag).toBe('lint.code');
-  });
-  it('run.code — interpreters, scripts, and bare path execution', () => {
-    expect(tagForEvent(bash('python3 script.py')).tag).toBe('run.code');
-    expect(tagForEvent(bash('node x.js')).tag).toBe('run.code');
-    expect(tagForEvent(bash('bash tests/x.sh')).tag).toBe('run.code');
-    expect(tagForEvent(bash('./target/release/wimcc serve')).tag).toBe('run.code');
-    expect(tagForEvent(bash('/usr/local/bin/foo')).tag).toBe('run.code');
-    expect(tagForEvent(bash('tests/structural/x.sh ch-prod')).tag).toBe('run.code'); // *.sh path
-  });
-  it('write.file / delete.file / write.deps', () => {
-    expect(tagForEvent(bash('mkdir -p a/b')).tag).toBe('write.file');
-    expect(tagForEvent(bash('cp a b')).tag).toBe('write.file');
-    expect(tagForEvent(bash('chmod +x x')).tag).toBe('write.file');
-    expect(tagForEvent(bash('rm -rf target')).tag).toBe('delete.file');
-    expect(tagForEvent(bash('mv a b')).tag).toBe('delete.file');
-    expect(tagForEvent(bash('pip install cairosvg')).tag).toBe('write.deps');
-  });
-  it('classifies compounds by the first MEANINGFUL command', () => {
-    expect(tagForEvent(bash('cd /repo && git add -A && git status')).tag).toBe('write.vcs');
-    expect(tagForEvent(bash('cd x && grep y')).tag).toBe('read.file');
-    expect(tagForEvent(bash('grep y > out.txt')).tag).toBe('read.file');
-    expect(tagForEvent(bash('grep a | grep b | wc -l')).tag).toBe('read.file');
-    expect(tagForEvent(bash('cd x && rm -rf y')).tag).toBe('delete.file');
-  });
-  it('resolves the multiplexer subcommand past global flags (git -C/-c, cargo +toolchain)', () => {
-    // git global options precede the subcommand: `git -C <dir> diff`, `git -c k=v commit`.
-    expect(tagForEvent(bash('git -C .. diff --stat')).tag).toBe('read.vcs');
-    expect(tagForEvent(bash('git -C /repo status --short')).tag).toBe('read.vcs');
-    expect(tagForEvent(bash('git -c user.name=x commit -m y')).tag).toBe('write.vcs');
-    expect(tagForEvent(bash('git --no-pager log')).tag).toBe('read.vcs');
-    // cargo toolchain selector `+toolchain` precedes the subcommand.
-    expect(tagForEvent(bash('cargo +1.86.0 build 2>&1')).tag).toBe('build.code');
-  });
-  it('unwraps a timeout wrapper to classify the inner command', () => {
-    expect(tagForEvent(bash('timeout 180 npm run dev')).tag).toBe('run.code');
-    expect(tagForEvent(bash('timeout 60 cargo test')).tag).toBe('test.code');
-    expect(tagForEvent(bash('timeout 5s git status')).tag).toBe('read.vcs');
-    // arg-consuming flags (-s SIGNAL, -k DURATION) must skip their value token too
-    expect(tagForEvent(bash('timeout -s SIGTERM 5 cargo test')).tag).toBe('test.code');
-    expect(tagForEvent(bash('timeout -k 10 30 npm test')).tag).toBe('test.code');
-    expect(tagForEvent(bash('timeout --signal=KILL 10 npm test')).tag).toBe('test.code');
-  });
-  it('tags bare relative-path execution (no ./ prefix) as run.code', () => {
-    expect(tagForEvent(bash('target/debug/wimcc --help')).tag).toBe('run.code');
-    expect(tagForEvent(bash('.claude/skills/ch/scripts/ch ch-prod')).tag).toBe('run.code');
-  });
-  it('just / shasum single-purpose tools', () => {
-    expect(tagForEvent(bash('just webui-build')).tag).toBe('run.code');
-    expect(tagForEvent(bash('shasum -a 256 file.pdf')).tag).toBe('read.file');
-  });
-  it('control vs unmatched', () => {
-    expect(tagForEvent(bash('cd /tmp && echo done')).disposition).toBe('control');
-    expect(tagForEvent(bash('cd /tmp')).disposition).toBe('control');
-    expect(tagForEvent(bash('frobnicate x')).disposition).toBe('unmatched');
-    expect(tagForEvent(bash('git frobnicate')).disposition).toBe('unmatched'); // unknown git sub
-    expect(tagForEvent(bash('npm frob')).disposition).toBe('unmatched'); // unknown npm sub
-  });
+const ev = (
+  id: string,
+  tag: EventTagDto | null,
+  tool_name: string | null = 'Bash',
+): ObservedEventDto =>
+  ({
+    event_id: id,
+    kind: 'tool_call',
+    tool_name,
+    observed_at: '2026-06-12T00:00:00Z',
+    tag,
+    payload: {},
+  }) as unknown as ObservedEventDto;
 
-  // ── classifier hardening (tokenizer noise) ──
-  it('strips leading whole-line comments before classifying', () => {
-    expect(tagForEvent(bash('# explore\ngrep -r x src')).tag).toBe('read.file');
-  });
-  it('date — system-state read (untagged-loop 2026-06-11, corpus 29건)', () => {
-    expect(tagForEvent(bash('date -u +"%Y-%m-%dT%H:%M:%SZ"')).tag).toBe('read.proc');
-  });
-  it('joins backslash line-continuations before segmenting (no bare-\\ segment)', () => {
-    // corpus: `\` was the #2 untagged token (28건) — continuation lines split
-    // on \n produced a lone-backslash segment and flag/path-led segments.
-    expect(tagForEvent(bash('cargo build \\\n  --release')).tag).toBe('build.code');
-    expect(tagForEvent(bash('grep -n foo \\\n  src/lib.rs | \\\n  head -5')).tag).toBe('read.file');
-    expect(segmentCommand('grep foo \\\n  bar')).toEqual(['grep foo bar']);
-  });
-  it('splits compounds on NEWLINES', () => {
-    expect(tagForEvent(bash('cd /x\ngrep y')).tag).toBe('read.file');
-    expect(tagForEvent(bash('cargo build\ncargo test')).tag).toBe('build.code');
-  });
-  it('does NOT mis-split a 2>&1 redirect', () => {
-    expect(tagForEvent(bash('grep x src 2>&1 | head')).tag).toBe('read.file');
-    expect(tagForEvent(bash('cargo test 2>&1')).tag).toBe('test.code');
-  });
-  it('skips leading VAR=value assignment prefixes', () => {
-    expect(tagForEvent(bash('VAULT=/x grep y')).tag).toBe('read.file');
-    expect(tagForEvent(bash('FOO=/x\ncat f')).tag).toBe('read.file');
-    expect(tagForEvent(bash('FOO=bar')).disposition).toBe('control');
-  });
-  it('treats loop/conditional keywords as control', () => {
-    expect(tagForEvent(bash('for f in *; do grep x "$f"; done')).tag).toBe('read.file');
-    expect(tagForEvent(bash('[ -f x ] && cat y')).tag).toBe('read.file');
-  });
-});
-
-describe('tagForEvent — Read by extension', () => {
-  it('classifies code/docs/config/data', () => {
-    expect(tagForEvent(read('src/a.rs')).tag).toBe('read.code');
-    expect(tagForEvent(read('webui/x.tsx')).tag).toBe('read.code');
-    expect(tagForEvent(read('README.md')).tag).toBe('read.docs');
-    expect(tagForEvent(read('Cargo.toml')).tag).toBe('read.config');
-    expect(tagForEvent(read('data.json')).tag).toBe('read.data');
-    expect(tagForEvent(read('tasks/run.output')).tag).toBe('read.data'); // CC task/log output
-    expect(tagForEvent(read('scripts/fetch.py')).tag).toBe('read.code'); // Python source
-  });
-});
-
-describe('classifier invariants', () => {
-  it('no map key contains a slash (isPathExec runs FIRST and would shadow it)', () => {
-    // isPathExec tags any unquoted slash-containing first token as run.code BEFORE
-    // the tsc/multiplexer/BASH lookups — so a slash in a key would be unreachable.
-    for (const k of Object.keys(BASH_FIRST_TOKEN_TAGS)) expect(k).not.toContain('/');
-    for (const k of Object.keys(TOOL_SUBCOMMAND_TAGS)) expect(k).not.toContain('/');
-  });
+const unmatched = (token: string, display = ''): EventTagDto => ({
+  value: null,
+  disposition: 'unmatched',
+  token,
+  display,
 });
 
 describe('tagVerb', () => {
@@ -172,124 +36,52 @@ describe('tagVerb', () => {
   });
 });
 
-describe('tagForEvent — Edit/Write by extension (write.object)', () => {
-  it('classifies write.code/docs/config/data by file_path extension', () => {
-    expect(tagForEvent(edit('src/a.rs')).tag).toBe('write.code');
-    expect(tagForEvent(edit('webui/x.tsx')).tag).toBe('write.code');
-    expect(tagForEvent(edit('README.md')).tag).toBe('write.docs');
-    expect(tagForEvent(edit('Cargo.toml')).tag).toBe('write.config');
-    expect(tagForEvent(write('out/data.json')).tag).toBe('write.data');
-    expect(tagForEvent(write('tasks/run.output')).tag).toBe('write.data');
-    expect(tagForEvent(edit('scripts/fetch.py')).tag).toBe('write.code'); // Python source
-  });
-  it('Edit with an unknown/absent extension is unmatched (surfaced by the loop)', () => {
-    expect(tagForEvent(edit('Makefile')).disposition).toBe('unmatched');
-  });
-});
-
-describe('tagForEvent — non-file tools get no chip', () => {
-  it('Task/Agent → control disposition (no chip)', () => {
-    const agent = { event_id: 'a', kind: 'tool_call', tool_name: 'Task', observed_at: '2026-05-31T00:00:00Z', payload: {} } as unknown as ObservedEventDto;
-    expect(tagForEvent(agent).disposition).toBe('control');
-    expect(tagForEvent(agent).tag).toBeNull();
-  });
-});
-
-describe('meaningfulCommand — strip leading control prefixes for display', () => {
-  it('drops a leading cd so the command leads with the real work', () => {
-    expect(meaningfulCommand('cd /repo && git add -A && git status')).toBe('git add -A && git status');
-    expect(meaningfulCommand('cd x && grep y')).toBe('grep y');
-  });
-  it('leaves a command that already leads with work unchanged', () => {
-    expect(meaningfulCommand('grep a | grep b')).toBe('grep a | grep b');
-    expect(meaningfulCommand('rm -f x && ls')).toBe('rm -f x && ls');
-    expect(meaningfulCommand('cd /tmp')).toBe('cd /tmp');
-  });
-});
-
-describe('collectUntagged', () => {
-  it('aggregates unmatched commands by the first MEANINGFUL token, with count + sample', () => {
-    const events = [
-      bash('frobnicate a'), bash('frobnicate b'),
-      bash('cd /tmp'),                  // control → excluded
-      bash('cd x && grep y'),           // tagged read.file → excluded
-      bash('grep z'),                   // tagged → excluded
-      bash('cd /repo && frobnicate c'), // unmatched; meaningful token = frobnicate
-    ];
-    const rows = collectUntagged(events);
+describe('collectUntagged — 서버 tag 필드 기반 집계', () => {
+  it('aggregates unmatched events by server token with count + first eventId', () => {
+    const rows = collectUntagged([
+      ev('e1', unmatched('frobnicate', 'frobnicate a')),
+      ev('e2', unmatched('frobnicate', 'frobnicate b')),
+      ev('e3', { value: 'read.file', disposition: 'tagged', token: 'grep', display: 'grep z' }),
+      ev('e4', { value: null, disposition: 'control', token: null, display: 'cd /tmp' }),
+      ev('e5', null), // 태그 미계산(비 tool_call 등) → 제외
+    ]);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ token: 'frobnicate', count: 3 });
+    expect(rows[0]).toMatchObject({ token: 'frobnicate', count: 2, eventId: 'e1' });
+    expect(rows[0].sample).toBe('frobnicate a');
     expect(rows[0].hint).toContain('BASH_FIRST_TOKEN_TAGS');
+    expect(rows[0].hint).toContain('src/insight/event_tags.rs');
   });
 
-  it('aggregates an unknown MULTIPLEXER subcommand as `tool sub` (so the loop knows which sub to add)', () => {
-    const rows = collectUntagged([bash('git frobnicate'), bash('git frobnicate --x')]);
+  it('multiplexer `tool sub` token hints at TOOL_SUBCOMMAND_TAGS', () => {
+    const rows = collectUntagged([
+      ev('e1', unmatched('git frobnicate', 'git frobnicate')),
+      ev('e2', unmatched('git frobnicate', 'git frobnicate --x')),
+    ]);
     expect(rows[0].token).toBe('git frobnicate');
     expect(rows[0].count).toBe(2);
     expect(rows[0].hint).toContain("TOOL_SUBCOMMAND_TAGS['git']");
   });
 
-  it('aggregates an unknown subcommand past global flags under the same `tool sub`', () => {
-    // `git -C .. frobnicate` and `git frobnicate` are the SAME unknown sub.
-    const rows = collectUntagged([bash('git -C .. frobnicate'), bash('git frobnicate')]);
-    expect(rows[0].token).toBe('git frobnicate');
-    expect(rows[0].count).toBe(2);
-  });
-
-  it('does not surface comment / assignment / redirect noise as untagged tokens', () => {
-    const events = [
-      bash('# explore\nfrobnicate view'),  // → frobnicate (comment stripped)
-      bash('VAULT=/x\nfrobnicate list'),    // → frobnicate (assignment skipped, newline split)
-      bash('grep x 2>&1 | head'),           // tagged read.file → excluded
-    ];
-    const rows = collectUntagged(events);
-    expect(rows.map((r) => r.token)).toEqual(['frobnicate']);
-    expect(rows[0].count).toBe(2);
-  });
-
-  it('carries the FIRST occurrence event_id so the panel can link to its card', () => {
-    const rows = collectUntagged([bash('frobnicate one'), bash('frobnicate two')]);
-    expect(rows[0].eventId).toBe('frobnicate one');
-  });
-
-  // Dogfooding 2026-06-11: an unmatched Read was surfaced as its FULL PATH with a
-  // BASH_FIRST_TOKEN_TAGS hint (/tmp/pr41.diff was the #1, .gitignore the #2 untagged
-  // "token"). A Read must aggregate by EXTENSION and point the loop at READ_EXT_TAGS.
-  it('surfaces an unmatched Read by EXTENSION under READ_EXT_TAGS, not the full path under BASH', () => {
-    const rows = collectUntagged([read('/tmp/pr41.diff'), read('/other/x.diff')]);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ token: 'diff', count: 2 });
-    expect(rows[0].hint).toContain('READ_EXT_TAGS');
-    expect(rows[0].hint).not.toContain('BASH_FIRST_TOKEN_TAGS');
-  });
-
-  it('surfaces an extensionless Read (dotfile) by basename under READ_EXT_TAGS, not BASH', () => {
-    const rows = collectUntagged([read('/repo/.gitignore'), read('/other/.gitignore')]);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].count).toBe(2);
-    expect(rows[0].token).toBe('.gitignore');
-    expect(rows[0].hint).toContain('READ_EXT_TAGS');
-    expect(rows[0].hint).not.toContain('BASH_FIRST_TOKEN_TAGS');
-  });
-
-  // Dogfooding 2026-06-11 (2nd round): subshell parens, loop-control keywords,
-  // newline-split flag lines, and empty tokens are NOT commands — they must not
-  // surface as untagged tokens (corpus: `(cd` 11, `break` 9, `-u` 17, `-s` 13).
-  it('does not surface subshell/loop-control/flag-line/empty noise as untagged tokens', () => {
+  it('unmatched Read/Edit points the loop at EXT_OBJECT, not BASH maps', () => {
     const rows = collectUntagged([
-      bash('(cd webui && frobnicate run)'), // subshell → frobnicate, not `(cd`
-      bash('break'), // loop control → control
-      bash('continue'), // loop control → control
-      bash('cd /x\n  -s http://y'), // cd(control) + flag line → all control, no `-s`
-      bash('cd a && frobnicate two'), // sanity: meaningful still found
+      ev('e1', unmatched('diff', '/tmp/pr41.diff'), 'Read'),
+      ev('e2', unmatched('diff', '/other/x.diff'), 'Read'),
+      ev('e3', unmatched('Makefile', 'Makefile'), 'Edit'),
     ]);
-    const tokens = rows.map((r) => r.token);
-    expect(tokens).not.toContain('(cd');
-    expect(tokens).not.toContain('break');
-    expect(tokens).not.toContain('continue');
-    expect(tokens.some((t) => t.startsWith('-'))).toBe(false);
-    expect(tokens.some((t) => t === '')).toBe(false);
-    // real commands still surface (frobnicate from both subshell and cd&&)
-    expect(tokens).toContain('frobnicate');
+    const byToken = Object.fromEntries(rows.map((r) => [r.token, r]));
+    expect(byToken['diff'].count).toBe(2);
+    expect(byToken['diff'].hint).toContain('EXT_OBJECT');
+    expect(byToken['diff'].hint).not.toContain('BASH_FIRST_TOKEN_TAGS');
+    expect(byToken['Makefile'].hint).toContain('EXT_OBJECT');
+  });
+
+  it('rows sort by count desc and empty tokens are skipped', () => {
+    const rows = collectUntagged([
+      ev('a1', unmatched('aa')),
+      ev('b1', unmatched('bb')),
+      ev('b2', unmatched('bb')),
+      ev('x1', { value: null, disposition: 'unmatched', token: null, display: '' }),
+    ]);
+    expect(rows.map((r) => r.token)).toEqual(['bb', 'aa']);
   });
 });

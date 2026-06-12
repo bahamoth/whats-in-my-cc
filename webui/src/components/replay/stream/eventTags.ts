@@ -1,11 +1,21 @@
 // webui/src/components/replay/stream/eventTags.ts
+//
+// 태그 어휘·분류기는 Rust core(`src/insight/event_tags.rs`)가 소유한다
+// (loop-foundations 2026-06-12 — 종전에는 이 파일이 사전·셸 파서를 들고 있어
+// MCP 소비자는 raw tool_name밖에 보지 못했다). 서버가 렌더된 tool_call
+// 이벤트에 `tag {value, disposition, token, display}`를 실어 주고, 이 모듈은
+// 그 값의 표현(칩 verb 색)과 집계(untagged 패널·태깅 루프 CLI)만 담당한다.
+//
+// 분류 규칙 추가(태깅 루프)는 src/insight/event_tags.rs의 사전에:
+// 일반 첫 토큰 → BASH_FIRST_TOKEN_TAGS, 멀티플렉서 서브커맨드 →
+// TOOL_SUBCOMMAND_TAGS, Read/Edit 확장자 → EXT_OBJECT. 분류 테스트는
+// tests/event_tags.rs — webui에는 분류 로직이 없다. 규칙 변경은 서버 재빌드·
+// 재기동 후 반영된다(태그는 API 렌더 시점 계산).
 import type { ObservedEventDto } from '../../../api/types';
 
 // ── Taxonomy: every tag is `verb.object` ──────────────────────────────────
 //   verbs   : read · write · delete · build · test · run · lint
 //   objects : code · docs · config · data · file · proc · vcs · db · web · deps
-// Principle: I/O operations are read/write/delete on an object (file/vcs/db/web/
-// proc); the rest are execution actions on the codebase (build/test/run/lint).
 // The chip is coloured by the VERB (the part before the dot).
 export type Tag =
   | 'read.code' | 'read.docs' | 'read.config' | 'read.data'
@@ -21,322 +31,6 @@ export function tagVerb(tag: Tag): TagVerb {
   return tag.slice(0, tag.indexOf('.')) as TagVerb;
 }
 
-export type Disposition = 'tagged' | 'control' | 'unmatched';
-export interface TagResult { tag: Tag | null; disposition: Disposition; }
-
-// ── single source of truth — add a key to extend ──────────────────────────
-// File content type by extension — shared by Read (read.*) and Edit/Write
-// (write.*). `output` is a Claude Code task/log capture file (tasks/<id>.output).
-type FileObject = 'code' | 'docs' | 'config' | 'data';
-const EXT_OBJECT: Record<string, FileObject> = {
-  rs: 'code', ts: 'code', tsx: 'code', js: 'code', jsx: 'code', css: 'code', py: 'code',
-  md: 'docs', html: 'docs', txt: 'docs',
-  toml: 'config', yaml: 'config', yml: 'config', ini: 'config',
-  json: 'data', sql: 'data', jsonl: 'data', log: 'data', csv: 'data', output: 'data',
-};
-// Read tool: file content type by extension.
-export const READ_EXT_TAGS: Record<string, Tag> = Object.fromEntries(
-  Object.entries(EXT_OBJECT).map(([e, o]) => [e, `read.${o}` as Tag]),
-) as Record<string, Tag>;
-// Edit/Write tools: same extension → object map, but the verb is `write`.
-export const WRITE_EXT_TAGS: Record<string, Tag> = Object.fromEntries(
-  Object.entries(EXT_OBJECT).map(([e, o]) => [e, `write.${o}` as Tag]),
-) as Record<string, Tag>;
-
-// Bash SINGLE-PURPOSE first tokens → tag. Multiplexers (git/cargo/npm/…) whose
-// subcommand decides the verb live in TOOL_SUBCOMMAND_TAGS; bare path execution
-// (`./x`, `/abs`, `*.sh`) is detected as run.code.
-export const BASH_FIRST_TOKEN_TAGS: Record<string, Tag> = {
-  // read.file — search / inspect files & dirs
-  grep: 'read.file', rg: 'read.file', egrep: 'read.file', fgrep: 'read.file', find: 'read.file',
-  ls: 'read.file', cat: 'read.file', head: 'read.file', tail: 'read.file', wc: 'read.file',
-  jq: 'read.file', tree: 'read.file', which: 'read.file', file: 'read.file', stat: 'read.file',
-  du: 'read.file', df: 'read.file', sed: 'read.file', awk: 'read.file', pwd: 'read.file', realpath: 'read.file',
-  // read.proc — process / port / system-state inspection
-  ps: 'read.proc', lsof: 'read.proc', date: 'read.proc',
-  // read.db
-  sqlite3: 'read.db', psql: 'read.db', mysql: 'read.db',
-  // read.web
-  curl: 'read.web', wget: 'read.web',
-  // write.file — create / modify (non-destructive)
-  mkdir: 'write.file', touch: 'write.file', cp: 'write.file', chmod: 'write.file', chown: 'write.file', ln: 'write.file',
-  // write.deps — dependency management
-  pip: 'write.deps', pip3: 'write.deps',
-  // delete.file — destructive
-  rm: 'delete.file', mv: 'delete.file', rmdir: 'delete.file',
-  // run.code — execute interpreters / scripts / package binaries
-  python3: 'run.code', python: 'run.code', node: 'run.code', ruby: 'run.code', osascript: 'run.code',
-  bash: 'run.code', sh: 'run.code', zsh: 'run.code', npx: 'run.code', markitdown: 'run.code',
-  // read.file — hash / inspect a file's content
-  shasum: 'read.file', sha256sum: 'read.file', md5: 'read.file', md5sum: 'read.file',
-  // run.code — task runners (just/make-like) executing project scripts
-  just: 'run.code',
-  // build / test / lint — single-purpose dev tools
-  make: 'build.code',
-  vitest: 'test.code', jest: 'test.code', pytest: 'test.code',
-  eslint: 'lint.code', ruff: 'lint.code', prettier: 'lint.code',
-  // vcs (non-git)
-  gh: 'write.vcs',
-};
-
-// Multiplexer tools: the SUBCOMMAND decides the verb. An unknown subcommand is
-// `unmatched` (no default) so the tagging loop surfaces `tool sub` to be added
-// here — new subcommands are never silently mis-tagged.
-export const TOOL_SUBCOMMAND_TAGS: Record<string, Record<string, Tag>> = {
-  git: {
-    status: 'read.vcs', log: 'read.vcs', diff: 'read.vcs', show: 'read.vcs', branch: 'read.vcs',
-    blame: 'read.vcs', 'rev-parse': 'read.vcs', describe: 'read.vcs', fetch: 'read.vcs',
-    remote: 'read.vcs', config: 'read.vcs', 'ls-files': 'read.vcs', shortlog: 'read.vcs',
-    add: 'write.vcs', commit: 'write.vcs', push: 'write.vcs', checkout: 'write.vcs', switch: 'write.vcs',
-    stash: 'write.vcs', rm: 'write.vcs', mv: 'write.vcs', reset: 'write.vcs', merge: 'write.vcs',
-    rebase: 'write.vcs', pull: 'write.vcs', tag: 'write.vcs', clone: 'write.vcs', init: 'write.vcs',
-    restore: 'write.vcs', 'cherry-pick': 'write.vcs', revert: 'write.vcs', apply: 'write.vcs', worktree: 'write.vcs',
-  },
-  cargo: {
-    build: 'build.code', b: 'build.code', test: 'test.code', t: 'test.code', nextest: 'test.code',
-    run: 'run.code', r: 'run.code', check: 'lint.code', clippy: 'lint.code', fmt: 'lint.code',
-    add: 'write.deps', update: 'write.deps', remove: 'write.deps',
-  },
-  npm: { install: 'write.deps', i: 'write.deps', ci: 'write.deps', add: 'write.deps', test: 'test.code', t: 'test.code', start: 'run.code', run: 'run.code' },
-  pnpm: { install: 'write.deps', i: 'write.deps', add: 'write.deps', test: 'test.code', start: 'run.code', run: 'run.code' },
-  yarn: { install: 'write.deps', add: 'write.deps', test: 'test.code', start: 'run.code', run: 'run.code' },
-  go: { build: 'build.code', test: 'test.code', run: 'run.code', vet: 'lint.code', get: 'write.deps', install: 'write.deps' },
-};
-
-// Global options that PRECEDE a multiplexer's subcommand and would otherwise be
-// mis-read AS the subcommand: `git -C <dir> diff`, `git -c k=v commit`,
-// `git --no-pager log`, `cargo +1.86.0 build`. Per tool, the flags that consume
-// a following argument (so we skip the arg too). Anchored to real corpus:
-// `git -C`/`-c` dominated the untagged set (240 occurrences).
-const SUBCOMMAND_ARG_FLAGS: Record<string, Set<string>> = {
-  git: new Set(['-C', '-c']),
-};
-/** Resolve a multiplexer's real subcommand from the text after the tool token,
- *  skipping leading global options (`-x`, `--x`, arg-consuming `-C <dir>`) and a
- *  `+toolchain` selector (cargo). Returns '' when no subcommand remains. */
-function resolveSubcommand(tool: string, rest: string): string {
-  const toks = rest.split(/\s+/).filter(Boolean);
-  const argFlags = SUBCOMMAND_ARG_FLAGS[tool];
-  let i = 0;
-  while (i < toks.length) {
-    const t = toks[i];
-    if (t.startsWith('+')) { i += 1; continue; }                 // cargo +toolchain
-    if (t.startsWith('-')) { i += argFlags?.has(t) ? 2 : 1; continue; } // global flag (+ its arg)
-    break;
-  }
-  return (toks[i] ?? '').toLowerCase();
-}
-
-export const CONTROL_TOKENS = new Set([
-  'cd', 'echo', 'sleep', 'for', 'export', 'source', 'set', 'pgrep', 'kill', 'pkill', 'wait', 'true', ':',
-  // shell loop/conditional keywords + the test builtin: a segment that IS one of
-  // these is control (no work to classify here).
-  'while', 'until', 'if', 'case', 'esac', 'done', 'fi', '[', '[[', 'test',
-  // loop-body control: a segment that is just `break`/`continue` carries no command.
-  'break', 'continue',
-]);
-/** A segment whose first token is a control/loop keyword OR a bare flag carries
- *  no command to classify. The flag case (`-s`, `-u`) catches newline-split arg
- *  lines where a flag became a segment's leading token (dogfooding 2026-06-11). */
-function isControlToken(tok: string): boolean {
-  return CONTROL_TOKENS.has(tok) || tok.startsWith('-');
-}
-// Control-flow keywords that PRECEDE a command on the same segment (`do grep …`,
-// `then cat …`). Unlike CONTROL_TOKENS they are stripped as a prefix so the real
-// command after them is classified.
-const PREFIX_KEYWORDS = new Set(['do', 'then', 'else', 'elif']);
-// `timeout` flags whose VALUE is a separate token (so we skip the next token too
-// when unwrapping). `--signal=KILL` / `--kill-after=10` (with `=`) need no skip.
-const TIMEOUT_ARG_FLAGS = new Set(['-s', '--signal', '-k', '--kill-after']);
-// A leading `NAME=value` shell variable assignment (env prefix). Stripped like a
-// prefix so `VAR=x grep …` classifies as the grep, not as an unknown `var=x`.
-const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
-// Command SEQUENCERS — split a compound into independent commands. We split on
-// these + NEWLINES (multi-line scripts), but NOT on a bare `&` (it would shred
-// `2>&1` / `&>` redirects into bogus tokens) nor redirects `>`/`<` / subshells.
-const COMMAND_SEPARATORS = /(?:&&|\|\||;|\||\n)/;
-
-function ext(path: string): string {
-  const base = path.split('/').pop() ?? '';
-  const i = base.lastIndexOf('.');
-  return i > 0 ? base.slice(i + 1).toLowerCase() : '';
-}
-function firstToken(cmd: string): string {
-  const t = cmd.trim();
-  const sp = t.indexOf(' ');
-  return (sp > 0 ? t.slice(0, sp) : t).toLowerCase();
-}
-
-/** Join shell line-continuations (`\` at end of line) into one logical line
- *  BEFORE any newline-based splitting — POSIX removes the backslash-newline
- *  pair entirely; we collapse it (plus the next line's indentation) to a single
- *  space. Without this, `cmd \\\n --flag` segments into a lone-`\` token and a
- *  flag-led segment (corpus: `\` was the #2 untagged token, 28건). */
-function joinContinuations(cmd: string): string {
-  return cmd.replace(/[ \t]*\\\r?\n\s*/g, ' ');
-}
-
-/** Drop whole-line `#` comments before any analysis, so a command that leads
- *  with a comment line (`# note\ngrep …`) classifies by the real command, not
- *  by the `#` token. Only lines that START with `#` are removed (a `#` mid-line
- *  may be inside a quoted string). */
-function stripCommentLines(cmd: string): string {
-  return cmd
-    .split('\n')
-    .filter((line) => !/^\s*#/.test(line))
-    .join('\n')
-    .trim();
-}
-
-/** The actual command of a segment, with leading `NAME=value` assignments and
- *  control-flow prefix keywords (`do`/`then`/…) stripped. '' when the segment is
- *  only assignments/prefixes (e.g. a bare `do` or `FOO=bar`). */
-function commandOf(segment: string): string {
-  let s = segment.trim();
-  // Strip leading subshell/group openers: `(cd … ` → `cd …`, `{ cmd` → `cmd`.
-  while (s.startsWith('(') || s.startsWith('{')) s = s.slice(1).trim();
-  for (let guard = 0; guard < 12; guard++) {
-    if (ASSIGNMENT.test(s)) {
-      const sp = s.indexOf(' ');
-      if (sp < 0) return ''; // pure assignment, no command follows
-      s = s.slice(sp + 1).trim();
-      continue;
-    }
-    if (PREFIX_KEYWORDS.has(firstToken(s))) {
-      const sp = s.indexOf(' ');
-      if (sp < 0) return ''; // bare `do` / `then`
-      s = s.slice(sp + 1).trim();
-      continue;
-    }
-    // `timeout [flags] DURATION cmd…` — a wrapper that runs an inner command.
-    // Strip `timeout`, any leading `-flags` (skipping the VALUE token of the
-    // arg-consuming `-s SIGNAL` / `-k DURATION`), and one duration token
-    // (180 / 5s) so the INNER command (npm/cargo/…) is what classifies.
-    if (firstToken(s) === 'timeout') {
-      let rest = s.slice('timeout'.length).trim();
-      while (rest.startsWith('-')) {
-        const flag = firstToken(rest);
-        const sp = rest.indexOf(' ');
-        if (sp < 0) { rest = ''; break; }
-        rest = rest.slice(sp + 1).trim();
-        // -s/--signal and -k/--kill-after (space-separated form) take a value.
-        if (TIMEOUT_ARG_FLAGS.has(flag)) {
-          const sp2 = rest.indexOf(' ');
-          if (sp2 < 0) { rest = ''; break; }
-          rest = rest.slice(sp2 + 1).trim();
-        }
-      }
-      if (/^\d+(\.\d+)?[smhd]?$/.test(firstToken(rest))) {
-        const sp = rest.indexOf(' ');
-        rest = sp < 0 ? '' : rest.slice(sp + 1).trim();
-      }
-      if (rest === '') return '';
-      s = rest;
-      continue;
-    }
-    return s;
-  }
-  return s;
-}
-
-/** Split a compound shell command into its sequenced sub-commands. */
-export function segmentCommand(cmd: string): string[] {
-  return joinContinuations(cmd).split(COMMAND_SEPARATORS).map((s) => s.trim()).filter(Boolean);
-}
-
-/** The first segment that carries real work — its command (assignments/prefix
- *  keywords stripped) is non-empty and not a control token. null when every
- *  segment is control/assignment (e.g. `cd x && echo y`, `FOO=bar`). */
-function firstMeaningfulSegment(segments: string[]): string | null {
-  return (
-    segments.find((s) => {
-      const c = commandOf(s);
-      return c !== '' && !isControlToken(firstToken(c));
-    }) ?? null
-  );
-}
-
-/** The command from its first meaningful sub-command onward, for DISPLAY —
- *  leading control prefixes like `cd /path &&` are dropped so the shown command
- *  leads with the actual work. Falls back to the trimmed original when every
- *  sub-command is control (e.g. a bare `cd /tmp`). */
-export function meaningfulCommand(cmd: string): string {
-  let s = joinContinuations(cmd).trim();
-  for (let guard = 0; guard < 6; guard++) {
-    const m = s.match(/^(.*?)(?:&&|\|\||;|\|)(.*)$/s); // split at the FIRST separator (no bare &)
-    if (!m) break;
-    const head = commandOf(m[1].trim());
-    if (head !== '' && !isControlToken(firstToken(head))) break;
-    s = m[2].trim();
-  }
-  return s || cmd.trim();
-}
-
-/** A command run directly by path → run.code: `./x`, `../x`, `/abs/x`, `*.sh`,
- *  or a bare relative path with a slash (`target/debug/wimcc`,
- *  `.claude/skills/ch/scripts/ch`). A token CONTAINING a slash in command
- *  position names a file to execute. Quoted tokens are excluded — those are
- *  heredoc/string-body fragments, not commands. */
-function isPathExec(tok: string): boolean {
-  if (tok.endsWith('.sh')) return true;
-  if (tok.startsWith('"') || tok.startsWith("'")) return false;
-  return tok.includes('/');
-}
-
-/** Classify a single (control-prefix-stripped) command string. */
-function classifyCommand(cmdStr: string): TagResult {
-  const tok = firstToken(cmdStr);
-  if (!tok || CONTROL_TOKENS.has(tok)) return { tag: null, disposition: 'control' };
-  if (isPathExec(tok)) return { tag: 'run.code', disposition: 'tagged' };
-  // tsc is a single tool whose intent flips with --noEmit (type-check = lint).
-  if (tok === 'tsc') {
-    return { tag: cmdStr.includes('--noEmit') ? 'lint.code' : 'build.code', disposition: 'tagged' };
-  }
-  // multiplexer: subcommand decides the verb (unknown → unmatched).
-  const subMap = TOOL_SUBCOMMAND_TAGS[tok];
-  if (subMap) {
-    const sub = resolveSubcommand(tok, cmdStr.slice(tok.length).trim());
-    const t = subMap[sub];
-    return t ? { tag: t, disposition: 'tagged' } : { tag: null, disposition: 'unmatched' };
-  }
-  const t = BASH_FIRST_TOKEN_TAGS[tok];
-  if (t) return { tag: t, disposition: 'tagged' };
-  return { tag: null, disposition: 'unmatched' };
-}
-
-export function tagForEvent(e: ObservedEventDto): TagResult {
-  const tool = e.tool_name;
-  const input = ((e.payload as Record<string, unknown>)?.input ?? {}) as Record<string, unknown>;
-
-  if (tool === 'Read') {
-    const fp = typeof input.file_path === 'string' ? input.file_path : '';
-    const tag = READ_EXT_TAGS[ext(fp)];
-    return tag ? { tag, disposition: 'tagged' } : { tag: null, disposition: 'unmatched' };
-  }
-  // Edit/Write/MultiEdit modify a file → write.{object} by the same extension map.
-  if (tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit') {
-    const fp = typeof input.file_path === 'string' ? input.file_path : '';
-    const tag = WRITE_EXT_TAGS[ext(fp)];
-    return tag ? { tag, disposition: 'tagged' } : { tag: null, disposition: 'unmatched' };
-  }
-  if (tool === 'Bash' || tool === 'bash') {
-    const cmd = stripCommentLines(typeof input.command === 'string' ? input.command : '');
-    if (!cmd) return { tag: null, disposition: 'control' };
-    // Classify a compound (`cd … && git add … && git status`) by its first
-    // MEANINGFUL sub-command: split on separators + newlines, skip control
-    // segments (cd) and assignment/keyword prefixes (`VAR=x`, `do`).
-    for (const seg of segmentCommand(cmd)) {
-      const cmdStr = commandOf(seg);
-      const tok = firstToken(cmdStr);
-      if (!tok || isControlToken(tok)) continue; // empty/assignment-only/control/flag → next segment
-      return classifyCommand(cmdStr);
-    }
-    return { tag: null, disposition: 'control' }; // every segment was control
-  }
-  // every other tool: tool name is the label → no chip
-  return { tag: null, disposition: 'control' };
-}
-
 export interface UntaggedRow {
   token: string;
   count: number;
@@ -346,67 +40,42 @@ export interface UntaggedRow {
   eventId: string;
 }
 
-/** Aggregation token for an untagged command. Multiplexers aggregate by
- *  `tool sub` (e.g. `git worktree`, `cargo bench`) so the panel/loop points at
- *  the exact subcommand to add; everything else by its first token. */
-function untaggedToken(cmdStr: string): string {
-  const tok = firstToken(cmdStr);
-  if (TOOL_SUBCOMMAND_TAGS[tok]) {
-    const sub = resolveSubcommand(tok, cmdStr.slice(tok.length).trim());
-    return sub ? `${tok} ${sub}` : tok;
+const RULES_FILE = 'src/insight/event_tags.rs';
+const FILE_TOOLS = new Set(['Read', 'Edit', 'Write', 'MultiEdit']);
+
+/** 태깅 루프가 정확한 사전 위치를 알도록 token 형태·도구별 힌트를 만든다.
+ *  사전은 이제 Rust core에 있다 — eventTags.ts에는 규칙이 없다. */
+function hintFor(toolName: string | null, token: string): string {
+  if (toolName && FILE_TOOLS.has(toolName)) {
+    return `add '${token}' to EXT_OBJECT in ${RULES_FILE} (확장자→object 매핑; 확장자 없는 파일은 별도 규칙 검토)`;
   }
-  return tok;
+  if (token.includes(' ')) {
+    const [tool, sub] = token.split(' ');
+    return `add '${sub}': '<tag>' to TOOL_SUBCOMMAND_TAGS['${tool}'] in ${RULES_FILE}`;
+  }
+  return `add '${token}': '<tag>' to BASH_FIRST_TOKEN_TAGS in ${RULES_FILE}`;
 }
 
-function untaggedHint(token: string): string {
-  return token.includes(' ')
-    ? `add '${token.split(' ')[1]}': '<tag>' to TOOL_SUBCOMMAND_TAGS['${token.split(' ')[0]}'] in eventTags.ts`
-    : `add '${token}': '<tag>' to BASH_FIRST_TOKEN_TAGS in eventTags.ts`;
-}
-
+/** 서버가 분류한 `tag` 필드 기준으로 unmatched 이벤트를 token별 집계한다.
+ *  (untagged 패널과 scripts/untagged-bash.ts의 SSOT — 분류 자체는 서버 몫.) */
 export function collectUntagged(events: ObservedEventDto[]): UntaggedRow[] {
   const byToken = new Map<string, { count: number; sample: string; eventId: string; hint: string }>();
   for (const e of events) {
-    if (tagForEvent(e).disposition !== 'unmatched') continue;
-    const input = ((e.payload as Record<string, unknown>)?.input ?? {}) as Record<string, unknown>;
-    let token: string;
-    let sample: string;
-    let hint: string;
-    if (typeof input.command === 'string') {
-      // Bash: aggregate under the first MEANINGFUL command token (or `tool sub`
-      // for a multiplexer), with comments / control prefixes / `VAR=` assignments
-      // stripped — so the hint points at the real command worth tagging.
-      const cmd = stripCommentLines(input.command);
-      const meaningful = commandOf(firstMeaningfulSegment(segmentCommand(cmd)) ?? cmd);
-      token = untaggedToken(meaningful);
-      sample = (meaningful || cmd).slice(0, 80);
-      hint = untaggedHint(token);
-    } else {
-      // Read/Edit/Write: classify by file EXTENSION (or basename for dotfiles) and
-      // point the loop at the EXTENSION map for that tool — NOT BASH_FIRST_TOKEN_TAGS.
-      // (Without this, an unmatched Read surfaced as its full path with a bogus Bash
-      // hint — corpus: /tmp/pr41.diff #1, .gitignore #2 untagged "token".)
-      const fp = typeof input.file_path === 'string' ? input.file_path : '';
-      const extn = ext(fp);
-      const base = fp.split('/').pop() ?? '';
-      const map = e.tool_name === 'Read' ? 'READ_EXT_TAGS' : 'WRITE_EXT_TAGS';
-      token = extn || base;
-      sample = fp.slice(0, 80);
-      hint = extn
-        ? `add '${extn}': '<tag>' to ${map} in eventTags.ts`
-        : `add a rule for '${base}' (no extension) to ${map} in eventTags.ts`;
-    }
+    const t = e.tag;
+    if (!t || t.disposition !== 'unmatched') continue;
+    const token = t.token ?? '';
+    if (!token) continue;
     const cur = byToken.get(token);
     if (cur) cur.count++;
-    else byToken.set(token, { count: 1, sample, eventId: e.event_id, hint });
+    else
+      byToken.set(token, {
+        count: 1,
+        sample: (t.display ?? '').slice(0, 80),
+        eventId: e.event_id,
+        hint: hintFor(e.tool_name, token),
+      });
   }
   return [...byToken.entries()]
-    .map(([token, v]) => ({
-      token,
-      count: v.count,
-      sample: v.sample,
-      eventId: v.eventId,
-      hint: v.hint,
-    }))
+    .map(([token, v]) => ({ token, ...v }))
     .sort((a, b) => b.count - a.count);
 }

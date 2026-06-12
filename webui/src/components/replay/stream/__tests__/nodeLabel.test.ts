@@ -1,8 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { nodeLabel, formatModel } from '../nodeLabel';
 
-const L = (node_kind: string, payload: unknown, telemetry?: unknown) =>
-  nodeLabel({ node_kind, payload, telemetry });
+const L = (
+  node_kind: string,
+  payload: unknown,
+  telemetry?: unknown,
+  tag?: { display?: string | null } | null,
+) => nodeLabel({ node_kind, payload, telemetry, tag });
 
 describe('formatModel', () => {
   it('shortens known model ids', () => {
@@ -22,9 +26,18 @@ describe('nodeLabel', () => {
       .toEqual({ kind: 'tool', primary: 'Read', secondary: 'slide_logo-17.jpg' });
     expect(L('tool_call', { tool_name: 'Bash', input: { command: 'rm -f x.jpg && ls' } }))
       .toEqual({ kind: 'tool', primary: 'Bash', secondary: 'rm -f x.jpg && ls' });
-    // a leading `cd …` is stripped so the shown command leads with the work
+    // 선행 `cd …` 제거는 서버 tag.display 책임 (core 분류기, tests/event_tags.rs
+    // 에서 잠금) — display가 오면 그것을 쓰고, 없으면 원문 그대로.
+    expect(
+      L(
+        'tool_call',
+        { tool_name: 'Bash', input: { command: 'cd /repo && git add -A && git status' } },
+        undefined,
+        { display: 'git add -A && git status' },
+      ).secondary,
+    ).toBe('git add -A && git status');
     expect(L('tool_call', { tool_name: 'Bash', input: { command: 'cd /repo && git add -A && git status' } }).secondary)
-      .toBe('git add -A && git status');
+      .toBe('cd /repo && git add -A && git status');
     expect(L('tool_call', { tool_name: 'Skill', input: { skill: 'corp-pptx-style' } }))
       .toEqual({ kind: 'tool', primary: 'Skill', secondary: 'corp-pptx-style' });
   });
@@ -43,8 +56,12 @@ describe('nodeLabel', () => {
     // Bash carries both — show the intent, not the gnarly command.
     expect(L('tool_call', { tool_name: 'Bash', input: { command: 'perl -0pi -e "s/a/b/" f1 f2 f3 f4 f5', description: 'Add costUsd:null to the 5 fixtures via perl' } }).secondary)
       .toBe('Add costUsd:null to the 5 fixtures via perl');
-    // no description → falls back to the (cd-stripped) command
-    expect(L('tool_call', { tool_name: 'Bash', input: { command: 'cd /x && grep y' } }).secondary).toBe('grep y');
+    // no description → falls back to the command (서버 display가 있으면 cd 제거판)
+    expect(
+      L('tool_call', { tool_name: 'Bash', input: { command: 'cd /x && grep y' } }, undefined, {
+        display: 'grep y',
+      }).secondary,
+    ).toBe('grep y');
   });
   it('tool_call: Task shows its description; unknown shapes fall back to first field', () => {
     expect(L('tool_call', { tool_name: 'Task', input: { description: 'find flaky tests', subagent_type: 'general-purpose' } }).secondary)

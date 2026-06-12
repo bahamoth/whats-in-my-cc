@@ -4,7 +4,7 @@ import { ChevronRight, ChevronDown, Wrench, AlertTriangle } from 'lucide-react';
 import { summarizeStack } from './activityGroup';
 import type { ActivityStackData } from './activityGroup';
 import { nodeLabel } from './nodeLabel';
-import { tagForEvent, tagVerb } from './eventTags';
+import { tagVerb, type Tag } from './eventTags';
 import { hookFacet } from './hookFacet';
 import styles from './ActivityStack.module.css';
 
@@ -69,7 +69,7 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
       {expanded && (
         <div className={styles.items}>
           {stack.events.map((ae) => {
-            const label = nodeLabel({ node_kind: ae.event.kind, payload: ae.event.payload, telemetry: ae.event.telemetry });
+            const label = nodeLabel({ node_kind: ae.event.kind, payload: ae.event.payload, telemetry: ae.event.telemetry, tag: ae.event.tag });
             const isSelected = selectedEventId === ae.event.event_id;
             // hook_event carries its own success/duration in its payload (not a
             // matched tool_result), so derive the badge + duration from there.
@@ -91,8 +91,8 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
                 }}
               >
                 <span className={styles.itemPrimary}>{label.primary}</span>
-                {(() => { const tr = tagForEvent(ae.event); return tr.disposition === 'tagged' && tr.tag
-                  ? <span data-testid="event-tag-chip" className={styles.tagChip} data-verb={tagVerb(tr.tag)}>{tr.tag}</span> : null; })()}
+                {(() => { const tr = ae.event.tag; return tr && tr.disposition === 'tagged' && tr.value
+                  ? <span data-testid="event-tag-chip" className={styles.tagChip} data-verb={tagVerb(tr.value as Tag)}>{tr.value}</span> : null; })()}
                 {label.secondary && (
                   <span className={styles.itemSecondary}>{label.secondary}</span>
                 )}

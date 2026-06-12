@@ -2,12 +2,12 @@
 /**
  * untagged-bash — emit the untagged-Bash analysis as JSON for an LLM to consume.
  *
- * Closes the tagging loop WITHOUT a backend: it reuses the frontend's single
- * source of truth (`collectUntagged` in src/components/replay/stream/eventTags.ts)
- * — the SAME classification the WebUI panel shows — applied to events pulled from
- * the read-only Pull API. An agent runs this each turn, reads the untagged
- * tokens, adds rules to BASH_FIRST_TOKEN_TAGS in eventTags.ts, and re-runs until
- * the list shrinks. No rule logic is duplicated.
+ * 분류는 서버(core `src/insight/event_tags.rs`)가 한다 — events 응답의 `tag`
+ * 필드(loop-foundations 2026-06-12). 이 스크립트는 프런트 `collectUntagged`
+ * (서버 tag 기반 집계 — WebUI 패널과 동일 SSOT)를 Pull API 이벤트에 적용해
+ * untagged token을 JSON으로 내보낸다. 에이전트는 hint가 가리키는 Rust 사전
+ * (BASH_FIRST_TOKEN_TAGS · TOOL_SUBCOMMAND_TAGS · EXT_OBJECT)에 규칙을 추가하고
+ * 서버 재빌드·재기동 후 재실행해 목록이 줄었는지 확인한다.
  *
  * Usage (from webui/) — emits CLEAN JSON on stdout (no npm banner):
  *   node scripts/untagged-bash.ts <sessionId>    # one session

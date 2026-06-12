@@ -2,7 +2,22 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { UntaggedBashPanel } from '../UntaggedBashPanel';
 
-const bash = (command: string, id: string) => ({ event_id: id, kind: 'tool_call', tool_name: 'Bash', observed_at: '2026-05-31T00:00:00Z', payload: { input: { command } } });
+// 분류는 서버 몫 — 이벤트는 서버가 계산한 `tag` 필드를 들고 온다
+// (src/insight/event_tags.rs, tests/event_tags.rs에서 잠금).
+const bash = (command: string, id: string) => {
+  const first = command.split(/\s+/)[0];
+  const known = first === 'grep';
+  return {
+    event_id: id,
+    kind: 'tool_call',
+    tool_name: 'Bash',
+    observed_at: '2026-05-31T00:00:00Z',
+    tag: known
+      ? { value: 'read.file', disposition: 'tagged', token: first, display: command }
+      : { value: null, disposition: 'unmatched', token: first, display: command },
+    payload: { input: { command } },
+  };
+};
 
 describe('UntaggedBashPanel', () => {
   it('is hidden by default and toggles open to show unmatched tokens with count + hint', () => {

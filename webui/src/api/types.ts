@@ -29,6 +29,18 @@ export type TelemetryFacetDto = {
   scope_version?: string | null;
 };
 
+/** 서버(core 분류기 `src/insight/event_tags.rs`)가 tool_call 이벤트에 싣는
+ *  verb.object 태그 (loop-foundations 2026-06-12). 분류는 결정론 측정이라
+ *  Rust가 소유한다 — UI는 표현(칩 색)과 집계만 담당. */
+export type EventTagDto = {
+  value: string | null;
+  disposition: 'tagged' | 'control' | 'unmatched';
+  /** untagged 루프 집계 키 — Bash 첫 토큰 | `"tool sub"` | 확장자 | basename. */
+  token: string | null;
+  /** 표시용 — 선행 제어 세그먼트를 제거한 명령 또는 file_path. */
+  display: string | null;
+};
+
 export type ObservedEventDto = {
   event_id: string;
   raw_event_id: string;
@@ -51,6 +63,8 @@ export type ObservedEventDto = {
    *  and llm-request metrics are read from this facet, not `payload.raw_span`
    *  (which was the removed double-store). */
   telemetry?: TelemetryFacetDto | null;
+  /** tool_call 이벤트에만 존재 — 그 외 kind는 null. */
+  tag?: EventTagDto | null;
   payload: unknown;
 };
 
