@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# 같은 PR에 push가 이어지면 진행 중이던 run을 취소한다(최신 commit만 검사).
+# main push는 취소하지 않는다 — 릴리스 머지 검증이 중간에 끊기면 안 된다.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -12,6 +18,15 @@ jobs:
   webui:
     name: WebUI (vitest + build)
     runs-on: ubuntu-latest
+    # main push CI는 release-please 릴리스 PR 머지 commit일 때만 돈다.
+    # 일반 PR 머지는 방금 PR CI를 통과한 tree의 중복 실행이라 생략.
+    # 릴리스 PR은 기본 GITHUB_TOKEN으로는 PR CI가 트리거되지 않으므로
+    # (release-please.yml 주석 참조) 이 안전망이 버전 bump commit의 유일한
+    # 검사다. rust job은 needs로 묶여 함께 생략된다.
+    # 주의: main 직접 push도 생략 대상이 된다 — 코드 변경은 PR 경유가 규칙.
+    if: >-
+      github.event_name == 'pull_request' ||
+      startsWith(github.event.head_commit.message, 'chore(main): release')
     defaults:
       run:
         working-directory: webui
