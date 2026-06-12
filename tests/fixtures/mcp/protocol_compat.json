@@ -39,6 +39,9 @@
         "name": "whats_in_my_cc.get_session_turns"
       },
       {
+        "name": "whats_in_my_cc.get_project_metrics"
+      },
+      {
         "name": "whats_in_my_cc.list_detectors"
       }
     ]

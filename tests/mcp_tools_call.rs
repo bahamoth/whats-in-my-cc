@@ -163,6 +163,37 @@ async fn list_detectors_returns_four_manifests() {
 }
 
 #[tokio::test]
+async fn get_project_metrics_returns_series() {
+    let (server, _pool) = make_server_with_session().await;
+    let sid = init_session(&server).await;
+    let (hk, hv) = sid_header(&sid);
+    let r = server
+        .post("/mcp")
+        .content_type("application/json")
+        .add_header(hk, hv)
+        .json(&json!({
+            "jsonrpc": "2.0", "id": 21, "method": "tools/call",
+            "params": {
+                "name": "whats_in_my_cc.get_project_metrics",
+                "arguments": { "limit": 5 }
+            }
+        }))
+        .await;
+    r.assert_status_ok();
+    let body: Value = r.json();
+    assert_eq!(body["result"]["isError"], false);
+    let text = body["result"]["content"][0]["text"].as_str().unwrap();
+    let payload: Value = serde_json::from_str(text).unwrap();
+    assert!(payload["data"]["sessions"].is_array());
+    assert!(payload["data"]["matched_count"].is_i64());
+    // minimal_session.jsonl이 ingest되어 있으므로 row 형태도 잠근다.
+    let rows = payload["data"]["sessions"].as_array().unwrap();
+    assert!(!rows.is_empty(), "ingested session must appear in series");
+    assert!(rows[0]["metrics"]["tool_call_total"].is_i64());
+    assert!(rows[0]["fingerprint"]["models"].is_array());
+}
+
+#[tokio::test]
 async fn unknown_tool_name_returns_is_error_true() {
     let (server, _pool) = make_server_with_session().await;
     let sid = init_session(&server).await;
