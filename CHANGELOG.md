@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.3.0...v0.4.0) (2026-06-12)
+
+
+### Features
+
+* **api:** 회고 §3 집계 표면 — kind 필터·project 매핑·turns 집계·envelope 정리 ([db9627c](https://github.com/bahamoth/whats-in-my-cc/commit/db9627c4b673b08cc2c36947f60a22862582e817))
+* **plugin:** session-retrospect skill + plugin 마켓플레이스 ([f9df02d](https://github.com/bahamoth/whats-in-my-cc/commit/f9df02d52568201812387409ffb4de1e08911727))
+
+
+### Bug Fixes
+
+* **signal:** context_bloat tool_name 페어링 해석 + is_sidechain facts ([0883f8d](https://github.com/bahamoth/whats-in-my-cc/commit/0883f8dcd7fa1a5a3a92b3d8c44a499422e2893f))
+
 ## [0.3.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.2.0...v0.3.0) (2026-06-12)
 
 
