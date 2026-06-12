@@ -1,5 +1,6 @@
 pub mod config;
 pub mod disposition;
+pub mod event_tags;
 pub mod extractor;
 pub mod extractors;
 pub mod fingerprint;
