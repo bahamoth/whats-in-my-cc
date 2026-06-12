@@ -2,6 +2,7 @@ pub mod config;
 pub mod disposition;
 pub mod extractor;
 pub mod extractors;
+pub mod fingerprint;
 pub mod manifest;
 pub mod metrics;
 pub mod outcome;
