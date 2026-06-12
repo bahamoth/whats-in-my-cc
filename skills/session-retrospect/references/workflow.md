@@ -1,8 +1,9 @@
 # session-retrospect — 상세 워크플로우
 
-SKILL.md의 Step 2–4를 수행할 때의 세부 가이드. 이 워크플로우 자체가
+SKILL.md의 Step 2–5를 수행할 때의 세부 가이드. 이 워크플로우 자체가
 2026-06-12 개밥먹기(세션 `191eddf3`, lhh-liveops)에서 수작업으로 검증된
-절차의 정식화다.
+절차의 정식화이며, 가설 원장·전후 비교는 같은 날 loop-foundations 라운드에서
+추가됐다.
 
 ## 데이터 표면 치트시트
 
@@ -11,13 +12,17 @@ SKILL.md의 Step 2–4를 수행할 때의 세부 가이드. 이 워크플로우
 | 프로젝트의 세션 찾기 | `search_sessions {project}` | `GET /v1/sessions?project=` |
 | 턴 집계 + 파일 churn | `get_session_turns {session_id}` | `GET /v1/sessions/:id/turns` |
 | 세션 메트릭 | — | `GET /v1/sessions/:id/metrics` |
+| 세션 fingerprint (모델·CC버전·branch·CLAUDE.md 해시) | — | `GET /v1/sessions/:id/fingerprint` |
+| 세션 횡단 series (전후 비교) | `get_project_metrics {project?, from?, to?, limit?}` | `GET /v1/metrics?project=&from=&to=&limit=` |
 | Signal 목록 | — | `GET /v1/sessions/:id/signals` |
+| detector manifest (metric_class 포함) | `list_detectors` | `GET /v1/detectors` |
 | kind 필터 이벤트 | — | `GET /v1/sessions/:id/events?kind=a,b&limit=` |
 | 특정 tool_use 상관 조회 | — | `GET /v1/sessions/:id/events?tool_use_id=` |
 
 events 커서는 `data.prev_cursor` / `data.next_cursor` (URL 인코딩 필요).
 `next_cursor: null` = 해당 스트림의 live tip. 미지원 쿼리 파라미터는 400으로
-거부되므로 silent-drop을 의심할 필요 없다.
+거부되므로 silent-drop을 의심할 필요 없다. `/v1/metrics`의 `matched_count`가
+`session_count`보다 크면 limit 절단이 일어난 것이다 — 절단을 숨기지 말 것.
 
 ## 판별 휴리스틱 (LLM 몫 — wimcc 데이터에 없는 이유)
 
@@ -41,18 +46,55 @@ events 커서는 `data.prev_cursor` / `data.next_cursor` (URL 인코딩 필요).
    `context_bloat`의 `facts.tool_result.is_sidechain == true`는 Agent 위임
    패턴일 가능성이 높다 — 문제로 단정하지 않는다.
 
-## 제안서 형식
+## 전후 비교 절차 (Step 5)
 
-```
-## <프로젝트명> 세션 회고 (YYYY-MM-DD, 세션 <id 앞 8자>, 표본 1)
+이전 회고의 **채택된** 제안 `R-YYYYMMDD-n`에 대해, 예측했던 지표가 실제로
+움직였는지 판정한다.
 
-| # | 제안 | 근거(관측) | 기대 효과 |
-|---|------|-----------|----------|
-```
+1. **코호트 분할 기준** (우선순위 순):
+   1. `fingerprint.instruction_sha256` 변화 — 제안이 CLAUDE.md/instruction
+      변경이었다면 가장 정확. 단 hook collector가 설치된 세션에만 존재하고,
+      collector 도입 이전 세션은 결측이라 이 기준으로 나눌 수 없다.
+   2. 채택 커밋 시각 — `git log -1 --format=%cI <commit>` vs 각 세션의
+      `first_observed_at`.
+   3. 사용자 수동 지정.
+2. **수집**: `get_project_metrics {"project": "<루트>", "limit": 50}`.
+   필요하면 `from`/`to`(RFC3339)로 창을 좁힌다.
+3. **비교**: 예측에 적힌 지표만 본다(사후 지표 쇼핑 금지 — 그게 원장의 존재
+   이유다). count는 세션 길이에 좌우되므로 비교 전에 분모를 명시해 직접
+   나눈다(F1: 비율은 소비자가 계산). 예: `tool_failure_count /
+   tool_call_total`, `turn_duration_ms_total / turn_duration_count`.
+4. **보고 형식**:
 
-- 근거 열에는 수치·event_id·턴 시각만. 해석은 본문 문단에.
-- 적용 가능한 제안(CLAUDE.md 한 줄, 스킬 규칙 추가)은 diff 형태로 제시하고
-  승인 후 반영.
+   ```
+   ## 이전 예측 검증 (R-YYYYMMDD-n)
+   | 제안 ID | 예측 | 전 (n=) | 후 (n=) | 판정 |
+   ```
+
+   판정은 검증됨 / 반증됨 / 판정불가(표본 부족·혼재 요인) 셋 중 하나.
+5. **단정 금지 규칙**: 전/후 한쪽 표본이 3 미만이면 "참고 수준". 전/후
+   코호트의 `models`·`cc_versions`가 다르면 혼재 요인으로 명시. 작업 난이도는
+   관측 불가 — "같은 프로젝트의 인접 기간"이라는 약한 통제만 가능함을 적는다.
+   반증된 제안은 되돌리는 제안을 새 ID로 낸다.
+
+## Goodhart 주의 (지표가 목표가 될 때)
+
+- `/v1/detectors` manifest의 `metric_class`를 본다: `process`(행동 형태 —
+  지표를 피하는 행동 변화로 게임 가능) vs `outcome`(최종 상태 결부 — 게임
+  난도 높음).
+- process 지표만 개선되고 outcome 지표(verification 계열,
+  final_state_mismatch)가 정체·악화하면 "증거 회피" 가능성을 보고한다.
+- 제안을 낼 때 자문: 이 제안은 *신호를 없애는가*(예: 재읽기 신호를 피하려
+  통파일 읽기 → context_bloat로 전이), *원인을 없애는가*?
+
+## 판별→fixture 승격 (detector 후보의 공식 졸업 관문)
+
+- 회고에서 같은 구조 패턴이 **서로 다른 세션 2개 이상**에서 확정되면, 해당
+  사례의 실 payload를 wimcc 리포의 `tests/fixtures/**/real/`에 동결하고
+  invariant 테스트로 잠근다 (Real-data anchoring의 확장).
+- 이것이 보류 중 detector 후보(`re_edit_churn`, `duplicate_edit_stream`)의
+  공식 졸업 경로다: **표본 축적은 annotation이 아니라 fixture로 한다.**
+  wimcc에 라벨/판정을 쓰는 API는 만들지 않는다(no-annotation 원칙 유지).
 
 ## 알려진 한계
 
@@ -62,3 +104,8 @@ events 커서는 `data.prev_cursor` / `data.next_cursor` (URL 인코딩 필요).
   기준이다. 텔레메트리 전용 세션이면 비어 있을 수 있다.
 - 비코드 프로젝트의 검증 활동(브라우저 smoke)은 verification-runs에 잡히지
   않는다 (wimcc 알려진 사각지대, 2026-06-12 기준).
+- `fingerprint.claude_md`는 SessionStart hook collector가 설치된 이후의
+  세션에만 존재한다. 과거 세션 소급은 불가 — transcript에는 CLAUDE.md가
+  기록되지 않는다(2026-06-12 실측: 4개 프로젝트 12 transcript 음성).
+  커밋된 프로젝트 CLAUDE.md에 한해 세션 시각 × git history로 근사 복원만
+  가능하다.
