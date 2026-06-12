@@ -1,5 +1,6 @@
 pub mod diff_hunk;
 pub mod hook;
+pub mod instruction_snapshot;
 pub mod mapping;
 pub mod otel;
 pub mod otel_logs;
