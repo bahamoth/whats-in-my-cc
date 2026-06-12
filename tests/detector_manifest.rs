@@ -142,3 +142,39 @@ fn all_manifests_are_serializable() {
         assert_eq!(v["id"].as_str().unwrap(), det.id());
     }
 }
+
+// ---------------------------------------------------------------------------
+// loop-foundations 2026-06-12 — metric_class (Goodhart 가드 메타데이터)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn every_manifest_declares_metric_class() {
+    use wimcc::insight::extractors::re_read::ReRead;
+    let detectors: Vec<Box<dyn wimcc::insight::extractor::Detector>> = vec![
+        Box::new(ToolFailure),
+        Box::new(RiskyAction),
+        Box::new(ContextBloat),
+        Box::new(FinalStateMismatch),
+        Box::new(ReRead),
+    ];
+    for det in detectors {
+        let m = det.manifest();
+        assert!(
+            m.metric_class == "process" || m.metric_class == "outcome",
+            "{}: metric_class must be process|outcome, got {:?}",
+            m.id,
+            m.metric_class
+        );
+    }
+}
+
+#[test]
+fn final_state_mismatch_is_outcome_class_others_process() {
+    // outcome = 최종 상태(verification 등)에 결부 — 게임 난도 높음.
+    // process = 행동 형태 — 지표가 목표가 되면 회피 가능. 소비자(LLM)가
+    // process 지표 개선 주장에 outcome 동반 확인을 하도록 근거를 제공한다.
+    assert_eq!(FinalStateMismatch.manifest().metric_class, "outcome");
+    assert_eq!(ToolFailure.manifest().metric_class, "process");
+    assert_eq!(RiskyAction.manifest().metric_class, "process");
+    assert_eq!(ContextBloat.manifest().metric_class, "process");
+}

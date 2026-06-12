@@ -63,6 +63,7 @@ impl Detector for ContextBloat {
             // Verified: all three cfg.usize_param calls in detect()
             config_keys: vec!["threshold_bytes", "next_event_window", "min_overlap_stems"],
             rationale: "spec §4.2 B",
+            metric_class: "process",
         }
     }
 

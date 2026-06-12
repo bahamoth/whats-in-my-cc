@@ -63,6 +63,7 @@ impl Detector for RiskyAction {
             // Verified: _cfg not used; no usize_param calls in detect()
             config_keys: vec![],
             rationale: "DESTRUCTIVE_PATTERNS 상수 + spec §4.2 C",
+            metric_class: "process",
         }
     }
 

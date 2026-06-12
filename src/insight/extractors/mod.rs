@@ -43,6 +43,7 @@ pub mod noop_test {
                 output: "{synthetic: true}",
                 config_keys: vec![],
                 rationale: "test helper only — no real detection logic",
+                metric_class: "process",
             }
         }
 

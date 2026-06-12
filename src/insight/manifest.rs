@@ -40,4 +40,12 @@ pub struct DetectorManifest {
 
     /// Evidence anchor: docs section URL fragment and/or real fixture path.
     pub rationale: &'static str,
+
+    /// Goodhart 가드 메타데이터 (loop-foundations 2026-06-12): 이 detector의
+    /// 신호가 과정 지표(`"process"` — 행동 형태, 지표가 목표가 되면 회피·게임
+    /// 가능)인지 결과 지표(`"outcome"` — 최종 상태에 결부, 게임 난도 높음)인지.
+    /// 분류 기준: verification/최종 상태를 읽으면 outcome. 판단이 아니라 정적
+    /// 분류 선언이다 — 소비자(LLM)가 process 지표 개선 주장에 outcome 동반
+    /// 확인을 하도록 근거를 제공한다.
+    pub metric_class: &'static str,
 }
