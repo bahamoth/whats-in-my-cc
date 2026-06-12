@@ -1401,8 +1401,77 @@ git commit -m "docs: 자기개선 루프 표면 사양 현행화 (PRD 소비자 
 
 ---
 
+---
+
+## 확장 (2026-06-12 사용자 지시): Task 11–16 — 태그 사전 webui→core 이전 (발견 5)
+
+> 사용자 지시로 같은 PR에 포함. 원칙: **분류(측정)는 Rust core가 소유**, webui는
+> 서버 값을 소비(파서·사전 전부 삭제), 표현(verb 색상·hint 문구)만 frontend 유지.
+
+### Task 11: Rust 분류기 `src/insight/event_tags.rs` (TDD — TS 테스트 1:1 이식)
+
+- Test: `tests/event_tags.rs` — `webui/.../eventTags.test.ts`의 분류 케이스 전수 이식
+  (taxonomy·compound·global-flag·timeout·continuation·newline·redirect·assignment·
+  loop-keyword·comment·Read/Write ext·control/unmatched·no-slash-key invariant·
+  meaningful display·untagged token 집계 의미론).
+- 공개 API:
+  ```rust
+  pub enum TagDisposition { Tagged, Control, Unmatched } // as_str(): "tagged"|"control"|"unmatched"
+  pub struct TagOutcome {
+      pub value: Option<&'static str>,   // "read.file" 등 verb.object — 21종
+      pub disposition: TagDisposition,
+      pub token: Option<String>,         // untagged-loop 집계 키 (Bash 첫 토큰 | "tool sub" | ext | basename)
+      pub display: Option<String>,       // meaningful command(선행 제어 세그먼트 제거) | file_path
+  }
+  pub fn classify_tool_call(tool_name: Option<&str>, payload: &serde_json::Value) -> TagOutcome
+  pub fn segment_command(cmd: &str) -> Vec<String>      // 테스트 패리티용 공개
+  pub fn meaningful_command(cmd: &str) -> String
+  ```
+- RED: 모듈 부재 컴파일 실패 확인 → GREEN: TS 구현 1:1 이식(사전 4종 + 파서) → Commit
+  `feat(insight): event tag 분류기를 core로 이전 (webui eventTags 패리티)`.
+
+### Task 12: events 응답에 `tag` 노출
+
+- Test: `tests/api_events_tag.rs` — Bash tool_call 시드 → `/v1/sessions/:id/events` 응답
+  이벤트에 `tag.value=="read.file"`·`tag.disposition=="tagged"` / 비 tool_call 이벤트는 `tag: null`.
+- 구현: `routes.rs::observed_to_dto`에 `"tag": (kind==ToolCall).then(|| classify…)` 추가.
+- Commit `feat(api): 렌더 이벤트에 tag(value·disposition·token·display) 노출`.
+
+### Task 13: turns rollup에 `tag_histogram`
+
+- Test: `tests/api_session_turns.rs`(기존 파일) 또는 turn_rollup 단위 — Bash grep 2회 시드 →
+  turn의 `tag_histogram == {"read.file": 2}`.
+- 구현: `turn_rollup.rs` ToolCall arm에서 `classify_tool_call` 호출, value 있는 것만 카운트.
+- Commit `feat(insight): turns rollup에 tag_histogram`.
+
+### Task 14: webui — 서버 태그 소비로 전환
+
+- `api/types.ts`: `EventTagDto { value, disposition, token, display }` + `ObservedEventDto.tag?`.
+- `eventTags.ts`: 사전·파서·tagForEvent·meaningfulCommand·segmentCommand **삭제**.
+  잔존: `Tag`/`TagVerb`/`tagVerb`(칩 색), `UntaggedRow`, `collectUntagged`(서버 필드 기반:
+  `disposition==='unmatched'` 그룹핑 by `token`, hint는 token 형태+tool_name으로
+  `src/insight/event_tags.rs`의 맵 이름 안내), sample은 `display.slice(0,80)`.
+- `ActivityStack.tsx`: `e.tag` 사용. `nodeLabel.ts`: `e.tag?.display ?? raw`. `UntaggedBashPanel` 무변경.
+- `eventTags.test.ts`: 분류 케이스 삭제(→Rust), 잔존 기능(tagVerb·collectUntagged 그룹핑·hint) 테스트로 재작성.
+- `scripts/untagged-bash.ts`: collectUntagged 시그니처 유지 확인.
+- 검증: `cd webui && npx vitest run` green. Commit `feat(webui): 이벤트 태그를 서버 값으로 소비 (사전 제거)`.
+
+### Task 15: 통합 검증 — dist 재빌드 + 브라우저 smoke (CLAUDE.md 의무)
+
+- `cd webui && npm run build` → `cargo build --release` → serve 재기동 →
+  claude-in-chrome으로 replay 화면 진입, 태그 칩 렌더·Untagged 패널 동작 시각 확인.
+
+### Task 16: 문서 + PR 갱신
+
+- 04 spec: events 행에 `tag` 필드, turns 행에 `tag_histogram` 추가.
+- CLAUDE.md Tagging loop 절: 규칙 위치를 `src/insight/event_tags.rs`로, 테스트 잠금을 Rust로 갱신.
+- impl-notes `#self-improvement-loop-2026-06-12`에 태그 이전 bullet 추가.
+- `gh pr edit`로 PR 본문의 "범위 외" 항목 정정. Commit `docs: 태그 어휘 core 이전 반영`.
+
+---
+
 ## Self-Review 결과
 
-- 범위: 리뷰 발견 1·2·3·6·7 + 우선순위 0을 Task 1–9가 커버. 발견 5(태그 사전 core 이전)는 **의도적 제외** — webui 동반 변경 + 브라우저 smoke가 필요한 독립 작업이라 별도 PR로 분리(통합선 분리 원칙: 이 PR과 파일 충돌 없음).
+- 범위: 리뷰 발견 1·2·3·6·7 + 우선순위 0을 Task 1–9가 커버. 발견 5(태그 사전 core 이전)는 Task 11–16으로 **이 PR에 포함** (2026-06-12 사용자 지시로 확장 — 종전 "별도 PR 분리" 결정을 대체).
 - 타입 일관성: `InstructionFile`(Task 1)을 Task 3이 재사용, `SessionSeries`(Task 5)를 Task 6이 재사용 — 시그니처 일치 확인.
 - 실행 시 확인 표식: pre_tool_use fixture의 session_id(Task 2), `detector_manifests()` 가시성(Task 7), `is_none_or` toolchain(Task 5), repo_observed payload 직렬화 형식(Task 3).
