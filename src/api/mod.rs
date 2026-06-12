@@ -108,6 +108,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/v1/sessions/:id/usage", get(routes::session_usage))
         .route("/v1/usage/baseline", get(routes::usage_baseline))
+        .route("/v1/metrics", get(routes::metrics_series))
         .route(
             "/v1/verification-runs/:id",
             get(routes::verification_run_detail),
