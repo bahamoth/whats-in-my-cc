@@ -309,3 +309,74 @@ fn fires_on_large_bloat_downstream_real_shape_no_overlap() {
         "100KB bloat with real-shape downstream (no overlap) must fire"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Dogfood 2026-06-12 (retrospect §4) — signal quality fixes, locked here.
+// Real case: session 191eddf3 fired context_bloat on a sidechain Read whose
+// tool_result row carried an empty tool_name → summary said `from ""` and the
+// sidechain context (a *recommended* delegation pattern) was invisible.
+// ---------------------------------------------------------------------------
+
+/// tool_result with empty tool_name + a paired tool_call (same tool_use_id)
+/// named Read → facts/summary must resolve the name from the pairing.
+#[test]
+fn resolves_empty_tool_name_from_paired_tool_call() {
+    let mut call = tool_call_with_input(0, "unrelated input");
+    call.tool_name = Some("Read".into());
+    call.tool_use_id = Some("tu_pair".into());
+    let mut result = large_tool_result(1, 100_000);
+    result.tool_name = Some("".into()); // observed-empty — the dogfood case
+    result.tool_use_id = Some("tu_pair".into());
+    let events = vec![call, result, short_assistant_msg(2)];
+    let view = empty_view(&events);
+    let cands = ContextBloat.detect(&view, &DetectorConfig::default());
+    assert_eq!(cands.len(), 1);
+    let c = &cands[0];
+    assert_eq!(
+        c.facts["tool_result"]["tool_name"], "Read",
+        "empty tool_name must be resolved from the paired tool_call"
+    );
+    assert!(
+        c.summary.contains("Read"),
+        "summary must name the resolved tool, got: {}",
+        c.summary
+    );
+}
+
+/// Unresolvable empty tool_name (no paired call) → "unknown", never `""`.
+#[test]
+fn unresolvable_tool_name_reads_unknown_not_empty() {
+    let mut result = large_tool_result(0, 100_000);
+    result.tool_name = Some("".into());
+    result.tool_use_id = None;
+    let events = vec![result, short_assistant_msg(1)];
+    let view = empty_view(&events);
+    let cands = ContextBloat.detect(&view, &DetectorConfig::default());
+    assert_eq!(cands.len(), 1);
+    assert!(
+        cands[0].summary.contains("unknown"),
+        "summary must say unknown, got: {}",
+        cands[0].summary
+    );
+    assert!(
+        !cands[0].summary.contains("\"\""),
+        "summary must never print an empty quoted name, got: {}",
+        cands[0].summary
+    );
+}
+
+/// Sidechain bloat (Agent delegation reading big docs) must be visible in
+/// facts so consumers can judge it as the recommended pattern it usually is.
+#[test]
+fn facts_carry_is_sidechain_flag() {
+    let mut result = large_tool_result(0, 100_000);
+    result.is_sidechain = true;
+    let events = vec![result, short_assistant_msg(1)];
+    let view = empty_view(&events);
+    let cands = ContextBloat.detect(&view, &DetectorConfig::default());
+    assert_eq!(cands.len(), 1);
+    assert_eq!(
+        cands[0].facts["tool_result"]["is_sidechain"], true,
+        "facts must expose is_sidechain"
+    );
+}
