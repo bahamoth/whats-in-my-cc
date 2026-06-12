@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.4.0...v0.5.0) (2026-06-12)
+
+
+### Features
+
+* **api:** GET /v1/metrics 세션 횡단 metrics+fingerprint series ([4c208dd](https://github.com/bahamoth/whats-in-my-cc/commit/4c208dd25ecfe2a21789aab362ae65a4f7722b44))
+* **api:** GET /v1/sessions/:id/fingerprint ([398aed5](https://github.com/bahamoth/whats-in-my-cc/commit/398aed58f70435a8cb8637e6bbde18d2ee7e2c12))
+* **api:** 렌더 이벤트에 tag(value·disposition·token·display) 노출 ([02e78d2](https://github.com/bahamoth/whats-in-my-cc/commit/02e78d245f8e8b349dc7f750526cdb178ed3ef81))
+* **ingest:** instruction snapshot 모듈 (CLAUDE.md 후보 sha256 관측) ([229f9e1](https://github.com/bahamoth/whats-in-my-cc/commit/229f9e1bcae4c4e27e5d69b56b3fceee77940de2))
+* **ingest:** SessionStart 수신 시각 CLAUDE.md 스냅샷 capture ([963cd6d](https://github.com/bahamoth/whats-in-my-cc/commit/963cd6d2d4267d21079378ab9c2964014b9ea2e6))
+* **insight:** detector manifest에 metric_class(process|outcome) 추가 ([3e8cc4a](https://github.com/bahamoth/whats-in-my-cc/commit/3e8cc4a6c818462463a6db6b9d49a5e7fada1667))
+* **insight:** event tag 분류기를 core로 이전 (webui eventTags 패리티) ([81b8236](https://github.com/bahamoth/whats-in-my-cc/commit/81b8236c2aea682f6d719c476e86df4aef2e81e9))
+* **insight:** turns rollup에 tag_histogram ([b441621](https://github.com/bahamoth/whats-in-my-cc/commit/b441621f542b3e3d182d265af08d8b79d934a49f))
+* **insight:** 세션 환경 fingerprint on-demand 집계 ([54f2ed1](https://github.com/bahamoth/whats-in-my-cc/commit/54f2ed192701b96af34b95ac7d4c431d8ff54bda))
+* **mcp:** get_project_metrics 도구 — 세션 횡단 series ([09275e6](https://github.com/bahamoth/whats-in-my-cc/commit/09275e6bf8f8485dc9d4f6abf7d826720dff053d))
+* **skill:** retrospect 가설 원장(제안 ID·예측)과 전후 비교 단계 ([aa9b908](https://github.com/bahamoth/whats-in-my-cc/commit/aa9b9085d3934cb60abcf5c99351b54a19f5a7c3))
+* **webui:** 이벤트 태그를 서버 값으로 소비 (사전·파서 제거) ([e62ef9f](https://github.com/bahamoth/whats-in-my-cc/commit/e62ef9f135001411f544c5507fbbe35189bc37a0))
+
 ## [0.4.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.3.0...v0.4.0) (2026-06-12)
 
 
