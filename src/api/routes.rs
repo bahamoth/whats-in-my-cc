@@ -780,6 +780,17 @@ fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Val
         .telemetry
         .as_ref()
         .map(|t| serde_json::to_value(t).unwrap_or(serde_json::Value::Null));
+    // tool_call만 태그 분류(loop-foundations 2026-06-12) — UI와 MCP 소비자가
+    // 같은 어휘를 본다. 그 외 kind는 null.
+    let tag = if e.kind == crate::model::observed::EventKind::ToolCall {
+        serde_json::to_value(crate::insight::event_tags::classify_tool_call(
+            e.tool_name.as_deref(),
+            &e.payload,
+        ))
+        .unwrap_or(serde_json::Value::Null)
+    } else {
+        serde_json::Value::Null
+    };
     json!({
         "event_id": e.event_id,
         "raw_event_id": e.raw_event_id,
@@ -802,6 +813,7 @@ fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Val
         "parent_span_id": e.parent_span_id,
         "latency_ms": e.latency_ms,
         "telemetry": telemetry,
+        "tag": tag,
         "payload": e.payload,
     })
 }
