@@ -38,7 +38,7 @@ async fn init_session(server: &TestServer) -> String {
 }
 
 #[tokio::test]
-async fn tools_list_returns_four_tools() {
+async fn tools_list_returns_five_tools() {
     let server = make_server().await;
     let sid = init_session(&server).await;
     let r = server
@@ -57,8 +57,8 @@ async fn tools_list_returns_four_tools() {
         .expect("tools must be an array");
     assert_eq!(
         tools.len(),
-        4,
-        "expected exactly 4 tools (Plan 4: +list_detectors), got {}",
+        5,
+        "expected exactly 5 tools (dogfood 2026-06-12: +get_session_turns), got {}",
         tools.len()
     );
 }

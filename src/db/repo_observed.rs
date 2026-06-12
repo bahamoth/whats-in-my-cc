@@ -134,19 +134,55 @@ pub struct SessionRow {
 }
 
 pub async fn list_sessions(pool: &SqlitePool, limit: i64) -> Result<Vec<SessionRow>> {
+    list_sessions_filtered(pool, limit, None).await
+}
+
+/// Dogfood 2026-06-12 (§3-3) — optional project filter: only sessions having
+/// ≥1 event whose `cwd` equals the given (already slash-normalised) path.
+/// `cwd` comes from the transcript's per-event `cwd` field, so sessions that
+/// `cd` around still match on the project root they ran any event in.
+pub async fn list_sessions_filtered(
+    pool: &SqlitePool,
+    limit: i64,
+    project: Option<&str>,
+) -> Result<Vec<SessionRow>> {
     use sqlx::Row as _Row;
     // First pass: per-session totals + ordering. Limit applies here.
-    let totals = sqlx::query(
-        "SELECT session_id,
-                MIN(observed_at) AS first_observed_at,
-                MAX(observed_at) AS last_observed_at,
-                COUNT(*)         AS event_count
-         FROM observed_event WHERE session_id != ''
-         GROUP BY session_id ORDER BY last_observed_at DESC LIMIT ?",
-    )
-    .bind(limit)
-    .fetch_all(pool)
-    .await?;
+    let totals = match project {
+        None => {
+            sqlx::query(
+                "SELECT session_id,
+                        MIN(observed_at) AS first_observed_at,
+                        MAX(observed_at) AS last_observed_at,
+                        COUNT(*)         AS event_count
+                 FROM observed_event WHERE session_id != ''
+                 GROUP BY session_id ORDER BY last_observed_at DESC LIMIT ?",
+            )
+            .bind(limit)
+            .fetch_all(pool)
+            .await?
+        }
+        Some(p) => {
+            sqlx::query(
+                "SELECT session_id,
+                        MIN(observed_at) AS first_observed_at,
+                        MAX(observed_at) AS last_observed_at,
+                        COUNT(*)         AS event_count
+                 FROM observed_event
+                 WHERE session_id != ''
+                   AND session_id IN (
+                       SELECT DISTINCT session_id FROM observed_event
+                        WHERE cwd = ? OR cwd = ? || '/'
+                   )
+                 GROUP BY session_id ORDER BY last_observed_at DESC LIMIT ?",
+            )
+            .bind(p)
+            .bind(p)
+            .bind(limit)
+            .fetch_all(pool)
+            .await?
+        }
+    };
     if totals.is_empty() {
         return Ok(Vec::new());
     }
@@ -418,6 +454,102 @@ pub async fn list_session_window(
     // before-only and no-cursor used DESC SQL — flip to chronological ASC.
     let needs_reverse = matches!((before, after), (Some(_), None) | (None, None));
     if needs_reverse {
+        events.reverse();
+    }
+    Ok(events)
+}
+
+/// Dogfood 2026-06-12 (§3-2) — all conversation-kind events of a session,
+/// chronological, unwindowed. Feeds the turn rollup: turn aggregation needs
+/// every user_message/tool_call of the session, and conversation kinds are
+/// bounded in practice (the heaviest dogfood session: ~700 of 6,533 rows) —
+/// the bulk telemetry kinds stay excluded.
+pub async fn list_session_conversation(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<Vec<ObservedEvent>> {
+    let rows = sqlx::query(
+        "SELECT * FROM observed_event WHERE session_id = ? \
+         AND kind IN ('user_message','assistant_message','tool_call','tool_result') \
+         ORDER BY observed_at ASC, event_id ASC",
+    )
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(row_to_observed).collect())
+}
+
+/// Dogfood 2026-06-12 — kind-filtered cursor window (`?kind=` on the events
+/// endpoint). Unlike the unfiltered window there is no rendered-kind anchor
+/// special case: the caller already names the kinds it wants, so every branch
+/// filters by `kind IN (...)` directly. Ordering/cursor contract is identical
+/// to `list_session_window` (`(observed_at, event_id)` ASC on the wire).
+pub async fn list_session_window_kinds(
+    pool: &SqlitePool,
+    session_id: &str,
+    kinds: &[String],
+    before: Option<&Cursor>,
+    after: Option<&Cursor>,
+    limit: i64,
+) -> Result<Vec<ObservedEvent>> {
+    let limit = limit.clamp(1, 1000);
+    let placeholders = (0..kinds.len()).map(|_| "?").collect::<Vec<_>>().join(",");
+    let mut sql =
+        format!("SELECT * FROM observed_event WHERE session_id = ? AND kind IN ({placeholders})");
+    match (before, after) {
+        (None, None) => {
+            sql.push_str(" ORDER BY observed_at DESC, event_id DESC LIMIT ?");
+        }
+        (Some(_), None) => {
+            sql.push_str(
+                " AND (observed_at < ? OR (observed_at = ? AND event_id < ?)) \
+                 ORDER BY observed_at DESC, event_id DESC LIMIT ?",
+            );
+        }
+        (None, Some(_)) => {
+            sql.push_str(
+                " AND (observed_at > ? OR (observed_at = ? AND event_id > ?)) \
+                 ORDER BY observed_at ASC, event_id ASC LIMIT ?",
+            );
+        }
+        (Some(_), Some(_)) => {
+            sql.push_str(
+                " AND (observed_at > ? OR (observed_at = ? AND event_id > ?)) \
+                 AND (observed_at < ? OR (observed_at = ? AND event_id < ?)) \
+                 ORDER BY observed_at ASC, event_id ASC LIMIT ?",
+            );
+        }
+    }
+    let mut q = sqlx::query(&sql).bind(session_id);
+    for k in kinds {
+        q = q.bind(k);
+    }
+    match (before, after) {
+        (None, None) => {}
+        (Some(b), None) => {
+            let ts = b.observed_at.to_rfc3339();
+            q = q.bind(ts.clone()).bind(ts).bind(&b.event_id);
+        }
+        (None, Some(a)) => {
+            let ts = a.observed_at.to_rfc3339();
+            q = q.bind(ts.clone()).bind(ts).bind(&a.event_id);
+        }
+        (Some(b), Some(a)) => {
+            let ats = a.observed_at.to_rfc3339();
+            let bts = b.observed_at.to_rfc3339();
+            q = q
+                .bind(ats.clone())
+                .bind(ats)
+                .bind(&a.event_id)
+                .bind(bts.clone())
+                .bind(bts)
+                .bind(&b.event_id);
+        }
+    }
+    let rows = q.bind(limit).fetch_all(pool).await?;
+    let mut events: Vec<ObservedEvent> = rows.into_iter().map(row_to_observed).collect();
+    // DESC branches flip to chronological ASC for the wire.
+    if matches!((before, after), (Some(_), None) | (None, None)) {
         events.reverse();
     }
     Ok(events)

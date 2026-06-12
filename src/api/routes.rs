@@ -17,8 +17,14 @@ use crate::db::{
 use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListQuery {
     pub limit: Option<i64>,
+    /// Dogfood 2026-06-12 (§3-3) — only sessions with ≥1 event whose `cwd`
+    /// equals this project root (trailing slash normalised). Lets the
+    /// session-retrospect skill resolve "the sessions of this project"
+    /// without hand-copied session IDs.
+    pub project: Option<String>,
 }
 
 /// Full-retention (2026-06-11) — 410 gate shared by every handler whose
@@ -124,7 +130,12 @@ pub async fn list_sessions(
     Query(q): Query<ListQuery>,
 ) -> impl IntoResponse {
     let limit = clamp_limit(q.limit);
-    let rows = repo_observed::list_sessions(&pool, limit)
+    let project = q
+        .project
+        .as_deref()
+        .map(|p| p.trim_end_matches('/'))
+        .filter(|p| !p.is_empty());
+    let rows = repo_observed::list_sessions_filtered(&pool, limit, project)
         .await
         .expect("db");
     // Slice-18 + doc-audit-2026-06-10: meta.redaction_summary aggregates the
@@ -192,7 +203,12 @@ pub async fn session_detail(
     }))
 }
 
+/// Dogfood 2026-06-12 — `deny_unknown_fields`: unknown query params are now a
+/// 400 instead of being silently dropped. A silently-ignored `?kind=` filter
+/// cost a dogfooding analysis a full-session download; misspelled params must
+/// fail loudly.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EventsQuery {
     pub before: Option<String>,
     pub after: Option<String>,
@@ -201,6 +217,10 @@ pub struct EventsQuery {
     /// Takes precedence over `before`/`after` (same as the correlated params).
     pub around: Option<String>,
     pub limit: Option<i64>,
+    /// Dogfood 2026-06-12 — kind filter (CSV of EventKind snake_case names).
+    /// Cursor-paged like the unfiltered window; cannot be combined with
+    /// `around` / `tool_use_id` / `request_id`.
+    pub kind: Option<String>,
     /// On-demand correlated telemetry for the detail view: when either is set,
     /// the endpoint returns the events whose payload carries that
     /// tool_use_id / request_id (instead of the cursor-paged window).
@@ -235,6 +255,50 @@ pub async fn session_events(
             }),
         }
     }
+    // Dogfood 2026-06-12 — `kind=` CSV filter. Validate every name against the
+    // EventKind taxonomy up front: an unknown kind silently matching nothing
+    // would reproduce the silent-drop failure this slice removes.
+    let kind_filter: Option<Vec<String>> = match q.kind.as_deref() {
+        None => None,
+        Some(csv) => {
+            let mut kinds = Vec::new();
+            for k in csv.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+                let valid = serde_json::from_value::<crate::model::observed::EventKind>(
+                    serde_json::Value::String(k.to_string()),
+                )
+                .is_ok();
+                if !valid {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({
+                            "type": "about:blank",
+                            "title": "INVALID_KIND",
+                            "detail": format!("unknown event kind: {k}"),
+                        })),
+                    ));
+                }
+                kinds.push(k.to_string());
+            }
+            if kinds.is_empty() {
+                None
+            } else {
+                Some(kinds)
+            }
+        }
+    };
+    if kind_filter.is_some()
+        && (q.around.is_some() || q.tool_use_id.is_some() || q.request_id.is_some())
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "type": "about:blank",
+                "title": "INVALID_PARAMS",
+                "detail": "kind cannot be combined with around / tool_use_id / request_id",
+            })),
+        ));
+    }
+
     // Correlated-telemetry fetch (detail view): targeted, not a window — return
     // the matching events with null cursors (no pagination).
     if q.tool_use_id.is_some() || q.request_id.is_some() {
@@ -281,29 +345,67 @@ pub async fn session_events(
     } else {
         let before = parse_cursor(q.before.as_deref())?;
         let after = parse_cursor(q.after.as_deref())?;
-        repo_observed::list_session_window(&pool, &id, before.as_ref(), after.as_ref(), limit)
+        match &kind_filter {
+            Some(kinds) => repo_observed::list_session_window_kinds(
+                &pool,
+                &id,
+                kinds,
+                before.as_ref(),
+                after.as_ref(),
+                limit,
+            )
             .await
-            .expect("db")
+            .expect("db"),
+            None => repo_observed::list_session_window(
+                &pool,
+                &id,
+                before.as_ref(),
+                after.as_ref(),
+                limit,
+            )
+            .await
+            .expect("db"),
+        }
     };
 
     let (prev_cursor, next_cursor) = match (evs.first(), evs.last()) {
         (Some(first), Some(last)) => {
             let prev = format!("{}|{}", first.observed_at.to_rfc3339(), first.event_id);
-            // next_cursor is null when the window already reaches the session's
-            // live tip — further events arrive via SSE, not via another page
-            // fetch. The summary's last_observed_at is the authoritative tip.
-            let summary = repo_observed::session_summary(&pool, &id)
-                .await
-                .expect("db");
-            let at_live_tip = matches!(summary, Some((_, _, last_observed_at)) if last_observed_at == last.observed_at.to_rfc3339());
-            let next = if at_live_tip {
-                None
-            } else {
+            let next_of_last = || {
                 Some(format!(
                     "{}|{}",
                     last.observed_at.to_rfc3339(),
                     last.event_id
                 ))
+            };
+            let next = if kind_filter.is_some() {
+                // Filtered window: the session's overall last_observed_at is
+                // the wrong tip (it is usually bulk telemetry). The tip rule
+                // for the filtered stream: a newest-anchored window (no
+                // cursors) is at the tip by construction; forward paging hit
+                // the tip when it returned fewer rows than asked.
+                let eff_limit = limit.clamp(1, 1000);
+                let at_filtered_tip = (q.before.is_none() && q.after.is_none())
+                    || (q.after.is_some() && (evs.len() as i64) < eff_limit);
+                if at_filtered_tip {
+                    None
+                } else {
+                    next_of_last()
+                }
+            } else {
+                // next_cursor is null when the window already reaches the
+                // session's live tip — further events arrive via SSE, not via
+                // another page fetch. The summary's last_observed_at is the
+                // authoritative tip.
+                let summary = repo_observed::session_summary(&pool, &id)
+                    .await
+                    .expect("db");
+                let at_live_tip = matches!(summary, Some((_, _, last_observed_at)) if last_observed_at == last.observed_at.to_rfc3339());
+                if at_live_tip {
+                    None
+                } else {
+                    next_of_last()
+                }
             };
             (Some(prev), next)
         }
@@ -324,6 +426,27 @@ pub async fn session_events(
             prev_cursor,
             next_cursor,
         },
+    }))
+}
+
+/// Dogfood 2026-06-12 (§3-2) — turn-level deterministic rollup. Counts and
+/// redacted excerpts only; the "is this a rework loop?" judgment belongs to
+/// the LLM consumer (deterministic-measurement / LLM-judgment split).
+pub async fn session_turns(
+    State(pool): State<SqlitePool>,
+    Path(id): Path<String>,
+) -> Result<
+    Json<Envelope<crate::insight::turn_rollup::TurnRollupResponse>>,
+    (StatusCode, Json<serde_json::Value>),
+> {
+    tombstone_gate(&pool, &id, "session", "session").await?;
+    let evs = repo_observed::list_session_conversation(&pool, &id)
+        .await
+        .expect("db");
+    let rollup = crate::insight::turn_rollup::rollup(&id, &evs);
+    Ok(Json(Envelope {
+        meta: ResponseMeta::now(),
+        data: rollup,
     }))
 }
 

@@ -97,6 +97,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/sessions", get(routes::list_sessions))
         .route("/v1/sessions/:id", get(routes::session_detail))
         .route("/v1/sessions/:id/events", get(routes::session_events))
+        .route("/v1/sessions/:id/turns", get(routes::session_turns))
         .route(
             "/v1/sessions/:id/diff-hunks",
             get(routes::session_diff_hunks),

@@ -43,7 +43,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <div class="callout"><strong>용어:</strong> MCP 공식 명칭은 <em>Streamable HTTP transport</em>다. 본 문서에서는 사용자의 표현인 “MCP streaming http”를 이 transport로 해석한다.</div>
 </section>
 <section id="surface"><h2><span class="num">02</span>Serving Surface</h2>
-<div class="grid three"><div class="card"><h4>Local WebUI</h4><p>브라우저 기반 React SPA (rust-embed로 서버에 내장). 같은 Pull API + SSE를 소비해 event-first replay와 insight strip을 렌더링한다.</p></div><div class="card"><h4>Pull API</h4><p>HTTP JSON API. <strong>전부 GET</strong> read-only. write endpoint 없음.</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p><code>/mcp</code> 단일 endpoint. AI client가 resources와 read-only tools 4종으로 insight를 조회한다.</p></div></div>
+<div class="grid three"><div class="card"><h4>Local WebUI</h4><p>브라우저 기반 React SPA (rust-embed로 서버에 내장). 같은 Pull API + SSE를 소비해 event-first replay와 insight strip을 렌더링한다.</p></div><div class="card"><h4>Pull API</h4><p>HTTP JSON API. <strong>전부 GET</strong> read-only. write endpoint 없음.</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p><code>/mcp</code> 단일 endpoint. AI client가 resources와 read-only tools 5종으로 insight를 조회한다.</p></div></div>
 <div class="callout"><strong>Collectors (입력면):</strong> 같은 서버가 OTLP/HTTP receiver(<code>POST /otel/v1/traces|metrics|logs</code>)와 hook receiver(<code>POST /hooks/v1/events</code>)를 함께 연다. 이는 telemetry <em>수집</em>이며 read-only 원칙의 예외가 아니다 — domain resource를 외부에서 수정하는 경로가 아니다.</div>
 </section>
 <section id="api"><h2><span class="num">03</span>Pull API Contract</h2>
@@ -51,9 +51,10 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <table><thead><tr><th>Method</th><th>Path</th><th>Purpose</th><th>Envelope</th></tr></thead><tbody>
 <tr><td>GET</td><td><code>/v1/health</code></td><td>service status: <code>status</code>, <code>build_sha</code>, <code>security.auth_required</code>, <code>security.retention_profile</code></td><td>bare JSON</td></tr>
 <tr><td>GET</td><td><code>/v1/health/sources</code></td><td>source별 ingest freshness (transcript / otel-traces / otel-metrics / otel-logs / hook) — <code>wimcc doctor</code>가 사용</td><td>{meta, data}</td></tr>
-<tr><td>GET</td><td><code>/v1/sessions</code></td><td>세션 목록 (최신순, <code>?limit=</code>) — <code>event_count</code>, <code>by_kind</code> 별 행수 포함</td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/sessions</code></td><td>세션 목록 (최신순, <code>?limit=</code>, <code>?project=</code>) — <code>event_count</code>, <code>by_kind</code> 별 행수 포함</td><td>{meta, data}</td></tr>
 <tr><td>GET</td><td><code>/v1/sessions/{session_id}</code></td><td>session summary (<code>event_count</code>, <code>by_kind</code>, first/last observed). event 본문은 포함하지 않는다</td><td>{meta, data}</td></tr>
-<tr><td>GET</td><td><code>/v1/sessions/{session_id}/events</code></td><td>cursor-paged <code>ObservedEvent</code> window + on-demand 상관 조회 (<code>?tool_use_id=</code> / <code>?request_id=</code>)</td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/sessions/{session_id}/events</code></td><td>cursor-paged <code>ObservedEvent</code> window + <code>?kind=</code> 필터(CSV) + on-demand 상관 조회 (<code>?tool_use_id=</code> / <code>?request_id=</code>)</td><td>{meta, data}</td></tr>
+<tr><td>GET</td><td><code>/v1/sessions/{session_id}/turns</code></td><td>턴 단위 결정론 집계 (dogfood 2026-06-12) — 턴별 tool histogram·편집 파일·user_message 발췌, 세션 전체 <code>file_churn</code>. 판단 필드 없음</td><td>{meta, data}</td></tr>
 <tr><td>GET</td><td><code>/v1/sessions/{session_id}/diff-hunks</code></td><td>transcript <code>toolUseResult.structuredPatch</code>에서 추출한 <code>DiffHunk</code> 목록</td><td>{meta, data}</td></tr>
 <tr><td>GET</td><td><code>/v1/sessions/{session_id}/usage</code></td><td>token-usage aggregate: <code>assistant_events</code>·<code>user_turns</code>·토큰 4종·<code>billed_tokens</code>·<code>estimated_cost_usd</code>·<code>by_model</code></td><td>{meta, data}</td></tr>
 <tr><td>GET</td><td><code>/v1/sessions/{session_id}/metrics</code></td><td>on-demand behavioral metrics (<code>SessionMetrics</code> — count만, 저장 없음)</td><td>{data}</td></tr>
@@ -82,8 +83,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       "rules_seen": [],
       "any_unredacted_sensitive": false
     },
-    "generated_at": "2026-06-10T03:00:00Z",
-    "next_cursor": null
+    "generated_at": "2026-06-10T03:00:00Z"
   },
   "data": { ... }
 }</code></pre>
@@ -97,12 +97,14 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 </ul>
 </section>
 <section id="filters"><h2><span class="num">04</span>Filtering and Pagination</h2>
-<div class="callout"><strong>session events window:</strong> <code>GET /v1/sessions/:id/events</code>의 <em>no-cursor</em> 초기 window는 raw 최신순이 아니라 <strong>렌더되는 event 기준 conversation-anchored</strong>(<code>[limit번째 최신 렌더 event, 최신 렌더 event]</code> 범위, 사이 텔레메트리 포함)다 — 텔레메트리 버스트로 끝나는 세션의 빈-화면 방지. 디테일용 <strong>on-demand 상관 조회 파라미터</strong> <code>?tool_use_id=…</code> / <code>?request_id=…</code>를 지원한다(payload의 correlation 키로 텔레메트리 반환, cursor 없는 targeted 응답). 설계 근거: <a href="implementation-notes.html#conversation-anchored-window"><code>implementation-notes.html#conversation-anchored-window</code></a>.</div>
+<div class="callout"><strong>session events window:</strong> <code>GET /v1/sessions/:id/events</code>의 <em>no-cursor</em> 초기 window는 raw 최신순이 아니라 <strong>렌더되는 event 기준 conversation-anchored</strong>(<code>[limit번째 최신 렌더 event, 최신 렌더 event]</code> 범위, 사이 텔레메트리 포함)다 — 텔레메트리 버스트로 끝나는 세션의 빈-화면 방지. 디테일용 <strong>on-demand 상관 조회 파라미터</strong> <code>?tool_use_id=…</code> / <code>?request_id=…</code>를 지원한다(payload의 correlation 키로 텔레메트리 반환, cursor 없는 targeted 응답). 설계 근거: <a href="implementation-notes.html#conversation-anchored-window"><code>implementation-notes.html#conversation-anchored-window</code></a>. <strong>미지원 쿼리 파라미터는 400으로 거부된다</strong>(dogfood 2026-06-12 — silent drop이 분석 오판을 유발했던 사례에서 잠금; <code>/v1/sessions</code>·<code>/v1/sessions/:id/events</code> 적용).</div>
 <table><thead><tr><th>Parameter</th><th>Applies to</th><th>Example / 의미</th></tr></thead><tbody>
 <tr><td><code>limit</code></td><td><code>/v1/sessions</code></td><td><code>?limit=10</code> — 1~5000으로 clamp, 기본 500</td></tr>
+<tr><td><code>project</code></td><td><code>/v1/sessions</code></td><td><code>?project=/abs/path</code> — 해당 경로를 <code>cwd</code>로 가진 event가 1개 이상인 세션만 (trailing slash 무시). session-retrospect 스킬의 "이 프로젝트의 세션" 식별용 (dogfood 2026-06-12)</td></tr>
 <tr><td><code>limit</code></td><td><code>/v1/sessions/:id/events</code></td><td>기본 500 — <strong>렌더되는 event 수</strong> 기준으로 1~1000 clamp. window가 실어오는 raw 행 수에는 별도 상한 5000이 적용된다 (텔레메트리 밀집 구간 보호)</td></tr>
 <tr><td><code>before</code> / <code>after</code></td><td><code>/v1/sessions/:id/events</code></td><td>cursor 페이징. cursor 포맷은 <code>&lt;observed_at_rfc3339&gt;|&lt;event_id&gt;</code>. 응답의 <code>prev_cursor</code>/<code>next_cursor</code>를 그대로 전달. <code>next_cursor: null</code>은 live tip 도달을 의미 — 이후 갱신은 SSE로</td></tr>
 <tr><td><code>around</code></td><td><code>/v1/sessions/:id/events</code></td><td><code>?around=&lt;event_id&gt;</code> — 해당 event를 <strong>포함하는</strong> window 반환(전 <code>(limit-1)/2</code> + 본인 + 후 나머지, 세션 경계에서 clamp). replay 딥링크(<code>?selected=</code>)가 cursor 없이 event_id만 가질 때 사용. event가 세션에 없으면 <code>404 RESOURCE_NOT_FOUND</code>. <code>before</code>/<code>after</code>보다 우선하며 응답의 <code>prev_cursor</code>/<code>next_cursor</code>로 이후 페이징 가능</td></tr>
+<tr><td><code>kind</code></td><td><code>/v1/sessions/:id/events</code></td><td><code>?kind=tool_call</code> 또는 CSV <code>?kind=user_message,tool_call</code> — EventKind snake_case 이름으로 필터된 cursor window. 미지의 kind는 <code>400 INVALID_KIND</code>. <code>around</code>/<code>tool_use_id</code>/<code>request_id</code>와 조합 불가(<code>400 INVALID_PARAMS</code>). 필터 window의 <code>next_cursor: null</code>은 <em>해당 kind 스트림의</em> tip 의미 (dogfood 2026-06-12)</td></tr>
 <tr><td><code>tool_use_id</code></td><td><code>/v1/sessions/:id/events</code></td><td><code>?tool_use_id=toolu_…</code> — payload에 해당 correlation 키를 가진 event들을 반환 (cursor 없는 targeted 응답, 디테일 패널용)</td></tr>
 <tr><td><code>request_id</code></td><td><code>/v1/sessions/:id/events</code></td><td><code>?request_id=req_…</code> — 위와 동일한 on-demand 상관 조회</td></tr>
 <tr><td><code>last_event_id</code></td><td><code>/v1/stream</code></td><td><code>?last_event_id=…</code> 또는 <code>Last-Event-ID</code> 헤더 — SSE 재연결 backfill cursor</td></tr>
@@ -124,10 +126,11 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 whats-in-my-cc://file-lineage/{session_id}
 whats-in-my-cc://otel/traces/{trace_id}</code></pre>
 <p class="muted"><code>resources/list</code>는 저장된 세션들을 <code>whats-in-my-cc://sessions/{session_id}</code> URI로 나열한다. 위 3개 template 외 패턴은 인식되지 않는다.</p>
-<h3>Read-only tool catalog <span class="pill green">4종 — src/api/mcp/tools/</span></h3><table><thead><tr><th>Tool</th><th>Input (required <strong>굵게</strong>)</th><th>Output</th><th>Mutates?</th></tr></thead><tbody>
-<tr><td><code>whats_in_my_cc.search_sessions</code></td><td><code>limit</code> (integer, 기본 20)</td><td>최근 로컬 관측 세션 요약 목록</td><td>No</td></tr>
+<h3>Read-only tool catalog <span class="pill green">5종 — src/api/mcp/tools/</span></h3><table><thead><tr><th>Tool</th><th>Input (required <strong>굵게</strong>)</th><th>Output</th><th>Mutates?</th></tr></thead><tbody>
+<tr><td><code>whats_in_my_cc.search_sessions</code></td><td><code>limit</code> (integer, 기본 20), <code>project</code> (string — cwd 일치 프로젝트 필터)</td><td>최근 로컬 관측 세션 요약 목록</td><td>No</td></tr>
 <tr><td><code>whats_in_my_cc.get_file_lineage</code></td><td><strong><code>session_id</code></strong>, <strong><code>file_path</code></strong></td><td>해당 파일의 diff-hunk lineage</td><td>No</td></tr>
 <tr><td><code>whats_in_my_cc.get_otel_trace</code></td><td><strong><code>trace_id</code></strong> (hex)</td><td>trace의 OTel span 목록</td><td>No</td></tr>
+<tr><td><code>whats_in_my_cc.get_session_turns</code></td><td><strong><code>session_id</code></strong></td><td>턴 단위 결정론 집계 — <code>/v1/sessions/:id/turns</code>와 동일 rollup</td><td>No</td></tr>
 <tr><td><code>whats_in_my_cc.list_detectors</code></td><td>(없음)</td><td>detector manifest catalog — <code>/v1/detectors</code>와 동일 내용</td><td>No</td></tr>
 </tbody></table>
 <div class="callout"><strong>tool 출력 형식:</strong> 모든 tool 결과는 JSON을 직렬화한 단일 <code>text</code> content block으로 래핑된다. 오류는 <code>isError: true</code> + 메시지 text.</div>
@@ -191,6 +194,9 @@ GET /v1/sessions/sess_123/usage
 GET /v1/sessions/sess_123/metrics
 GET /v1/sessions/sess_123/signals
 GET /v1/sessions/sess_123/verification-runs
+GET /v1/sessions/sess_123/turns                            # 턴 집계 (dogfood 2026-06-12)
+GET /v1/sessions?project=/Users/me/projects/foo            # 프로젝트→세션 매핑
+GET /v1/sessions/sess_123/events?kind=user_message,tool_call&limit=100
 GET /v1/usage/baseline
 GET /v1/detectors
 GET /v1/events/01JX9ZD1…/raw
@@ -199,6 +205,8 @@ GET /v1/stream                                # SSE (curl -N)
 # MCP examples
 read_resource("whats-in-my-cc://sessions/sess_123")
 call_tool("whats_in_my_cc.search_sessions", { "limit": 5 })
+call_tool("whats_in_my_cc.search_sessions", { "project": "/Users/me/projects/foo" })
+call_tool("whats_in_my_cc.get_session_turns", { "session_id": "sess_123" })
 call_tool("whats_in_my_cc.get_file_lineage", { "session_id": "sess_123", "file_path": "src/service.ts" })
 call_tool("whats_in_my_cc.get_otel_trace", { "trace_id": "a1b2c3…" })
 call_tool("whats_in_my_cc.list_detectors", {})</code></pre>
