@@ -834,6 +834,34 @@ pub async fn session_metrics(
     }
 }
 
+/// `GET /v1/sessions/:id/fingerprint` — 세션 환경 fingerprint (on-demand).
+///
+/// 자기개선 루프의 독립변수 표면: 이 세션이 어떤 모델·CC 버전·branch·
+/// instruction(CLAUDE.md 해시) 아래에서 돌았는가. 관측 값만 — 판단 필드 없음.
+pub async fn session_fingerprint(
+    State(pool): State<SqlitePool>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    if let Err(gone) = tombstone_gate(&pool, &id, "session", "session").await {
+        return gone.into_response();
+    }
+    match crate::insight::fingerprint::compute_session_fingerprint(&pool, &id).await {
+        Ok(f) => Json(Envelope {
+            meta: ResponseMeta::now(),
+            data: f,
+        })
+        .into_response(),
+        Err(err) => {
+            tracing::error!(session_id = %id, err = %err, "session_fingerprint failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Plan 1 — Signal endpoints (replaces the slice-14 finding endpoints)
 // ---------------------------------------------------------------------------
