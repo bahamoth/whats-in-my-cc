@@ -11,6 +11,7 @@ use sqlx::SqlitePool;
 
 pub mod get_file_lineage;
 pub mod get_otel_trace;
+pub mod get_project_metrics;
 pub mod get_session_turns;
 pub mod list_detectors;
 pub mod search_sessions;
@@ -75,6 +76,19 @@ fn get_session_turns_schema() -> Value {
     })
 }
 
+fn get_project_metrics_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "project": { "type": "string", "description": "Project root path filter (same semantics as search_sessions.project)" },
+            "from": { "type": "string", "description": "RFC3339 — only sessions whose first observed event is at or after this time" },
+            "to": { "type": "string", "description": "RFC3339 — only sessions whose first observed event is at or before this time" },
+            "limit": { "type": "integer", "default": 50, "description": "Max sessions returned (newest first, max 200; matched_count reports pre-truncation total)" }
+        },
+        "required": []
+    })
+}
+
 fn list_detectors_schema() -> Value {
     json!({
         "type": "object",
@@ -108,6 +122,11 @@ pub fn tools_list_response() -> Value {
                 "inputSchema": get_session_turns_schema()
             },
             {
+                "name": "whats_in_my_cc.get_project_metrics",
+                "description": "Cross-session deterministic metrics series: per-session behavioral counts (SessionMetrics) plus environment fingerprint (models, cc_versions, git_branches, claude_md instruction hashes, instruction_sha256). Group sessions by fingerprint to compare before/after a harness or prompt change. Counts and observations only — rates and judgments are the caller's.",
+                "inputSchema": get_project_metrics_schema()
+            },
+            {
                 "name": "whats_in_my_cc.list_detectors",
                 "description": "Return the manifest catalog for all registered detectors (spec §6.4). Each manifest describes what the detector detects, which raw payload fields it reads, by what rule, and why. Use this before proposing config changes or new detectors.",
                 "inputSchema": list_detectors_schema()
@@ -123,6 +142,7 @@ pub async fn dispatch(name: &str, args: &Value, pool: &SqlitePool) -> Value {
         "whats_in_my_cc.get_file_lineage" => get_file_lineage::call(args, pool).await,
         "whats_in_my_cc.get_otel_trace" => get_otel_trace::call(args, pool).await,
         "whats_in_my_cc.get_session_turns" => get_session_turns::call(args, pool).await,
+        "whats_in_my_cc.get_project_metrics" => get_project_metrics::call(args, pool).await,
         "whats_in_my_cc.list_detectors" => list_detectors::call(args, pool).await,
         _ => tool_error(format!("unknown tool: {name}")),
     }

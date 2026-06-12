@@ -73,6 +73,33 @@
       }
     },
     {
+      "name": "whats_in_my_cc.get_project_metrics",
+      "description": "Cross-session deterministic metrics series: per-session behavioral counts (SessionMetrics) plus environment fingerprint (models, cc_versions, git_branches, claude_md instruction hashes, instruction_sha256). Group sessions by fingerprint to compare before/after a harness or prompt change. Counts and observations only — rates and judgments are the caller's.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "Project root path filter (same semantics as search_sessions.project)"
+          },
+          "from": {
+            "type": "string",
+            "description": "RFC3339 — only sessions whose first observed event is at or after this time"
+          },
+          "to": {
+            "type": "string",
+            "description": "RFC3339 — only sessions whose first observed event is at or before this time"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 50,
+            "description": "Max sessions returned (newest first, max 200; matched_count reports pre-truncation total)"
+          }
+        },
+        "required": []
+      }
+    },
+    {
       "name": "whats_in_my_cc.list_detectors",
       "description": "Return the manifest catalog for all registered detectors (spec §6.4). Each manifest describes what the detector detects, which raw payload fields it reads, by what rule, and why. Use this before proposing config changes or new detectors.",
       "inputSchema": {
