@@ -182,3 +182,28 @@ async fn verification_run_detail_returns_410_when_tombstoned() {
         .await;
     r.assert_status(axum::http::StatusCode::NOT_FOUND);
 }
+
+/// Tombstone matching must be kind-scoped: a tombstone written for one
+/// resource class must not 410 a *different* class that happens to share the
+/// id (resource ids are caller-supplied for sessions, so collisions are not
+/// impossible).
+#[tokio::test]
+async fn tombstone_of_other_kind_does_not_gate() {
+    let (server, pool, token) = build_auth_server_with_pool().await;
+    tombstone(&pool, "shared_id", "signal").await;
+
+    // session gate must ignore the signal tombstone → 404, not 410.
+    let r = server
+        .get("/v1/sessions/shared_id")
+        .add_header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
+        .await;
+    r.assert_status(axum::http::StatusCode::NOT_FOUND);
+
+    // and the signal handler must ignore a session tombstone.
+    tombstone(&pool, "shared_id2", "session").await;
+    let r = server
+        .get("/v1/signals/shared_id2")
+        .add_header(axum::http::header::AUTHORIZATION, format!("Bearer {token}"))
+        .await;
+    r.assert_status(axum::http::StatusCode::NOT_FOUND);
+}

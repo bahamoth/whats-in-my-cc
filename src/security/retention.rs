@@ -9,9 +9,13 @@
 //!   `ingest --all` replay cannot resurrect expired content. Tombstone per
 //!   scrubbed payload → `/v1/events/:id/raw` answers 410.
 //! - **normalized + insight** — session granularity ("delete by session",
-//!   docs/05): a session whose newest `observed_at` is older than the
-//!   normalized cutoff loses its observed_event / diff_hunk / verification_run
-//!   / usage_facet / signal rows. Tombstones: the session id, every signal id,
+//!   docs/05): a session whose newest *activity* timestamp (`observed_at` of
+//!   observed_event/usage_facet, `started_at` of verification_run) is older
+//!   than the normalized cutoff loses its observed_event / diff_hunk /
+//!   verification_run / usage_facet / signal rows — including sessions that
+//!   exist only in side tables. Ingest-time `created_at` columns are not
+//!   consulted (re-ingest must not extend retention).
+//!   Tombstones: the session id, every signal id,
 //!   every verification_run id. (Per-event tombstones are deliberately not
 //!   written — a session can hold 10k+ events and tombstones live forever,
 //!   DEV-S19-04; expired events answer 404, the session id answers 410.)
@@ -192,9 +196,17 @@ pub async fn run_sweep(pool: &SqlitePool, policy: &RetentionPolicy) -> Result<Sw
     // ---- normalized + insight: session granularity -----------------------
     if let Some(days) = policy.profile.normalized_event_days() {
         let cutoff = cutoff_rfc3339(now, days);
+        // Candidates come from every table carrying a *session-activity*
+        // timestamp, so side-table rows whose session has no observed_event
+        // (partially ingested data) still expire. `signal.created_at` /
+        // `diff_hunk.created_at` are deliberately excluded: they are ingest
+        // time, and re-ingest (routine here) would reset retention forever.
         let sessions: Vec<(String,)> = sqlx::query_as(
-            "SELECT session_id FROM observed_event \
-             GROUP BY session_id HAVING MAX(observed_at) < ?",
+            "SELECT session_id FROM (\
+                 SELECT session_id, observed_at AS ts FROM observed_event \
+                 UNION ALL SELECT session_id, started_at FROM verification_run \
+                 UNION ALL SELECT session_id, observed_at FROM usage_facet\
+             ) GROUP BY session_id HAVING MAX(ts) < ?",
         )
         .bind(&cutoff)
         .fetch_all(&mut *tx)

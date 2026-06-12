@@ -460,6 +460,77 @@ async fn audit_rows_older_than_window_are_deleted() {
     assert_eq!(new, 1);
 }
 
+/// A session can exist only in side tables (no observed_event rows) — e.g.
+/// partially ingested historical data. Expiry must be judged by
+/// session-activity timestamps (`verification_run.started_at`,
+/// `usage_facet.observed_at`), and such sessions must still be swept.
+/// `signal.created_at` is ingest time, NOT session activity — it must not
+/// keep the session alive (re-ingest is routine and would otherwise reset
+/// retention forever). The signal row here keeps its DEFAULT (= now) to lock
+/// exactly that.
+#[tokio::test]
+async fn orphan_session_without_observed_events_is_swept() {
+    let pool = test_pool().await;
+    sqlx::query(
+        "INSERT INTO verification_run (verification_run_id, session_id, source, command, command_kind, trigger_event_id, status, started_at, raw_event_id, parser_version)
+         VALUES ('vr_orphan', 'sess_orphan', 'bash', 'cargo test', 'test_suite_rust', 'ev_gone', 'passed', datetime('now', '-200 days'), 'raw_gone', 'test')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO usage_facet (raw_event_id, session_id, observed_at, parser_version)
+         VALUES ('raw_orphan_uf', 'sess_orphan', datetime('now', '-200 days'), 'test')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO signal (signal_id, session_id, detector, summary, evidence_refs, facts, provenance)
+         VALUES ('sig_orphan', 'sess_orphan', 'd_test', 'orphan', '[]', '{}', '{}')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let p = RetentionPolicy {
+        profile: Profile::Default,
+    };
+    let report = wimcc::security::retention::run_sweep(&pool, &p)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        report.deletions.get("session").copied().unwrap_or(0),
+        1,
+        "orphan session must be selected for expiry"
+    );
+    for table in ["verification_run", "usage_facet", "signal"] {
+        let n: i64 = count(
+            &pool,
+            &format!("SELECT COUNT(*) FROM {table} WHERE session_id = ?"),
+            "sess_orphan",
+        )
+        .await;
+        assert_eq!(n, 0, "{table}: orphan session rows must be deleted");
+    }
+    for (id, kind) in [
+        ("sess_orphan", "session"),
+        ("sig_orphan", "signal"),
+        ("vr_orphan", "verification_run"),
+    ] {
+        let n: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM retention_tombstone WHERE resource_id = ? AND resource_kind = ?",
+        )
+        .bind(id)
+        .bind(kind)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(n, 1, "{kind} {id} should be tombstoned");
+    }
+}
+
 #[tokio::test]
 async fn sweep_writes_audit_row() {
     let pool = test_pool().await;
