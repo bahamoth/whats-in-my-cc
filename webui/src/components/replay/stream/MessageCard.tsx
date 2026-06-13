@@ -1,5 +1,8 @@
 // webui/src/components/replay/stream/MessageCard.tsx
-import { User, Bot, BrainCog, Lightbulb, CornerDownRight, Info } from 'lucide-react';
+import { useState } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { User, Bot, BrainCog, Lightbulb, CornerDownRight, Info, Code2, Type } from 'lucide-react';
 import type { MessageItem } from './streamModel';
 import { formatModel } from './nodeLabel';
 import styles from './MessageCard.module.css';
@@ -18,6 +21,14 @@ interface MessageCardProps {
 }
 
 export function MessageCard({ item, selected, onSelect, hasFinding = false }: MessageCardProps) {
+  // Markdown view mode. Assistant/system output is authored AS markdown →
+  // styled by default; user prompts and thinking are literal text where `_`/`*`
+  // are usually paths or emphasis-by-accident → raw by default. The per-card
+  // toggle flips either way (원본 보기 ↔ 스타일 보기).
+  const defaultStyled = item.role === 'assistant' || item.role === 'system';
+  const [styledOverride, setStyledOverride] = useState<boolean | null>(null);
+  const styled = styledOverride ?? defaultStyled;
+
   // A sidechain user_message is the orchestrator's prompt to a Task subagent —
   // not human input. It renders left, labelled "Prompt", inside a SubagentGroup.
   const isSubagentPrompt = item.role === 'user' && item.sidechain;
@@ -91,10 +102,26 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
             className={styles.finding}
           />
         )}
+        <button
+          data-testid="md-toggle"
+          className={styles.mdToggle}
+          aria-label={styled ? '원본 보기' : '마크다운 보기'}
+          title={styled ? '원본 보기' : '마크다운 보기'}
+          onClick={(e) => {
+            e.stopPropagation();
+            setStyledOverride(!styled);
+          }}
+        >
+          {styled ? <Code2 size={12} aria-hidden /> : <Type size={12} aria-hidden />}
+        </button>
         <span className={styles.time}>{timeLabel(item.timestamp)}</span>
       </div>
-      <div className={`${styles.bubble} ${bubbleClass}`}>
-        {item.text}
+      <div
+        data-testid="message-bubble"
+        data-mode={styled ? 'styled' : 'raw'}
+        className={`${styles.bubble} ${bubbleClass} ${styled ? styles.markdown : ''}`}
+      >
+        {styled ? <Markdown remarkPlugins={[remarkGfm]}>{item.text}</Markdown> : item.text}
       </div>
     </div>
   );
