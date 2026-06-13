@@ -281,6 +281,15 @@ export function buildStreamModel(
     if (scBuf && scBuf.length) {
       const meta = scAgent ? metaByAgent.get(scAgent) ?? null : null;
       const taskEventId = meta?.toolUseId ? callEventByUse.get(meta.toolUseId) ?? null : null;
+      // Conclusion = the agent's LAST non-empty assistant_message (the design's
+      // observed invariant: every sidechain agent ends on an assistant_message).
+      // Truncated to a one-line preview length for the collapsed summary row.
+      let conclusion: string | null = null;
+      for (const it of scBuf) {
+        if (it.type === 'message' && it.role === 'assistant' && it.text.trim()) {
+          conclusion = it.text.trim().slice(0, 200);
+        }
+      }
       items.push({
         type: 'sidechain-group',
         id: `sc-${scFirstId}`,
@@ -288,7 +297,7 @@ export function buildStreamModel(
         agentType: meta?.agentType ?? (scAgent ? attributionByAgent.get(scAgent) ?? null : null),
         description: meta?.description ?? null,
         taskEventId,
-        conclusion: null,
+        conclusion,
         items: scBuf,
       });
     }
