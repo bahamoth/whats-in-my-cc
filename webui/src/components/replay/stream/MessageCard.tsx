@@ -2,8 +2,9 @@
 import { useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { User, Bot, BrainCog, Lightbulb, CornerDownRight, Info, Code2, Type } from 'lucide-react';
+import { User, Bot, BrainCog, Lightbulb, CornerDownRight, Info, Code2, Type, Terminal, Sparkles } from 'lucide-react';
 import type { MessageItem } from './streamModel';
+import { userDisplayText } from './messageOrigin';
 import { formatModel } from './nodeLabel';
 import styles from './MessageCard.module.css';
 
@@ -37,39 +38,58 @@ interface MessageCardProps {
 }
 
 export function MessageCard({ item, selected, onSelect, hasFinding = false }: MessageCardProps) {
-  // Markdown view mode. Assistant/system output is authored AS markdown →
-  // styled by default; user prompts and thinking are literal text where `_`/`*`
-  // are usually paths or emphasis-by-accident → raw by default. The per-card
-  // toggle flips either way (원본 보기 ↔ 스타일 보기).
-  const defaultStyled = item.role === 'assistant' || item.role === 'system';
-  const [styledOverride, setStyledOverride] = useState<boolean | null>(null);
-  const styled = styledOverride ?? defaultStyled;
-
-  // Long messages (huge prompts, pasted logs) collapse to a fixed height with
-  // a 더 보기/접기 control so one card cannot swallow the whole stream.
-  const clampable = isClampable(item.text);
-  const [clampOpen, setClampOpen] = useState(false);
-  const clamped = clampable && !clampOpen;
-
   // A sidechain user_message is the orchestrator's prompt to a Task subagent —
   // not human input. It renders left, labelled "Prompt", inside a SubagentGroup.
   const isSubagentPrompt = item.role === 'user' && item.sidechain;
   const isRight = item.role === 'user' && !item.sidechain;
   const align = isRight ? 'right' : 'left';
 
+  // Caller classification only applies to a non-sidechain user record. CC folds
+  // typed input + invoked command/skill scaffolding + command output into
+  // type:"user" — all user-ORIGINATED, so all stay on the user side; the origin
+  // only changes the label/chip/icon and whether the injected body collapses, so
+  // it never masquerades as the words the user actually typed.
+  const userOrigin = (isRight ? item.origin : 'human') ?? 'human';
+  const isScaffold = userOrigin !== 'human';
+
+  // Rendered body: strip <command-*>/<local-command-*> scaffolding to a clean
+  // line for command/output records; verbatim otherwise.
+  const displayText = isRight
+    ? userDisplayText(userOrigin, item.text, item.commandName ?? null)
+    : item.text;
+
+  // Markdown view mode. Assistant/system output is authored AS markdown →
+  // styled by default; user prompts, scaffolding and thinking are literal text
+  // where `_`/`*` are usually paths or emphasis-by-accident → raw by default.
+  const defaultStyled = item.role === 'assistant' || item.role === 'system';
+  const [styledOverride, setStyledOverride] = useState<boolean | null>(null);
+  const styled = styledOverride ?? defaultStyled;
+
+  // Long messages (huge prompts, pasted logs) collapse to a fixed height with a
+  // 더 보기/접기 control so one card cannot swallow the whole stream. Injected
+  // skill bodies / command output collapse BY DEFAULT regardless of length —
+  // they are reference, not conversation.
+  const forceCollapse = userOrigin === 'skill' || userOrigin === 'command-output';
+  const clampable = forceCollapse || isClampable(displayText);
+  const [clampOpen, setClampOpen] = useState(false);
+  const clamped = clampable && !clampOpen;
+
   let Icon: typeof User;
   let label: string;
   let bubbleClass: string;
 
-  // Origin chip — surfaces who produced this message: a human, a subagent, or
-  // the model. A non-sidechain user bubble is now only genuine human input —
-  // buildStreamModel routes command/skill/output scaffolding (markers / isMeta)
-  // to the activity stack — so this says "human", not the old hardcoded
-  // "external" (which was a string unrelated to transcript userType).
+  // Origin chip — surfaces who produced this record: typed by a human, a
+  // command/skill the user invoked, command output, a subagent prompt, or the
+  // model. Replaces the old hardcoded "external" (a string unrelated to the
+  // transcript's userType).
   const sourceTag = isSubagentPrompt
     ? 'subagent'
     : item.role === 'user'
-    ? 'human'
+    ? userOrigin === 'human'
+      ? 'human'
+      : userOrigin === 'command-output'
+      ? 'command'
+      : userOrigin // 'command' | 'skill' | 'system'
     : item.role === 'system'
     ? 'system'
     : 'agent';
@@ -78,6 +98,18 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
     Icon = CornerDownRight;
     label = 'Prompt';
     bubbleClass = styles.subagentBubble;
+  } else if (item.role === 'user' && isScaffold) {
+    // user-invoked command / injected skill body / command output / interrupt.
+    Icon = userOrigin === 'skill' ? Sparkles : userOrigin === 'system' ? Info : Terminal;
+    label =
+      userOrigin === 'command'
+        ? (item.commandName ?? 'Command')
+        : userOrigin === 'skill'
+        ? 'Skill'
+        : userOrigin === 'command-output'
+        ? 'Command output'
+        : 'System';
+    bubbleClass = styles.metaBubble;
   } else if (item.role === 'user') {
     Icon = User;
     label = 'You';
@@ -102,6 +134,7 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
     <div
       data-testid="message-card"
       data-role={item.role}
+      {...(isRight ? { 'data-origin': userOrigin } : {})}
       data-align={align}
       data-selected={String(selected)}
       role="button"
@@ -146,7 +179,7 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
         {...(clampable ? { 'data-clamped': String(clamped) } : {})}
         className={`${styles.bubble} ${bubbleClass} ${styled ? styles.markdown : ''} ${clamped ? styles.clamped : ''}`}
       >
-        {styled ? <Markdown remarkPlugins={[remarkGfm]}>{item.text}</Markdown> : item.text}
+        {styled ? <Markdown remarkPlugins={[remarkGfm]}>{displayText}</Markdown> : displayText}
       </div>
       {clampable && (
         <button

@@ -36,27 +36,30 @@ describe('buildStreamModel', () => {
     expect(msgs.map((m: any) => m.text)).toEqual(['질문1', '질문2']);
   });
 
-  it('excludes empty and scaffolding user messages from first-class cards', () => {
+  it('drops empty user messages but keeps command/skill scaffolding as user-side messages tagged by origin (not activity, not "You")', () => {
     const items = buildStreamModel([
       ev({ event_id: 'a', kind: 'user_message', payload: { text: '' } }),
       ev({ event_id: 'b', kind: 'user_message', payload: { content: '<command-name>/clear</command-name>' } }),
       ev({ event_id: 'c', kind: 'user_message', payload: { content: 'Base directory for this skill: /x' } }),
     ]);
-    expect(items.filter((i) => i.type === 'message')).toHaveLength(0);
-    expect(items.some((i) => i.type === 'activity-run')).toBe(true);
+    const msgs = items.filter((i) => i.type === 'message') as any[];
+    // empty dropped; command + skill remain as USER-SIDE messages (user-invoked),
+    // never relocated to the agent/activity side.
+    expect(msgs.map((m) => m.origin)).toEqual(['command', 'skill']);
+    expect(msgs.map((m) => m.role)).toEqual(['user', 'user']);
+    expect(items.some((i) => i.type === 'activity-run')).toBe(false);
   });
 
-  it('does NOT render isMeta:true injected text as a human user bubble (caller gap)', () => {
+  it('isMeta:true injected text is a user-side message tagged origin=skill, never human "You" (caller gap)', () => {
     // Real leak: a skill/command body injected as type:"user" + isMeta:true has
-    // no command marker, so it used to fall through to a "You" message card.
+    // no command marker, so it used to fall through to a "You" human bubble.
     const items = buildStreamModel([
       ev({ event_id: 'h', kind: 'user_message', payload: { content: '진짜 사람 질문' } }),
       ev({ event_id: 'm', kind: 'user_message', is_meta: true, payload: { content: 'Review the PR thoroughly...' } }),
     ]);
-    const msgs = items.filter((i) => i.type === 'message');
-    expect(msgs).toHaveLength(1);
-    expect((msgs[0] as any).text).toBe('진짜 사람 질문');
-    expect(items.some((i) => i.type === 'activity-run')).toBe(true);
+    const msgs = items.filter((i) => i.type === 'message') as any[];
+    expect(msgs.map((m) => m.origin)).toEqual(['human', 'skill']);
+    expect(msgs[0].text).toBe('진짜 사람 질문');
   });
 
   it('keeps readable thinking as a message; redacted thinking becomes a selectable thinking marker (not activity)', () => {

@@ -126,6 +126,18 @@
   border-bottom-left-radius: 3px;
 }
 
+/* user-side scaffolding (command invocation / injected skill body / command
+ * output / interrupt): stays on the USER side (the user triggered it) but is
+ * muted — not the bright "typed by me" accent — with a right rail so it reads
+ * as "you invoked this", clearly distinct from prose the user actually typed. */
+.metaBubble {
+  background: var(--wimcc-surface-1, #11141b);
+  color: var(--wimcc-fg-muted, #aab0bd);
+  border-right: 2px solid var(--wimcc-fg-subtle, #6a7180);
+  border-radius: 4px;
+  border-bottom-right-radius: 3px;
+}
+
 /* system_summary: left, muted surface with an accent rail — a CC work recap */
 .systemBubble {
   background: var(--wimcc-surface-1, #11141b);
