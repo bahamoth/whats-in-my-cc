@@ -1,6 +1,7 @@
 /* webui/src/components/replay/stream/SubagentGroup.module.css
  * One Task-subagent exchange, indented + accented so it is visually nested
- * under (and distinct from) the main conversation. */
+ * under (and distinct from) the main conversation. Collapsible: the header is
+ * a one-line overview (agent chip, prompt preview, counts, duration). */
 
 .group {
   margin: 8px 0 8px 24px;
@@ -12,10 +13,26 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
+  width: 100%;
+  padding: 4px 6px 4px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
   font-size: 11px;
   font-weight: 600;
   color: var(--wimcc-lane-context, #b07dff);
+  border-radius: 4px;
+}
+
+.header:hover {
+  background: var(--wimcc-surface-2, #161a23);
+}
+
+.chevron {
+  flex: none;
+  color: var(--wimcc-fg-subtle, #6a7180);
 }
 
 .icon {
@@ -23,7 +40,47 @@
 }
 
 .label {
+  flex: none;
   font-weight: 600;
+}
+
+/* short agent_id chip — ties interleaved parallel dispatches to one identity */
+.agentChip {
+  flex: none;
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-weight: 400;
+  color: var(--wimcc-lane-context, #b07dff);
+  background: var(--wimcc-surface-3, #1b202a);
+  border: 1px solid var(--wimcc-border, #1d212c);
+}
+
+/* first line of the dispatched prompt — the group's human-readable identity */
+.preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  color: var(--wimcc-fg-muted, #aab0bd);
+}
+
+.meta {
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+  color: var(--wimcc-fg-subtle, #6a7180);
+}
+
+.duration {
+  font-variant-numeric: tabular-nums;
 }
 
 /* flex column so the inner MessageCards' alignment (align-self / margin) works */
