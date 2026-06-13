@@ -1,0 +1,123 @@
+/* webui/src/components/replay/stream/BatchGroup.module.css
+ * One parallel-dispatch batch — a TEAL-railed container that wraps its parallel
+ * sibling SubagentGroups into a single chronological slot. The teal identity
+ * (--wimcc-lane-hook) separates a batch container from the human blue accent
+ * and the violet scaffold/context rail, so "these ran in parallel" reads
+ * distinctly from "you said this" / "injected context". */
+
+.group {
+  margin: 8px 0 8px 24px;
+  padding-left: 10px;
+  border-left: 2px solid var(--wimcc-lane-hook, #2bd0d0);
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 4px 6px 4px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--wimcc-lane-hook, #2bd0d0);
+  border-radius: 4px;
+}
+
+.header:hover {
+  background: var(--wimcc-surface-2, #161a23);
+}
+
+.chevron {
+  flex: none;
+  color: var(--wimcc-fg-subtle, #6a7180);
+}
+
+.icon {
+  flex: none;
+}
+
+/* "병렬 배치" identity pill — the strongest batch marker */
+.chip {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--wimcc-lane-hook, #2bd0d0);
+  background: var(--wimcc-surface-3, #1b202a);
+  border: 1px solid var(--wimcc-lane-hook, #2bd0d0);
+}
+
+.meta {
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+  color: var(--wimcc-fg-subtle, #6a7180);
+}
+
+.status {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--wimcc-fg-muted, #aab0bd);
+}
+
+.duration {
+  font-variant-numeric: tabular-nums;
+}
+
+/* shared long-running heat tiers (durationHeat) */
+.duration[data-heat='warn'] {
+  color: var(--wimcc-warning, #f0b429);
+}
+
+.duration[data-heat='hot'] {
+  color: var(--wimcc-danger, #ef4747);
+  font-weight: 600;
+}
+
+/* synthesis (종합 결과) — lifted to the L0 line so the batch outcome is
+   visible without expanding. "진행 중" until the main-thread synthesis lands. */
+.synthesis {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 2px 0 4px 19px;
+  font-size: 11px;
+  color: var(--wimcc-fg-muted, #aab0bd);
+}
+
+.synthesisLabel {
+  flex: none;
+  font-weight: 600;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--wimcc-lane-hook, #2bd0d0);
+}
+
+.synthesisText {
+  min-width: 0;
+}
+
+/* flex column so child SubagentGroups stack and their alignment works */
+.body {
+  display: flex;
+  flex-direction: column;
+}
