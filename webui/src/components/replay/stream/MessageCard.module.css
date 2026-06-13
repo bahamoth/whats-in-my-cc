@@ -130,12 +130,27 @@
  * output / interrupt): stays on the USER side (the user triggered it) but is
  * muted — not the bright "typed by me" accent — with a right rail so it reads
  * as "you invoked this", clearly distinct from prose the user actually typed. */
+/* Quiet non-human origin marker: a faint violet tint + thin violet rail. The
+ * colour itself rides on the origin BADGE (below) — the small chip is the
+ * category marker, so colour there reads as "this is a command/skill", contained
+ * and calm, never shouting importance. The bubble only echoes it faintly. */
 .metaBubble {
-  background: var(--wimcc-surface-1, #11141b);
+  background: var(--wimcc-scaffold-tint, rgba(176, 125, 255, 0.06));
   color: var(--wimcc-fg-muted, #aab0bd);
-  border-right: 2px solid var(--wimcc-fg-subtle, #6a7180);
+  border-right: 2px solid var(--wimcc-scaffold, #b07dff);
   border-radius: 4px;
   border-bottom-right-radius: 3px;
+}
+
+/* Origin colour lives on the badge chip. Scaffold origins only — the human
+ * card also carries data-origin='human' and must stay neutral. */
+[data-origin='command'] .sourceBadge,
+[data-origin='command-output'] .sourceBadge,
+[data-origin='skill'] .sourceBadge,
+[data-origin='system'] .sourceBadge {
+  color: var(--wimcc-scaffold, #b07dff);
+  background: rgba(176, 125, 255, 0.14);
+  border-color: rgba(176, 125, 255, 0.34);
 }
 
 /* system_summary: left, muted surface with an accent rail — a CC work recap */

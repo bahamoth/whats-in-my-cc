@@ -40,6 +40,14 @@
   --wimcc-danger: #ef4747;
   --wimcc-info: #7da7ff;
 
+  /* Command/skill scaffolding the user invoked (not typed). A violet identity
+     (matches lane-context: this IS injected context), hue-separated from the
+     human accent (blue) so "you invoked this" never reads as "you said this".
+     Kept QUIET — a faint tint + thin rail, not a loud accent: the goal is only
+     to mark non-human origin, not to imply importance. */
+  --wimcc-scaffold: #b07dff;
+  --wimcc-scaffold-tint: rgba(176, 125, 255, 0.06);
+
   /* Lane / node_kind palette — driven by PR-4 Waterfall.
    * Keep deterministic ↔ light, inferred ↔ dim. */
   --wimcc-lane-intent: #7da7ff;
