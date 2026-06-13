@@ -513,6 +513,11 @@ const scUser = (ag: string, ev: string) =>
   base({ event_id: ev, kind: 'user_message', is_sidechain: true, agent_id: ag, payload: { content: 'prompt' } });
 const scAsst = (ag: string, ev: string, text: string) =>
   base({ event_id: ev, kind: 'assistant_message', is_sidechain: true, agent_id: ag, payload: { text } });
+/** A MAIN-chain tool_call (not an Agent dispatch, not sidechain) that arrives
+ *  WHILE the parallel subagents are still running — the interleaving the
+ *  Important review flagged. It must NOT flush the open sidechain buffers. */
+const mainToolCall = (ev: string, tool: string) =>
+  base({ event_id: ev, kind: 'tool_call', tool_name: tool, tool_use_id: ev, payload: { tool_name: tool, input: {} } });
 
 /** All sidechain-groups regardless of whether they sit inside a batch-group. */
 function collectSidechainGroups(items: any[]): any[] {
@@ -616,5 +621,39 @@ describe('buildStreamModel — parallel batch grouping (#13 design 2026-06-13)',
     const items = buildStreamModel(evs);
     expect(items.some((i: any) => i.type === 'batch-group')).toBe(false);
     expect(items.some((i: any) => i.type === 'sidechain-group')).toBe(true);
+  });
+
+  it('병렬 윈도 중 끼어든 main tool_call이 배치를 조각내지 않는다', () => {
+    // anchored: fb6b8e3a — 병렬 윈도(12:33:27~12:36:55) 동안 dispatch 5개 외에
+    // main 체인 tool_call이 서브에이전트 실행 중 끼어든다(12:34:02·04·07,
+    // + hook_event 1개). main의 도구활동은 "main 재개" 신호가 아니므로(메시지가
+    // 신호) 열린 sidechain 버퍼를 flush하면 안 된다 — 그러면 A가 "배치 밖 조각 +
+    // 배치 안 조각"으로 쪼개진다(design §1이 없애려던 증상).
+    const evs = [
+      asstMain('m1', '병렬'),
+      taskCall('m1', 'tcA', 'tuA'),
+      taskCall('m1', 'tcB', 'tuB'),
+      sidecar('A', 'tuA', 'Explore', 'A'),
+      sidecar('B', 'tuB', 'general', 'B'),
+      scAsst('A', 'a1', 'A1'),
+      mainToolCall('mt1', 'Bash'), // ← 병렬 윈도 중 끼어든 main tool_call
+      scAsst('B', 'b1', 'B1'),
+      scAsst('A', 'a2', 'A결론'),
+      scAsst('B', 'b2', 'B결론'),
+      asstMain('m2', '종합'),
+    ];
+    const items = buildStreamModel(evs);
+    // A·B는 각각 한 그룹으로 유지(조각 X), 배치 무결.
+    const groups = collectSidechainGroups(items);
+    expect(groups.filter((g: any) => g.agentId === 'A')).toHaveLength(1);
+    expect(groups.filter((g: any) => g.agentId === 'B')).toHaveLength(1);
+    const batch = items.find((i: any) => i.type === 'batch-group') as any;
+    expect(batch).toBeTruthy();
+    expect(batch.agentGroups).toHaveLength(2);
+    // 끼어든 main tool_call은 자기 activity-run으로 스트림에 존재한다.
+    const mainActs = items.filter(
+      (i: any) => i.type === 'activity-run' && i.events.some((ae: any) => ae.event.event_id === 'mt1'),
+    );
+    expect(mainActs).toHaveLength(1);
   });
 });
