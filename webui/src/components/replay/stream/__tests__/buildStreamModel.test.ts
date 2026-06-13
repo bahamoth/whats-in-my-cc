@@ -466,3 +466,70 @@ describe('buildStreamModel — thinking metrics survive telemetry display-drop (
     expect(beat.metrics.durationMs).toBe(11869);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Parallel batch grouping (design 2026-06-13, sample-1 session
+// fb6b8e3a-2289-4214-884c-0c721a3e3cf5): main dispatches N Agent calls in ONE
+// assistant message; the N subagents run in parallel and their sidechain
+// events arrive interleaved by timestamp. We collect per agent_id globally
+// (de-interleave) and wrap the same-dispatch siblings in a BatchGroup.
+// ---------------------------------------------------------------------------
+
+const base = (over: Partial<ObservedEventDto>): ObservedEventDto =>
+  ({
+    event_id: 'e',
+    session_id: 's',
+    kind: 'assistant_message',
+    actor: 'assistant',
+    observed_at: '2026-06-13T00:00:00.000Z',
+    is_sidechain: false,
+    agent_id: '',
+    message_id: null,
+    turn_id: null,
+    tool_use_id: null,
+    subkind: null,
+    payload: {},
+    ...over,
+  }) as ObservedEventDto;
+const asstMain = (mid: string, text: string) =>
+  base({ event_id: mid, message_id: mid, kind: 'assistant_message', payload: { text } });
+const taskCall = (mid: string, ev: string, tu: string) =>
+  base({ event_id: ev, message_id: mid, kind: 'tool_call', tool_name: 'Agent', tool_use_id: tu });
+const sidecar = (ag: string, tu: string, atype: string, desc: string) =>
+  base({
+    event_id: `meta-${ag}`,
+    kind: 'attachment_meta',
+    subkind: 'subagent_meta',
+    is_sidechain: true,
+    agent_id: ag,
+    tool_use_id: tu,
+    payload: { agentType: atype, description: desc, toolUseId: tu },
+  });
+const scUser = (ag: string, ev: string) =>
+  base({ event_id: ev, kind: 'user_message', is_sidechain: true, agent_id: ag, payload: { content: 'prompt' } });
+const scAsst = (ag: string, ev: string, text: string) =>
+  base({ event_id: ev, kind: 'assistant_message', is_sidechain: true, agent_id: ag, payload: { text } });
+
+describe('buildStreamModel — parallel batch grouping (#13 design 2026-06-13)', () => {
+  it('병렬 형제는 BatchGroup으로 래핑되고 자식은 agent별 SidechainGroup', () => {
+    const evs = [
+      asstMain('m1', '병렬로 2개'), // main assistant
+      taskCall('m1', 'tc-A', 'tu-A'),
+      taskCall('m1', 'tc-B', 'tu-B'),
+      sidecar('A', 'tu-A', 'Explore', '조사 A'),
+      sidecar('B', 'tu-B', 'general', '조사 B'),
+      // 교차 도착
+      scUser('A', 'pA'),
+      scUser('B', 'pB'),
+      scAsst('A', 'a1', 'A 중간'),
+      scAsst('B', 'b1', 'B 중간'),
+      scAsst('A', 'a2', 'A 결론'),
+      scAsst('B', 'b2', 'B 결론'),
+    ];
+    const items = buildStreamModel(evs);
+    const batch = items.find((i: any) => i.type === 'batch-group') as any;
+    expect(batch).toBeTruthy();
+    expect(batch.agentGroups).toHaveLength(2);
+    expect(batch.agentGroups.map((g: any) => g.agentId).sort()).toEqual(['A', 'B']);
+  });
+});
