@@ -54,7 +54,27 @@ export interface SidechainGroup {
   /** subagent attribution of the grouped events; null on pre-0023 ingests
    *  (no agentId in the DTO) where grouping falls back to contiguity only. */
   agentId: string | null;
+  /** Agent type (e.g. "Explore") from the subagent_meta sidecar event, falling
+   *  back to the sidechain assistant payload's attribution_agent. null when
+   *  neither is observed (older ingests / sidecar absent). */
+  agentType: string | null;
+  /** The dispatching Task call's human-readable description from the sidecar.
+   *  Preferred over the prompt's first line as the group's one-line identity. */
+  description: string | null;
+  /** event_id of the main-chain Task tool_call that spawned this agent —
+   *  joined via the sidecar's toolUseId. null when the sidecar is absent or
+   *  the Task call is outside the loaded window (jump unavailable). */
+  taskEventId: string | null;
   items: StreamItem[];
+}
+
+/** Caller linkage harvested from `attachment_meta`/`subagent_meta` sidecar
+ *  events (real layout: `<session>/subagents/agent-<id>.meta.json`, frozen in
+ *  tests/fixtures/.../subagent_sidecar_v01 — sample 1, CC 2.1.176). */
+interface SubagentMeta {
+  agentType: string | null;
+  description: string | null;
+  toolUseId: string | null;
 }
 
 /** One redacted (content-less) thinking event. Claude Code transcripts store
@@ -191,8 +211,31 @@ export function buildStreamModel(
   metricsByReq?: Map<string, LlmRequestMetrics>,
 ): StreamItem[] {
   const resultByUse = new Map<string, ObservedEventDto>();
+  // Caller-linkage prepass: sidecar meta per agent, tool_call event ids per
+  // tool_use_id (jump target lookup), and the attribution_agent fallback from
+  // sidechain assistant payloads (secondary evidence when no sidecar landed).
+  const metaByAgent = new Map<string, SubagentMeta>();
+  const callEventByUse = new Map<string, string>();
+  const attributionByAgent = new Map<string, string>();
   for (const e of events) {
     if (e.kind === 'tool_result' && e.tool_use_id) resultByUse.set(e.tool_use_id, e);
+    if (e.kind === 'tool_call' && e.tool_use_id) callEventByUse.set(e.tool_use_id, e.event_id);
+    const agent = e.agent_id || null;
+    if (!agent) continue;
+    const p = asObj(e.payload);
+    if (e.kind === 'attachment_meta' && e.subkind === 'subagent_meta') {
+      metaByAgent.set(agent, {
+        agentType: typeof p.agentType === 'string' ? p.agentType : null,
+        description: typeof p.description === 'string' ? p.description : null,
+        toolUseId: typeof p.toolUseId === 'string' ? p.toolUseId : null,
+      });
+    } else if (
+      e.kind === 'assistant_message' &&
+      typeof p.attribution_agent === 'string' &&
+      !attributionByAgent.has(agent)
+    ) {
+      attributionByAgent.set(agent, p.attribution_agent);
+    }
   }
 
   const items: StreamItem[] = [];
@@ -207,7 +250,17 @@ export function buildStreamModel(
   let scAgent: string | null = null;
   const closeGroup = () => {
     if (scBuf && scBuf.length) {
-      items.push({ type: 'sidechain-group', id: `sc-${scFirstId}`, agentId: scAgent, items: scBuf });
+      const meta = scAgent ? metaByAgent.get(scAgent) ?? null : null;
+      const taskEventId = meta?.toolUseId ? callEventByUse.get(meta.toolUseId) ?? null : null;
+      items.push({
+        type: 'sidechain-group',
+        id: `sc-${scFirstId}`,
+        agentId: scAgent,
+        agentType: meta?.agentType ?? (scAgent ? attributionByAgent.get(scAgent) ?? null : null),
+        description: meta?.description ?? null,
+        taskEventId,
+        items: scBuf,
+      });
     }
     scBuf = null;
     scAgent = null;

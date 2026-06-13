@@ -318,6 +318,53 @@ describe('buildStreamModel — sidechain agent attribution (agent_id)', () => {
     for (const g of items as any[]) expect(g.items[0].type).toBe('activity-run');
   });
 
+  it('joins subagent_meta sidecar event onto the group: agentType, description, taskEventId', () => {
+    // 실 사이드카(subagent_sidecar_v01 fixture)가 ingest되면 attachment_meta/
+    // subagent_meta 이벤트가 같은 윈도우에 실린다. 그룹은 agent_id로 메타를,
+    // 메타의 toolUseId로 메인 체인 Task tool_call 이벤트를 찾는다(점프 타깃).
+    const items = buildStreamModel([
+      ev({ event_id: 'task1', kind: 'tool_call', actor: 'assistant', tool_use_id: 'toolu_T', tool_name: 'Task',
+        payload: { tool_name: 'Task', input: { description: '조사', prompt: 'p', subagent_type: 'Explore' } } }),
+      ev({ event_id: 'meta1', kind: 'attachment_meta', subkind: 'subagent_meta', actor: 'system',
+        agent_id: 'agentX', tool_use_id: 'toolu_T', is_sidechain: true,
+        payload: { agentType: 'Explore', description: '간단 조사', toolUseId: 'toolu_T' } }),
+      ev({ event_id: 's-u', kind: 'user_message', is_sidechain: true, agent_id: 'agentX', payload: { content: 'p' } }),
+    ]);
+    const group = items.find((i: any) => i.type === 'sidechain-group') as any;
+    expect(group.agentId).toBe('agentX');
+    expect(group.agentType).toBe('Explore');
+    expect(group.description).toBe('간단 조사');
+    expect(group.taskEventId).toBe('task1');
+    // 사이드카 이벤트 자체는 카드로 렌더되지 않는다 (attachment_meta drop 유지)
+    const allIds = items.flatMap((i: any) =>
+      i.type === 'sidechain-group' ? i.items.map((x: any) => x.id) : [i.id]);
+    expect(allIds).not.toContain('meta1');
+  });
+
+  it('leaves taskEventId null when the Task tool_call is outside the loaded window', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'meta1', kind: 'attachment_meta', subkind: 'subagent_meta', actor: 'system',
+        agent_id: 'agentX', tool_use_id: 'toolu_T', is_sidechain: true,
+        payload: { agentType: 'Explore', description: 'd', toolUseId: 'toolu_T' } }),
+      ev({ event_id: 's-u', kind: 'user_message', is_sidechain: true, agent_id: 'agentX', payload: { content: 'p' } }),
+    ]);
+    const group = items.find((i: any) => i.type === 'sidechain-group') as any;
+    expect(group.agentType).toBe('Explore');
+    expect(group.taskEventId).toBeNull();
+  });
+
+  it('falls back to assistant payload.attribution_agent for agentType when no sidecar event', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 's-u', kind: 'user_message', is_sidechain: true, agent_id: 'agentX', payload: { content: 'p' } }),
+      ev({ event_id: 's-a', kind: 'assistant_message', is_sidechain: true, agent_id: 'agentX', actor: 'assistant',
+        payload: { text: 'r', model: 'claude-opus-4-8', attribution_agent: 'Explore' } }),
+    ]);
+    const group = items.find((i: any) => i.type === 'sidechain-group') as any;
+    expect(group.agentType).toBe('Explore');
+    expect(group.taskEventId).toBeNull();
+    expect(group.description).toBeNull();
+  });
+
   it('treats missing agent_id (pre-0023 ingest: null or "") as contiguity-only grouping', () => {
     const items = buildStreamModel([
       ev({ event_id: 's1', kind: 'user_message', is_sidechain: true, agent_id: null, payload: { content: 'p1' } }),
