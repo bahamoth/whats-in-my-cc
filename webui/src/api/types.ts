@@ -57,6 +57,9 @@ export type ObservedEventDto = {
   message_id?: string | null;
   turn_id: string | null;
   is_sidechain: boolean | number;
+  /** subagent jsonl의 top-level `agentId` — 병렬 서브에이전트 구분 키. 비-subagent
+   *  이벤트는 null 또는 ''(NULL TEXT 컬럼의 row 매핑 관례)로 온다. */
+  agent_id?: string | null;
   is_meta: boolean | number;
   /** OTel span events carry their extracted span data here (span_name +
    *  flat attributes). Absent on non-span events. C4 (Tier 3-1): span name
