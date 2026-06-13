@@ -91,6 +91,16 @@ describe('nodeLabel', () => {
     expect(L('user_message', { content: '<local-command-stdout>x</local-command-stdout>' }).primary).toBe('command');
     expect(L('user_message', { content: '[Request interrupted by user]' }).primary).toBe('system');
   });
+  it('user_message: <task-notification> labels as "알림" (NOT "You"), matching the MessageCard label', () => {
+    // anchored: 전 DB 55건 user_message가 <task-notification> 선행, isMeta 없음.
+    // The detail panel (InsightTab) + activity stack go through nodeLabel; without
+    // this case a task-notification fell through to the "You" default, so opening
+    // one via ?selected= showed "© You" in the detail header (the original gap).
+    const real = '<task-notification>Background task "build" completed (exit 0).</task-notification>';
+    const r = L('user_message', { content: real });
+    expect(r.primary).toBe('알림');
+    expect(r.kind).toBe('user');
+  });
   it('hook_event: hookName from either shape', () => {
     expect(L('hook_event', { hookName: 'PreToolUse:Agent' }).secondary).toBe('PreToolUse:Agent');
     expect(L('hook_event', { hook: { hook_event_name: 'PreToolUse' } }).secondary).toBe('PreToolUse');
