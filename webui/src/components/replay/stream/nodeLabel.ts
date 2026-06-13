@@ -114,6 +114,12 @@ export function nodeLabel(node: {
           return { kind: 'user', primary: 'system', secondary: 'interrupted' };
         case 'skill':
           return { kind: 'user', primary: 'skill', secondary: txt.trim().split('\n', 1)[0] };
+        case 'notification':
+          // Harness background-task completion notice folded into type:"user"
+          // (anchored: 전 DB 55건 <task-notification> 선행, isMeta 없음). Label
+          // "알림" to match the MessageCard, so the detail panel/activity stack
+          // never read it as the user's own "You" input.
+          return { kind: 'user', primary: '알림', secondary: txt.trim() };
         default:
           return { kind: 'user', primary: 'You', secondary: txt.trim() };
       }
