@@ -5,6 +5,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { MessageCard } from './MessageCard';
 import { ActivityStack } from './ActivityStack';
 import { SubagentGroup } from './SubagentGroup';
+import { BatchGroup } from './BatchGroup';
 import { ThinkingMarker } from './ThinkingMarker';
 import { AutoscrollToggle } from './AutoscrollToggle';
 import type { StreamItem } from './streamModel';
@@ -325,21 +326,13 @@ export function ConversationStream({
       );
     }
     if (item.type === 'batch-group') {
-      // Dedicated BatchGroup container (L0/L1) lands in a later slice. Until
-      // then render each parallel sibling as its own SubagentGroup so the
-      // de-interleaved children stay visible and selectable.
       return (
-        <>
-          {item.agentGroups.map((g) => (
-            <SubagentGroup
-              key={g.id}
-              group={g}
-              selectedEventId={selectedEventId}
-              onSelect={onSelect}
-              findingEventIds={findingEventIds}
-            />
-          ))}
-        </>
+        <BatchGroup
+          group={item}
+          selectedEventId={selectedEventId}
+          onSelect={onSelect}
+          findingEventIds={findingEventIds}
+        />
       );
     }
     // An activity-run renders as ONE contiguous ActivityStack (its events).
