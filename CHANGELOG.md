@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.6.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.5.0...v0.6.0) (2026-06-13)
+
+
+### Features
+
+* **api:** 렌더 이벤트에 agent_id 노출 ([5300569](https://github.com/bahamoth/whats-in-my-cc/commit/5300569e6e6a66487305d2fce14c578603fa6cd3))
+* **ingest:** subagent 사이드카 meta.json 수집 — 호출 관계 직접 조인 ([32fe3c1](https://github.com/bahamoth/whats-in-my-cc/commit/32fe3c12edeeb889dc80b54211824b753850e29f))
+* **webui:** BatchGroup 컴포넌트(L0 배치+종합 / L1 자식) ([214591e](https://github.com/bahamoth/whats-in-my-cc/commit/214591e610558da3d3b7694d84b84cdbdf93f9bd))
+* **webui:** ConversationStream에 BatchGroup 렌더·스크롤 타깃 ([6ba0867](https://github.com/bahamoth/whats-in-my-cc/commit/6ba08674cd9da953130e530cd27c4cb463db8922))
+* **webui:** scaffold(커맨드·스킬) origin 색을 뱃지에 — violet, 사람 파랑과 구분 ([6288604](https://github.com/bahamoth/whats-in-my-cc/commit/62886043fb66ace5ebdd2f2a79253b3cb9e63092))
+* **webui:** SidechainGroup 결론 추출(마지막 assistant_message) ([fba84f6](https://github.com/bahamoth/whats-in-my-cc/commit/fba84f6c15ad5f368511377d5e4959dcfeba2400))
+* **webui:** sidechain을 agent_id로 전역 수집(병렬 조각화 제거) ([e807d49](https://github.com/bahamoth/whats-in-my-cc/commit/e807d49926370c75e18195fa23556ce8a5d43140))
+* **webui:** SubagentGroup 축약 줄 결론 표시 ([492bbb8](https://github.com/bahamoth/whats-in-my-cc/commit/492bbb85a716d6b39a381568f0663d93c163a4b2))
+* **webui:** task-notification 메시지를 'notification' 출처로 분류 ([d42fc01](https://github.com/bahamoth/whats-in-my-cc/commit/d42fc013973b8fdcc3e3d279374d99f58acb6a72))
+* **webui:** 메시지 마크다운 렌더 + 원본 보기 토글 ([855e4a8](https://github.com/bahamoth/whats-in-my-cc/commit/855e4a8c70823c8e68bd672103c7cf2b8666d11c))
+* **webui:** 메시지 카드 가독성 — 로컬 시각 표시·긴 본문 접기 ([6aabef9](https://github.com/bahamoth/whats-in-my-cc/commit/6aabef9582ac6d406272b57f485ddf6a04594b43))
+* **webui:** 서브에이전트 그룹 접기·agent 식별·요약 헤더 ([1002d4e](https://github.com/bahamoth/whats-in-my-cc/commit/1002d4e949bb8f04f7b397dd2a80003fdb83dd44))
+* **webui:** 실행 시간 heat 색상 차등 (10s warn · 60s hot) ([c1f2525](https://github.com/bahamoth/whats-in-my-cc/commit/c1f2525293b7915da943176427437f8af60a5856))
+* **webui:** 연속 scaffold 메시지를 ScaffoldGroup으로 모아보기 ([5912127](https://github.com/bahamoth/whats-in-my-cc/commit/5912127e709586663f5f3773e413a11516b13883))
+* **webui:** 형제 서브에이전트를 BatchGroup으로 래핑 + 종합 결과 ([59cfba6](https://github.com/bahamoth/whats-in-my-cc/commit/59cfba6939844ab2cc2b17be64103caa49b82259))
+
+
+### Bug Fixes
+
+* **webui:** nodeLabel에 notification 케이스 추가 (상세 패널 "You" 빈틈) ([821b047](https://github.com/bahamoth/whats-in-my-cc/commit/821b047b69a43859825734469150730df51dde41))
+* **webui:** replay UX 후속 — 마크다운 가로 overflow·서브에이전트 헤더 겹침·duration 1m60s ([d5a711e](https://github.com/bahamoth/whats-in-my-cc/commit/d5a711ef7802173004663af6ce44c1c77895d201))
+* **webui:** 메시지 출처(caller) 분류 — 주입 텍스트가 사람 입력으로 새던 갭 ([bb3e245](https://github.com/bahamoth/whats-in-my-cc/commit/bb3e245161931d12962881480639012b52596caf))
+* **webui:** 병렬 윈도 중 끼어든 main 도구활동이 배치를 조각내지 않게 ([9550190](https://github.com/bahamoth/whats-in-my-cc/commit/95501902b5951d4823a0d691848db162c8b18f44))
+* **webui:** 커맨드/스킬을 활동 스택이 아니라 유저 측에 두도록 교정 ([f8a5b6c](https://github.com/bahamoth/whats-in-my-cc/commit/f8a5b6cc5665f743d0fad9f1ab63d69eac7e55d9))
+
 ## [0.5.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.4.0...v0.5.0) (2026-06-12)
 
 
