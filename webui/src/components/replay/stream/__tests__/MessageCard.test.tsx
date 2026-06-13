@@ -29,17 +29,46 @@ describe('MessageCard', () => {
     expect(screen.getByText('Prompt')).toBeInTheDocument();
     expect(screen.queryByText('You')).toBeNull();
   });
-  it('shows an honest source badge (human / subagent / agent), not the meaningless hardcoded "external"', () => {
-    // A non-sidechain user bubble is now only genuine human input — classify
-    // routes injected/command records (isMeta / markers) out of the bubble flow
-    // — so the badge says "human", never the old userType-unrelated "external".
-    const { rerender } = render(<MessageCard item={m({ role: 'user' })} selected={false} onSelect={() => {}} />);
+  it('source badge reflects deterministic origin (human/command/skill/subagent/agent), not the meaningless hardcoded "external"', () => {
+    const { rerender } = render(<MessageCard item={m({ role: 'user', origin: 'human' })} selected={false} onSelect={() => {}} />);
     expect(screen.getByTestId('source-badge')).toHaveTextContent('human');
     expect(screen.queryByText('external')).toBeNull();
+    rerender(<MessageCard item={m({ role: 'user', origin: 'command', commandName: '/model', text: '<command-name>/model</command-name>' })} selected={false} onSelect={() => {}} />);
+    expect(screen.getByTestId('source-badge')).toHaveTextContent('command');
+    rerender(<MessageCard item={m({ role: 'user', origin: 'skill', text: 'skill body' })} selected={false} onSelect={() => {}} />);
+    expect(screen.getByTestId('source-badge')).toHaveTextContent('skill');
     rerender(<MessageCard item={m({ role: 'user', sidechain: true })} selected={false} onSelect={() => {}} />);
     expect(screen.getByTestId('source-badge')).toHaveTextContent('subagent');
     rerender(<MessageCard item={m({ role: 'assistant', model: 'claude-opus-4-8' })} selected={false} onSelect={() => {}} />);
     expect(screen.getByTestId('source-badge')).toHaveTextContent('agent');
+  });
+
+  it('a user-invoked command/skill stays on the USER side (right), not "You", labelled by origin', () => {
+    const { rerender } = render(
+      <MessageCard
+        item={m({ role: 'user', origin: 'command', commandName: '/model', text: '<command-name>/model</command-name>\n<command-args>opus</command-args>' })}
+        selected={false}
+        onSelect={() => {}}
+      />,
+    );
+    const card = screen.getByTestId('message-card');
+    expect(card).toHaveAttribute('data-align', 'right'); // user-originated → user side
+    expect(card).toHaveAttribute('data-origin', 'command');
+    expect(screen.queryByText('You')).toBeNull();
+    expect(screen.getByText('/model')).toBeInTheDocument();
+    // scaffolding XML is cleaned to "/name args", not shown raw
+    expect(screen.getByTestId('message-bubble')).toHaveTextContent('/model opus');
+    expect(screen.queryByText(/command-name/)).toBeNull();
+
+    rerender(<MessageCard item={m({ role: 'user', origin: 'skill', text: 'injected skill body' })} selected={false} onSelect={() => {}} />);
+    expect(screen.getByTestId('message-card')).toHaveAttribute('data-align', 'right');
+    expect(screen.getByText('Skill')).toBeInTheDocument();
+  });
+
+  it('injected skill body collapses by default (reference, not conversation), even when short', () => {
+    render(<MessageCard item={m({ role: 'user', origin: 'skill', text: '한 줄짜리 짧은 스킬 본문' })} selected={false} onSelect={() => {}} />);
+    expect(screen.getByTestId('message-bubble')).toHaveAttribute('data-clamped', 'true');
+    expect(screen.getByTestId('clamp-toggle')).toHaveTextContent('더 보기');
   });
   it('thinking is left + distinct (data-role=thinking)', () => {
     render(<MessageCard item={m({ role: 'thinking', text: '추론중' })} selected={false} onSelect={() => {}} />);

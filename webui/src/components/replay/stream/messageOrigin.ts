@@ -81,3 +81,20 @@ export function messageOrigin(e: {
   if (e.is_meta) return { origin: 'skill', commandName: null };
   return { origin: 'human', commandName: null };
 }
+
+/** Human-readable body for a user record, by origin: a command invocation
+ *  collapses its <command-*> scaffolding to "/name args"; command output strips
+ *  the <local-command-*> wrapper to its inner text; everything else is shown
+ *  verbatim. Keeps the raw XML scaffolding out of the rendered bubble while
+ *  still attributing the record to the user who triggered it. */
+export function userDisplayText(origin: MessageOrigin, text: string, commandName: string | null): string {
+  if (origin === 'command') {
+    const args = text.match(/<command-args>([\s\S]*?)<\/command-args>/)?.[1]?.trim();
+    return [commandName, args].filter((s) => s && s.length).join(' ').trim() || (commandName ?? text.trim());
+  }
+  if (origin === 'command-output') {
+    const inner = text.match(/<local-command-(?:stdout|caveat)>([\s\S]*?)<\/local-command-(?:stdout|caveat)>/);
+    return (inner?.[1] ?? text).trim();
+  }
+  return text.trim();
+}

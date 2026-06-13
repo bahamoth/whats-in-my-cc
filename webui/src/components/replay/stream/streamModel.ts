@@ -1,7 +1,7 @@
 // webui/src/components/replay/stream/streamModel.ts
 import type { ObservedEventDto } from '../../../api/types';
 import type { LlmRequestMetrics } from './llmRequestMetrics';
-import { messageOrigin } from './messageOrigin';
+import { messageOrigin, type MessageOrigin } from './messageOrigin';
 
 function asObj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
@@ -25,6 +25,15 @@ export interface MessageItem {
    *  user_message this means the orchestrator's prompt TO a subagent — NOT human
    *  input — so it must not be labelled "You" nor right-aligned. */
   sidechain: boolean;
+  /** Caller classification of a user_message (role==='user'). CC folds three
+   *  things into type:"user": typed input, slash-command/skill scaffolding the
+   *  user INVOKED, and command output. All are user-originated (kept on the user
+   *  side), but the origin drives the label/chip and whether the body collapses
+   *  so injected text never reads as the user's own words. Optional so hand-built
+   *  fixtures may omit it (treated as 'human'); buildStreamModel always sets it. */
+  origin?: MessageOrigin;
+  /** The invoked command (e.g. "/model") when origin==='command', else null. */
+  commandName?: string | null;
 }
 
 export interface ActivityEvent {
@@ -141,17 +150,20 @@ function classify(
   text?: string;
   model?: string | null;
   sigLen?: number;
+  origin?: MessageOrigin;
+  commandName?: string | null;
 } {
   const p = asObj(e.payload);
   if (e.kind === 'user_message') {
     const t = userText(p);
     if (t === '') return { cat: 'drop' };
-    // Only genuine human input is a first-class conversation bubble. Slash
-    // commands, skill bodies (isMeta), local-command output, and interrupts are
-    // CC scaffolding folded into type:"user" — route them to the activity stack
-    // (labelled by origin via nodeLabel) so they never read as the user's words.
-    if (messageOrigin(e).origin !== 'human') return { cat: 'activity' };
-    return { cat: 'message', role: 'user', text: t, model: null };
+    // Everything CC folds into type:"user" is user-ORIGINATED (the user typed it
+    // or invoked the command/skill that injected it), so it stays a user-side
+    // message — never relocated to the agent/activity side. The origin only
+    // drives how it's labelled and whether the body collapses (so an injected
+    // skill body does not masquerade as the user's typed words).
+    const { origin, commandName } = messageOrigin(e);
+    return { cat: 'message', role: 'user', text: t, model: null, origin, commandName };
   }
   if (e.kind === 'assistant_message') {
     const t = (typeof p.text === 'string' ? p.text : '').trim();
@@ -307,6 +319,8 @@ export function buildStreamModel(
           text: c.text!,
           timestamp: e.observed_at,
           sidechain: sc,
+          origin: c.origin ?? 'human',
+          commandName: c.commandName ?? null,
         },
         sc,
         agent,
