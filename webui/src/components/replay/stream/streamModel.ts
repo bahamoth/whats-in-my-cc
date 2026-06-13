@@ -127,7 +127,79 @@ export interface ThinkingMarker {
   events: ThinkingEntry[];
 }
 
-export type StreamItem = MessageItem | ActivityRun | SidechainGroup | ThinkingMarker | BatchGroup;
+/** A contiguous run of ≥2 user-side scaffold messages (slash-command
+ *  invocations, injected skill bodies, command output, system interrupts,
+ *  harness task-notifications) folded into one collapsible block on the user
+ *  side. CC injects these as type:"user" records the user TRIGGERED, so they
+ *  belong on the user side, but a run of them buries the real conversation —
+ *  this groups them so the main flow (human input + assistant) stays legible.
+ *  Built by `groupScaffold` as a TOP-LEVEL post-pass; subagent/batch internals
+ *  are never grouped (those are already collapsible). */
+export interface ScaffoldGroup {
+  type: 'scaffold-group';
+  id: string;
+  items: MessageItem[];
+  /** The invoked command names (origin==='command') within the group, in
+   *  order — drives the collapsed preview ("/chrome /claude-in-chrome …"). */
+  commandNames: string[];
+}
+
+export type StreamItem =
+  | MessageItem
+  | ActivityRun
+  | SidechainGroup
+  | ThinkingMarker
+  | BatchGroup
+  | ScaffoldGroup;
+
+/** True for a TOP-LEVEL user-side scaffold message: a real user_message
+ *  (not a subagent prompt) whose caller classification is anything but a typed
+ *  human turn. `origin` is optional on hand-built fixtures (treated as human),
+ *  so an undefined/`'human'` origin never qualifies. */
+function isUserScaffold(it: StreamItem): it is MessageItem {
+  return (
+    it.type === 'message' &&
+    it.role === 'user' &&
+    !it.sidechain &&
+    it.origin != null &&
+    it.origin !== 'human'
+  );
+}
+
+/** Fold each contiguous run of ≥2 top-level user-side scaffold messages into a
+ *  ScaffoldGroup; a single scaffold message stays inline (no needless wrapper).
+ *  Any non-scaffold item — a human message, assistant/thinking message,
+ *  activity-run, sidechain-group, batch-group — breaks the run. Operates on the
+ *  TOP-LEVEL items only; nested group internals are left untouched. */
+export function groupScaffold(items: StreamItem[]): StreamItem[] {
+  const out: StreamItem[] = [];
+  let run: MessageItem[] = [];
+  const flushRun = () => {
+    if (run.length >= 2) {
+      out.push({
+        type: 'scaffold-group',
+        id: `scaffold-${run[0].id}`,
+        items: run,
+        commandNames: run
+          .filter((m) => m.origin === 'command' && m.commandName)
+          .map((m) => m.commandName as string),
+      });
+    } else if (run.length === 1) {
+      out.push(run[0]);
+    }
+    run = [];
+  };
+  for (const it of items) {
+    if (isUserScaffold(it)) {
+      run.push(it);
+    } else {
+      flushRun();
+      out.push(it);
+    }
+  }
+  flushRun();
+  return out;
+}
 
 function userText(p: Record<string, unknown>): string {
   return (typeof p.content === 'string'
@@ -502,6 +574,10 @@ export function buildStreamModel(
   }
   flush();
   flushSidechain();
-  return items;
+  // Top-level post-pass: fold contiguous user-side scaffold runs (commands,
+  // skill bodies, command output, interrupts, task-notifications) into one
+  // collapsible block so the main conversation stays legible. Subagent/batch
+  // internals are untouched — groupScaffold scans only this top-level array.
+  return groupScaffold(items);
 }
 

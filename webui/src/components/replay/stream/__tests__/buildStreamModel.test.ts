@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildStreamModel } from '../streamModel';
+import { buildStreamModel, groupScaffold } from '../streamModel';
+import type { MessageItem, StreamItem } from '../streamModel';
 import { buildLlmRequestMetrics } from '../llmRequestMetrics';
 import type { ObservedEventDto } from '../../../../api/types';
 
@@ -42,9 +43,11 @@ describe('buildStreamModel', () => {
       ev({ event_id: 'b', kind: 'user_message', payload: { content: '<command-name>/clear</command-name>' } }),
       ev({ event_id: 'c', kind: 'user_message', payload: { content: 'Base directory for this skill: /x' } }),
     ]);
-    const msgs = items.filter((i) => i.type === 'message') as any[];
     // empty dropped; command + skill remain as USER-SIDE messages (user-invoked),
-    // never relocated to the agent/activity side.
+    // never relocated to the agent/activity side. The two contiguous scaffold
+    // records fold into ONE scaffold-group (top-level grouping post-pass).
+    expect(items.map((i) => i.type)).toEqual(['scaffold-group']);
+    const msgs = (items[0] as any).items as any[];
     expect(msgs.map((m) => m.origin)).toEqual(['command', 'skill']);
     expect(msgs.map((m) => m.role)).toEqual(['user', 'user']);
     expect(items.some((i) => i.type === 'activity-run')).toBe(false);
@@ -655,5 +658,155 @@ describe('buildStreamModel — parallel batch grouping (#13 design 2026-06-13)',
       (i: any) => i.type === 'activity-run' && i.events.some((ae: any) => ae.event.event_id === 'mt1'),
     );
     expect(mainActs).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// groupScaffold — collapse a contiguous run of ≥2 user-side scaffold messages
+// into one ScaffoldGroup (the right-side "커맨드·스킬" affordance). Anchored to
+// the session 5bde98d8 6-card run: [Request interrupted](system) → Caveat
+// (command-output) → /chrome(command) → output(command-output) →
+// /claude-in-chrome(command) → skill body. Only the TOP-LEVEL flow is grouped;
+// subagent/batch internals are untouched.
+// ---------------------------------------------------------------------------
+function smsg(id: string, over: Partial<MessageItem> = {}): MessageItem {
+  return {
+    type: 'message',
+    id,
+    eventId: id,
+    role: 'user',
+    model: null,
+    text: id,
+    timestamp: '2026-06-13T00:00:00Z',
+    sidechain: false,
+    origin: 'human',
+    commandName: null,
+    ...over,
+  };
+}
+
+describe('groupScaffold', () => {
+  it('wraps a contiguous run of ≥2 scaffold messages into one scaffold-group (items preserved, commandNames collected)', () => {
+    const input: StreamItem[] = [
+      smsg('h1', { origin: 'human' }),
+      smsg('s1', { origin: 'system' }),
+      smsg('c1', { origin: 'command', commandName: '/chrome' }),
+      smsg('o1', { origin: 'command-output' }),
+      smsg('c2', { origin: 'command', commandName: '/claude-in-chrome' }),
+      smsg('k1', { origin: 'skill' }),
+    ];
+    const out = groupScaffold(input);
+    expect(out.map((i) => i.type)).toEqual(['message', 'scaffold-group']);
+    const g = out[1] as Extract<StreamItem, { type: 'scaffold-group' }>;
+    expect(g.items.map((i) => i.id)).toEqual(['s1', 'c1', 'o1', 'c2', 'k1']);
+    // commandNames = origin==='command' items' commandName, in order.
+    expect(g.commandNames).toEqual(['/chrome', '/claude-in-chrome']);
+    // The human message stays inline ahead of the group.
+    expect((out[0] as MessageItem).id).toBe('h1');
+  });
+
+  it('leaves a SINGLE scaffold message inline (no wrapper for a run of 1)', () => {
+    const input: StreamItem[] = [
+      smsg('h1', { origin: 'human' }),
+      smsg('c1', { origin: 'command', commandName: '/model' }),
+      smsg('h2', { origin: 'human' }),
+    ];
+    const out = groupScaffold(input);
+    expect(out.map((i) => i.type)).toEqual(['message', 'message', 'message']);
+    expect(out.map((i) => (i as MessageItem).id)).toEqual(['h1', 'c1', 'h2']);
+  });
+
+  it('a human message breaks the run (scaffold before + after a human = two separate runs, each grouped only if ≥2)', () => {
+    const input: StreamItem[] = [
+      smsg('c1', { origin: 'command', commandName: '/a' }),
+      smsg('c2', { origin: 'command', commandName: '/b' }),
+      smsg('h1', { origin: 'human' }),
+      smsg('c3', { origin: 'command', commandName: '/c' }),
+      smsg('c4', { origin: 'command', commandName: '/d' }),
+    ];
+    const out = groupScaffold(input);
+    expect(out.map((i) => i.type)).toEqual(['scaffold-group', 'message', 'scaffold-group']);
+    expect((out[0] as any).commandNames).toEqual(['/a', '/b']);
+    expect((out[1] as MessageItem).origin).toBe('human');
+    expect((out[2] as any).commandNames).toEqual(['/c', '/d']);
+  });
+
+  it('an assistant message between scaffolds splits them into two groups', () => {
+    const asst: MessageItem = smsg('a1', { role: 'assistant', origin: undefined });
+    const input: StreamItem[] = [
+      smsg('s1', { origin: 'system' }),
+      smsg('c1', { origin: 'command', commandName: '/x' }),
+      asst,
+      smsg('o1', { origin: 'command-output' }),
+      smsg('k1', { origin: 'skill' }),
+    ];
+    const out = groupScaffold(input);
+    expect(out.map((i) => i.type)).toEqual(['scaffold-group', 'message', 'scaffold-group']);
+    expect((out[1] as MessageItem).role).toBe('assistant');
+  });
+
+  it('non-message items (activity-run/sidechain-group/batch-group) break the run', () => {
+    const actRun: StreamItem = { type: 'activity-run', id: 'r1', events: [] };
+    const input: StreamItem[] = [
+      smsg('c1', { origin: 'command', commandName: '/x' }),
+      actRun,
+      smsg('c2', { origin: 'command', commandName: '/y' }),
+      smsg('c3', { origin: 'command', commandName: '/z' }),
+    ];
+    const out = groupScaffold(input);
+    // c1 alone (run of 1 → inline), then activity-run, then c2+c3 grouped.
+    expect(out.map((i) => i.type)).toEqual(['message', 'activity-run', 'scaffold-group']);
+    expect((out[2] as any).commandNames).toEqual(['/y', '/z']);
+  });
+
+  it('notification origin counts as scaffold (origin !== human)', () => {
+    const input: StreamItem[] = [
+      smsg('n1', { origin: 'notification' }),
+      smsg('c1', { origin: 'command', commandName: '/x' }),
+    ];
+    const out = groupScaffold(input);
+    expect(out.map((i) => i.type)).toEqual(['scaffold-group']);
+    const g = out[0] as any;
+    expect(g.items.map((i: MessageItem) => i.id)).toEqual(['n1', 'c1']);
+    // no command among them except c1
+    expect(g.commandNames).toEqual(['/x']);
+  });
+
+  it('a sidechain user message is NOT a top-level scaffold (it lives inside a group; only role=user && !sidechain && origin!==human qualifies)', () => {
+    // A bare top-level message with sidechain:true and a scaffold-looking origin
+    // must not be swept — it is the orchestrator prompt, not user scaffold. In
+    // practice these are inside sidechain-groups; this guards the predicate.
+    const input: StreamItem[] = [
+      smsg('sc', { origin: 'command', commandName: '/x', sidechain: true }),
+      smsg('c1', { origin: 'command', commandName: '/y' }),
+    ];
+    const out = groupScaffold(input);
+    // sc is not scaffold (sidechain) → run of 1 (c1) → inline.
+    expect(out.map((i) => i.type)).toEqual(['message', 'message']);
+  });
+});
+
+describe('buildStreamModel — wires groupScaffold (top-level only)', () => {
+  it('groups a contiguous run of ≥2 user-side scaffold records into a scaffold-group', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'h', kind: 'user_message', payload: { content: '진짜 질문' } }),
+      ev({ event_id: 'c1', kind: 'user_message', payload: { content: '<command-name>/chrome</command-name>' } }),
+      ev({ event_id: 'o1', kind: 'user_message', payload: { content: '<local-command-stdout>out</local-command-stdout>' } }),
+      ev({ event_id: 'k1', kind: 'user_message', is_meta: true, payload: { content: 'skill body injected' } }),
+    ]);
+    expect(items.map((i: any) => i.type)).toEqual(['message', 'scaffold-group']);
+    const g: any = items[1];
+    expect(g.items.map((i: any) => i.id)).toEqual(['c1', 'o1', 'k1']);
+    expect(g.commandNames).toEqual(['/chrome']);
+  });
+
+  it('does NOT group scaffold INSIDE a sidechain-group (only the top-level main flow)', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 's-u', kind: 'user_message', is_sidechain: true, agent_id: 'A', payload: { content: '<command-name>/x</command-name>' } }),
+      ev({ event_id: 's-c', kind: 'user_message', is_sidechain: true, agent_id: 'A', payload: { content: '<command-name>/y</command-name>' } }),
+    ]);
+    // The sidechain-group is one top-level item — never wrapped in a scaffold-group.
+    expect(items.some((i: any) => i.type === 'scaffold-group')).toBe(false);
+    expect(items.some((i: any) => i.type === 'sidechain-group')).toBe(true);
   });
 });

@@ -17,6 +17,7 @@ import type {
   ActivityEvent,
   BatchGroup,
   SidechainGroup,
+  ScaffoldGroup,
 } from '../streamModel';
 
 // Capture the options ConversationStream passes to useVirtualizer so we can
@@ -110,6 +111,19 @@ function batch(over: Partial<BatchGroup> = {}): BatchGroup {
     ],
     synthesis: '두 결과를 종합하면 X',
     settled: true,
+    ...over,
+  };
+}
+
+function scaffoldGroup(over: Partial<ScaffoldGroup> = {}): ScaffoldGroup {
+  return {
+    type: 'scaffold-group',
+    id: 'scaffold-c1',
+    items: [
+      msg('c1', '<command-name>/chrome</command-name>', { origin: 'command', commandName: '/chrome' }),
+      msg('k1', 'Base directory for this skill: /x', { origin: 'skill' }),
+    ],
+    commandNames: ['/chrome'],
     ...over,
   };
 }
@@ -275,6 +289,41 @@ describe('ConversationStream', () => {
     );
     expect(screen.getByTestId('batch-group')).toHaveAttribute('data-expanded', 'true');
     expect(screen.getAllByTestId('subagent-group').length).toBeGreaterThan(0);
+  });
+
+  // A scaffold-group renders the dedicated ScaffoldGroup container, collapsed by
+  // default (children hidden), with its identity chip showing.
+  it('renders a scaffold-group as the ScaffoldGroup container (collapsed by default)', () => {
+    render(
+      <ConversationStream
+        items={[msg('a', 'first'), scaffoldGroup()]}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('scaffold-group')).toBeInTheDocument();
+    expect(screen.getByText('커맨드·스킬')).toBeInTheDocument();
+    // collapsed → the folded cards (c1/k1) are not mounted; only the main msg is
+    expect(screen.getAllByTestId('message-card')).toHaveLength(1);
+    expect(screen.getByText('first')).toBeInTheDocument();
+  });
+
+  // Selection inside a scaffold-group child auto-expands the container so the
+  // row mounts and the scroll-into-view fallback can find it (itemContainsEvent
+  // recurses into scaffold-group.items).
+  it('auto-expands a scaffold-group whose child holds the selected event', () => {
+    render(
+      <ConversationStream
+        items={[scaffoldGroup()]}
+        selectedEventId="k1"
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('scaffold-group')).toHaveAttribute('data-expanded', 'true');
+    // expanded → both folded cards mount
+    expect(screen.getAllByTestId('message-card')).toHaveLength(2);
   });
 
   it('marks the selected message', () => {
