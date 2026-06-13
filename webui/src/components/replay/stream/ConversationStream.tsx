@@ -68,6 +68,16 @@ export function ConversationStream({
 }: ConversationStreamProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
 
+  // Deep-link scroll-to-index coordination. While we scroll the virtualizer to a
+  // freshly-selected OFF-SCREEN event, `scrollPendingRef` is true so the
+  // measurement-resize compensation stands down — otherwise it adjusts scrollTop
+  // mid-reconcile and cancels the core's scrollToIndex, so the view briefly hits
+  // the event then drifts to a meaningless area. Cleared once the target row
+  // renders or the reader takes over. `scrollAttemptsRef` caps settle frames so a
+  // never-converging reconcile cannot suppress compensation forever.
+  const scrollPendingRef = useRef(false);
+  const scrollAttemptsRef = useRef(0);
+
   // "대화 시작" marker sits in normal flow above the virtualized list once the
   // session start is loaded. The virtualizer is told about that offset via
   // `scrollMargin` so row positions stay correct (rows subtract it below).
@@ -101,6 +111,10 @@ export function ConversationStream({
   // is assigned every render; `scrollAdjustments` is typed private but is the
   // exact frame the core's own default uses, hence the narrow cast.
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
+    // While a deep-link scroll-to-index is converging, stand down: the core's own
+    // scrollToIndex reconcile owns scrollTop, and adjusting it here mid-reconcile
+    // cancels that reconcile so the view drifts off the target.
+    if (scrollPendingRef.current) return false;
     // getScrollOffset/scrollAdjustments are typed private in this core
     // version's d.ts but are the exact frame the core's own default predicate
     // reads — narrow structural cast instead of `any`.
@@ -259,26 +273,55 @@ export function ConversationStream({
   useEffect(() => {
     if (!selectedEventId) {
       scrollSatisfiedRef.current = null;
+      scrollPendingRef.current = false;
+      scrollAttemptsRef.current = 0;
       return;
     }
     if (scrollSatisfiedRef.current === selectedEventId) return;
     const idx = items.findIndex((it) => itemContainsEvent(it, selectedEventId));
-    if (idx < 0) return; // not loaded yet — retried when items change
-    scrollSatisfiedRef.current = selectedEventId;
-    // Virtual path: scroll the virtualizer to that index — but ONLY when the
-    // selected row is not already on screen. Clicking a row that is already
-    // visible (in-stream selection) must not re-center it and yank the
-    // viewport; scroll-into-view is for OFF-SCREEN (external timeline/subgraph)
-    // selection only.
+    if (idx < 0) return; // not loaded yet — retried when items / totalSize change
     const vItems = virtualizer.getVirtualItems();
-    const alreadyVisible = vItems.some((vi) => vi.index === idx);
-    if (vItems.length > 0 && !alreadyVisible) {
-      virtualizer.scrollToIndex(idx, { align: 'center' });
+    if (vItems.length > 0) {
+      const rendered = vItems.some((vi) => vi.index === idx);
+      if (rendered) {
+        // Target row is mounted: it was already on screen (in-stream click — must
+        // not re-center / yank) or the core's scrollToIndex reconcile has landed.
+        // Done — let the measurement compensation resume.
+        scrollSatisfiedRef.current = selectedEventId;
+        scrollPendingRef.current = false;
+        scrollAttemptsRef.current = 0;
+      } else if (hasInteractedRef.current || scrollAttemptsRef.current > 30) {
+        // Reader took over, or the reconcile never converged — stop trying so we
+        // neither fight the reader nor suppress compensation forever.
+        scrollSatisfiedRef.current = selectedEventId;
+        scrollPendingRef.current = false;
+        scrollAttemptsRef.current = 0;
+      } else if (!scrollPendingRef.current) {
+        // OFF-SCREEN deep link `?selected=` / timeline-subgraph selection: stop
+        // following the live tip and scroll to the event ONCE. `scrollPendingRef`
+        // suppresses the measurement compensation so the core's dynamic-height
+        // reconcile is not cancelled mid-flight (the "briefly there then drifts to
+        // a meaningless area" bug). The effect re-runs on `totalSize` as rows
+        // measure; we wait for the target row to render rather than re-issuing.
+        auto.disable();
+        scrollPendingRef.current = true;
+        scrollAttemptsRef.current = 0;
+        virtualizer.scrollToIndex(idx, { align: 'center' });
+      } else {
+        // Pending: rows between here and the target are still measuring, so the
+        // first scrollToIndex landed on an ESTIMATE (64px/row) far from the real
+        // (taller group-container) offset. Re-issue on each measurement settle so
+        // we march toward the target — each scroll renders + measures the rows it
+        // passes, growing totalSize, which re-runs this effect with a better
+        // offset until the target row finally renders. Capped above.
+        scrollAttemptsRef.current += 1;
+        virtualizer.scrollToIndex(idx, { align: 'center' });
+      }
+      return;
     }
-    // Fallback path (jsdom / zero-height): find the element by data-event-id
-    // and call scrollIntoView. In a real browser this works; in jsdom the stub
-    // is a no-op but the spy can observe the call. Only message rows carry
-    // data-event-id; activity rows rely on the virtual scrollToIndex above.
+    // Fallback path (jsdom / zero-height, no virtual items): find the element by
+    // data-event-id and call scrollIntoView. In a real browser the virtual path
+    // above runs instead; in jsdom the stub is a no-op but the spy observes it.
     if (typeof parentRef.current?.querySelector === 'function') {
       const escapedId = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
         ? CSS.escape(selectedEventId)
@@ -287,11 +330,13 @@ export function ConversationStream({
       if (el && typeof (el as HTMLElement).scrollIntoView === 'function') {
         (el as HTMLElement).scrollIntoView({ block: 'nearest' });
       }
+      scrollSatisfiedRef.current = selectedEventId;
     }
-  // virtualizer identity is render-stable enough here; the satisfied-ref is
-  // the real one-shot guard.
+  // `totalSize` is in deps so the effect re-runs as rows lazily measure, letting
+  // us detect when the reconcile has rendered the target row. The satisfied/
+  // pending refs are the real guards.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEventId, items]);
+  }, [selectedEventId, items, totalSize]);
 
   if (items.length === 0) {
     return <p className={styles.empty}>No conversation events yet.</p>;
