@@ -46,6 +46,19 @@ describe('buildStreamModel', () => {
     expect(items.some((i) => i.type === 'activity-run')).toBe(true);
   });
 
+  it('does NOT render isMeta:true injected text as a human user bubble (caller gap)', () => {
+    // Real leak: a skill/command body injected as type:"user" + isMeta:true has
+    // no command marker, so it used to fall through to a "You" message card.
+    const items = buildStreamModel([
+      ev({ event_id: 'h', kind: 'user_message', payload: { content: '진짜 사람 질문' } }),
+      ev({ event_id: 'm', kind: 'user_message', is_meta: true, payload: { content: 'Review the PR thoroughly...' } }),
+    ]);
+    const msgs = items.filter((i) => i.type === 'message');
+    expect(msgs).toHaveLength(1);
+    expect((msgs[0] as any).text).toBe('진짜 사람 질문');
+    expect(items.some((i) => i.type === 'activity-run')).toBe(true);
+  });
+
   it('keeps readable thinking as a message; redacted thinking becomes a selectable thinking marker (not activity)', () => {
     const items = buildStreamModel([
       ev({ event_id: 't1', kind: 'thinking', actor: 'assistant', payload: { thinking: '먼저 확인하자' } }),

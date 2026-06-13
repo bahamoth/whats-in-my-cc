@@ -1,11 +1,10 @@
+import { messageOrigin } from './messageOrigin';
+
 export interface NodeLabel {
   kind: 'user' | 'assistant' | 'thinking' | 'tool' | 'hook' | 'span' | 'verify' | 'diff' | 'other';
   primary: string;
   secondary: string;
 }
-
-const SCAFFOLD =
-  /^\s*(<command-name>|<command-message>|<command-args>|<local-command-stdout>|<local-command-caveat>|Base directory for this skill:|\[Request interrupted)/;
 
 function asObj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
@@ -72,6 +71,8 @@ export function nodeLabel(node: {
   telemetry?: unknown;
   /** 서버 분류 태그 (tool_call 한정) — display가 명령 표시에 쓰인다. */
   tag?: { display?: string | null } | null;
+  /** transcript isMeta → caller classification of user_message scaffolding. */
+  is_meta?: boolean | number | null;
 }): NodeLabel {
   const p = asObj(node.payload);
   switch (node.node_kind) {
@@ -99,12 +100,23 @@ export function nodeLabel(node: {
     case 'user_message': {
       const txt =
         typeof p.content === 'string' ? p.content : ((p.text as string) ?? '');
-      if (SCAFFOLD.test(txt)) {
-        const name =
-          txt.match(/<command-name>([^<]*)<\/command-name>/)?.[1] ?? 'scaffolding';
-        return { kind: 'user', primary: 'command', secondary: name };
+      // Shared caller classification (SSOT): a user_message that reaches the
+      // activity stack is scaffolding, not human words — label it by origin so
+      // it never reads as "You". (Genuine human input is a message bubble and
+      // does not come through here.)
+      const { origin, commandName } = messageOrigin({ payload: node.payload, is_meta: node.is_meta });
+      switch (origin) {
+        case 'command':
+          return { kind: 'user', primary: 'command', secondary: commandName ?? 'scaffolding' };
+        case 'command-output':
+          return { kind: 'user', primary: 'command', secondary: '출력' };
+        case 'system':
+          return { kind: 'user', primary: 'system', secondary: 'interrupted' };
+        case 'skill':
+          return { kind: 'user', primary: 'skill', secondary: txt.trim().split('\n', 1)[0] };
+        default:
+          return { kind: 'user', primary: 'You', secondary: txt.trim() };
       }
-      return { kind: 'user', primary: 'You', secondary: txt.trim() };
     }
     case 'hook_event': {
       const hn =

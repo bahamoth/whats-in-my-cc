@@ -6,7 +6,8 @@ const L = (
   payload: unknown,
   telemetry?: unknown,
   tag?: { display?: string | null } | null,
-) => nodeLabel({ node_kind, payload, telemetry, tag });
+  is_meta?: boolean,
+) => nodeLabel({ node_kind, payload, telemetry, tag, is_meta });
 
 describe('formatModel', () => {
   it('shortens known model ids', () => {
@@ -82,6 +83,13 @@ describe('nodeLabel', () => {
   it('user_message: scaffolding becomes command label', () => {
     expect(L('user_message', { content: '<command-name>/plugin</command-name>' }))
       .toEqual({ kind: 'user', primary: 'command', secondary: '/plugin' });
+  });
+  it('user_message: isMeta injection labels as skill (not "You"), so it never reads as human input', () => {
+    expect(L('user_message', { content: '스킬 본문 주입' }, undefined, undefined, true).primary).toBe('skill');
+  });
+  it('user_message: local-command output and interrupt get their own origins', () => {
+    expect(L('user_message', { content: '<local-command-stdout>x</local-command-stdout>' }).primary).toBe('command');
+    expect(L('user_message', { content: '[Request interrupted by user]' }).primary).toBe('system');
   });
   it('hook_event: hookName from either shape', () => {
     expect(L('hook_event', { hookName: 'PreToolUse:Agent' }).secondary).toBe('PreToolUse:Agent');
