@@ -26,6 +26,7 @@
 
 * **webui:** nodeLabel에 notification 케이스 추가 (상세 패널 "You" 빈틈) ([821b047](https://github.com/bahamoth/whats-in-my-cc/commit/821b047b69a43859825734469150730df51dde41))
 * **webui:** replay UX 후속 — 마크다운 가로 overflow·서브에이전트 헤더 겹침·duration 1m60s ([d5a711e](https://github.com/bahamoth/whats-in-my-cc/commit/d5a711ef7802173004663af6ce44c1c77895d201))
+* **webui:** 딥링크 ?selected= 스크롤이 타깃 이벤트로 이동 — 드리프트 제거(autoscroll·측정보정이 reconcile 취소하던 것) + 타깃 렌더까지 scroll-march ([c69cd70](https://github.com/bahamoth/whats-in-my-cc/commit/c69cd70074c1d4fd51965abee0c43aa674de0b0b))
 * **webui:** 메시지 출처(caller) 분류 — 주입 텍스트가 사람 입력으로 새던 갭 ([bb3e245](https://github.com/bahamoth/whats-in-my-cc/commit/bb3e245161931d12962881480639012b52596caf))
 * **webui:** 병렬 윈도 중 끼어든 main 도구활동이 배치를 조각내지 않게 ([9550190](https://github.com/bahamoth/whats-in-my-cc/commit/95501902b5951d4823a0d691848db162c8b18f44))
 * **webui:** 커맨드/스킬을 활동 스택이 아니라 유저 측에 두도록 교정 ([f8a5b6c](https://github.com/bahamoth/whats-in-my-cc/commit/f8a5b6cc5665f743d0fad9f1ab63d69eac7e55d9))
