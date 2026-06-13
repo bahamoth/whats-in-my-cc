@@ -11,7 +11,13 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConversationStream } from '../ConversationStream';
-import type { MessageItem, ActivityRun, ActivityEvent } from '../streamModel';
+import type {
+  MessageItem,
+  ActivityRun,
+  ActivityEvent,
+  BatchGroup,
+  SidechainGroup,
+} from '../streamModel';
 
 // Capture the options ConversationStream passes to useVirtualizer so we can
 // assert it keys the row-size cache by stable item id (see overlap regression
@@ -67,6 +73,45 @@ function ae(eventId: string, toolName: string, isError = false): ActivityEvent {
 
 function run(id: string, events: ActivityEvent[]): ActivityRun {
   return { type: 'activity-run', id, events };
+}
+
+function scGroup(over: Partial<SidechainGroup> = {}): SidechainGroup {
+  return {
+    type: 'sidechain-group',
+    id: 'sc-A',
+    agentId: 'A',
+    agentType: 'Explore',
+    description: '조사 A',
+    taskEventId: null,
+    conclusion: 'A 결론',
+    items: [
+      {
+        type: 'message',
+        id: 'aMsg',
+        eventId: 'aMsg',
+        role: 'assistant',
+        model: null,
+        text: 'A 결론',
+        timestamp: '2026-06-13T00:00:30Z',
+        sidechain: true,
+      },
+    ],
+    ...over,
+  };
+}
+
+function batch(over: Partial<BatchGroup> = {}): BatchGroup {
+  return {
+    type: 'batch-group',
+    id: 'batch-sc-A',
+    agentGroups: [
+      scGroup({ id: 'sc-A', agentId: 'A' }),
+      scGroup({ id: 'sc-B', agentId: 'B', conclusion: 'B 결론' }),
+    ],
+    synthesis: '두 결과를 종합하면 X',
+    settled: true,
+    ...over,
+  };
 }
 
 describe('ConversationStream', () => {
@@ -197,6 +242,39 @@ describe('ConversationStream', () => {
     expect(screen.getAllByTestId('activity-stack')).toHaveLength(1);
     expect(screen.getByText('first')).toBeInTheDocument();
     expect(screen.getByText('second')).toBeInTheDocument();
+  });
+
+  // A batch-group renders the dedicated BatchGroup container (not a flat list of
+  // SubagentGroups). Collapsed by default (settled) → identity + synthesis show,
+  // children stay hidden.
+  it('renders a batch-group as the BatchGroup container', () => {
+    render(
+      <ConversationStream
+        items={[msg('a', 'first'), batch()]}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('batch-group')).toBeInTheDocument();
+    expect(screen.getByTestId('batch-synthesis')).toHaveTextContent('두 결과를 종합하면 X');
+    // settled batch collapses by default → children hidden
+    expect(screen.queryByTestId('subagent-group')).toBeNull();
+  });
+
+  // Selection inside a batch child auto-expands the container so the row mounts
+  // and the scroll-into-view fallback can find it (itemContainsEvent recurses).
+  it('auto-expands a batch-group whose child holds the selected event', () => {
+    render(
+      <ConversationStream
+        items={[batch()]}
+        selectedEventId="aMsg"
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('batch-group')).toHaveAttribute('data-expanded', 'true');
+    expect(screen.getAllByTestId('subagent-group').length).toBeGreaterThan(0);
   });
 
   it('marks the selected message', () => {
