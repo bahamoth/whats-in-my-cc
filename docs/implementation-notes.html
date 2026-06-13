@@ -4685,6 +4685,22 @@ vitest: 69 passed
       어울리는지, 접힘 기본값이 실제 리플레이 독해에 맞는지, virtualizer 높이
       재측정(접기/펼치기 시) 깜빡임 여부.
     </p>
+    <p>
+      <strong>후속 smoke (2026-06-13, 로컬 PR #56 리뷰)</strong>: 로컬에서
+      <code>wimcc serve</code> + 실 세션(사이드카 포함) ingest 후 브라우저로
+      전 항목을 시각 검증. 코어(사이드카 조인·접기/펼침·자동 펼침·duration heat·
+      마크다운 토글·긴 본문 clamp·Task 점프)는 정상. <strong>표현 계층 버그 3건
+      발견·수정</strong>: ① 마크다운 모드에서 긴 인라인 코드(파일 경로)가 줄바꿈되지
+      않아 버블이 가로로 넘쳐 본문이 클립됨 → <code>.markdown</code>과 인라인
+      <code>code</code>에 <code>overflow-wrap: anywhere</code>(min-content 폭까지
+      줄여 flex 컬럼 내 넘침 방지). ② SubagentGroup 헤더가 좁은 폭에서 <code>flex:none</code>
+      meta 클러스터가 박스를 넘쳐 형제 jump 버튼과 겹침 → <code>.header</code>에
+      <code>overflow: hidden</code>(<code>.preview</code>가 먼저 shrink돼 카운트는
+      대개 보존). ③ <code>formatDuration</code>이 잔여 초를 분과 독립 반올림해
+      <code>119_500ms</code>가 "1m 60s"로 표기 → 총초 선반올림 후 분할("2m 0s"),
+      <code>duration.test.ts</code>에 경계 케이스 잠금. virtualizer 깜빡임은
+      미관측. 콘솔 에러 없음.
+    </p>
   </section>
 
   <section id="subagent-sidecar-2026-06-13">

@@ -23,6 +23,10 @@
   gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
+  /* clip inner children to the header box so that at narrow widths the
+     flex:none meta cluster cannot overflow and overlap the sibling jump
+     button. `.preview` (flex:1) shrinks first, so counts stay visible. */
+  overflow: hidden;
   padding: 4px 6px 4px 0;
   background: none;
   border: none;

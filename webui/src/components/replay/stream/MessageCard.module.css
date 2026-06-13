@@ -172,6 +172,10 @@
  * so switch to normal whitespace and give elements compact chat-sized rhythm. */
 .markdown {
   white-space: normal;
+  /* Long unbroken tokens (esp. file paths inside inline code) must wrap, or the
+   * bubble overflows horizontally and clips text. `anywhere` (not `break-word`)
+   * so the min-content width shrinks too — required inside the flex column. */
+  overflow-wrap: anywhere;
 }
 
 .markdown > :first-child { margin-top: 0; }
@@ -207,6 +211,9 @@
   border: 1px solid var(--wimcc-border, #1d212c);
   border-radius: 3px;
   padding: 0 4px;
+  /* inline code with a long path is a single token — let it break mid-string
+   * (the block `pre code` below keeps white-space: pre and scrolls instead). */
+  overflow-wrap: anywhere;
 }
 
 .markdown pre {
