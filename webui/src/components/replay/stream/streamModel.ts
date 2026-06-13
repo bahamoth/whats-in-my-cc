@@ -245,10 +245,17 @@ export function buildStreamModel(
   // sidechain assistant payloads (secondary evidence when no sidecar landed).
   const metaByAgent = new Map<string, SubagentMeta>();
   const callEventByUse = new Map<string, string>();
+  // The dispatching tool_call's message_id per tool_use_id. Batch membership =
+  // siblings whose Task calls share a message_id (one assistant turn dispatched
+  // them together); joined back from a child's sidecar toolUseId.
+  const callMsgByUse = new Map<string, string | null>();
   const attributionByAgent = new Map<string, string>();
   for (const e of events) {
     if (e.kind === 'tool_result' && e.tool_use_id) resultByUse.set(e.tool_use_id, e);
-    if (e.kind === 'tool_call' && e.tool_use_id) callEventByUse.set(e.tool_use_id, e.event_id);
+    if (e.kind === 'tool_call' && e.tool_use_id) {
+      callEventByUse.set(e.tool_use_id, e.event_id);
+      callMsgByUse.set(e.tool_use_id, e.message_id ?? null);
+    }
     const agent = e.agent_id || null;
     if (!agent) continue;
     const p = asObj(e.payload);
@@ -309,16 +316,71 @@ export function buildStreamModel(
       items: buf,
     };
   };
+  // Batches awaiting their synthesis line (the first main assistant_message
+  // after the batch returns). Filled lazily when that message is emitted.
+  const pendingSynthesis: BatchGroup[] = [];
   const flushSidechain = () => {
+    // 1) Materialize one SidechainGroup per accumulated agent buffer (order
+    //    preserved by scOrder).
+    const groups: SidechainGroup[] = [];
     for (const key of scOrder) {
       const buf = scBufs.get(key);
       if (!buf || !buf.length) continue;
-      items.push(makeSidechainGroup(key, buf));
+      groups.push(makeSidechainGroup(key, buf));
     }
     scBufs.clear();
     scFirstIdByKey.clear();
     scOrder.length = 0;
     lastScAgent = null;
+    if (!groups.length) return;
+
+    // 2) Group siblings by their dispatching message_id (same assistant turn).
+    //    A child's dispatch message_id = its sidecar toolUseId → callMsgByUse.
+    //    Siblings with no resolvable message_id (no sidecar / pre-0023) get a
+    //    unique solo key so they never merge — degrade to a plain SidechainGroup.
+    const byMsg = new Map<string, SidechainGroup[]>();
+    const msgOrder: string[] = [];
+    for (const g of groups) {
+      const tu = g.agentId ? metaByAgent.get(g.agentId)?.toolUseId ?? null : null;
+      const mid = tu ? callMsgByUse.get(tu) ?? null : null;
+      const key = mid ?? `solo-${g.id}`;
+      let bucket = byMsg.get(key);
+      if (!bucket) {
+        bucket = [];
+        byMsg.set(key, bucket);
+        msgOrder.push(key);
+      }
+      bucket.push(g);
+    }
+
+    // 3) N>=2 siblings → BatchGroup (wraps the parallel siblings into one
+    //    chronological slot). N==1 → the bare SidechainGroup (no wrapper).
+    for (const key of msgOrder) {
+      const sibs = byMsg.get(key)!;
+      if (sibs.length >= 2) {
+        const batch: BatchGroup = {
+          type: 'batch-group',
+          id: `batch-${sibs[0].id}`,
+          agentGroups: sibs,
+          synthesis: null,
+          settled: sibs.every((s) => s.conclusion != null),
+        };
+        items.push(batch);
+        pendingSynthesis.push(batch);
+      } else {
+        items.push(sibs[0]);
+      }
+    }
+  };
+  /** Fill any pending batch's synthesis from the first main assistant_message
+   *  after the batch returned, then clear the queue (one synthesis per flush). */
+  const fillPendingSynthesis = (text: string) => {
+    if (!pendingSynthesis.length) return;
+    const preview = text.trim().slice(0, 200);
+    for (const b of pendingSynthesis) {
+      if (b.synthesis == null) b.synthesis = preview;
+    }
+    pendingSynthesis.length = 0;
   };
   const emitSidechain = (it: StreamItem, agentId: string | null) => {
     const key = agentId ?? lastScAgent ?? NULL_AGENT_KEY;
@@ -375,6 +437,10 @@ export function buildStreamModel(
         sc,
         agent,
       );
+      // The first main assistant_message after a batch returns is its synthesis
+      // (the design's "종합 결과" lifted to the batch's L0 line). The preceding
+      // emit() already flushed any pending batch, so pendingSynthesis is set.
+      if (!sc && c.role === 'assistant') fillPendingSynthesis(c.text!);
     } else if (c.cat === 'thinking') {
       // Close any open activity run first so order stays chronological. Each
       // redacted thinking is one LLM response → its own selectable marker
