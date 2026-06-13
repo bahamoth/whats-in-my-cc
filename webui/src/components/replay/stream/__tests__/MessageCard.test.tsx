@@ -29,9 +29,13 @@ describe('MessageCard', () => {
     expect(screen.getByText('Prompt')).toBeInTheDocument();
     expect(screen.queryByText('You')).toBeNull();
   });
-  it('shows a source badge revealing origin (external / subagent / agent)', () => {
+  it('shows an honest source badge (human / subagent / agent), not the meaningless hardcoded "external"', () => {
+    // A non-sidechain user bubble is now only genuine human input — classify
+    // routes injected/command records (isMeta / markers) out of the bubble flow
+    // — so the badge says "human", never the old userType-unrelated "external".
     const { rerender } = render(<MessageCard item={m({ role: 'user' })} selected={false} onSelect={() => {}} />);
-    expect(screen.getByTestId('source-badge')).toHaveTextContent('external');
+    expect(screen.getByTestId('source-badge')).toHaveTextContent('human');
+    expect(screen.queryByText('external')).toBeNull();
     rerender(<MessageCard item={m({ role: 'user', sidechain: true })} selected={false} onSelect={() => {}} />);
     expect(screen.getByTestId('source-badge')).toHaveTextContent('subagent');
     rerender(<MessageCard item={m({ role: 'assistant', model: 'claude-opus-4-8' })} selected={false} onSelect={() => {}} />);

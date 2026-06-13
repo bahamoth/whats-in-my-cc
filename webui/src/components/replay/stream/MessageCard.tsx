@@ -61,13 +61,15 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
   let label: string;
   let bubbleClass: string;
 
-  // Origin chip — surfaces who produced this message (the raw role the user
-  // would otherwise have to open Raw to confirm): a human, a subagent, or the
-  // model. Complements the friendly label.
+  // Origin chip — surfaces who produced this message: a human, a subagent, or
+  // the model. A non-sidechain user bubble is now only genuine human input —
+  // buildStreamModel routes command/skill/output scaffolding (markers / isMeta)
+  // to the activity stack — so this says "human", not the old hardcoded
+  // "external" (which was a string unrelated to transcript userType).
   const sourceTag = isSubagentPrompt
     ? 'subagent'
     : item.role === 'user'
-    ? 'external'
+    ? 'human'
     : item.role === 'system'
     ? 'system'
     : 'agent';

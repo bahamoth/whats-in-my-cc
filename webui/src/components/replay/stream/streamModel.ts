@@ -1,6 +1,7 @@
 // webui/src/components/replay/stream/streamModel.ts
 import type { ObservedEventDto } from '../../../api/types';
 import type { LlmRequestMetrics } from './llmRequestMetrics';
+import { messageOrigin } from './messageOrigin';
 
 function asObj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
@@ -104,9 +105,6 @@ export interface ThinkingMarker {
 
 export type StreamItem = MessageItem | ActivityRun | SidechainGroup | ThinkingMarker;
 
-const SCAFFOLD =
-  /^\s*(<command-name>|<command-message>|<command-args>|<local-command-stdout>|<local-command-caveat>|Base directory for this skill:|\[Request interrupted)/;
-
 function userText(p: Record<string, unknown>): string {
   return (typeof p.content === 'string'
     ? p.content
@@ -148,7 +146,11 @@ function classify(
   if (e.kind === 'user_message') {
     const t = userText(p);
     if (t === '') return { cat: 'drop' };
-    if (SCAFFOLD.test(t)) return { cat: 'activity' };
+    // Only genuine human input is a first-class conversation bubble. Slash
+    // commands, skill bodies (isMeta), local-command output, and interrupts are
+    // CC scaffolding folded into type:"user" — route them to the activity stack
+    // (labelled by origin via nodeLabel) so they never read as the user's words.
+    if (messageOrigin(e).origin !== 'human') return { cat: 'activity' };
     return { cat: 'message', role: 'user', text: t, model: null };
   }
   if (e.kind === 'assistant_message') {

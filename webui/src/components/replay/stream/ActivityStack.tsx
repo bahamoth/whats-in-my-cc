@@ -67,7 +67,7 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
       {expanded && (
         <div className={styles.items}>
           {stack.events.map((ae) => {
-            const label = nodeLabel({ node_kind: ae.event.kind, payload: ae.event.payload, telemetry: ae.event.telemetry, tag: ae.event.tag });
+            const label = nodeLabel({ node_kind: ae.event.kind, payload: ae.event.payload, telemetry: ae.event.telemetry, tag: ae.event.tag, is_meta: ae.event.is_meta });
             const isSelected = selectedEventId === ae.event.event_id;
             // hook_event carries its own success/duration in its payload (not a
             // matched tool_result), so derive the badge + duration from there.
