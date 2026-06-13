@@ -307,9 +307,11 @@ describe('buildStreamModel — sidechain agent attribution (agent_id)', () => {
     expect(group.agentId).toBe('agentX');
   });
 
-  it('splits interleaved parallel subagents (agent_id change) into separate groups', () => {
+  it('de-interleaves parallel subagents: each agent_id collapses to ONE group (no fragments)', () => {
     // 병렬 Task 디스패치: 두 서브에이전트의 이벤트가 시간순으로 교차 도착한다.
-    // 인접성만으로 묶으면 한 그룹에 합쳐지므로 agent_id 변화가 경계가 돼야 한다.
+    // 예전엔 agent_id 변화가 경계라 한 에이전트가 여러 조각으로 쪼개졌지만(설계 2026-06-13),
+    // 이제 agent_id로 전역 수집(de-interleave)하므로 agentX는 교차에도 한 그룹으로 모인다.
+    // 디스패치 사이드카가 없어(N 판별 불가) 배치 래핑 없이 first-seen 순서대로 평탄 emit.
     const items = buildStreamModel([
       ev({ event_id: 'x1', kind: 'user_message', is_sidechain: true, agent_id: 'agentX', payload: { content: 'px' } }),
       ev({ event_id: 'y1', kind: 'user_message', is_sidechain: true, agent_id: 'agentY', payload: { content: 'py' } }),
@@ -318,8 +320,10 @@ describe('buildStreamModel — sidechain agent attribution (agent_id)', () => {
     expect(items.map((i: any) => [i.type, i.agentId])).toEqual([
       ['sidechain-group', 'agentX'],
       ['sidechain-group', 'agentY'],
-      ['sidechain-group', 'agentX'],
     ]);
+    const x = items.find((i: any) => i.agentId === 'agentX') as any;
+    // agentX의 교차 도착한 두 이벤트가 한 그룹에 직렬로 모인다 (조각 X).
+    expect(x.items.map((i: any) => i.id)).toEqual(['x1', 'x2']);
   });
 
   it('splits a sidechain ACTIVITY run at an agent_id boundary (tools from two agents never share a run)', () => {
@@ -510,6 +514,16 @@ const scUser = (ag: string, ev: string) =>
 const scAsst = (ag: string, ev: string, text: string) =>
   base({ event_id: ev, kind: 'assistant_message', is_sidechain: true, agent_id: ag, payload: { text } });
 
+/** All sidechain-groups regardless of whether they sit inside a batch-group. */
+function collectSidechainGroups(items: any[]): any[] {
+  const out: any[] = [];
+  for (const it of items) {
+    if (it.type === 'sidechain-group') out.push(it);
+    if (it.type === 'batch-group') out.push(...it.agentGroups);
+  }
+  return out;
+}
+
 describe('buildStreamModel — parallel batch grouping (#13 design 2026-06-13)', () => {
   it('병렬 형제는 BatchGroup으로 래핑되고 자식은 agent별 SidechainGroup', () => {
     const evs = [
@@ -546,5 +560,24 @@ describe('buildStreamModel — parallel batch grouping (#13 design 2026-06-13)',
     // N=1 → 배치 래핑 없음, 단일 SidechainGroup
     const g = items.find((i: any) => i.type === 'sidechain-group') as any;
     expect(g.conclusion).toBe('최종 결론입니다');
+  });
+
+  it('교차 도착해도 한 agent는 한 SidechainGroup으로(조각 안 남)', () => {
+    const evs = [
+      asstMain('m1', '병렬'),
+      taskCall('m1', 'tcA', 'tuA'),
+      taskCall('m1', 'tcB', 'tuB'),
+      sidecar('A', 'tuA', 'Explore', 'A'),
+      sidecar('B', 'tuB', 'general', 'B'),
+      scAsst('A', 'a1', 'A1'),
+      scAsst('B', 'b1', 'B1'),
+      scAsst('A', 'a2', 'A2'),
+      scAsst('B', 'b2', 'B2'),
+    ];
+    const items = buildStreamModel(evs);
+    const groups = collectSidechainGroups(items); // 헬퍼: batch 안/밖 모든 sidechain-group
+    const byAgent = groups.filter((g: any) => g.agentId === 'A');
+    expect(byAgent).toHaveLength(1); // 조각 X
+    expect(byAgent[0].items.filter((i: any) => i.type === 'message')).toHaveLength(2);
   });
 });
