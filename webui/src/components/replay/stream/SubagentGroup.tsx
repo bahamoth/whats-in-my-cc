@@ -141,6 +141,14 @@ export function SubagentGroup({
           </button>
         )}
       </div>
+      {/* 결론 = 그 agent의 마지막 assistant_message 요약. 헤더 아래에 두어
+          접힌 상태에서도 "이 에이전트가 무엇을 결론지었나"가 한눈에 보인다. */}
+      {group.conclusion && (
+        <div data-testid="subagent-conclusion" className={styles.conclusion}>
+          <span className={styles.conclusionLabel}>결론</span>
+          <span className={styles.conclusionText}>{group.conclusion}</span>
+        </div>
+      )}
       {expanded && (
         <div className={styles.body}>
           {group.items.map((it) => {

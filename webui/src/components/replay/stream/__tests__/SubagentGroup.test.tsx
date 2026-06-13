@@ -127,4 +127,30 @@ describe('SubagentGroup', () => {
     );
     expect(screen.queryByTestId('subagent-jump')).toBeNull();
   });
+
+  it('shows the conclusion line in the collapsed summary when present', () => {
+    render(
+      <SubagentGroup
+        group={{ ...group, conclusion: '핵심 결론' }}
+        selectedEventId={null}
+        onSelect={() => {}}
+        findingEventIds={new Set()}
+      />,
+    );
+    // collapsed by default, yet the conclusion is visible (sits below the header)
+    expect(screen.getByTestId('subagent-toggle')).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('subagent-conclusion')).toHaveTextContent('핵심 결론');
+  });
+
+  it('omits the conclusion line when the group has no conclusion', () => {
+    render(
+      <SubagentGroup
+        group={{ ...group, conclusion: null }}
+        selectedEventId={null}
+        onSelect={() => {}}
+        findingEventIds={new Set()}
+      />,
+    );
+    expect(screen.queryByTestId('subagent-conclusion')).toBeNull();
+  });
 });
