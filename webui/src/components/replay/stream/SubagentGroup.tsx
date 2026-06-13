@@ -9,7 +9,7 @@ import { ChevronDown, ChevronRight, CornerDownRight } from 'lucide-react';
 import { MessageCard } from './MessageCard';
 import { ActivityStack } from './ActivityStack';
 import { ThinkingMarker } from './ThinkingMarker';
-import { formatDuration } from './duration';
+import { formatDuration, durationHeat } from './duration';
 import type { SidechainGroup, StreamItem } from './streamModel';
 import styles from './SubagentGroup.module.css';
 
@@ -111,7 +111,9 @@ export function SubagentGroup({
           <span>메시지 {summary.messageCount}</span>
           <span>도구 {summary.toolCount}</span>
           {summary.durationMs > 0 && (
-            <span className={styles.duration}>{formatDuration(summary.durationMs)}</span>
+            <span className={styles.duration} data-heat={durationHeat(summary.durationMs)}>
+              {formatDuration(summary.durationMs)}
+            </span>
           )}
         </span>
       </button>

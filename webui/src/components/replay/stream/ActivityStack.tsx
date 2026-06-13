@@ -6,7 +6,7 @@ import type { ActivityStackData } from './activityGroup';
 import { nodeLabel } from './nodeLabel';
 import { tagVerb, type Tag } from './eventTags';
 import { hookFacet } from './hookFacet';
-import { formatDuration } from './duration';
+import { formatDuration, durationHeat } from './duration';
 import styles from './ActivityStack.module.css';
 
 interface ActivityStackProps {
@@ -57,7 +57,9 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
             </span>
           )}
           {summary.durationMs > 0 && (
-            <span className={styles.duration}>{formatDuration(summary.durationMs)}</span>
+            <span className={styles.duration} data-heat={durationHeat(summary.durationMs)}>
+              {formatDuration(summary.durationMs)}
+            </span>
           )}
         </span>
       </button>
@@ -111,7 +113,9 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
                       {status === 'ok' && <span className={styles.itemBadgeOk}>ok</span>}
                       {status === 'error' && <span className={styles.itemBadgeError}>error</span>}
                       {durationMs != null && (
-                        <span className={styles.duration}>{formatDuration(durationMs)}</span>
+                        <span className={styles.duration} data-heat={durationHeat(durationMs)}>
+                          {formatDuration(durationMs)}
+                        </span>
                       )}
                     </span>
                   );

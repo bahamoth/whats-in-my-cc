@@ -52,6 +52,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* long-running heat tiers (durationHeat): ≥10s warn, ≥60s hot — slow work
+   pops out of the stream without opening each fold. */
+.duration[data-heat='warn'] {
+  color: var(--wimcc-warning, #f0b429);
+}
+
+.duration[data-heat='hot'] {
+  color: var(--wimcc-danger, #ef4747);
+  font-weight: 600;
+}
+
 /* The right-aligned [time, status] cluster, shared by the fold header and every
    activity item so time + ok/error line up consistently on the right edge. */
 .meta {
