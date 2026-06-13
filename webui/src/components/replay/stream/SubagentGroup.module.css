@@ -134,6 +134,31 @@
   font-weight: 600;
 }
 
+/* the agent's conclusion (last assistant_message) — sits below the header so it
+   reads even while collapsed. Quiet (fg-muted, small), with a strong "결론"
+   label so the line scans as a result, not body text. */
+.conclusion {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 1px 0 3px 19px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--wimcc-fg-muted, #aab0bd);
+}
+
+.conclusionLabel {
+  flex: none;
+  font-weight: 600;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--wimcc-lane-action, #8fe6c8);
+}
+
+.conclusionText {
+  min-width: 0;
+}
+
 /* flex column so the inner MessageCards' alignment (align-self / margin) works */
 .body {
   display: flex;
