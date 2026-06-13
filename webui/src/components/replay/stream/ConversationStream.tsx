@@ -46,6 +46,8 @@ interface ConversationStreamProps {
 function itemContainsEvent(item: StreamItem, eventId: string): boolean {
   if (item.type === 'message') return item.eventId === eventId;
   if (item.type === 'sidechain-group') return item.items.some((i) => itemContainsEvent(i, eventId));
+  if (item.type === 'batch-group')
+    return item.agentGroups.some((g) => itemContainsEvent(g, eventId));
   if (item.type === 'thinking') return item.events.some((e) => e.eventId === eventId);
   return item.events.some((ae) => ae.event.event_id === eventId);
 }
@@ -320,6 +322,24 @@ export function ConversationStream({
           selectedEventId={selectedEventId}
           onSelect={onSelect}
         />
+      );
+    }
+    if (item.type === 'batch-group') {
+      // Dedicated BatchGroup container (L0/L1) lands in a later slice. Until
+      // then render each parallel sibling as its own SubagentGroup so the
+      // de-interleaved children stay visible and selectable.
+      return (
+        <>
+          {item.agentGroups.map((g) => (
+            <SubagentGroup
+              key={g.id}
+              group={g}
+              selectedEventId={selectedEventId}
+              onSelect={onSelect}
+              findingEventIds={findingEventIds}
+            />
+          ))}
+        </>
       );
     }
     // An activity-run renders as ONE contiguous ActivityStack (its events).

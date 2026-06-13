@@ -75,7 +75,22 @@ export interface SidechainGroup {
    *  joined via the sidecar's toolUseId. null when the sidecar is absent or
    *  the Task call is outside the loaded window (jump unavailable). */
   taskEventId: string | null;
+  /** 그 agent의 마지막 assistant_message 요약 — 축약 줄의 "결론". null=미관측/진행중. */
+  conclusion: string | null;
   items: StreamItem[];
+}
+
+/** 한 디스패치 턴(같은 message_id)에서 병렬로 띄운 형제 서브에이전트 묶음. 동시성은
+ *  에이전트 사이에만 있고 각 자식은 직렬이므로, agent_id로 전역 수집한 SidechainGroup을
+ *  배치로 래핑한다(시간축은 배치=한 슬롯으로 보존). 단일 디스패치(N=1)는 래핑하지 않는다. */
+export interface BatchGroup {
+  type: 'batch-group';
+  id: string;
+  agentGroups: SidechainGroup[];
+  /** 배치 후 main의 첫 assistant_message 요약 = 종합 결과. null=진행 중/미관측. */
+  synthesis: string | null;
+  /** 전부 완료 추정(모든 자식이 결론 보유)이면 true. 스트리밍 중 false. */
+  settled: boolean;
 }
 
 /** Caller linkage harvested from `attachment_meta`/`subagent_meta` sidecar
@@ -112,7 +127,7 @@ export interface ThinkingMarker {
   events: ThinkingEntry[];
 }
 
-export type StreamItem = MessageItem | ActivityRun | SidechainGroup | ThinkingMarker;
+export type StreamItem = MessageItem | ActivityRun | SidechainGroup | ThinkingMarker | BatchGroup;
 
 function userText(p: Record<string, unknown>): string {
   return (typeof p.content === 'string'
@@ -273,6 +288,7 @@ export function buildStreamModel(
         agentType: meta?.agentType ?? (scAgent ? attributionByAgent.get(scAgent) ?? null : null),
         description: meta?.description ?? null,
         taskEventId,
+        conclusion: null,
         items: scBuf,
       });
     }

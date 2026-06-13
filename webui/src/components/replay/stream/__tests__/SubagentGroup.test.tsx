@@ -11,6 +11,7 @@ const group: SidechainGroup = {
   agentType: null,
   description: null,
   taskEventId: null,
+  conclusion: null,
   items: [
     { type: 'message', id: 'p', eventId: 'p', role: 'user', model: null, text: '서브 프롬프트 첫 줄\n둘째 줄', timestamp: '2026-05-28T00:00:00Z', sidechain: true },
     {
