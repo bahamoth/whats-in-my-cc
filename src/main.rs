@@ -290,13 +290,6 @@ fn collect_files(
 }
 
 fn walk_jsonl(root: &std::path::Path) -> Vec<std::path::PathBuf> {
-    walkdir::WalkDir::new(root)
-        .into_iter()
-        .filter_map(|r| r.ok())
-        .filter(|e| {
-            e.file_type().is_file()
-                && e.path().extension().and_then(|x| x.to_str()) == Some("jsonl")
-        })
-        .map(|e| e.into_path())
-        .collect()
+    // *.jsonl + subagent 사이드카 meta.json (호출 관계의 원본) — lib과 공유.
+    wimcc::ingest::discover_files(root)
 }

@@ -5,7 +5,7 @@
 // the wall-clock span — so parallel dispatches scan at a glance; expanded it
 // shows the inner stream (prompt, the subagent's replies, its tool activity).
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, CornerDownRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, CornerDownRight, CornerUpLeft } from 'lucide-react';
 import { MessageCard } from './MessageCard';
 import { ActivityStack } from './ActivityStack';
 import { ThinkingMarker } from './ThinkingMarker';
@@ -84,39 +84,62 @@ export function SubagentGroup({
     group.items.some((it) => itemEventIds(it).includes(selectedEventId));
   const expanded = userOverride ?? containsSelected;
 
+  // 사이드카 description(디스패치한 Task의 의도)이 프롬프트 첫 줄보다 정확한
+  // 한 줄 정체성이다 — 있으면 우선한다.
+  const preview = group.description || summary.promptPreview;
+
   return (
     <section data-testid="subagent-group" data-expanded={String(expanded)} className={styles.group}>
-      <button
-        data-testid="subagent-toggle"
-        className={styles.header}
-        onClick={() => setUserOverride(!expanded)}
-        aria-expanded={expanded}
-      >
-        {expanded
-          ? <ChevronDown size={13} aria-hidden className={styles.chevron} />
-          : <ChevronRight size={13} aria-hidden className={styles.chevron} />}
-        <CornerDownRight size={13} aria-hidden className={styles.icon} />
-        <span className={styles.label}>Subagent</span>
-        {group.agentId && (
-          <span data-testid="subagent-agent-chip" className={styles.agentChip} title={group.agentId}>
-            {group.agentId.slice(0, 6)}
-          </span>
-        )}
-        {summary.promptPreview && (
-          <span data-testid="subagent-preview" className={styles.preview}>
-            {summary.promptPreview}
-          </span>
-        )}
-        <span data-testid="subagent-meta" className={styles.meta}>
-          <span>메시지 {summary.messageCount}</span>
-          <span>도구 {summary.toolCount}</span>
-          {summary.durationMs > 0 && (
-            <span className={styles.duration} data-heat={durationHeat(summary.durationMs)}>
-              {formatDuration(summary.durationMs)}
+      <div className={styles.headerRow}>
+        <button
+          data-testid="subagent-toggle"
+          className={styles.header}
+          onClick={() => setUserOverride(!expanded)}
+          aria-expanded={expanded}
+        >
+          {expanded
+            ? <ChevronDown size={13} aria-hidden className={styles.chevron} />
+            : <ChevronRight size={13} aria-hidden className={styles.chevron} />}
+          <CornerDownRight size={13} aria-hidden className={styles.icon} />
+          <span className={styles.label}>Subagent</span>
+          {group.agentType && (
+            <span data-testid="subagent-type" className={styles.agentType}>
+              {group.agentType}
             </span>
           )}
-        </span>
-      </button>
+          {group.agentId && (
+            <span data-testid="subagent-agent-chip" className={styles.agentChip} title={group.agentId}>
+              {group.agentId.slice(0, 6)}
+            </span>
+          )}
+          {preview && (
+            <span data-testid="subagent-preview" className={styles.preview}>
+              {preview}
+            </span>
+          )}
+          <span data-testid="subagent-meta" className={styles.meta}>
+            <span>메시지 {summary.messageCount}</span>
+            <span>도구 {summary.toolCount}</span>
+            {summary.durationMs > 0 && (
+              <span className={styles.duration} data-heat={durationHeat(summary.durationMs)}>
+                {formatDuration(summary.durationMs)}
+              </span>
+            )}
+          </span>
+        </button>
+        {group.taskEventId && (
+          <button
+            data-testid="subagent-jump"
+            className={styles.jump}
+            title="호출한 Task로 이동"
+            aria-label="호출한 Task로 이동"
+            onClick={() => onSelect(group.taskEventId!)}
+          >
+            <CornerUpLeft size={12} aria-hidden />
+            Task
+          </button>
+        )}
+      </div>
       {expanded && (
         <div className={styles.body}>
           {group.items.map((it) => {

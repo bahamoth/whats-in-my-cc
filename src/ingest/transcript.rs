@@ -109,6 +109,12 @@ pub struct AssistantRecord {
     #[serde(rename = "agentId")]
     #[serde(default)]
     pub agent_id: Option<String>,
+    /// Subagent transcript의 assistant 레코드에 찍히는 agent 타입(예:
+    /// "Explore"). 실측 표본 1 (subagent_sidecar_v01 fixture, CC 2.1.176) —
+    /// 같은 파일의 user 레코드에는 없었다.
+    #[serde(rename = "attributionAgent")]
+    #[serde(default)]
+    pub attribution_agent: Option<String>,
     #[serde(rename = "requestId")]
     pub request_id: Option<String>,
     pub message: Value,

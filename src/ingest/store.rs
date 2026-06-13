@@ -15,9 +15,9 @@ use crate::security::redaction::engine::scan;
 type TurnBackfillRow = (String, Option<String>, Option<String>, Option<String>);
 use crate::error::{Result, WimccError};
 use crate::ids::MonotonicUlidGen;
-use crate::ingest::{diff_hunk, mapping, transcript, usage_facet, verification_run};
+use crate::ingest::{diff_hunk, mapping, subagent_meta, transcript, usage_facet, verification_run};
 use crate::model::meta::SCHEMA_VERSION;
-use crate::model::observed::EventKind;
+use crate::model::observed::{Actor, EventKind, ObservedEvent};
 
 #[derive(Debug, Default, Serialize)]
 pub struct IngestStats {
@@ -77,6 +77,10 @@ async fn ingest_one_file(
     run_id: &str,
     stats: &mut IngestStats,
 ) -> Result<()> {
+    // Subagent 사이드카(meta.json)는 JSONL이 아니라 단일 JSON 파일 — 전용 경로.
+    if let Some(sc) = subagent_meta::sidecar_path_parts(path) {
+        return ingest_sidecar_file(pool, path, &sc, sink, gen, run_id, stats).await;
+    }
     tracing::info!(path = %path.display(), "ingesting");
     let mut stream = Box::pin(
         transcript::stream_file(path)
@@ -231,6 +235,110 @@ async fn ingest_one_file(
             Err(other) => return Err(other),
         }
     }
+    Ok(())
+}
+
+/// Subagent 사이드카 meta.json 한 파일 → raw_event 1행(source-preserving,
+/// redaction 경로 통과) + ObservedEvent 1건. 이벤트는 correlation 키 자리에
+/// 그대로 싣는다: `agent_id`(사이드체인 그룹 조인) + `tool_use_id`(메인 체인
+/// Task tool_call로 점프). `observed_at`은 파일 mtime — 레코드에 타임스탬프가
+/// 없는 정적 사이드카라 capture에 가장 가까운 시각이다.
+async fn ingest_sidecar_file(
+    pool: &SqlitePool,
+    path: &Path,
+    sc: &subagent_meta::SidecarRef,
+    sink: &dyn LiveSink,
+    gen: &mut MonotonicUlidGen,
+    run_id: &str,
+    stats: &mut IngestStats,
+) -> Result<()> {
+    let bytes = std::fs::read(path).map_err(|e| WimccError::Io {
+        path: path.to_path_buf(),
+        source: e,
+    })?;
+    let payload_text = String::from_utf8_lossy(&bytes);
+    let parsed: Option<serde_json::Value> = serde_json::from_str(&payload_text).ok();
+
+    let scan_result = scan(&payload_text);
+    let stored_payload: Vec<u8> = if scan_result.applied {
+        scan_result.masked_text.into_bytes()
+    } else {
+        bytes.clone()
+    };
+    let payload_sha = hex::encode(Sha256::digest(&stored_payload));
+    let raw_id = gen.generate();
+    let inserted = repo_raw::insert_dedup(
+        pool,
+        &repo_raw::NewRaw {
+            raw_event_id: raw_id.clone(),
+            ingest_run_id: run_id.to_string(),
+            source_type: "claude_subagent_meta".into(),
+            source_uri: path.display().to_string(),
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: payload_sha,
+            payload: stored_payload,
+            parse_error: if parsed.is_none() {
+                Some("invalid JSON in subagent meta sidecar".into())
+            } else {
+                None
+            },
+            captured_at: Utc::now(),
+            redaction_state: scan_result.manifest.redaction_state.as_str().to_owned(),
+            redaction_manifest: serde_json::to_string(&scan_result.manifest).ok(),
+        },
+    )
+    .await?;
+    if !inserted {
+        stats.raw_skipped += 1;
+        stats.sessions_touched.insert(sc.session_id.clone());
+        return Ok(());
+    }
+    stats.raw_inserted += 1;
+    let Some(mut record) = parsed else {
+        stats.parse_errors += 1;
+        return Ok(());
+    };
+    if scan_result.applied {
+        let redacted = scan(&record.to_string()).masked_text;
+        record = serde_json::from_str(&redacted).unwrap_or(record);
+    }
+    let tool_use_id = record
+        .get("toolUseId")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let observed_at = std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .map(chrono::DateTime::<Utc>::from)
+        .unwrap_or_else(|_| Utc::now());
+    let ev = ObservedEvent {
+        event_id: gen.generate(),
+        raw_event_id: raw_id,
+        schema_version: SCHEMA_VERSION.into(),
+        parser_version: subagent_meta::PARSER_VERSION.into(),
+        session_id: sc.session_id.clone(),
+        observed_at,
+        actor: Actor::System,
+        kind: EventKind::AttachmentMeta,
+        subkind: Some("subagent_meta".into()),
+        tool_use_id,
+        agent_id: Some(sc.agent_id.clone()),
+        is_sidechain: true,
+        // payload는 사이드카 JSON 전체 — unknown field 보존 원칙.
+        payload: record,
+        ..Default::default()
+    };
+    stats.sessions_touched.insert(ev.session_id.clone());
+    repo_observed::insert(pool, &ev).await?;
+    stats.observed_inserted += 1;
+    sink.emit(LiveEvent {
+        schema_version: LiveEvent::SCHEMA_VERSION.into(),
+        session_id: ev.session_id.clone(),
+        event_id: ev.event_id.clone(),
+        kind: ev.kind,
+        source_type: "transcript".into(),
+        observed_at: ev.observed_at.to_rfc3339(),
+    });
     Ok(())
 }
 

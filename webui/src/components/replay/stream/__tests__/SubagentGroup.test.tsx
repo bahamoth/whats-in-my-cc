@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { SubagentGroup } from '../SubagentGroup';
 import type { SidechainGroup } from '../streamModel';
 
@@ -8,6 +8,9 @@ const group: SidechainGroup = {
   type: 'sidechain-group',
   id: 'sc-1',
   agentId: 'a3f9c2d41b',
+  agentType: null,
+  description: null,
+  taskEventId: null,
   items: [
     { type: 'message', id: 'p', eventId: 'p', role: 'user', model: null, text: '서브 프롬프트 첫 줄\n둘째 줄', timestamp: '2026-05-28T00:00:00Z', sidechain: true },
     {
@@ -83,5 +86,44 @@ describe('SubagentGroup', () => {
       />,
     );
     expect(screen.queryByTestId('subagent-agent-chip')).toBeNull();
+  });
+
+  it('shows the agent TYPE when known, and prefers the Task description as preview', () => {
+    render(
+      <SubagentGroup
+        group={{ ...group, agentType: 'Explore', description: '간단 조사' }}
+        selectedEventId={null}
+        onSelect={() => {}}
+        findingEventIds={new Set()}
+      />,
+    );
+    expect(screen.getByTestId('subagent-type')).toHaveTextContent('Explore');
+    // 사이드카 description이 프롬프트 첫 줄보다 우선한다
+    expect(screen.getByTestId('subagent-preview')).toHaveTextContent('간단 조사');
+  });
+
+  it('jump-to-Task button selects the dispatching Task event without toggling the fold', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(
+      <SubagentGroup
+        group={{ ...group, taskEventId: 'task-ev-1' }}
+        selectedEventId={null}
+        onSelect={onSelect}
+        findingEventIds={new Set()}
+      />,
+    );
+    const jump = screen.getByTestId('subagent-jump');
+    await user.click(jump);
+    expect(onSelect).toHaveBeenCalledWith('task-ev-1');
+    // 점프가 fold 상태를 건드리지 않는다 — 여전히 접힘
+    expect(screen.getByTestId('subagent-toggle')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('omits the jump button when the Task event is not in the loaded window', () => {
+    render(
+      <SubagentGroup group={group} selectedEventId={null} onSelect={() => {}} findingEventIds={new Set()} />,
+    );
+    expect(screen.queryByTestId('subagent-jump')).toBeNull();
   });
 });

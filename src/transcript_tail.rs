@@ -27,8 +27,10 @@ use tokio_util::sync::CancellationToken;
 const DEBOUNCE_MS: u64 = 100;
 const TICK_MS: u64 = 50;
 
-fn is_jsonl(p: &Path) -> bool {
+fn is_ingestable(p: &Path) -> bool {
+    // *.jsonl + subagent 사이드카 meta.json — CLI discover_files와 같은 대상.
     p.extension().and_then(|x| x.to_str()) == Some("jsonl")
+        || crate::ingest::subagent_meta::sidecar_path_parts(p).is_some()
 }
 
 /// Run the transcript live tail until `cancel` is triggered.
@@ -82,7 +84,7 @@ pub async fn run(
                 EventKind::Modify(_) | EventKind::Create(_) | EventKind::Any
             ) {
                 for p in ev.paths {
-                    if is_jsonl(&p) {
+                    if is_ingestable(&p) {
                         let _ = tx_for_watcher.send(p);
                     }
                 }
@@ -148,7 +150,7 @@ async fn scan_initial(
     let mut total_inserted = 0u64;
     for entry in walkdir::WalkDir::new(root).into_iter().flatten() {
         let p = entry.path();
-        if !p.is_file() || !is_jsonl(p) {
+        if !p.is_file() || !is_ingestable(p) {
             continue;
         }
         files += 1;

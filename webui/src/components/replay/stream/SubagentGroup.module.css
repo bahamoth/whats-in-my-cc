@@ -9,11 +9,20 @@
   border-left: 2px solid var(--wimcc-lane-context, #b07dff);
 }
 
+/* header row = fold toggle (flex:1) + jump-to-Task button as SIBLINGS — the
+   jump must not nest inside the toggle <button> (invalid HTML, focus traps). */
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .header {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   padding: 4px 6px 4px 0;
   background: none;
   border: none;
@@ -42,6 +51,34 @@
 .label {
   flex: none;
   font-weight: 600;
+}
+
+/* agent TYPE from the sidecar meta (e.g. Explore) — the strongest identity */
+.agentType {
+  flex: none;
+  font-weight: 600;
+  color: var(--wimcc-lane-context, #b07dff);
+}
+
+/* jump to the dispatching Task tool_call on the main chain */
+.jump {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  background: none;
+  border: 1px solid var(--wimcc-border, #1d212c);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  color: var(--wimcc-fg-muted, #aab0bd);
+}
+
+.jump:hover {
+  color: var(--wimcc-fg, #e6e8ee);
+  background: var(--wimcc-surface-3, #1b202a);
 }
 
 /* short agent_id chip — ties interleaved parallel dispatches to one identity */

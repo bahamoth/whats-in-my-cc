@@ -201,6 +201,13 @@ fn map_assistant(
                 e.payload = json!({"content_ordinal": ord, "raw": item});
             }
         }
+        // Subagent attribution(agent 타입) — 있을 때만 싣는다(키 부재 = 미관측).
+        // payload 필드라 기존 DB는 재ingest해야 채워진다 (`model` 전례).
+        if let Some(attr) = &a.attribution_agent {
+            if let Some(obj) = e.payload.as_object_mut() {
+                obj.insert("attribution_agent".into(), json!(attr));
+            }
+        }
         out.push(e);
     }
     out
