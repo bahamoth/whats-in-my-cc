@@ -532,4 +532,19 @@ describe('buildStreamModel — parallel batch grouping (#13 design 2026-06-13)',
     expect(batch.agentGroups).toHaveLength(2);
     expect(batch.agentGroups.map((g: any) => g.agentId).sort()).toEqual(['A', 'B']);
   });
+
+  it('각 자식 SidechainGroup.conclusion = 그 agent의 마지막 assistant_message', () => {
+    const evs = [
+      asstMain('m1', '병렬'),
+      taskCall('m1', 'tcA', 'tuA'),
+      sidecar('A', 'tuA', 'Explore', '조사 A'),
+      scUser('A', 'pA'),
+      scAsst('A', 'a1', '중간'),
+      scAsst('A', 'a2', '최종 결론입니다'),
+    ];
+    const items = buildStreamModel(evs);
+    // N=1 → 배치 래핑 없음, 단일 SidechainGroup
+    const g = items.find((i: any) => i.type === 'sidechain-group') as any;
+    expect(g.conclusion).toBe('최종 결론입니다');
+  });
 });
