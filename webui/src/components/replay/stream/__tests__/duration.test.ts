@@ -13,6 +13,15 @@ describe('formatDuration', () => {
     expect(formatDuration(65_000)).toBe('1m 5s');
     expect(formatDuration(312_000)).toBe('5m 12s');
   });
+  it('rounds the whole duration so the seconds field never reaches 60 (bug: 1m 60s)', () => {
+    // 119_500ms rounds to 120s = 2m 0s, NOT 1m 60s. Rounding the remainder
+    // seconds independently of the minutes carries 60 into the seconds slot.
+    expect(formatDuration(119_500)).toBe('2m 0s');
+    expect(formatDuration(179_800)).toBe('3m 0s');
+    // a clean minute and a mid-minute value must stay correct after the fix
+    expect(formatDuration(60_000)).toBe('1m 0s');
+    expect(formatDuration(90_400)).toBe('1m 30s');
+  });
 });
 
 describe('durationHeat — 오래 걸린 작업의 색상 차등 티어', () => {
