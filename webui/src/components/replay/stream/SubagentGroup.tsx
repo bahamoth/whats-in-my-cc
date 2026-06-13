@@ -1,13 +1,16 @@
 // webui/src/components/replay/stream/SubagentGroup.tsx
-// Renders one Task-subagent exchange (a sidechain run) as a single indented
-// block: a "Subagent" header + the inner stream (dispatched prompt, the
-// subagent's replies, its tool activity) so it reads as separate from — but
-// nested under — the main human↔agent conversation.
-import { CornerDownRight } from 'lucide-react';
+// Renders one Task-subagent exchange (a sidechain run) as a single indented,
+// COLLAPSIBLE block. Collapsed (the default) it reads as one overview line —
+// agent identity, the dispatched prompt's first line, message/tool counts and
+// the wall-clock span — so parallel dispatches scan at a glance; expanded it
+// shows the inner stream (prompt, the subagent's replies, its tool activity).
+import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, CornerDownRight } from 'lucide-react';
 import { MessageCard } from './MessageCard';
 import { ActivityStack } from './ActivityStack';
 import { ThinkingMarker } from './ThinkingMarker';
-import type { SidechainGroup } from './streamModel';
+import { formatDuration } from './duration';
+import type { SidechainGroup, StreamItem } from './streamModel';
 import styles from './SubagentGroup.module.css';
 
 interface SubagentGroupProps {
@@ -17,55 +20,140 @@ interface SubagentGroupProps {
   findingEventIds: Set<string>;
 }
 
+interface GroupSummary {
+  messageCount: number;
+  toolCount: number;
+  /** wall-clock span (ms) from the group's first to last observed timestamp. */
+  durationMs: number;
+  /** first line of the orchestrator's dispatched prompt, '' when absent. */
+  promptPreview: string;
+}
+
+function itemEventIds(it: StreamItem): string[] {
+  if (it.type === 'message') return [it.eventId];
+  if (it.type === 'thinking') return it.events.map((e) => e.eventId);
+  if (it.type === 'activity-run') return it.events.map((ae) => ae.event.event_id);
+  return it.items.flatMap(itemEventIds);
+}
+
+function summarizeGroup(group: SidechainGroup): GroupSummary {
+  let messageCount = 0;
+  let toolCount = 0;
+  let min = Infinity;
+  let max = -Infinity;
+  let promptPreview = '';
+  const see = (iso: string) => {
+    const t = new Date(iso).getTime();
+    if (!Number.isNaN(t)) {
+      min = Math.min(min, t);
+      max = Math.max(max, t);
+    }
+  };
+  for (const it of group.items) {
+    if (it.type === 'message') {
+      messageCount++;
+      see(it.timestamp);
+      if (!promptPreview && it.role === 'user') {
+        promptPreview = it.text.split('\n', 1)[0].trim();
+      }
+    } else if (it.type === 'activity-run') {
+      for (const ae of it.events) {
+        if (ae.event.kind === 'tool_call') toolCount++;
+        see(ae.event.observed_at);
+      }
+    } else if (it.type === 'thinking') {
+      for (const e of it.events) see(e.timestamp);
+    }
+  }
+  return { messageCount, toolCount, durationMs: max > min ? max - min : 0, promptPreview };
+}
+
 export function SubagentGroup({
   group,
   selectedEventId,
   onSelect,
   findingEventIds,
 }: SubagentGroupProps) {
+  // Same fold policy as ActivityStack: `null` = no explicit user choice yet →
+  // follow `containsSelected` (auto-open when a selection lands inside so the
+  // host can scroll it into view); an explicit toggle then wins either way.
+  const [userOverride, setUserOverride] = useState<boolean | null>(null);
+  const summary = useMemo(() => summarizeGroup(group), [group]);
+  const containsSelected =
+    selectedEventId != null &&
+    group.items.some((it) => itemEventIds(it).includes(selectedEventId));
+  const expanded = userOverride ?? containsSelected;
+
   return (
-    <section data-testid="subagent-group" className={styles.group}>
-      <div className={styles.header}>
+    <section data-testid="subagent-group" data-expanded={String(expanded)} className={styles.group}>
+      <button
+        data-testid="subagent-toggle"
+        className={styles.header}
+        onClick={() => setUserOverride(!expanded)}
+        aria-expanded={expanded}
+      >
+        {expanded
+          ? <ChevronDown size={13} aria-hidden className={styles.chevron} />
+          : <ChevronRight size={13} aria-hidden className={styles.chevron} />}
         <CornerDownRight size={13} aria-hidden className={styles.icon} />
         <span className={styles.label}>Subagent</span>
-      </div>
-      <div className={styles.body}>
-        {group.items.map((it) => {
-          if (it.type === 'message') {
-            return (
-              <MessageCard
-                key={it.id}
-                item={it}
-                selected={it.eventId === selectedEventId}
-                onSelect={onSelect}
-                hasFinding={findingEventIds.has(it.eventId)}
-              />
-            );
-          }
-          if (it.type === 'activity-run') {
-            return (
-              <ActivityStack
-                key={it.id}
-                stack={{ events: it.events }}
-                selectedEventId={selectedEventId}
-                onSelect={onSelect}
-              />
-            );
-          }
-          if (it.type === 'thinking') {
-            return (
-              <ThinkingMarker
-                key={it.id}
-                marker={it}
-                selectedEventId={selectedEventId}
-                onSelect={onSelect}
-              />
-            );
-          }
-          // nested sidechain groups do not occur (grouping is one level deep)
-          return null;
-        })}
-      </div>
+        {group.agentId && (
+          <span data-testid="subagent-agent-chip" className={styles.agentChip} title={group.agentId}>
+            {group.agentId.slice(0, 6)}
+          </span>
+        )}
+        {summary.promptPreview && (
+          <span data-testid="subagent-preview" className={styles.preview}>
+            {summary.promptPreview}
+          </span>
+        )}
+        <span data-testid="subagent-meta" className={styles.meta}>
+          <span>메시지 {summary.messageCount}</span>
+          <span>도구 {summary.toolCount}</span>
+          {summary.durationMs > 0 && (
+            <span className={styles.duration}>{formatDuration(summary.durationMs)}</span>
+          )}
+        </span>
+      </button>
+      {expanded && (
+        <div className={styles.body}>
+          {group.items.map((it) => {
+            if (it.type === 'message') {
+              return (
+                <MessageCard
+                  key={it.id}
+                  item={it}
+                  selected={it.eventId === selectedEventId}
+                  onSelect={onSelect}
+                  hasFinding={findingEventIds.has(it.eventId)}
+                />
+              );
+            }
+            if (it.type === 'activity-run') {
+              return (
+                <ActivityStack
+                  key={it.id}
+                  stack={{ events: it.events }}
+                  selectedEventId={selectedEventId}
+                  onSelect={onSelect}
+                />
+              );
+            }
+            if (it.type === 'thinking') {
+              return (
+                <ThinkingMarker
+                  key={it.id}
+                  marker={it}
+                  selectedEventId={selectedEventId}
+                  onSelect={onSelect}
+                />
+              );
+            }
+            // nested sidechain groups do not occur (grouping is one level deep)
+            return null;
+          })}
+        </div>
+      )}
     </section>
   );
 }

@@ -44,10 +44,16 @@ export interface ActivityRun {
 
 /** A contiguous run of sidechain (subagent) events — the prompt the orchestrator
  *  sent, the subagent's replies, and its tool activity — grouped so the whole
- *  exchange reads as one indented block separate from the main conversation. */
+ *  exchange reads as one indented block separate from the main conversation.
+ *  Parallel Task dispatches interleave their events chronologically, so a
+ *  change of `agent_id` (subagent jsonl attribution, exposed on the events DTO)
+ *  is ALSO a group boundary — contiguity alone would merge two agents' work. */
 export interface SidechainGroup {
   type: 'sidechain-group';
   id: string;
+  /** subagent attribution of the grouped events; null on pre-0023 ingests
+   *  (no agentId in the DTO) where grouping falls back to contiguity only. */
+  agentId: string | null;
   items: StreamItem[];
 }
 
@@ -193,17 +199,24 @@ export function buildStreamModel(
 
   // Sidechain items accumulate into a buffer that is flushed as one
   // SidechainGroup the moment the stream returns to the main thread (or ends).
+  // The buffer also closes when the sidechain agent_id CHANGES (parallel Task
+  // dispatches interleave). Missing attribution (null/'' — pre-0023 ingest)
+  // never splits: it attaches to whatever group is open (contiguity fallback).
   let scBuf: StreamItem[] | null = null;
   let scFirstId = '';
+  let scAgent: string | null = null;
   const closeGroup = () => {
     if (scBuf && scBuf.length) {
-      items.push({ type: 'sidechain-group', id: `sc-${scFirstId}`, items: scBuf });
+      items.push({ type: 'sidechain-group', id: `sc-${scFirstId}`, agentId: scAgent, items: scBuf });
     }
     scBuf = null;
+    scAgent = null;
   };
-  const emit = (it: StreamItem, sidechain: boolean) => {
+  const emit = (it: StreamItem, sidechain: boolean, agentId: string | null) => {
     if (sidechain) {
+      if (scBuf && agentId && scAgent && agentId !== scAgent) closeGroup();
       if (!scBuf) { scBuf = []; scFirstId = it.id; }
+      scAgent = scAgent ?? agentId;
       scBuf.push(it);
     } else {
       closeGroup();
@@ -213,16 +226,19 @@ export function buildStreamModel(
 
   let run: ActivityEvent[] = [];
   let runSc = false;
+  let runAgent: string | null = null;
   const flush = () => {
     if (run.length) {
-      emit({ type: 'activity-run', id: `run-${run[0].event.event_id}`, events: run }, runSc);
+      emit({ type: 'activity-run', id: `run-${run[0].event.event_id}`, events: run }, runSc, runAgent);
       run = [];
+      runAgent = null;
     }
   };
 
   for (const e of events) {
     if (e.kind === 'tool_result') continue;
     const sc = !!e.is_sidechain;
+    const agent = e.agent_id || null; // '' (NULL TEXT row mapping) → null
     const c = classify(e);
     if (c.cat === 'message') {
       flush();
@@ -238,6 +254,7 @@ export function buildStreamModel(
           sidechain: sc,
         },
         sc,
+        agent,
       );
     } else if (c.cat === 'thinking') {
       // Close any open activity run first so order stays chronological. Each
@@ -261,12 +278,15 @@ export function buildStreamModel(
           ],
         },
         sc,
+        agent,
       );
     } else if (c.cat === 'activity') {
-      // A change of sidechain status breaks the activity run so a run never
-      // straddles the main↔subagent boundary.
-      if (run.length && runSc !== sc) flush();
+      // A change of sidechain status — or of sidechain agent attribution —
+      // breaks the activity run so a run never straddles the main↔subagent
+      // boundary nor mixes two parallel subagents' tools.
+      if (run.length && (runSc !== sc || (sc && agent && runAgent && agent !== runAgent))) flush();
       runSc = sc;
+      runAgent = runAgent ?? agent;
       let result: { isError: boolean } | null = null;
       let durationMs: number | null = null;
       if (e.kind === 'tool_call' && e.tool_use_id) {

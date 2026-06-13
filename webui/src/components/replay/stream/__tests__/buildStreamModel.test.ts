@@ -281,6 +281,56 @@ describe('buildStreamModel — sidechain grouping (#3)', () => {
   });
 });
 
+describe('buildStreamModel — sidechain agent attribution (agent_id)', () => {
+  it('carries the events agent_id on the sidechain-group', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 's-u', kind: 'user_message', is_sidechain: true, agent_id: 'agentX', payload: { content: 'p' } }),
+      ev({ event_id: 's-a', kind: 'assistant_message', is_sidechain: true, agent_id: 'agentX', actor: 'assistant', payload: { text: 'r', model: 'claude-opus-4-8' } }),
+    ]);
+    const group = items.find((i: any) => i.type === 'sidechain-group') as any;
+    expect(group.agentId).toBe('agentX');
+  });
+
+  it('splits interleaved parallel subagents (agent_id change) into separate groups', () => {
+    // 병렬 Task 디스패치: 두 서브에이전트의 이벤트가 시간순으로 교차 도착한다.
+    // 인접성만으로 묶으면 한 그룹에 합쳐지므로 agent_id 변화가 경계가 돼야 한다.
+    const items = buildStreamModel([
+      ev({ event_id: 'x1', kind: 'user_message', is_sidechain: true, agent_id: 'agentX', payload: { content: 'px' } }),
+      ev({ event_id: 'y1', kind: 'user_message', is_sidechain: true, agent_id: 'agentY', payload: { content: 'py' } }),
+      ev({ event_id: 'x2', kind: 'assistant_message', is_sidechain: true, agent_id: 'agentX', actor: 'assistant', payload: { text: 'rx', model: 'claude-opus-4-8' } }),
+    ]);
+    expect(items.map((i: any) => [i.type, i.agentId])).toEqual([
+      ['sidechain-group', 'agentX'],
+      ['sidechain-group', 'agentY'],
+      ['sidechain-group', 'agentX'],
+    ]);
+  });
+
+  it('splits a sidechain ACTIVITY run at an agent_id boundary (tools from two agents never share a run)', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 'cx', kind: 'tool_call', is_sidechain: true, agent_id: 'agentX', actor: 'assistant', tool_name: 'Read', payload: { tool_name: 'Read', input: {} } }),
+      ev({ event_id: 'cy', kind: 'tool_call', is_sidechain: true, agent_id: 'agentY', actor: 'assistant', tool_name: 'Grep', payload: { tool_name: 'Grep', input: {} } }),
+    ]);
+    expect(items.map((i: any) => [i.type, i.agentId])).toEqual([
+      ['sidechain-group', 'agentX'],
+      ['sidechain-group', 'agentY'],
+    ]);
+    for (const g of items as any[]) expect(g.items[0].type).toBe('activity-run');
+  });
+
+  it('treats missing agent_id (pre-0023 ingest: null or "") as contiguity-only grouping', () => {
+    const items = buildStreamModel([
+      ev({ event_id: 's1', kind: 'user_message', is_sidechain: true, agent_id: null, payload: { content: 'p1' } }),
+      ev({ event_id: 's2', kind: 'assistant_message', is_sidechain: true, agent_id: '', actor: 'assistant', payload: { text: 'r1', model: 'claude-opus-4-8' } }),
+    ]);
+    expect(items).toHaveLength(1);
+    const group = items[0] as any;
+    expect(group.type).toBe('sidechain-group');
+    expect(group.agentId).toBeNull();
+    expect(group.items.map((i: any) => i.type)).toEqual(['message', 'message']);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // REGRESSION GUARD: thinking metrics survive the telemetry display-drop.
 //

@@ -6,17 +6,13 @@ import type { ActivityStackData } from './activityGroup';
 import { nodeLabel } from './nodeLabel';
 import { tagVerb, type Tag } from './eventTags';
 import { hookFacet } from './hookFacet';
+import { formatDuration } from './duration';
 import styles from './ActivityStack.module.css';
 
 interface ActivityStackProps {
   stack: ActivityStackData;
   selectedEventId: string | null;
   onSelect: (eventId: string) => void;
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStackProps) {
