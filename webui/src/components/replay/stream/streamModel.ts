@@ -269,49 +269,74 @@ export function buildStreamModel(
 
   const items: StreamItem[] = [];
 
-  // Sidechain items accumulate into a buffer that is flushed as one
-  // SidechainGroup the moment the stream returns to the main thread (or ends).
-  // The buffer also closes when the sidechain agent_id CHANGES (parallel Task
-  // dispatches interleave). Missing attribution (null/'' — pre-0023 ingest)
-  // never splits: it attaches to whatever group is open (contiguity fallback).
-  let scBuf: StreamItem[] | null = null;
-  let scFirstId = '';
-  let scAgent: string | null = null;
-  const closeGroup = () => {
-    if (scBuf && scBuf.length) {
-      const meta = scAgent ? metaByAgent.get(scAgent) ?? null : null;
-      const taskEventId = meta?.toolUseId ? callEventByUse.get(meta.toolUseId) ?? null : null;
-      // Conclusion = the agent's LAST non-empty assistant_message (the design's
-      // observed invariant: every sidechain agent ends on an assistant_message).
-      // Truncated to a one-line preview length for the collapsed summary row.
-      let conclusion: string | null = null;
-      for (const it of scBuf) {
-        if (it.type === 'message' && it.role === 'assistant' && it.text.trim()) {
-          conclusion = it.text.trim().slice(0, 200);
-        }
+  // Parallel Task dispatches interleave their sidechain events by timestamp, so
+  // we collect GLOBALLY per agent_id (de-interleave) rather than breaking the
+  // buffer on every agent change. Each agent's events accumulate into its own
+  // buffer keyed by agent_id; `scOrder` preserves first-seen order so flushed
+  // groups stay in dispatch order. The whole map flushes the moment the stream
+  // returns to the main thread (or ends) — concurrency is between agents only,
+  // each agent's own sub-stream is serial, so no ordering is lost. Missing
+  // attribution (null/'' — pre-0023 ingest) never splits: it attaches to the
+  // last-seen agent's buffer (contiguity fallback), keyed by NULL_AGENT_KEY
+  // when no agent has been seen yet.
+  const NULL_AGENT_KEY = '∅';
+  const scBufs = new Map<string, StreamItem[]>();
+  const scFirstIdByKey = new Map<string, string>();
+  const scOrder: string[] = [];
+  let lastScAgent: string | null = null;
+  /** Build one SidechainGroup from an accumulated per-agent buffer. */
+  const makeSidechainGroup = (key: string, buf: StreamItem[]): SidechainGroup => {
+    const agentId = key === NULL_AGENT_KEY ? null : key;
+    const meta = agentId ? metaByAgent.get(agentId) ?? null : null;
+    const taskEventId = meta?.toolUseId ? callEventByUse.get(meta.toolUseId) ?? null : null;
+    // Conclusion = the agent's LAST non-empty assistant_message (the design's
+    // observed invariant: every sidechain agent ends on an assistant_message).
+    // Truncated to a one-line preview length for the collapsed summary row.
+    let conclusion: string | null = null;
+    for (const it of buf) {
+      if (it.type === 'message' && it.role === 'assistant' && it.text.trim()) {
+        conclusion = it.text.trim().slice(0, 200);
       }
-      items.push({
-        type: 'sidechain-group',
-        id: `sc-${scFirstId}`,
-        agentId: scAgent,
-        agentType: meta?.agentType ?? (scAgent ? attributionByAgent.get(scAgent) ?? null : null),
-        description: meta?.description ?? null,
-        taskEventId,
-        conclusion,
-        items: scBuf,
-      });
     }
-    scBuf = null;
-    scAgent = null;
+    return {
+      type: 'sidechain-group',
+      id: `sc-${scFirstIdByKey.get(key) ?? buf[0]?.id ?? key}`,
+      agentId,
+      agentType: meta?.agentType ?? (agentId ? attributionByAgent.get(agentId) ?? null : null),
+      description: meta?.description ?? null,
+      taskEventId,
+      conclusion,
+      items: buf,
+    };
+  };
+  const flushSidechain = () => {
+    for (const key of scOrder) {
+      const buf = scBufs.get(key);
+      if (!buf || !buf.length) continue;
+      items.push(makeSidechainGroup(key, buf));
+    }
+    scBufs.clear();
+    scFirstIdByKey.clear();
+    scOrder.length = 0;
+    lastScAgent = null;
+  };
+  const emitSidechain = (it: StreamItem, agentId: string | null) => {
+    const key = agentId ?? lastScAgent ?? NULL_AGENT_KEY;
+    let buf = scBufs.get(key);
+    if (!buf) {
+      buf = [];
+      scBufs.set(key, buf);
+      scFirstIdByKey.set(key, it.id);
+      scOrder.push(key);
+    }
+    buf.push(it);
+    if (agentId) lastScAgent = agentId;
   };
   const emit = (it: StreamItem, sidechain: boolean, agentId: string | null) => {
     if (sidechain) {
-      if (scBuf && agentId && scAgent && agentId !== scAgent) closeGroup();
-      if (!scBuf) { scBuf = []; scFirstId = it.id; }
-      scAgent = scAgent ?? agentId;
-      scBuf.push(it);
+      emitSidechain(it, agentId);
     } else {
-      closeGroup();
+      flushSidechain();
       items.push(it);
     }
   };
@@ -396,7 +421,7 @@ export function buildStreamModel(
     // cat === 'drop': skip silently
   }
   flush();
-  closeGroup();
+  flushSidechain();
   return items;
 }
 
