@@ -55,6 +55,48 @@ describe('MessageCard', () => {
   });
 });
 
+describe('MessageCard — header time is the VIEWER-LOCAL clock', () => {
+  it('renders HH:MM:SS in the local timezone, not UTC (bug: toISOString despite the locale comment)', () => {
+    const prev = process.env.TZ;
+    process.env.TZ = 'Asia/Seoul'; // Node 13+ re-reads TZ on assignment
+    try {
+      render(<MessageCard item={m({ timestamp: '2026-05-28T00:00:00Z' })} selected={false} onSelect={() => {}} />);
+      expect(screen.getByText('09:00:00')).toBeInTheDocument(); // UTC+9
+    } finally {
+      process.env.TZ = prev;
+    }
+  });
+});
+
+describe('MessageCard — long message clamp (더 보기)', () => {
+  const longText = Array.from({ length: 80 }, (_, i) => `줄 ${i}: 본문이 아주 길다`).join('\n');
+
+  it('clamps a long message by default and expands via 더 보기', async () => {
+    const user = userEvent.setup();
+    render(<MessageCard item={m({ role: 'user', text: longText })} selected={false} onSelect={() => {}} />);
+    expect(screen.getByTestId('message-bubble')).toHaveAttribute('data-clamped', 'true');
+    const more = screen.getByTestId('clamp-toggle');
+    expect(more).toHaveTextContent('더 보기');
+    await user.click(more);
+    expect(screen.getByTestId('message-bubble')).toHaveAttribute('data-clamped', 'false');
+    expect(screen.getByTestId('clamp-toggle')).toHaveTextContent('접기');
+  });
+
+  it('short messages never clamp and show no toggle', () => {
+    render(<MessageCard item={m({ role: 'user', text: '짧은 메시지' })} selected={false} onSelect={() => {}} />);
+    expect(screen.getByTestId('message-bubble')).not.toHaveAttribute('data-clamped', 'true');
+    expect(screen.queryByTestId('clamp-toggle')).toBeNull();
+  });
+
+  it('clicking 더 보기 does NOT select the card', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<MessageCard item={m({ role: 'user', text: longText })} selected={false} onSelect={onSelect} />);
+    await user.click(screen.getByTestId('clamp-toggle'));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
 describe('MessageCard — markdown raw/styled view', () => {
   it('assistant messages render markdown by default (styled mode)', () => {
     const { container } = render(

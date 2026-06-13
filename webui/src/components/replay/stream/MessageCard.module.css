@@ -135,6 +135,38 @@
   border-bottom-left-radius: 3px;
 }
 
+/* ---- long-message clamp ----
+ * The trigger is a char/line heuristic in the component; the visual cut is a
+ * max-height with a fade so it is obviously truncated, plus 더 보기/접기. */
+.clamped {
+  max-height: 320px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 75%, transparent);
+  mask-image: linear-gradient(to bottom, #000 75%, transparent);
+}
+
+.clampToggle {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 2px 8px;
+  background: none;
+  border: 1px solid var(--wimcc-border, #1d212c);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  font-family: inherit;
+  color: var(--wimcc-fg-muted, #aab0bd);
+}
+
+.clampToggle:hover {
+  color: var(--wimcc-fg, #e6e8ee);
+  background: var(--wimcc-surface-3, #1b202a);
+}
+
+.alignRight .clampToggle {
+  align-self: flex-end;
+}
+
 /* ---- styled (markdown) mode ----
  * raw mode keeps the bubble's pre-wrap; markdown supplies its own block layout,
  * so switch to normal whitespace and give elements compact chat-sized rhythm. */
