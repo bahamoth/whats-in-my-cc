@@ -20,7 +20,8 @@ export type MessageOrigin =
   | 'command' // a slash-command invocation (<command-name> …)
   | 'command-output' // local-command stdout/caveat echoed back as a user record
   | 'skill' // skill / command body injected on the user's behalf (isMeta)
-  | 'system'; // a system beat folded into type:"user" (e.g. interrupt)
+  | 'system' // a system beat folded into type:"user" (e.g. interrupt)
+  | 'notification'; // a harness background-task notice (<task-notification> …)
 
 export interface OriginResult {
   origin: MessageOrigin;
@@ -34,6 +35,11 @@ const COMMAND_INVOCATION = /^\s*(<command-name>|<command-message>|<command-args>
 const COMMAND_OUTPUT = /^\s*(<local-command-stdout>|<local-command-caveat>)/;
 const SYSTEM_BEAT = /^\s*\[Request interrupted/;
 const SKILL_SCAFFOLD = /^\s*Base directory for this skill:/;
+// Harness-injected background-task completion notice, folded into type:"user".
+// Anchored: 전 DB 55건 user_message가 <task-notification> 선행, isMeta 없음 —
+// so the marker (not isMeta) is the deterministic signal that distinguishes it
+// from a human turn (which would otherwise post as "You").
+const NOTIFICATION = /^\s*<task-notification>/;
 
 /** Union of every non-human leading marker — kept so other surfaces can reuse
  *  the exact same set instead of re-listing it (the old per-file SCAFFOLD). */
@@ -42,7 +48,8 @@ export function hasScaffoldMarker(text: string): boolean {
     COMMAND_INVOCATION.test(text) ||
     COMMAND_OUTPUT.test(text) ||
     SYSTEM_BEAT.test(text) ||
-    SKILL_SCAFFOLD.test(text)
+    SKILL_SCAFFOLD.test(text) ||
+    NOTIFICATION.test(text)
   );
 }
 
@@ -74,6 +81,7 @@ export function messageOrigin(e: {
   }
   if (COMMAND_OUTPUT.test(text)) return { origin: 'command-output', commandName: null };
   if (SYSTEM_BEAT.test(text)) return { origin: 'system', commandName: null };
+  if (NOTIFICATION.test(text)) return { origin: 'notification', commandName: null };
   if (SKILL_SCAFFOLD.test(text)) return { origin: 'skill', commandName: null };
   // No marker: isMeta=true is the remaining injection signal (skill bodies,
   // injected guidance). Everything else — including <system-reminder>-wrapped

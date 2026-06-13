@@ -51,6 +51,17 @@ describe('messageOrigin — deterministic caller classification of user_message'
     expect(messageOrigin({ payload: { text: 'human typed this' }, is_meta: 0 }).origin).toBe('human');
     expect(messageOrigin({ payload: { text: 'injected' }, is_meta: 1 }).origin).toBe('skill');
   });
+
+  it('<task-notification> leading marker is a harness notification, NOT human "You"', () => {
+    // anchored: 전 DB 55건 user_message가 <task-notification> 선행, isMeta 없음.
+    // The harness injects background-task completion notices as a user-role
+    // record beginning with <task-notification>; without this marker it falls
+    // through to the human default and posts as "You" (a gap the user did not type).
+    const real = '<task-notification>Background task "build" completed (exit 0).</task-notification>';
+    const r = messageOrigin({ payload: { content: real }, is_meta: false });
+    expect(r.origin).toBe('notification');
+    expect(r.commandName).toBeNull();
+  });
 });
 
 // Real-data anchor (CLAUDE.md "Real-data anchoring"): invariants asserted

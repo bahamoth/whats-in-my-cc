@@ -147,7 +147,8 @@
 [data-origin='command'] .sourceBadge,
 [data-origin='command-output'] .sourceBadge,
 [data-origin='skill'] .sourceBadge,
-[data-origin='system'] .sourceBadge {
+[data-origin='system'] .sourceBadge,
+[data-origin='notification'] .sourceBadge {
   color: var(--wimcc-scaffold, #b07dff);
   background: rgba(176, 125, 255, 0.14);
   border-color: rgba(176, 125, 255, 0.34);
