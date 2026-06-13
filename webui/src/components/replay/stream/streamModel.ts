@@ -316,9 +316,11 @@ export function buildStreamModel(
       items: buf,
     };
   };
-  // Batches awaiting their synthesis line (the first main assistant_message
-  // after the batch returns). Filled lazily when that message is emitted.
-  const pendingSynthesis: BatchGroup[] = [];
+  // The batch awaiting its synthesis line (the first main assistant_message
+  // after the batch returns). At most one is ever pending — a flush produces
+  // one batch slot, and the next main assistant_message consumes it — so a
+  // single reference, not a queue, expresses the intent.
+  let pendingBatch: BatchGroup | null = null;
   const flushSidechain = () => {
     // 1) Materialize one SidechainGroup per accumulated agent buffer (order
     //    preserved by scOrder).
@@ -366,21 +368,18 @@ export function buildStreamModel(
           settled: sibs.every((s) => s.conclusion != null),
         };
         items.push(batch);
-        pendingSynthesis.push(batch);
+        pendingBatch = batch; // the most recently flushed batch awaits synthesis
       } else {
         items.push(sibs[0]);
       }
     }
   };
-  /** Fill any pending batch's synthesis from the first main assistant_message
-   *  after the batch returned, then clear the queue (one synthesis per flush). */
+  /** Fill the pending batch's synthesis from the first main assistant_message
+   *  after the batch returned, then clear it (one synthesis per batch). */
   const fillPendingSynthesis = (text: string) => {
-    if (!pendingSynthesis.length) return;
-    const preview = text.trim().slice(0, 200);
-    for (const b of pendingSynthesis) {
-      if (b.synthesis == null) b.synthesis = preview;
-    }
-    pendingSynthesis.length = 0;
+    if (!pendingBatch) return;
+    if (pendingBatch.synthesis == null) pendingBatch.synthesis = text.trim().slice(0, 200);
+    pendingBatch = null;
   };
   const emitSidechain = (it: StreamItem, agentId: string | null) => {
     const key = agentId ?? lastScAgent ?? NULL_AGENT_KEY;
@@ -394,11 +393,23 @@ export function buildStreamModel(
     buf.push(it);
     if (agentId) lastScAgent = agentId;
   };
-  const emit = (it: StreamItem, sidechain: boolean, agentId: string | null) => {
+  // `flushMain` says whether a MAIN-chain item should first flush the open
+  // sidechain buffers. Only a main MESSAGE means "main resumed" — its
+  // tool activity / thinking can interleave a still-running parallel window
+  // (real: fb6b8e3a main tool_calls at 12:34:02–07 mid-window) and MUST NOT
+  // close the batch, or one agent splits into out-of-batch + in-batch shards
+  // (the design §1 symptom). Interleaved main activity just emits in place;
+  // the sidechain buffers stay open and flush on the next main message / end.
+  const emit = (
+    it: StreamItem,
+    sidechain: boolean,
+    agentId: string | null,
+    flushMain: boolean,
+  ) => {
     if (sidechain) {
       emitSidechain(it, agentId);
     } else {
-      flushSidechain();
+      if (flushMain) flushSidechain();
       items.push(it);
     }
   };
@@ -408,7 +419,8 @@ export function buildStreamModel(
   let runAgent: string | null = null;
   const flush = () => {
     if (run.length) {
-      emit({ type: 'activity-run', id: `run-${run[0].event.event_id}`, events: run }, runSc, runAgent);
+      // An activity-run never signals main resumption → never flushes sidechain.
+      emit({ type: 'activity-run', id: `run-${run[0].event.event_id}`, events: run }, runSc, runAgent, false);
       run = [];
       runAgent = null;
     }
@@ -436,10 +448,11 @@ export function buildStreamModel(
         },
         sc,
         agent,
+        true, // a MAIN message signals main resumed → flush the open batch first
       );
       // The first main assistant_message after a batch returns is its synthesis
       // (the design's "종합 결과" lifted to the batch's L0 line). The preceding
-      // emit() already flushed any pending batch, so pendingSynthesis is set.
+      // emit(…, flushMain=true) already flushed the batch, so pendingBatch is set.
       if (!sc && c.role === 'assistant') fillPendingSynthesis(c.text!);
     } else if (c.cat === 'thinking') {
       // Close any open activity run first so order stays chronological. Each
@@ -464,6 +477,7 @@ export function buildStreamModel(
         },
         sc,
         agent,
+        false, // thinking can interleave a running window → never flushes batch
       );
     } else if (c.cat === 'activity') {
       // A change of sidechain status — or of sidechain agent attribution —
