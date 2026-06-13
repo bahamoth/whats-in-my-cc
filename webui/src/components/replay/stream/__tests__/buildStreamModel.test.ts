@@ -580,4 +580,41 @@ describe('buildStreamModel — parallel batch grouping (#13 design 2026-06-13)',
     expect(byAgent).toHaveLength(1); // 조각 X
     expect(byAgent[0].items.filter((i: any) => i.type === 'message')).toHaveLength(2);
   });
+
+  it('같은 message_id 디스패치 형제는 한 BatchGroup, 종합=배치 후 main 메시지', () => {
+    const evs = [
+      asstMain('m1', '병렬'),
+      taskCall('m1', 'tcA', 'tuA'),
+      taskCall('m1', 'tcB', 'tuB'),
+      sidecar('A', 'tuA', 'Explore', 'A'),
+      sidecar('B', 'tuB', 'general', 'B'),
+      scAsst('A', 'a1', 'A결론'),
+      scAsst('B', 'b1', 'B결론'),
+      asstMain('m2', '두 결과 종합하면 X'),
+    ];
+    const items = buildStreamModel(evs);
+    const batch = items.find((i: any) => i.type === 'batch-group') as any;
+    expect(batch.agentGroups).toHaveLength(2);
+    expect(batch.synthesis).toContain('종합하면');
+    expect(batch.settled).toBe(true);
+  });
+
+  it('단일 디스패치는 BatchGroup 없이 SidechainGroup', () => {
+    const evs = [
+      asstMain('m1', '하나'),
+      taskCall('m1', 'tcA', 'tuA'),
+      sidecar('A', 'tuA', 'Explore', 'A'),
+      scAsst('A', 'a1', '끝'),
+    ];
+    const items = buildStreamModel(evs);
+    expect(items.some((i: any) => i.type === 'batch-group')).toBe(false);
+    expect(items.some((i: any) => i.type === 'sidechain-group')).toBe(true);
+  });
+
+  it('agent_id 없는 sidechain은 contiguity로 묶이고 배치 미형성(pre-0023 degrade)', () => {
+    const evs = [scAsst('', 'x1', 'pre0023')]; // agent_id '' → contiguity fallback
+    const items = buildStreamModel(evs);
+    expect(items.some((i: any) => i.type === 'batch-group')).toBe(false);
+    expect(items.some((i: any) => i.type === 'sidechain-group')).toBe(true);
+  });
 });
