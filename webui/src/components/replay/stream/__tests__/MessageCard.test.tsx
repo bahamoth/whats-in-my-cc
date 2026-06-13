@@ -65,6 +65,23 @@ describe('MessageCard', () => {
     expect(screen.getByText('Skill')).toBeInTheDocument();
   });
 
+  it('a <task-notification> origin renders as "알림" (Bell), data-origin notification, NOT "You"', () => {
+    // anchored: 전 DB 55건 user_message가 <task-notification> 선행, isMeta 없음.
+    render(
+      <MessageCard
+        item={m({ role: 'user', origin: 'notification', text: '<task-notification>build done</task-notification>' })}
+        selected={false}
+        onSelect={() => {}}
+      />,
+    );
+    const card = screen.getByTestId('message-card');
+    expect(card).toHaveAttribute('data-origin', 'notification');
+    expect(card).toHaveAttribute('data-align', 'right'); // user-side, still
+    expect(screen.queryByText('You')).toBeNull();
+    expect(screen.getByText('알림')).toBeInTheDocument();
+    expect(screen.getByTestId('source-badge')).toHaveTextContent('notification');
+  });
+
   it('injected skill body collapses by default (reference, not conversation), even when short', () => {
     render(<MessageCard item={m({ role: 'user', origin: 'skill', text: '한 줄짜리 짧은 스킬 본문' })} selected={false} onSelect={() => {}} />);
     expect(screen.getByTestId('message-bubble')).toHaveAttribute('data-clamped', 'true');

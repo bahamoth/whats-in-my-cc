@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { User, Bot, BrainCog, Lightbulb, CornerDownRight, Info, Code2, Type, Terminal, Sparkles } from 'lucide-react';
+import { User, Bot, BrainCog, Lightbulb, CornerDownRight, Info, Code2, Type, Terminal, Sparkles, Bell } from 'lucide-react';
 import type { MessageItem } from './streamModel';
 import { userDisplayText } from './messageOrigin';
 import { formatModel } from './nodeLabel';
@@ -89,7 +89,7 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
       ? 'human'
       : userOrigin === 'command-output'
       ? 'command'
-      : userOrigin // 'command' | 'skill' | 'system'
+      : userOrigin // 'command' | 'skill' | 'system' | 'notification'
     : item.role === 'system'
     ? 'system'
     : 'agent';
@@ -99,8 +99,16 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
     label = 'Prompt';
     bubbleClass = styles.subagentBubble;
   } else if (item.role === 'user' && isScaffold) {
-    // user-invoked command / injected skill body / command output / interrupt.
-    Icon = userOrigin === 'skill' ? Sparkles : userOrigin === 'system' ? Info : Terminal;
+    // user-invoked command / injected skill body / command output / interrupt /
+    // harness background-task notification.
+    Icon =
+      userOrigin === 'skill'
+        ? Sparkles
+        : userOrigin === 'system'
+        ? Info
+        : userOrigin === 'notification'
+        ? Bell
+        : Terminal;
     label =
       userOrigin === 'command'
         ? (item.commandName ?? 'Command')
@@ -108,6 +116,8 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
         ? 'Skill'
         : userOrigin === 'command-output'
         ? 'Command output'
+        : userOrigin === 'notification'
+        ? '알림'
         : 'System';
     bubbleClass = styles.metaBubble;
   } else if (item.role === 'user') {
