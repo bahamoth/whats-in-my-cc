@@ -108,6 +108,30 @@ describe('ActivityStack', () => {
     expect(within(item).getByText('330ms')).toBeInTheDocument();
   });
 
+  it('marks long-running durations with a heat tier (data-heat) on item and fold meta', () => {
+    const slow: ActivityStackData = { events: [
+      { event: { event_id: 's1', kind: 'tool_call', observed_at: '2026-05-31T00:00:00.000Z', tool_name: 'Bash',
+        payload: { tool_name: 'Bash', input: { command: 'cargo build' } } } as any,
+        result: { isError: false }, durationMs: 15_000 },
+      { event: { event_id: 's2', kind: 'tool_call', observed_at: '2026-05-31T00:01:30.000Z', tool_name: 'Bash',
+        payload: { tool_name: 'Bash', input: { command: 'cargo test' } } } as any,
+        result: { isError: false }, durationMs: 75_000 },
+      { event: { event_id: 's3', kind: 'tool_call', observed_at: '2026-05-31T00:02:45.000Z', tool_name: 'Read',
+        payload: { tool_name: 'Read', input: { file_path: '/a' } } } as any,
+        result: { isError: false }, durationMs: 200 },
+    ] };
+    render(<ActivityStack stack={slow} selectedEventId="s1" onSelect={() => {}} />);
+    const items = screen.getAllByTestId('activity-item');
+    const heatOf = (item: HTMLElement) =>
+      within(item).getByTestId('activity-meta').querySelector('[data-heat]')?.getAttribute('data-heat') ?? null;
+    expect(heatOf(items[0])).toBe('warn'); // 15s
+    expect(heatOf(items[1])).toBe('hot');  // 75s
+    expect(heatOf(items[2])).toBeNull();   // 200ms — no heat
+    // the fold header's summary duration (span of the whole run) is heated too
+    const fold = screen.getByTestId('fold-meta');
+    expect(fold.querySelector('[data-heat]')?.getAttribute('data-heat')).toBe('hot');
+  });
+
   it('renders a tag chip for a tagged Bash event (read.file) and none for control', () => {
     // 칩은 서버가 계산한 `tag` 필드로 렌더된다 (분류는 core 분류기 몫).
     const ev = (command: string, id: string, tag: unknown) => ({ event_id: id, kind: 'tool_call', tool_name: 'Bash', observed_at: '2026-05-31T00:00:00Z', tag, payload: { input: { command } } });
