@@ -4965,6 +4965,74 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section>
+    <h2 id="forward-paging-resume-latest-2026-06-14">전방 페이징 + 자동스크롤 토글 → latest — 분리된 윈도우가 막다른 슬라이스가 되던 문제 (2026-06-14)</h2>
+    <p>
+      <strong>증상</strong>: <code>?selected=</code> deep-link로 들어오면(분리/detached) ① 아래로
+      스크롤해도 최신이 로드되지 않고(위로 스크롤=loadOlder처럼 forward paging이 없었음) ② 자동
+      스크롤 토글을 켜도 <em>현재 버퍼의 바닥</em>(deep-link 슬라이스)에 머물고 latest로 내려오지
+      않았다. 두 요구는 같은 윈도우 모델의 두 끝(전/후방)에서의 같은 결함이었다.
+    </p>
+    <h3>① 전방 페이징 — <code>shouldLoadNewer</code> (scrollAnchor)</h3>
+    <p>
+      <code>shouldLoadOlder</code>의 거울. 분리(autoscroll OFF) 상태에서 아래로 내려 바닥
+      근처에 닿으면 다음 <em>newer</em> 윈도우를 <code>?after=</code>로 당긴다. 절대 바닥
+      (<code>AT_BOTTOM_PX≤4</code>)에선 방향 무관 트리거, 그 외엔 하향 델타 + 임계
+      (<code>max(LOAD_NEWER_BOTTOM_PX, clientHeight)</code>). <code>ConversationStream.onScroll</code>이
+      <code>!auto.autoscroll</code>로 게이트해 라이브 follow 경로와 경쟁하지 않게 했고,
+      <code>SessionDetailPage</code>는 <code>onLoadNewer={window_.loadNewer}</code>·
+      <code>canLoadNewer={!window_.atLiveTip}</code>로 배선. <code>hasInteracted</code> 래치는
+      그대로 적용(마운트/프로그램 스크롤 제외) — <strong>주의</strong>: 브라우저 자동화의
+      <code>computer.scroll</code>은 네이티브 <code>scroll</code>만 쏘고 <code>wheel</code>을
+      안 쏴서 <code>hasInteracted</code>가 안 켜진다(실측 <code>wheel:0 scroll:1</code>). 실유저는
+      wheel을 쏘므로 정상 — smoke 시 <code>WheelEvent</code>를 한 번 dispatch해 래치를 켜고 검증.
+    </p>
+    <h3>② 자동스크롤 토글 → latest — <code>reload</code>를 tail로</h3>
+    <p>
+      <code>useSessionWindow.reload</code>가 <code>doInitial</code>(=마운트 시 <code>initialAround</code>
+      윈도우)을 가리켜, 분리 후 follow 재개(토글 ON)가 <em>around 슬라이스를 다시 로드</em>해 latest로
+      못 갔다. <code>loadTail</code>(커서 없는 <code>?limit=</code> → 최신 윈도우)을 분리해
+      <code>reload: loadTail</code>로 변경. <code>doInitial</code>은 마운트 전용으로 around 분기만 유지.
+      재개 시 buffer가 tail로 교체되면 <code>auto.autoscroll</code>이 켜져 있으므로
+      <code>ConversationStream</code>의 measurement-settle pin(<code>totalSize</code>+autoscroll)이
+      새 바닥(=latest)으로 내려준다.
+    </p>
+    <h3>충돌 가드 — 분리 윈도우 바닥 ≠ 라이브 tip (<code>canResumeFollow</code>)</h3>
+    <p>
+      ①과 ②가 같은 onScroll에서 충돌: 분리된 early 슬라이스의 바닥에 닿으면
+      <code>useAutoscroll.onScroll</code>의 atBottom→resume-follow가 발화해 tail로 점프(reload)하면서
+      전방 페이징과 싸웠다(실측: tail reload + <code>?around=</code> 되돌림이 경쟁, 콘텐츠가 early에
+      고착). 핵심: <em>버퍼의 바닥</em>과 <em>라이브 tip</em>은 newer가 더 남았을 때(<code>canLoadNewer</code>)
+      서로 다르다. <code>useAutoscroll</code>에 <code>canResumeFollow</code>(=<code>!canLoadNewer</code>=at tip)를
+      추가해 <strong>암묵적</strong> atBottom→resume를 게이트(명시적 <code>enable()</code> 토글은 게이트 안 함 —
+      항상 latest로 점프). 부수로 <code>autoscrollRef</code>를 <code>initialFollow</code>로 초기화(기존엔
+      하드코딩 <code>true</code>라 deep-link 분리 마운트에서 ref/state 불일치 → 첫 제스처가 "following"
+      분기로 빠지던 잠복 버그).
+    </p>
+    <h3>되돌림 가드 — follow 중 deep-link <code>loadAround</code> 억제</h3>
+    <p>
+      ② 적용 후에도 latest로 안 갔다: reload→loadTail이 tail로 바꾸면 선택된 (early) 이벤트가
+      윈도우에서 빠지고, <code>SessionDetailPage</code>의 deep-link <code>loadAround</code> effect가 즉시
+      <code>?around=</code>로 그 슬라이스를 <em>되돌려</em> 붙였다(점프가 안 착지). follow 중
+      (<code>followingRef.current</code>)이면 effect를 early-return — 사용자가 latest를 선택한 것이므로.
+      선택 자체는 DetailPanel에 보존, 스크롤만 안 끌려간다.
+    </p>
+    <h3>테스트 / 실데이터 검증</h3>
+    <p>
+      TDD red→green: <code>scrollAnchor.test</code>(<code>shouldLoadNewer</code>),
+      <code>useSessionWindow.test</code>(<code>reload</code>가 <code>initialAround</code> 마운트에서도 tail을
+      로드 — around 미발화), <code>useAutoscroll.test</code>(<code>canResumeFollow</code> false→바닥에서
+      resume 안 함 / true→resume), <code>SessionDetailPage.test</code>(follow 재개 시 loadAround 되돌림
+      없음 — 가드 제거 시 red 확인). <strong>브라우저 smoke</strong>(static 653ea169, deep-link
+      <code>01KTY3AASH4SJ67AWG3PVFS04V</code>=2026-05-29 슬라이스): #2 — wheel 래치 후 아래 스크롤 →
+      <code>?after=</code> 발화(afterCalls 1→2), tail reload·around 0, 토글 OFF 유지, 콘텐츠
+      00:29→00:44 전진. #1 — 토글 ON → tail reload 1, around 0, 콘텐츠가 latest(00:29→19:14
+      compaction summary·"10 turns")로 점프, 바닥 고정. <strong>주의</strong>: 이 코퍼스의
+      <code>event_id</code> ULID는 ingest-time 부여라 observed_at 순서와 무관(head·tail 모두
+      <code>01KTY3A*</code>) — era 판별은 ULID 프리픽스 말고 observed_at/표시 시각으로.
+    </p>
+  </section>
+
 </main>
 </div>
 </body></html>

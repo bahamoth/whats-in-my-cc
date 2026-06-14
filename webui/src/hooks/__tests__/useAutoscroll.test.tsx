@@ -170,6 +170,45 @@ describe('useAutoscroll', () => {
     expect(el.scrollTop).toBe(200); // viewport held, NOT yanked to 1000
   });
 
+  it('does NOT resume follow at the bottom when canResumeFollow is false (detached, newer pages remain)', () => {
+    // When the loaded window is a detached slice with newer events still to page
+    // (NOT the live tip), scrolling to the BOTTOM of the buffer must NOT resume
+    // following — that would yank a jump-to-tail and fight forward-paging. Follow
+    // resumes only once the real tip is reached (canResumeFollow flips true) or
+    // via the explicit toggle. Default true keeps the at-tip behaviour intact.
+    const el = makeEl(1000, 100, 1000);
+    const { result } = renderHook(
+      ({ sig: s }: { sig: ItemsSignature }) => {
+        const ref = useRef(el);
+        return useAutoscroll(ref, s, { initialFollow: false, canResumeFollow: false });
+      },
+      { initialProps: { sig: sig('a', 'c', 3) } },
+    );
+    expect(result.current.autoscroll).toBe(false);
+    act(() => {
+      el.scrollTop = 900; // at the bottom (dist 0)
+      result.current.onScroll();
+    });
+    expect(result.current.autoscroll).toBe(false); // stayed detached — forward-page, don't jump to tail
+  });
+
+  it('DOES resume follow at the bottom when canResumeFollow is true (at the live tip)', () => {
+    const el = makeEl(1000, 100, 1000);
+    const { result } = renderHook(
+      ({ sig: s }: { sig: ItemsSignature }) => {
+        const ref = useRef(el);
+        return useAutoscroll(ref, s, { initialFollow: false, canResumeFollow: true });
+      },
+      { initialProps: { sig: sig('a', 'c', 3) } },
+    );
+    expect(result.current.autoscroll).toBe(false);
+    act(() => {
+      el.scrollTop = 900; // at the bottom (dist 0)
+      result.current.onScroll();
+    });
+    expect(result.current.autoscroll).toBe(true); // at the tip → resume
+  });
+
   it('disable() stops following without moving the viewport', () => {
     const el = makeEl(1000, 100, 1000);
     const { result } = setup(sig('a', 'c', 3), el);

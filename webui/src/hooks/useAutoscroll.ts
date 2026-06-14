@@ -53,6 +53,13 @@ export interface UseAutoscrollOpts {
    *  `?selected=` deep-link, so live SSE backfill does not pull the window off
    *  the loadAround target before it can be scrolled into view. Default true. */
   initialFollow?: boolean;
+  /** Whether reaching the BOTTOM of the loaded buffer may RESUME following the
+   *  live tip. False when the window is a detached slice with newer events still
+   *  to page (NOT the live tip): there, hitting the buffer bottom must
+   *  forward-page (grow the window), not jump to the tail. Follow resumes only
+   *  once the real tip is reached (this flips true) or via the explicit toggle
+   *  (`enable()`, which is NOT gated by this). Default true. */
+  canResumeFollow?: boolean;
 }
 
 // How far the reader must scroll UP from our last pinned position to count as a
@@ -81,12 +88,19 @@ export function useAutoscroll(
 
   // Mirror autoscroll into a ref so the items-change effect reads the current
   // value without taking it as a dependency (which would re-run the effect on
-  // every toggle, not just on item changes).
-  const autoscrollRef = useRef(true);
+  // every toggle, not just on item changes). Initialised from initialFollow so
+  // a detached deep-link mount has ref AND state both false (a hardcoded `true`
+  // here would make onScroll take the "following" branch on the first gesture).
+  const autoscrollRef = useRef(opts.initialFollow ?? true);
   const setFollow = useCallback((v: boolean) => {
     autoscrollRef.current = v;
     setAutoscroll(v);
   }, []);
+
+  // Whether hitting the buffer bottom may resume following (see opts doc).
+  // Mirrored to a ref so onScroll reads the live value without re-subscribing.
+  const canResumeFollowRef = useRef(opts.canResumeFollow ?? true);
+  canResumeFollowRef.current = opts.canResumeFollow ?? true;
 
   const prevSigRef = useRef<ItemsSignature | null>(null);
   // The scrollTop of our last programmatic pin. onScroll compares against it to
@@ -148,8 +162,11 @@ export function useAutoscroll(
       if (top < lastPinnedTopRef.current - DETACH_PX) {
         setFollow(false);
       }
-    } else if (atBottom) {
-      // Detached but the reader scrolled back to the bottom → resume following.
+    } else if (atBottom && canResumeFollowRef.current) {
+      // Detached but the reader scrolled back to the bottom AND the window is at
+      // the live tip → resume following. When newer pages still remain
+      // (canResumeFollow false) the buffer bottom is NOT the tip — the consumer
+      // forward-pages there instead, so we must not jump to the tail here.
       lastPinnedTopRef.current = top;
       setFollow(true);
       setNewCount(0);

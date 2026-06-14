@@ -103,3 +103,32 @@ export function shouldLoadOlder(args: {
   if (args.scrollTop >= args.prevScrollTop) return false; // not scrolling up
   return args.scrollTop <= (args.topThreshold ?? LOAD_OLDER_TOP_PX);
 }
+
+/** Symmetric to LOAD_OLDER_TOP_PX, for the bottom edge. */
+export const LOAD_NEWER_BOTTOM_PX = 800;
+/** Symmetric to AT_TOP_PX, for the bottom edge. */
+export const AT_BOTTOM_PX = 4;
+
+/** Whether to page the next NEWER window in — FORWARD paging on a downward
+ *  near-bottom user scroll. Mirror of `shouldLoadOlder`. This is what lets a
+ *  reader who jumped into history (a `?selected=` deep-link, autoscroll OFF)
+ *  scroll DOWN through the rest of the session toward the live tip; without it
+ *  the only forward load was live-tip following, so a detached window stayed a
+ *  stuck slice (the "스크롤 내려도 최신이 안 옴" bug). The caller gates this to
+ *  the detached (not-following) case so it never competes with the autoscroll /
+ *  SSE live-append path. */
+export function shouldLoadNewer(args: {
+  scrollTop: number;
+  prevScrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+  hasInteracted: boolean;
+  canLoadNewer: boolean;
+  bottomThreshold?: number;
+}): boolean {
+  if (!args.canLoadNewer || !args.hasInteracted) return false;
+  const distanceFromBottom = args.scrollHeight - (args.scrollTop + args.clientHeight);
+  if (distanceFromBottom <= AT_BOTTOM_PX) return true; // pinned at the absolute bottom
+  if (args.scrollTop <= args.prevScrollTop) return false; // not scrolling down
+  return distanceFromBottom <= (args.bottomThreshold ?? LOAD_NEWER_BOTTOM_PX);
+}

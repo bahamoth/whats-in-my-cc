@@ -123,15 +123,17 @@ export function useSessionWindow(
   }, []);
 
   const initialAround = opts.initialAround ?? null;
-  const doInitial = useCallback(async () => {
+
+  // Load the latest tail window and REPLACE the buffer with it. This is the
+  // `reload` path (resume-follow catch-up): when the reader toggles autoscroll
+  // ON, the page calls this to jump to the live tip — it must fetch the LATEST,
+  // never the `initialAround` deep-link slice (which would strand them on the
+  // around-window instead of going to latest — the "토글해도 latest로 안 옴" bug).
+  const loadTail = useCallback(async () => {
     setLoadingBoth('initial');
     setError(null);
     try {
-      // Deep-link mount: load AROUND the target so it is in the buffer from the
-      // first load (no tail load to race/overwrite it). Falls back to the tail.
-      const resp = initialAround
-        ? await getSessionEvents(sessionId, { around: initialAround, limit: initialLimit })
-        : await getSessionEvents(sessionId, { limit: initialLimit });
+      const resp = await getSessionEvents(sessionId, { limit: initialLimit });
       setEvents(resp.events);
       setOldest(resp.prev_cursor);
       setNewest(resp.next_cursor);
@@ -141,7 +143,31 @@ export function useSessionWindow(
       setError(e instanceof Error ? e.message : String(e));
       setLoadingBoth('error');
     }
-  }, [sessionId, initialLimit, initialAround, setLoadingBoth]);
+  }, [sessionId, initialLimit, setLoadingBoth]);
+
+  const doInitial = useCallback(async () => {
+    // Non-deep-link mount: the tail IS the initial window.
+    if (!initialAround) {
+      await loadTail();
+      return;
+    }
+    // Deep-link mount: load AROUND the target so it is in the buffer from the
+    // first load (no tail load to race/overwrite it). `reload` (loadTail) takes
+    // over once the reader resumes following.
+    setLoadingBoth('initial');
+    setError(null);
+    try {
+      const resp = await getSessionEvents(sessionId, { around: initialAround, limit: initialLimit });
+      setEvents(resp.events);
+      setOldest(resp.prev_cursor);
+      setNewest(resp.next_cursor);
+      setAtLiveTip(resp.next_cursor === null);
+      setLoadingBoth('idle');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+      setLoadingBoth('error');
+    }
+  }, [sessionId, initialLimit, initialAround, loadTail, setLoadingBoth]);
 
   useEffect(() => {
     void doInitial();
@@ -270,6 +296,6 @@ export function useSessionWindow(
     loadNewer,
     loadAround,
     appendOne,
-    reload: doInitial,
+    reload: loadTail,
   };
 }

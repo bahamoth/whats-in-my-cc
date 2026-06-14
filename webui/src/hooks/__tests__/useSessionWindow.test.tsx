@@ -222,6 +222,48 @@ describe('useSessionWindow', () => {
     expect(result.current.atLiveTip).toBe(true);
   });
 
+  it('reload() loads the TAIL even when mounted with initialAround (resume-follow → latest)', async () => {
+    // A `?selected=` deep-link mounts AROUND the target (detached). When the
+    // reader toggles autoscroll ON, the page calls reload() to catch up to the
+    // live tip — it MUST fetch the latest tail, NOT re-issue ?around= (which
+    // would strand them on the deep-link slice instead of going to latest).
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(
+      envelope({
+        events: [makeEvent(10), makeEvent(11)],
+        prev_cursor: 'pc-around',
+        next_cursor: 'nc-around',
+      }),
+    );
+    const { result } = renderHook(() =>
+      useSessionWindow('s', { initialAround: makeEvent(10).event_id }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+    // mount used ?around=
+    expect(f.mock.calls.at(-1)?.[0] as string).toContain(
+      `around=${encodeURIComponent(makeEvent(10).event_id)}`,
+    );
+    expect(result.current.atLiveTip).toBe(false);
+
+    f.mockResolvedValueOnce(
+      envelope({
+        events: [makeEvent(98), makeEvent(99)],
+        prev_cursor: 'pc-tail',
+        next_cursor: null,
+      }),
+    );
+    await act(async () => {
+      await result.current.reload();
+    });
+    const reloadUrl = f.mock.calls.at(-1)?.[0] as string;
+    expect(reloadUrl).not.toContain('around=');
+    expect(result.current.events.map((e) => e.event_id)).toEqual([
+      makeEvent(98).event_id,
+      makeEvent(99).event_id,
+    ]);
+    expect(result.current.atLiveTip).toBe(true);
+  });
+
   it('loadNewer fetches ?after=<last cursor> and appends the newer events', async () => {
     const f = fetch as unknown as ReturnType<typeof vi.fn>;
     f.mockResolvedValueOnce(
