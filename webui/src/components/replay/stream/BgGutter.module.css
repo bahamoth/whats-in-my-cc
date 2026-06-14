@@ -1,0 +1,59 @@
+/* Background-subagent hairline gutter — one per stream row. Constant 14px wide
+   at any concurrency (lanes pack inside; ≥4 → single dense spine). align-self
+   stretch makes the rails span the row's full height so adjacent rows' rails
+   read as one continuous lane, without the gutter ever changing row HEIGHT. */
+.gutter {
+  position: relative;
+  flex: none;
+  width: 14px;
+  align-self: stretch;
+}
+
+.lane {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+}
+
+/* ▢ start node — hollow square at the agent's first row */
+.start {
+  position: absolute;
+  top: 7px;
+  left: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--wimcc-bg, #0b0d12);
+}
+
+/* ✓ end node — filled dot at the agent's last covered row */
+.end {
+  position: absolute;
+  bottom: 7px;
+  left: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.6px var(--wimcc-bg, #0b0d12);
+}
+
+/* dense fallback (≥4 concurrent) — one neutral presence spine; identity/count
+   live in the block headers + the row's bg-marker chip, not the gutter. */
+.dense {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 6px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--wimcc-fg-subtle, #6a7180);
+  opacity: 0.7;
+}
