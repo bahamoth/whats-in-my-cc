@@ -1,0 +1,91 @@
+/* Workflow completion card — closes the workflow's orange gutter rail with the
+   deterministic status + summary from its <task-notification>. Green on success,
+   red on failed, amber on killed; flush like the other top-level end cards. */
+.card {
+  margin: 4px 0 8px 0;
+  border: 1px solid color-mix(in srgb, var(--wimcc-success, #41c285) 30%, var(--wimcc-border, #1d212c));
+  border-left: 3px solid var(--wimcc-success, #41c285);
+  background: color-mix(in srgb, var(--wimcc-success, #41c285) 8%, var(--wimcc-surface-2, #161a23));
+  border-radius: 7px;
+  padding: 6px 10px;
+}
+.card[data-status='fail'] {
+  border-color: color-mix(in srgb, var(--wimcc-danger, #ef4747) 34%, var(--wimcc-border, #1d212c));
+  border-left-color: var(--wimcc-danger, #ef4747);
+  background: color-mix(in srgb, var(--wimcc-danger, #ef4747) 8%, var(--wimcc-surface-2, #161a23));
+}
+.card[data-status='killed'] {
+  border-color: color-mix(in srgb, var(--wimcc-warning, #f0b429) 30%, var(--wimcc-border, #1d212c));
+  border-left-color: var(--wimcc-warning, #f0b429);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--wimcc-success, #41c285);
+}
+.card[data-status='fail'] .head { color: var(--wimcc-danger, #ef4747); }
+.card[data-status='killed'] .head { color: var(--wimcc-warning, #f0b429); }
+
+.check { flex: none; }
+.label { flex: none; }
+.name { color: var(--wimcc-fg, #e6e8ee); font-weight: 700; }
+.time { font-variant-numeric: tabular-nums; font-weight: 400; color: var(--wimcc-fg-subtle, #6a7180); }
+
+.stats {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--wimcc-fg-subtle, #6a7180);
+}
+.statusPill {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  border: 1px solid currentColor;
+  color: var(--wimcc-success, #41c285);
+}
+.card[data-status='fail'] .statusPill { color: var(--wimcc-danger, #ef4747); }
+.card[data-status='killed'] .statusPill { color: var(--wimcc-warning, #f0b429); }
+
+.jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  background: none;
+  border: 1px solid var(--wimcc-border-strong, #2a3040);
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  color: var(--wimcc-lane-context, #b07dff);
+}
+.jump:hover { background: var(--wimcc-surface-3, #1b202a); }
+
+.summary {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--wimcc-fg, #e6e8ee);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.summaryLabel {
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  color: var(--wimcc-success, #41c285);
+  margin-right: 5px;
+}
+.card[data-status='fail'] .summaryLabel { color: var(--wimcc-danger, #ef4747); }
+.card[data-status='killed'] .summaryLabel { color: var(--wimcc-warning, #f0b429); }

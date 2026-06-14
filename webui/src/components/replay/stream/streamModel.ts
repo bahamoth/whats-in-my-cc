@@ -22,6 +22,30 @@ export function parseWorkflowMeta(script: string): {
   return { name: pick('name'), description: pick('description') };
 }
 
+/** A harness `<task-notification>` (injected as a user_message) announcing a
+ *  background task's completion. Its `<tool-use-id>` is the DETERMINISTIC join
+ *  key back to the dispatching tool_call (Workflow / Agent run_in_background /
+ *  background Bash) — verified against the real transcript (2026-06-14). Returns
+ *  null when the text is not a task-notification. */
+export function parseTaskNotification(content: string): {
+  taskId: string | null;
+  toolUseId: string | null;
+  status: string | null;
+  summary: string | null;
+} | null {
+  if (!content.includes('<task-notification>')) return null;
+  const pick = (tag: string): string | null => {
+    const m = content.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+    return m ? m[1].trim() : null;
+  };
+  return {
+    taskId: pick('task-id'),
+    toolUseId: pick('tool-use-id'),
+    status: pick('status'),
+    summary: pick('summary'),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // buildStreamModel — Slice S2: stream classifier (message / activity / drop)
 // ---------------------------------------------------------------------------
@@ -102,6 +126,11 @@ export interface SidechainGroup {
   /** insertSubagentEndCards가 이 그룹에 끝 카드를 붙였으면 true. 그러면 결론은 끝
    *  카드가 담당하므로 시작 카드(헤더)에선 결론 줄을 숨긴다(요청→결과 분리). */
   hasEndCard?: boolean;
+  /** 매칭된 `<task-notification>`의 status(completed/failed/killed) — Agent
+   *  run_in_background면 종료 알림에서 결정론적으로 채워진다(syncTaskNotifications). */
+  endStatus?: string;
+  /** 그 종료 알림 메시지의 event_id (점프 타깃). */
+  notificationEventId?: string;
   items: StreamItem[];
 }
 
@@ -141,6 +170,13 @@ export interface WorkflowGroup {
   settled: boolean;
   /** 이 워크플로우 실행 span과 겹친 main 메시지 수(백그라운드 동시진행). */
   concurrentMainCount?: number;
+  /** 매칭된 `<task-notification>`의 status/summary/시각 — 워크플로우 종료를
+   *  결정론적으로 잇는다(추정 synthesis 대체). syncTaskNotifications. */
+  endStatus?: string;
+  endSummary?: string;
+  endTimestamp?: string;
+  /** 그 종료 알림 메시지의 event_id (점프 타깃). */
+  notificationEventId?: string;
 }
 
 /** Caller linkage harvested from `attachment_meta`/`subagent_meta` sidecar
@@ -210,6 +246,31 @@ export interface SubagentEndCard {
   toolCount: number;
   /** span end (max observed time) — drives row ordering / gutter coverage. */
   endTimestamp: string;
+  /** matched `<task-notification>` status (Agent run_in_background) — deterministic
+   *  completed/failed/killed; absent when the end is span-derived only. */
+  status?: string;
+  /** the completion notification's event_id (jump to 원문). */
+  notificationEventId?: string;
+}
+
+/** A workflow's deterministic completion card, synced from its `<task-notification>`
+ *  (joined by tool_use_id). Replaces the floating "알림" message at the position
+ *  where the workflow finished — status + summary are authoritative (vs the
+ *  heuristic synthesis). Synthetic row; see syncTaskNotifications. */
+export interface WorkflowEndCard {
+  type: 'workflow-end';
+  id: string;
+  /** workflow-group id this closes (for the gutter rail end marker). */
+  workflowId: string;
+  name: string | null;
+  color: string;
+  /** notification status — completed | failed | killed | … */
+  status: string;
+  summary: string | null;
+  endTimestamp: string;
+  agentCount: number;
+  /** the completion notification's event_id (jump to 원문). */
+  notificationEventId: string;
 }
 
 export type StreamItem =
@@ -220,7 +281,8 @@ export type StreamItem =
   | BatchGroup
   | WorkflowGroup
   | ScaffoldGroup
-  | SubagentEndCard;
+  | SubagentEndCard
+  | WorkflowEndCard;
 
 /** One lane cell painted in the background-subagent gutter for a given row. */
 export interface GutterCell {
@@ -521,6 +583,79 @@ export function annotateConcurrency(items: StreamItem[]): StreamItem[] {
 }
 
 const MAX_LANES = 3;
+/** workflow type color (orange) — gutter rail + end card accent for a workflow,
+ *  distinct from the per-agent hash colors. Matches WorkflowGroup's --wimcc-lane-quality. */
+const WORKFLOW_COLOR = '#ff8a4c';
+
+interface TaskNoti {
+  status: string | null;
+  summary: string | null;
+  endTimestamp: string;
+  eventId: string;
+}
+
+/** Join `<task-notification>` completion events to their dispatching group via
+ *  tool_use_id (the verified deterministic key): a WORKFLOW noti → enrich the
+ *  WorkflowGroup + replace the floating noti message with a `workflow-end` card;
+ *  an Agent run_in_background noti → enrich the SidechainGroup (status drives the
+ *  subagent end card) + absorb (drop) the noti message. Unmatched notis (e.g.
+ *  background Bash, or notis with no loaded group) stay as-is. Runs after
+ *  annotateConcurrency, before groupScaffold (notis still top-level here). */
+export function syncTaskNotifications(
+  items: StreamItem[],
+  notiByToolUse: Map<string, TaskNoti>,
+  wfToolUseByEvent: Map<string, string>,
+  agentDispatchToolUse: Map<string, string>,
+): StreamItem[] {
+  const wfEndByNotiEvent = new Map<string, WorkflowEndCard>();
+  const absorbNotiEvents = new Set<string>();
+  for (const it of items) {
+    if (it.type === 'workflow-group') {
+      const tu = it.taskEventId ? wfToolUseByEvent.get(it.taskEventId) : undefined;
+      const noti = tu ? notiByToolUse.get(tu) : undefined;
+      if (noti) {
+        it.endStatus = noti.status ?? undefined;
+        it.endSummary = noti.summary ?? undefined;
+        it.endTimestamp = noti.endTimestamp;
+        it.notificationEventId = noti.eventId;
+        wfEndByNotiEvent.set(noti.eventId, {
+          type: 'workflow-end',
+          id: `wfend-${it.id}`,
+          workflowId: it.id,
+          name: it.name,
+          color: WORKFLOW_COLOR,
+          status: noti.status ?? 'completed',
+          summary: noti.summary,
+          endTimestamp: noti.endTimestamp,
+          agentCount: it.agentGroups.length,
+          notificationEventId: noti.eventId,
+        });
+      }
+    } else if (it.type === 'sidechain-group' && it.agentId) {
+      const tu = agentDispatchToolUse.get(it.agentId);
+      const noti = tu ? notiByToolUse.get(tu) : undefined;
+      if (noti) {
+        it.endStatus = noti.status ?? undefined;
+        it.notificationEventId = noti.eventId;
+        absorbNotiEvents.add(noti.eventId);
+      }
+    }
+  }
+  if (!wfEndByNotiEvent.size && !absorbNotiEvents.size) return items;
+  const out: StreamItem[] = [];
+  for (const it of items) {
+    if (it.type === 'message') {
+      const wfEnd = wfEndByNotiEvent.get(it.eventId);
+      if (wfEnd) {
+        out.push(wfEnd);
+        continue;
+      }
+      if (absorbNotiEvents.has(it.eventId)) continue; // absorbed into the subagent end card
+    }
+    out.push(it);
+  }
+  return out;
+}
 
 /** Representative wall-clock (ms) of a top-level row for gutter coverage tests. */
 function rowTimeMs(it: StreamItem): number | null {
@@ -530,6 +665,7 @@ function rowTimeMs(it: StreamItem): number | null {
   };
   if (it.type === 'message') return t(it.timestamp);
   if (it.type === 'subagent-end') return t(it.endTimestamp);
+  if (it.type === 'workflow-end') return t(it.endTimestamp);
   if (it.type === 'activity-run') return it.events.length ? t(it.events[0].event.observed_at) : null;
   if (it.type === 'thinking') return it.events.length ? t(it.events[0].timestamp) : null;
   if (it.type === 'scaffold-group') return it.items.length ? t(it.items[0].timestamp) : null;
@@ -577,43 +713,73 @@ function sidechainSpan(g: SidechainGroup): { s: number; e: number } | null {
  *  own block row = 'start', its last covered row = 'end', covered rows between =
  *  'mid'. Returns a Map keyed by row item.id (rows with no coverage are absent).*/
 export function computeBgGutter(items: StreamItem[]): Map<string, GutterRow> {
-  type Ag = { agentId: string; blockId: string; s: number; e: number; lane: number; endRowId: string | null };
-  const agents: Ag[] = [];
+  // A track = one bookended background unit (a standalone subagent OR a workflow).
+  // blockId = its start card row; endRowId = its end card row (preferred) or last
+  // covered row (fallback). color = per-agent hash, or the workflow orange.
+  type Track = { key: string; blockId: string; color: string; s: number; e: number; lane: number; endRowId: string | null };
+  const tracks: Track[] = [];
+  const byId = new Map(items.map((i) => [i.id, i] as const));
+  const subEndIds = new Set(items.filter((i) => i.type === 'subagent-end').map((i) => i.id));
+  const wfEndByWorkflowId = new Map<string, string>();
+  for (const it of items) if (it.type === 'workflow-end') wfEndByWorkflowId.set(it.workflowId, it.id);
+
   for (const it of items) {
-    if (it.type !== 'sidechain-group' || !it.agentId) continue;
-    const sp = sidechainSpan(it);
-    if (sp) agents.push({ agentId: it.agentId, blockId: it.id, s: sp.s, e: sp.e, lane: -1, endRowId: null });
+    if (it.type === 'sidechain-group' && it.agentId) {
+      const sp = sidechainSpan(it);
+      if (!sp) continue;
+      const endId = `end-${it.agentId}`;
+      tracks.push({ key: it.agentId, blockId: it.id, color: agentColor(it.agentId), s: sp.s, e: sp.e, lane: -1, endRowId: subEndIds.has(endId) ? endId : null });
+    } else if (it.type === 'workflow-group') {
+      const blockT = rowTimeMs(it);
+      let s = blockT ?? Infinity;
+      let e = -Infinity;
+      for (const g of it.agentGroups) {
+        const sp = sidechainSpan(g);
+        if (sp) {
+          s = Math.min(s, sp.s);
+          e = Math.max(e, sp.e);
+        }
+      }
+      const endId = wfEndByWorkflowId.get(it.id) ?? null;
+      if (endId) {
+        const et = rowTimeMs(byId.get(endId)!);
+        if (et != null) e = Math.max(e, et);
+      }
+      if (!(e > s)) continue;
+      tracks.push({ key: `wf-${it.id}`, blockId: it.id, color: WORKFLOW_COLOR, s, e, lane: -1, endRowId: endId });
+    }
   }
   const out = new Map<string, GutterRow>();
-  if (!agents.length) return out;
+  if (!tracks.length) return out;
 
-  // greedy lane assignment (stable per agent): sort by start, lowest free lane.
-  agents.sort((a, b) => a.s - b.s);
+  // greedy lane assignment (stable per track): sort by start, lowest free lane.
+  tracks.sort((a, b) => a.s - b.s);
   const laneFreeAt = new Array(MAX_LANES).fill(-Infinity);
-  for (const a of agents) {
+  for (const t of tracks) {
     for (let L = 0; L < MAX_LANES; L++) {
-      if (a.s >= laneFreeAt[L]) {
-        a.lane = L;
-        laneFreeAt[L] = a.e;
+      if (t.s >= laneFreeAt[L]) {
+        t.lane = L;
+        laneFreeAt[L] = t.e;
         break;
       }
     }
   }
 
-  // last covered row per agent (for the ✓ end marker): walk rows in order.
-  for (const a of agents) {
+  // tracks without an explicit end card fall back to last-covered row for ✓.
+  for (const t of tracks) {
+    if (t.endRowId) continue;
     let last: string | null = null;
     for (const it of items) {
-      const t = rowTimeMs(it);
-      if (t != null && t >= a.s && t <= a.e) last = it.id;
+      const tt = rowTimeMs(it);
+      if (tt != null && tt >= t.s && tt <= t.e) last = it.id;
     }
-    a.endRowId = last;
+    t.endRowId = last;
   }
 
   for (const it of items) {
     const t = rowTimeMs(it);
     if (t == null) continue;
-    const covering = agents.filter((a) => t >= a.s && t <= a.e);
+    const covering = tracks.filter((a) => t >= a.s && t <= a.e);
     if (!covering.length) continue;
     const overflow = covering.some((a) => a.lane < 0);
     if (overflow) {
@@ -622,8 +788,8 @@ export function computeBgGutter(items: StreamItem[]): Map<string, GutterRow> {
     }
     const cells: GutterCell[] = covering.map((a) => ({
       lane: a.lane,
-      agentId: a.agentId,
-      color: agentColor(a.agentId),
+      agentId: a.key,
+      color: a.color,
       marker: a.blockId === it.id ? 'start' : a.endRowId === it.id ? 'end' : 'mid',
     }));
     cells.sort((x, y) => x.lane - y.lane);
@@ -673,6 +839,8 @@ export function insertSubagentEndCards(items: StreamItem[]): StreamItem[] {
       messageCount,
       toolCount,
       endTimestamp: new Date(sp.e).toISOString(),
+      status: it.endStatus,
+      notificationEventId: it.notificationEventId,
     };
     const arr = inserts.get(lastIdx) ?? [];
     arr.push(card);
@@ -703,6 +871,9 @@ export function buildStreamModel(
   // them together); joined back from a child's sidecar toolUseId.
   const callMsgByUse = new Map<string, string | null>();
   const attributionByAgent = new Map<string, string>();
+  // `<task-notification>` completion events keyed by their <tool-use-id> (the
+  // deterministic join back to the dispatching Workflow/Agent/Bash call).
+  const notiByToolUse = new Map<string, TaskNoti>();
   // Workflow tool_call들(이름 메타). 워크플로우가 띄운 에이전트는 events의
   // `workflow_run_id`(파일 경로 `…/subagents/workflows/<runId>/` 유래)로 결정론적으로
   // 묶는다. 그룹에 이름을 붙이려고 run_id ↔ Workflow tool_call을 잇는데, run_id는 call의
@@ -723,6 +894,19 @@ export function buildStreamModel(
       const input = asObj(asObj(e.payload).input);
       const meta = parseWorkflowMeta(typeof input.script === 'string' ? input.script : '');
       wfCalls.push({ eventId: e.event_id, toolUseId: e.tool_use_id, ...meta });
+    }
+    if (e.kind === 'user_message') {
+      const pp = asObj(e.payload);
+      const content = typeof pp.content === 'string' ? pp.content : typeof pp.text === 'string' ? pp.text : '';
+      const noti = parseTaskNotification(content);
+      if (noti && noti.toolUseId) {
+        notiByToolUse.set(noti.toolUseId, {
+          status: noti.status,
+          summary: noti.summary,
+          endTimestamp: e.observed_at,
+          eventId: e.event_id,
+        });
+      }
     }
     const agent = e.agent_id || null;
     if (!agent) continue;
@@ -1030,6 +1214,22 @@ export function buildStreamModel(
   // skill bodies, command output, interrupts, task-notifications) into one
   // collapsible block so the main conversation stays legible. Subagent/batch
   // internals are untouched — groupScaffold scans only this top-level array.
-  return insertSubagentEndCards(groupScaffold(annotateConcurrency(mergeConcurrentGroups(items))));
+  // Join keys for task-notification sync: WorkflowGroup.taskEventId → Workflow
+  // call tool_use_id; SidechainGroup.agentId → dispatching Agent call tool_use_id.
+  const wfToolUseByEvent = new Map<string, string>();
+  for (const c of wfCalls) wfToolUseByEvent.set(c.eventId, c.toolUseId);
+  const agentDispatchToolUse = new Map<string, string>();
+  for (const [agentId, meta] of metaByAgent) if (meta.toolUseId) agentDispatchToolUse.set(agentId, meta.toolUseId);
+
+  return insertSubagentEndCards(
+    groupScaffold(
+      syncTaskNotifications(
+        annotateConcurrency(mergeConcurrentGroups(items)),
+        notiByToolUse,
+        wfToolUseByEvent,
+        agentDispatchToolUse,
+      ),
+    ),
+  );
 }
 

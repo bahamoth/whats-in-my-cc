@@ -25,6 +25,46 @@
 .label { flex: none; }
 .time { font-variant-numeric: tabular-nums; }
 
+/* status from a matched <task-notification> (Agent run_in_background) */
+.statusPill {
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  border: 1px solid currentColor;
+}
+
+/* fail/killed recolor the card + check + status to read the outcome at a glance */
+.card[data-status='fail'] {
+  border-color: color-mix(in srgb, var(--wimcc-danger, #ef4747) 34%, var(--wimcc-border, #1d212c));
+  border-left-color: var(--wimcc-danger, #ef4747);
+  background: color-mix(in srgb, var(--wimcc-danger, #ef4747) 8%, var(--wimcc-surface-2, #161a23));
+}
+.card[data-status='fail'] .head,
+.card[data-status='fail'] .conclLabel { color: var(--wimcc-danger, #ef4747); }
+.card[data-status='killed'] {
+  border-color: color-mix(in srgb, var(--wimcc-warning, #f0b429) 30%, var(--wimcc-border, #1d212c));
+  border-left-color: var(--wimcc-warning, #f0b429);
+}
+.card[data-status='killed'] .head,
+.card[data-status='killed'] .conclLabel { color: var(--wimcc-warning, #f0b429); }
+
+.jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  background: none;
+  border: 1px solid var(--wimcc-border-strong, #2a3040);
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  color: var(--wimcc-lane-context, #b07dff);
+}
+.jump:hover { background: var(--wimcc-surface-3, #1b202a); }
+
 .stats {
   margin-left: auto;
   display: flex;

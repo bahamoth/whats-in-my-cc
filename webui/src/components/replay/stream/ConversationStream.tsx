@@ -12,6 +12,7 @@ import { ThinkingMarker } from './ThinkingMarker';
 import { AutoscrollToggle } from './AutoscrollToggle';
 import { BgGutter } from './BgGutter';
 import { SubagentEndCard } from './SubagentEndCard';
+import { WorkflowEndCard } from './WorkflowEndCard';
 import { computeBgGutter } from './streamModel';
 import type { StreamItem } from './streamModel';
 import { shouldLoadOlder, shouldAdjustOnItemResize, LOAD_OLDER_TOP_PX } from './scrollAnchor';
@@ -58,7 +59,10 @@ function itemContainsEvent(item: StreamItem, eventId: string): boolean {
   if (item.type === 'thinking') return item.events.some((e) => e.eventId === eventId);
   if (item.type === 'workflow-group')
     return item.agentGroups.some((g) => itemContainsEvent(g, eventId));
-  if (item.type === 'subagent-end') return false;
+  // end cards are synthetic (no own event); selecting the absorbed/jumped
+  // notification event targets the end card that represents it.
+  if (item.type === 'subagent-end') return item.notificationEventId === eventId;
+  if (item.type === 'workflow-end') return item.notificationEventId === eventId;
   return item.events.some((ae) => ae.event.event_id === eventId);
 }
 
@@ -416,7 +420,10 @@ export function ConversationStream({
       );
     }
     if (item.type === 'subagent-end') {
-      return <SubagentEndCard card={item} />;
+      return <SubagentEndCard card={item} onSelect={onSelect} />;
+    }
+    if (item.type === 'workflow-end') {
+      return <WorkflowEndCard card={item} onSelect={onSelect} />;
     }
     // An activity-run renders as ONE contiguous ActivityStack (its events).
     return (
