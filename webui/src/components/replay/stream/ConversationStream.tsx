@@ -46,9 +46,6 @@ interface ConversationStreamProps {
   /** Extra content for the LEFT of the stream footer (e.g. the untagged-Bash
    *  control), so footer affordances are consistent in one bar. */
   footerExtra?: ReactNode;
-  /** Start detached (autoscroll off) — set on a `?selected=` deep-link mount so
-   *  the around-window the page loads isn't yanked to the live tip. Default true. */
-  initialFollow?: boolean;
 }
 
 /** True when the item is a message with the given eventId, or an activity-run
@@ -79,7 +76,6 @@ export function ConversationStream({
   onFollowingChange,
   pendingNewCount,
   footerExtra,
-  initialFollow = true,
 }: ConversationStreamProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
 
@@ -157,7 +153,7 @@ export function ConversationStream({
     }),
     [items],
   );
-  const auto = useAutoscroll(parentRef, signature, { initialFollow });
+  const auto = useAutoscroll(parentRef, signature);
 
   // Per-row background-subagent gutter cells (hairline lanes). Derived from the
   // standalone sidechain-groups' spans; keyed by row id. Recomputed only when
@@ -424,14 +420,10 @@ export function ConversationStream({
       );
     }
     if (item.type === 'subagent-end') {
-      return (
-        <SubagentEndCard card={item} onSelect={onSelect} selected={item.notificationEventId === selectedEventId} />
-      );
+      return <SubagentEndCard card={item} onSelect={onSelect} />;
     }
     if (item.type === 'workflow-end') {
-      return (
-        <WorkflowEndCard card={item} onSelect={onSelect} selected={item.notificationEventId === selectedEventId} />
-      );
+      return <WorkflowEndCard card={item} onSelect={onSelect} />;
     }
     // An activity-run renders as ONE contiguous ActivityStack (its events).
     return (
