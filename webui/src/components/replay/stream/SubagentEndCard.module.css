@@ -103,5 +103,5 @@
    An inset box-shadow follows the border-radius and never clips. Accent blue =
    same selection language as MessageCard, distinct from the card's identity color. */
 .card[data-selected='true'] {
-  box-shadow: inset 0 0 0 2px var(--wimcc-accent, #4f8cff);
+  box-shadow: inset 0 0 0 1px var(--wimcc-accent, #4f8cff);
 }
