@@ -162,15 +162,15 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
         <Icon size={14} aria-hidden className={styles.icon} />
         <span className={styles.label}>{label}</span>
         <span data-testid="source-badge" className={styles.sourceBadge}>{sourceTag}</span>
-        {item.duringBackground && (
+        {item.concurrentBackground ? (
           <span
             data-testid="bg-marker"
             className={styles.bgMarker}
-            title="백그라운드 서브에이전트/워크플로우 실행 중에 진행된 main 메시지"
+            title={`이 메시지가 진행되는 동안 서브에이전트 ${item.concurrentBackground}개가 백그라운드로 실행 중이었음 (이 메시지가 백그라운드라는 뜻이 아님)`}
           >
-            ⟂ 백그라운드 실행 중
+            ⟂ 서브에이전트 {item.concurrentBackground}개 동시 실행
           </span>
-        )}
+        ) : null}
         {hasFinding && (
           <Lightbulb
             size={12}

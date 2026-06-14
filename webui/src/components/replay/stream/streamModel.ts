@@ -48,10 +48,11 @@ export interface MessageItem {
   origin?: MessageOrigin;
   /** The invoked command (e.g. "/model") when origin==='command', else null. */
   commandName?: string | null;
-  /** True when this MAIN message's timestamp falls within a background
-   *  agent/workflow group's run span — i.e. it happened concurrently while that
-   *  block ran. Drives the "백그라운드 실행 중" marker (annotateConcurrency). */
-  duringBackground?: boolean;
+  /** Number of background SUBAGENTS running concurrently while this MAIN message
+   *  happened (their run span covers this message's timestamp). undefined/0 when
+   *  none. Drives the "서브에이전트 N개 동시 실행" marker — the subject is the
+   *  OTHER agents, not this message (annotateConcurrency). */
+  concurrentBackground?: number;
 }
 
 export interface ActivityEvent {
@@ -445,31 +446,35 @@ export function annotateConcurrency(items: StreamItem[]): StreamItem[] {
     return e > s ? { s, e } : null;
   };
   const blocks: { s: number; e: number; group: SidechainGroup | BatchGroup | WorkflowGroup }[] = [];
+  const agentSpans: { s: number; e: number }[] = [];
   for (const it of items) {
     if (it.type !== 'sidechain-group' && it.type !== 'batch-group' && it.type !== 'workflow-group')
       continue;
     const scs: SidechainGroup[] = it.type === 'sidechain-group' ? [it] : it.agentGroups;
-    let s = Infinity;
-    let e = -Infinity;
+    let bs = Infinity;
+    let be = -Infinity;
     for (const g of scs) {
       const sp = spanOf(g);
       if (sp) {
-        s = Math.min(s, sp.s);
-        e = Math.max(e, sp.e);
+        agentSpans.push(sp); // per-subagent span (message-side count)
+        bs = Math.min(bs, sp.s);
+        be = Math.max(be, sp.e);
       }
     }
-    if (e > s) blocks.push({ s, e, group: it });
+    if (be > bs) blocks.push({ s: bs, e: be, group: it });
   }
   if (!blocks.length) return items;
   for (const it of items) {
     if (it.type !== 'message' || it.sidechain) continue;
     const t = tms(it.timestamp);
     if (t == null) continue;
+    // message-side: how many SUBAGENTS were running while this main message happened
+    let n = 0;
+    for (const a of agentSpans) if (t >= a.s && t <= a.e) n++;
+    if (n > 0) it.concurrentBackground = n;
+    // block-side: count main messages that fell within each block's run span
     for (const b of blocks) {
-      if (t >= b.s && t <= b.e) {
-        it.duringBackground = true;
-        b.group.concurrentMainCount = (b.group.concurrentMainCount ?? 0) + 1;
-      }
+      if (t >= b.s && t <= b.e) b.group.concurrentMainCount = (b.group.concurrentMainCount ?? 0) + 1;
     }
   }
   return items;

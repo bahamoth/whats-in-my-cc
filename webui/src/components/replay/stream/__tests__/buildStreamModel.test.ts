@@ -681,7 +681,7 @@ describe('buildStreamModel — concurrent fragment merge (2026-06-14)', () => {
     const sub = collectSidechainGroups(items)[0];
     expect(sub.concurrentMainCount).toBe(1); // A span[01,10]과 겹친 main 1건
     const main = items.find((i: any) => i.type === 'message' && !i.sidechain) as any;
-    expect(main.duringBackground).toBe(true);
+    expect(main.concurrentBackground).toBe(1); // A 1개가 그 시각에 백그라운드 실행 중
   });
 });
 
