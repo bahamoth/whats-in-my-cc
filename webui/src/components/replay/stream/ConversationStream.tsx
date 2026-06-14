@@ -11,6 +11,7 @@ import { ScaffoldGroup } from './ScaffoldGroup';
 import { ThinkingMarker } from './ThinkingMarker';
 import { AutoscrollToggle } from './AutoscrollToggle';
 import { BgGutter } from './BgGutter';
+import type { SpineKind } from './BgGutter';
 import { SubagentEndCard } from './SubagentEndCard';
 import { WorkflowEndCard } from './WorkflowEndCard';
 import { computeBgGutter } from './streamModel';
@@ -484,6 +485,30 @@ export function ConversationStream({
   const rowEventId = (item: StreamItem): string | undefined =>
     item.type === 'message' ? item.eventId : undefined;
 
+  // The row's primary kind → spine node color (A+B timeline). Synthetic end
+  // cards carry no node (the lane's own end glyph marks them).
+  const rowKind = (item: StreamItem): SpineKind | null => {
+    switch (item.type) {
+      case 'message':
+        return item.role === 'user' ? 'user' : 'assistant';
+      case 'thinking':
+        return 'thinking';
+      case 'batch-group':
+        return 'batch';
+      case 'workflow-group':
+        return 'workflow';
+      case 'sidechain-group':
+        return 'workflow';
+      case 'scaffold-group':
+        return 'scaffold';
+      case 'subagent-end':
+      case 'workflow-end':
+        return null;
+      default:
+        return 'tool'; // activity-run
+    }
+  };
+
   // Fallback path: cap to the last FALLBACK_CAP items (newest at bottom).
   const fallbackItems = items.length > FALLBACK_CAP ? items.slice(-FALLBACK_CAP) : items;
   const fallbackCapped = items.length > FALLBACK_CAP;
@@ -521,7 +546,7 @@ export function ConversationStream({
                   style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start - scrollMargin}px)` }}
                 >
                   <div className={styles.row}>
-                    <BgGutter row={gutterByRow.get(item.id)} />
+                    <BgGutter row={gutterByRow.get(item.id)} kind={rowKind(item)} />
                     <div className={styles.rowBody}>{renderItem(item)}</div>
                   </div>
                 </div>
@@ -532,7 +557,7 @@ export function ConversationStream({
           fallbackItems.map((item) => (
             <div key={item.id} {...(rowEventId(item) ? { 'data-event-id': rowEventId(item) } : {})}>
               <div className={styles.row}>
-                <BgGutter row={gutterByRow.get(item.id)} />
+                <BgGutter row={gutterByRow.get(item.id)} kind={rowKind(item)} />
                 <div className={styles.rowBody}>{renderItem(item)}</div>
               </div>
             </div>
