@@ -5063,12 +5063,13 @@ vitest: 69 passed
       <li><strong>종료/노티 카드 선택 테두리 잘림 수정</strong>: 종료 카드(SubagentEnd·WorkflowEnd)는 행
         폭을 꽉 채워(실측 <code>gapToScrollRight=0</code>) <code>outline-offset:1px</code> 아웃셋 아웃라인이
         오른쪽 3px가 스크롤 컨테이너에 잘렸다(<code>.scroll</code>의 <code>overflow-y:auto</code>가
-        <code>overflow-x:auto</code>를 강제 + scrollbar-gutter). <strong>inset box-shadow</strong>
-        (<code>inset 0 0 0 1px</code>)로 교체 — 박스 안에 그려 border-radius를 따르고 절대 잘리지 않음.
-        두께는 다른 박스(MessageCard·ActivityStack의 <code>outline: 1px</code>)와 동일한 1px. 색은
-        <strong>짙은 주황 <code>#ea580c</code></strong>(사용자 요청 — 처음에 accent 블루로 했다가
-        주황으로 정정; 테마에 dark-orange 토큰이 없어 raw hex). 실측: inset 링
-        <code>rightEdgeInsideViewport=true</code>.</li>
+        <code>overflow-x:auto</code>를 강제 + scrollbar-gutter). <strong>기존 테두리 recolor</strong>로
+        교체 — 종료 카드는 이미 1px 테두리(+3px 좌측)를 가져, 별도 outset/inset 링을 그리면 테두리가
+        두 줄(2px 효과)이 된다. 그래서 선택 시 <code>border-color: #ea580c</code>(짙은 주황)로 기존
+        테두리 색만 바꾼다 — 같은 위치·같은 두께, 두 번째 선 없음, 레이아웃 시프트 없음. (진행 경과:
+        아웃셋 아웃라인→오른쪽 잘림 / inset 2px→다른 박스보다 두꺼움 / inset 1px accent 블루→사용자가
+        주황 원함 / 최종 = 기존 테두리를 짙은 주황으로 recolor. <code>border-color</code>는 3px 좌측
+        테두리 색까지 바꾸되 두께는 유지.) 테마에 dark-orange 토큰이 없어 raw hex.</li>
     </ul>
     <p>
       이상 셋은 순수 CSS/렌더 정리라 브라우저 smoke로 잠금(데이터/로직 무변경). 커버리지 클램프만 단위
