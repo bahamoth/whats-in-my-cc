@@ -992,6 +992,29 @@ describe('computeBgGutter', () => {
     expect(g.get('m3')).toBeUndefined();
   });
 
+  it('a main row BEFORE the block (but inside its time span) is NOT covered — coverage anchors at the block row, not raw timestamp', () => {
+    // Real shape (session 00fae5d9): the bg subagent's first event is 01:41:05,
+    // but the collapsed group CARD renders AFTER a main-thread thinking at
+    // 01:41:10 (5s later, dispatched-then-keeps-thinking). That thinking is
+    // main-thread — NOT the subagent's work — so the green rail must NOT bleed up
+    // onto it. Coverage starts AT the block row and extends DOWN; rows above the
+    // block are never painted, even if their time falls inside [s,e].
+    const A = sgAgent('A', 'aa1844', ['2026-06-14T01:41:05Z', '2026-06-14T01:42:24Z']);
+    const items: StreamItem[] = [
+      mainMsg('before', '2026-06-14T01:41:10Z'), // inside [s,e] by time, but BEFORE the block
+      A, // the subagent group card (block / start anchor)
+      mainMsg('m1', '2026-06-14T01:41:30Z'), // after block, interior → mid
+      mainMsg('m2', '2026-06-14T01:42:00Z'), // after block, last covered → end
+      mainMsg('after', '2026-06-14T01:50:00Z'), // after span → none
+    ];
+    const g = computeBgGutter(items);
+    expect(g.get('before')).toBeUndefined(); // NOT painted — above the block, not the subagent's
+    expect(g.get('A')!.cells[0]).toMatchObject({ lane: 0, agentId: 'aa1844', marker: 'start' });
+    expect(g.get('m1')!.cells[0]).toMatchObject({ lane: 0, marker: 'mid' });
+    expect(g.get('m2')!.cells[0]).toMatchObject({ lane: 0, marker: 'end' });
+    expect(g.get('after')).toBeUndefined();
+  });
+
   it('three concurrent bg agents pack into lanes 0,1,2 (gutter width constant)', () => {
     const A = sgAgent('A', 'a', ['2026-06-14T01:00:00Z', '2026-06-14T01:10:00Z']);
     const B = sgAgent('B', 'b', ['2026-06-14T01:01:00Z', '2026-06-14T01:09:00Z']);

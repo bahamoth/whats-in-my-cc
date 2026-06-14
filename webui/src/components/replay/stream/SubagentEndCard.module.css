@@ -96,8 +96,12 @@
 .card[role='button'] { cursor: pointer; }
 .card[role='button']:hover { background: color-mix(in srgb, var(--wimcc-success, #41c285) 13%, var(--wimcc-surface-2, #161a23)); }
 
-/* deep-link / selection highlight (the absorbed noti targets this card) */
+/* deep-link / selection highlight (the absorbed noti targets this card). INSET
+   ring (not an outset outline): the card fills the full row width, so an
+   outline-offset outline drew OUTSIDE the box and got clipped on the right by
+   the scroll container (overflow-y:auto forces overflow-x:auto + scrollbar-gutter).
+   An inset box-shadow follows the border-radius and never clips. Accent blue =
+   same selection language as MessageCard, distinct from the card's identity color. */
 .card[data-selected='true'] {
-  outline: 2px solid var(--agentColor, var(--wimcc-lane-context, #b07dff));
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 2px var(--wimcc-accent, #4f8cff);
 }

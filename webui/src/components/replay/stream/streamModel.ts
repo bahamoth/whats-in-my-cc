@@ -768,9 +768,17 @@ export function computeBgGutter(items: StreamItem[]): Map<string, GutterRow> {
   // A track = one bookended background unit (a standalone subagent OR a workflow).
   // blockId = its start card row; endRowId = its end card row (preferred) or last
   // covered row (fallback). color = per-agent hash, or the workflow orange.
-  type Track = { key: string; blockId: string; color: string; s: number; e: number; lane: number; endRowId: string | null };
+  // blockIndex = the block row's position in `items`. Coverage is anchored to it:
+  // a track only paints rows AT OR AFTER its block row, so the rail never bleeds
+  // UP onto an earlier main-thread row that merely overlaps the subagent in time
+  // (e.g. a main-thread thinking emitted in the dispatch turn, which is NOT the
+  // subagent's work). The rail starts at the block (the subagent itself) and
+  // extends DOWN over the concurrent main rows — the chosen "liveness span,
+  // anchored at the subagent" model.
+  type Track = { key: string; blockId: string; blockIndex: number; color: string; s: number; e: number; lane: number; endRowId: string | null };
   const tracks: Track[] = [];
   const byId = new Map(items.map((i) => [i.id, i] as const));
+  const indexById = new Map(items.map((i, idx) => [i.id, idx] as const));
   const subEndIds = new Set(items.filter((i) => i.type === 'subagent-end').map((i) => i.id));
   const wfEndByWorkflowId = new Map<string, string>();
   for (const it of items) if (it.type === 'workflow-end') wfEndByWorkflowId.set(it.workflowId, it.id);
@@ -780,7 +788,7 @@ export function computeBgGutter(items: StreamItem[]): Map<string, GutterRow> {
       const sp = sidechainSpan(it);
       if (!sp) continue;
       const endId = `end-${it.agentId}`;
-      tracks.push({ key: it.agentId, blockId: it.id, color: agentColor(it.agentId), s: sp.s, e: sp.e, lane: -1, endRowId: subEndIds.has(endId) ? endId : null });
+      tracks.push({ key: it.agentId, blockId: it.id, blockIndex: indexById.get(it.id)!, color: agentColor(it.agentId), s: sp.s, e: sp.e, lane: -1, endRowId: subEndIds.has(endId) ? endId : null });
     } else if (it.type === 'workflow-group') {
       const blockT = rowTimeMs(it);
       let s = blockT ?? Infinity;
@@ -798,7 +806,7 @@ export function computeBgGutter(items: StreamItem[]): Map<string, GutterRow> {
         if (et != null) e = Math.max(e, et);
       }
       if (!(e > s)) continue;
-      tracks.push({ key: `wf-${it.id}`, blockId: it.id, color: WORKFLOW_COLOR, s, e, lane: -1, endRowId: endId });
+      tracks.push({ key: `wf-${it.id}`, blockId: it.id, blockIndex: indexById.get(it.id)!, color: WORKFLOW_COLOR, s, e, lane: -1, endRowId: endId });
     }
   }
   const out = new Map<string, GutterRow>();
@@ -818,20 +826,26 @@ export function computeBgGutter(items: StreamItem[]): Map<string, GutterRow> {
   }
 
   // tracks without an explicit end card fall back to last-covered row for ✓.
+  // Same anchor rule: only rows AT OR AFTER the block can be the end row.
   for (const t of tracks) {
     if (t.endRowId) continue;
     let last: string | null = null;
-    for (const it of items) {
-      const tt = rowTimeMs(it);
-      if (tt != null && tt >= t.s && tt <= t.e) last = it.id;
+    for (let i = 0; i < items.length; i++) {
+      if (i < t.blockIndex) continue;
+      const tt = rowTimeMs(items[i]);
+      if (tt != null && tt <= t.e) last = items[i].id;
     }
     t.endRowId = last;
   }
 
-  for (const it of items) {
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
     const t = rowTimeMs(it);
     if (t == null) continue;
-    const covering = tracks.filter((a) => t >= a.s && t <= a.e);
+    // Anchor coverage to the block row: paint rows at/after the block whose time
+    // is within the span. Rows above the block (even if time-overlapping) are not
+    // the subagent's and stay unpainted.
+    const covering = tracks.filter((a) => i >= a.blockIndex && t <= a.e);
     if (!covering.length) continue;
     const overflow = covering.some((a) => a.lane < 0);
     if (overflow) {
