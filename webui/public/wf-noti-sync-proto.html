@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>task-notification ↔ 워크플로우 종료 싱크</title>
+<style>
+  :root{
+    --bg:#0b0d12;--s1:#11141b;--s2:#161a23;--s3:#1b202a;--border:#1d212c;--bstrong:#2a3040;
+    --fg:#e6e8ee;--muted:#aab0bd;--subtle:#6a7180;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --human:#4f8cff;--success:#41c285;--warn:#f0b429;--danger:#ef4747;--wf:#ff8a4c;--noti:#b07dff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);font-size:13px;line-height:1.5;padding:28px 26px 90px}
+  .wrap{max-width:1000px;margin:0 auto}
+  .eyebrow{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--wf);font-weight:600}
+  h1{font-size:20px;margin:6px 0 8px}
+  .lede{color:var(--muted);font-size:12px;max-width:900px}.lede code{background:var(--s2);padding:1px 5px;border-radius:4px;color:var(--fg)}.lede b{color:var(--fg)}
+  h2{font-size:13px;margin:24px 0 6px;display:flex;gap:8px;align-items:center}
+  .tag{font-size:9px;font-weight:700;border-radius:4px;padding:2px 7px;color:var(--bg)}.tag.bad{background:var(--warn)}.tag.good{background:var(--success)}
+  .cn{color:var(--subtle);font-size:11px;margin:2px 0 10px}
+  .stream{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:12px 14px 14px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:880px){.cols{grid-template-columns:1fr}}
+
+  .trow{display:grid;grid-template-columns:16px 1fr;column-gap:7px}
+  .gut{position:relative}
+  .railFull{position:absolute;right:1px;top:0;bottom:0;width:2px;background:var(--wf)}
+  .railDown{position:absolute;right:1px;top:50%;bottom:0;width:2px;background:linear-gradient(var(--wf),color-mix(in srgb,var(--wf) 60%,var(--success)))}
+  .railUp{position:absolute;right:1px;top:0;height:50%;width:2px;background:color-mix(in srgb,var(--wf) 50%,var(--success))}
+  .nStart{position:absolute;right:-3px;top:50%;transform:translateY(-50%);width:9px;height:9px;border-radius:2px;background:var(--wf);box-shadow:0 0 0 2px var(--bg)}
+  .nEnd{position:absolute;right:-3px;top:50%;transform:translateY(-50%);width:9px;height:9px;border-radius:50%;background:var(--success);box-shadow:0 0 0 2px var(--bg)}
+  .conn{position:absolute;right:1px;top:50%;transform:translateY(-50%);height:2px;width:8px}
+
+  .main{padding:5px 9px;border-radius:6px;background:var(--s2);border-left:2px solid var(--human)}
+  .who{color:var(--human);font-weight:600;font-size:10px;text-transform:uppercase}
+  .tx{font-size:10.5px;color:var(--fg);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* workflow start card (container) */
+  .wfcard{border:1px solid color-mix(in srgb,var(--wf) 32%,var(--border));background:color-mix(in srgb,var(--wf) 9%,var(--s2));border-radius:7px;padding:6px 10px}
+  .wfhead{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--wf)}
+  .wfchip{border:1px solid var(--wf);border-radius:5px;padding:1px 7px;font-size:9.5px}
+  .wfname{color:var(--fg)}
+  .wfmeta{margin-left:auto;color:var(--subtle);font-weight:400;font-size:10px;display:flex;gap:9px}
+  .pill{font-size:9px;font-weight:700;border-radius:10px;padding:1px 8px}
+  .pill.run{color:var(--warn);border:1px solid var(--warn)}
+
+  /* notification — floating (BEFORE) */
+  .noti{border:1px dashed var(--noti);background:color-mix(in srgb,var(--noti) 7%,var(--s2));border-radius:7px;padding:6px 10px;margin-left:auto;max-width:78%}
+  .notihead{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:600;color:var(--noti)}
+  .notibody{font-size:10.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* workflow END card synced from notification (AFTER) */
+  .wfend{border:1px solid color-mix(in srgb,var(--success) 30%,var(--border));border-left:3px solid var(--success);background:color-mix(in srgb,var(--success) 8%,var(--s2));border-radius:7px;padding:6px 10px}
+  .wfend.fail{border-color:color-mix(in srgb,var(--danger) 34%,var(--border));border-left-color:var(--danger);background:color-mix(in srgb,var(--danger) 8%,var(--s2))}
+  .we-l1{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:var(--success)}
+  .wfend.fail .we-l1{color:var(--danger)}
+  .we-stats{margin-left:auto;display:flex;gap:9px;font-weight:400;font-size:10px;color:var(--subtle)}
+  .we-sum{margin-top:3px;font-size:11px;color:var(--fg)}.we-sum b{color:var(--success);font-weight:700;font-size:9px;margin-right:5px}
+  .wfend.fail .we-sum b{color:var(--danger)}
+  .jump{font-size:9px;color:var(--noti);border:1px solid var(--bstrong);border-radius:5px;padding:0 6px;margin-left:6px}
+
+  .note{margin-top:10px;color:var(--subtle);font-size:11px}.note b{color:var(--fg)}.note code{background:var(--s2);padding:1px 4px;border-radius:3px}
+  .foot{margin-top:26px;border-top:1px solid var(--border);padding-top:14px;color:var(--subtle);font-size:11px}.foot b{color:var(--fg)}.foot code{background:var(--s2);padding:1px 4px;border-radius:3px}
+</style></head>
+<body><div class="wrap">
+  <div class="eyebrow">wimcc · replay · 노티 ↔ 워크플로우 종료 싱크</div>
+  <h1>task-notification을 워크플로우 종료에 결정론적으로 묶기</h1>
+  <p class="lede">
+    조인 키(검증됨): <code>&lt;task-notification&gt;</code>의 <code>&lt;tool-use-id&gt;</code> == 그 작업을 띄운
+    <b>Workflow tool_call의 id</b>. 그러면 떠다니던 "알림"이 <b>해당 워크플로우의 권위 있는 종료 마커</b>가 된다 —
+    추정(synthesis=직후 첫 메시지) 대신 <b>status(completed/failed/killed) + summary + 정확한 종료시각</b>.
+    서브에이전트 북엔드와 동일 패턴(주황 레일). 같은 메커니즘이 백그라운드 Bash·Agent <code>run_in_background</code>에도 적용.
+  </p>
+
+  <div class="cols">
+    <!-- BEFORE -->
+    <div>
+      <h2><span class="tag bad">현재</span> 알림이 워크플로우와 분리되어 떠 있음</h2>
+      <p class="cn">워크플로우 컨테이너는 종료를 "직후 메시지"로 추정. 종료 알림은 한참 뒤 우측에 "알림"으로 따로 — 어느 워크플로우 종료인지 안 보임.</p>
+      <div class="stream">
+        <div class="trow"><div class="gut"></div>
+          <div class="wfcard"><div class="wfhead"><span class="wfchip">워크플로우</span><span class="wfname">bg-hairline-plan-facts</span><span class="wfmeta"><span>5 agents</span><span>진행 추정</span></span></div></div></div>
+        <div class="trow"><div class="gut"></div><div class="main"><span class="who">Claude · main</span><div class="tx">완료 알림이 오면 결과를 받아…</div></div></div>
+        <div class="trow"><div class="gut"></div><div class="main"><span class="who">Claude · main</span><div class="tx">그동안 다른 작업…</div></div></div>
+        <div class="trow"><div class="gut"></div>
+          <div class="noti"><div class="notihead">🔔 알림</div><div class="notibody">&lt;task-notification&gt; Dynamic workflow "Map real wimcc…" completed</div></div></div>
+      </div>
+      <div class="note">관계 단절: 알림이 <code>tool-use-id</code>로 위 워크플로우를 가리키는데 UI는 안 잇는다.</div>
+    </div>
+
+    <!-- AFTER -->
+    <div>
+      <h2><span class="tag good">제안</span> 알림 = 워크플로우 종료 카드 (싱크)</h2>
+      <p class="cn">알림을 그 워크플로우의 <b>끝 카드</b>로 흡수 — 주황 레일이 시작(컨테이너)→끝(노티)으로 북엔드. status·summary는 노티에서(결정론).</p>
+      <div class="stream">
+        <div class="trow"><div class="gut"><div class="railDown"></div><div class="conn" style="background:var(--wf)"></div><div class="nStart"></div></div>
+          <div class="wfcard"><div class="wfhead"><span class="wfchip">워크플로우</span><span class="wfname">bg-hairline-plan-facts</span><span class="wfmeta"><span>5 agents</span><span class="pill run">● 실행 중</span></span></div></div></div>
+        <div class="trow"><div class="gut"><div class="railFull"></div></div><div class="main"><span class="who">Claude · main</span><div class="tx">완료 알림이 오면 결과를 받아…</div></div></div>
+        <div class="trow"><div class="gut"><div class="railFull"></div></div><div class="main"><span class="who">Claude · main</span><div class="tx">그동안 다른 작업…</div></div></div>
+        <div class="trow"><div class="gut"><div class="railUp"></div><div class="conn" style="background:var(--success)"></div><div class="nEnd"></div></div>
+          <div class="wfend"><div class="we-l1"><span>✓ 워크플로우 종료 06:14:56</span><span class="we-stats"><span>⏱ 2m</span><span>✓ 5/5 agents</span><span class="jump">🔔 알림 원문</span></span></div>
+            <div class="we-sum"><b>completed</b>Map real wimcc code + verify data caveats … (노티 summary, 권위)</div></div></div>
+      </div>
+      <div class="note">status가 <code>failed</code>/<code>killed</code>면 끝 카드가 빨강 + 그 사유. 원문은 "🔔 알림 원문"으로 점프.</div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:24px">실패/취소도 결정론으로</h2>
+  <div class="stream">
+    <div class="trow"><div class="gut"><div class="railUp" style="background:color-mix(in srgb,var(--wf) 50%,var(--danger))"></div><div class="conn" style="background:var(--danger)"></div><div class="nEnd" style="background:var(--danger)"></div></div>
+      <div class="wfend fail"><div class="we-l1"><span>✗ 워크플로우 실패 06:12:10</span><span class="we-stats"><span>⏱ 10s</span><span class="jump">🔔 알림 원문</span></span></div>
+        <div class="we-sum"><b>failed</b>Error: parallel(...).filter is not a function (workflow.js:47) … (노티 summary)</div></div></div>
+  </div>
+  <div class="note">예: 이번 세션의 첫 facts 워크플로우가 <code>.filter</code> 버그로 <b>failed</b> — 지금은 그 사실이 알림에만 있고 워크플로우와 안 묶임. 싱크하면 종료 카드가 즉시 빨강.</div>
+
+  <div class="foot">
+    데이터 정직성: 조인 키 <code>tool-use-id</code>는 실 transcript로 검증(noti.tool-use-id == Workflow tool_use id; bash noti == Bash tool_call). 구현 전 실 <code>&lt;task-notification&gt;</code> payload(status/summary/tool-use-id)를 <code>tests/fixtures/**/real/</code>에 동결.
+    범위: ① WorkflowGroup 종료 카드(노티 싱크) ② 같은 키로 Agent <code>run_in_background</code> end card를 <b>span 파생→노티 정밀화</b>(status·정확 시각) ③ 백그라운드 Bash status. 떠다니던 "알림"은 종료 카드로 흡수(원문은 점프 유지) — 포그라운드/노티 없는 작업은 기존대로.
+  </div>
+</div></body></html>

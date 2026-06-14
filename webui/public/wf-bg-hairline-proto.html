@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>컴팩트 거터 — 헤어라인 스파인 (12px 고정)</title>
+<style>
+  :root{
+    --bg:#0b0d12;--s1:#11141b;--s2:#161a23;--s3:#1b202a;--border:#1d212c;--bstrong:#2a3040;
+    --fg:#e6e8ee;--muted:#aab0bd;--subtle:#6a7180;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --human:#4f8cff;--success:#41c285;--warn:#f0b429;--neutral:#5a6273;
+    /* 서브에이전트 색 = hash(agent_id) → 안정 팔레트. 헤어라인·틱·글리프·블록 보더 전부 같은 var. */
+    --a:#7da7ff; --b:#41c285; --c:#d97aff; --d:#ff8a4c; --e:#2bd0d0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);font-size:13px;line-height:1.5;padding:28px 26px 90px}
+  .wrap{max-width:1020px;margin:0 auto}
+  .eyebrow{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--a);font-weight:600}
+  h1{font-size:20px;margin:6px 0 8px}
+  .lede{color:var(--muted);font-size:12px;max-width:900px}
+  .lede code{background:var(--s2);padding:1px 5px;border-radius:4px;color:var(--fg)}.lede b{color:var(--fg)}
+  h2{font-size:13px;margin:26px 0 6px;display:flex;gap:8px;align-items:center}
+  .tag{font-size:9px;font-weight:700;border-radius:4px;padding:2px 7px;color:var(--bg)}
+  .tag.bad{background:var(--warn)}.tag.good{background:var(--success)}.tag.flex{background:var(--c)}.tag.dense{background:var(--neutral);color:var(--fg)}
+  .cn{color:var(--subtle);font-size:11px;margin:2px 0 10px}.cn b{color:var(--muted)}
+  .stream{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:12px 14px 14px}
+
+  /* ===== 공통 row 레이아웃: [거터][본문], per-row 페인트 ===== */
+  .trow{display:grid;column-gap:9px;align-items:stretch}
+  .gut{position:relative}
+  /* 헤어라인: row 전체 높이를 칠함 → 인접 row끼리 쌓이면 연속선. (구현=per-row segment) */
+  .hair{position:absolute;top:0;bottom:0;width:2px;border-radius:1px;background:var(--hc)}
+  .dot{display:none} /* 행별 점 비트 제거 — 연속 헤어라인이 이미 "구간 안" 표현 */
+  .gstart{position:absolute;top:7px;width:7px;height:7px;border-radius:2px;transform:translateX(-2.5px);background:var(--bg);box-shadow:0 0 0 1.6px var(--hc)}
+  .gend{position:absolute;bottom:7px;width:7px;height:7px;border-radius:50%;transform:translateX(-2.5px);background:var(--hc);box-shadow:0 0 0 1.6px var(--bg)}
+
+  /* 본문 카드들 */
+  .main{padding:5px 10px;border-radius:6px;background:var(--s2);border-left:2px solid var(--human)}
+  .tool{padding:5px 10px;border-radius:6px;background:var(--s3);border-left:2px solid var(--subtle)}
+  .mhead{display:flex;align-items:center;gap:7px}
+  .who{color:var(--human);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+  .twho{color:var(--muted);font-weight:600;font-size:10px}
+  .tx{font-size:11px;color:var(--fg);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .t{margin-left:auto;font-size:9px;color:var(--subtle);font-variant-numeric:tabular-nums}
+
+  /* 병합 서브에이전트 블록 = 권위 신원면(색 스와치 + agent_id) */
+  .sub{border-radius:7px;background:color-mix(in srgb,var(--hc) 12%,var(--s2));border:1px solid color-mix(in srgb,var(--hc) 32%,var(--border));border-left:3px solid var(--hc);padding:6px 10px}
+  .shead{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600}
+  .swatch{flex:none;width:9px;height:9px;border-radius:2px;background:var(--hc)}
+  .caret{color:var(--hc);font-size:10px}
+  .stype{font-size:9.5px;font-weight:700;color:var(--hc);background:var(--s3);border:1px solid var(--hc);border-radius:4px;padding:1px 6px}
+  .aid{font-size:9.5px;color:var(--subtle);font-weight:400}
+  .sname{color:var(--fg)}
+  .smeta{margin-left:auto;color:var(--subtle);font-weight:400;font-size:10px}
+  .sbody{margin-top:3px;font-size:10.5px;color:var(--muted)}.sbody .concl{color:var(--success)}
+  .endrow{display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:600;color:var(--hc)}.endrow .dur{color:var(--subtle);font-weight:400}
+  .chip{margin-left:auto;font-size:9px;color:var(--muted);background:var(--bg);border:1px solid var(--bstrong);border-radius:5px;padding:1px 6px;display:flex;align-items:center;gap:4px}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:9px;font-size:10.5px;color:var(--muted)}
+  .legend span{display:flex;align-items:center;gap:5px}.sw{width:14px;height:5px;border-radius:3px;display:inline-block}
+  .note{margin-top:9px;color:var(--subtle);font-size:11px}.note b{color:var(--fg)}.note code{background:var(--s2);padding:1px 4px;border-radius:3px;color:var(--muted)}
+  .foot{margin-top:28px;border-top:1px solid var(--border);padding-top:14px;color:var(--subtle);font-size:11px}.foot b{color:var(--fg)}.foot code{background:var(--s2);padding:1px 4px;border-radius:3px;color:var(--muted)}
+
+  /* width-compare 전용 */
+  .cmp{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:880px){.cmp{grid-template-columns:1fr}}
+  .cmp h3{font-size:11px;margin:0 0 6px;display:flex;align-items:center;gap:7px}
+  .px{font-size:9px;font-weight:700;border-radius:4px;padding:1px 6px}.px.big{background:var(--warn);color:var(--bg)}.px.small{background:var(--success);color:var(--bg)}
+  /* OLD: 컬럼형 거터(넓음) */
+  .oldgut{position:relative;width:60px;flex:none}
+  .olane{position:absolute;top:0;bottom:0;width:5px;border-radius:3px}
+  .measure{position:relative;margin:0 0 6px;height:13px}
+  .measure .bar{position:absolute;top:5px;height:2px;background:var(--subtle)}
+  .measure .lab{position:absolute;top:-2px;font-size:8.5px;color:var(--subtle)}
+</style></head>
+<body><div class="wrap">
+  <div class="eyebrow">wimcc · replay · 컴팩트 거터 (헤어라인 스파인)</div>
+  <h1>거터를 12px로 — 폭은 고정, 본문 가시성은 회복</h1>
+  <p class="lede">
+    승인하신 거터 스윔레인 아이디어를 유지하되 <b>폭 제약</b>을 해결했습니다(4안 설계→3인 심사, 우승=헤어라인 스파인).
+    핵심 변경: 백그라운드 에이전트마다 <b>컬럼을 늘리던 것</b>(이전 3개 = 64px)을 그만두고,
+    <b>고정 ~12px 거터 안에서 1px 헤어라인을 3px 피치로 묶는다</b> — 백그라운드 1개든 30개든 거터 폭은 그대로.
+    본문(메시지) 폭이 곧 회복된다. 시간축은 여전히 정직(메인 아이템 순서 불변).
+  </p>
+
+  <!-- ===================== A. WIDTH 비교 ===================== -->
+  <h2><span class="tag good">핵심</span> 폭 비교 — 같은 백그라운드 3개, 거터만 다르다</h2>
+  <p class="cn">왼쪽: 이전(에이전트당 레인 컬럼, <b>64px</b>). 오른쪽: 신규(헤어라인 묶음, <b>14px</b>). 우측에서 회복된 ~50px가 전부 본문으로 간다.</p>
+  <div class="cmp">
+    <!-- OLD -->
+    <div class="stream">
+      <h3><span class="px big">거터 64px</span> 이전 — 레인 컬럼 누적</h3>
+      <div class="measure"><div class="bar" style="left:0;width:60px"></div><span class="lab" style="left:0">◀ 60px 거터 ▶</span></div>
+      <div style="display:flex;gap:9px">
+        <div class="oldgut">
+          <div class="olane" style="left:6px;background:var(--a)"></div>
+          <div class="olane" style="left:18px;background:var(--b);top:40px"></div>
+          <div class="olane" style="left:30px;background:var(--c);top:96px;bottom:40px"></div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+          <div class="main"><div class="mhead"><span class="who">main</span></div><div class="tx">three runners out, building…</div></div>
+          <div class="tool"><div class="mhead"><span class="twho">⚒ Bash npm build</span></div></div>
+          <div class="main"><div class="mhead"><span class="who">main</span></div><div class="tx">waiting on lint…</div></div>
+          <div class="tool"><div class="mhead"><span class="twho">⚒ Read lib.rs</span></div></div>
+        </div>
+      </div>
+      <div class="note" style="margin-top:8px">에이전트 3개 → 레인 3컬럼 → 거터가 본문을 60px 밀어냄.</div>
+    </div>
+    <!-- NEW -->
+    <div class="stream">
+      <h3><span class="px small">거터 14px</span> 신규 — 헤어라인 3px 피치</h3>
+      <div class="measure"><div class="bar" style="left:0;width:14px"></div><span class="lab" style="left:18px">◀14px▶ 거터 (고정)</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="hair" style="--hc:var(--b);left:6px"></span><span class="hair" style="--hc:var(--c);left:10px"></span><span class="dot" style="--hc:var(--a);left:2px"></span><span class="dot" style="--hc:var(--b);left:6px"></span><span class="dot" style="--hc:var(--c);left:10px"></span></div><div class="main"><div class="mhead"><span class="who">main</span><span class="chip">⟂ 백그라운드 3</span></div><div class="tx">three runners out, building…</div></div></div>
+        <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="hair" style="--hc:var(--b);left:6px"></span><span class="hair" style="--hc:var(--c);left:10px"></span></div><div class="tool"><div class="mhead"><span class="twho">⚒ Bash npm build</span></div></div></div>
+        <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="hair" style="--hc:var(--b);left:6px"></span><span class="hair" style="--hc:var(--c);left:10px"></span></div><div class="main"><div class="mhead"><span class="who">main</span><span class="chip">⟂ 백그라운드 3</span></div><div class="tx">waiting on lint…</div></div></div>
+        <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="hair" style="--hc:var(--b);left:6px"></span><span class="hair" style="--hc:var(--c);left:10px"></span></div><div class="tool"><div class="mhead"><span class="twho">⚒ Read lib.rs</span></div></div></div>
+      </div>
+      <div class="note" style="margin-top:8px">에이전트 3개 → 헤어라인 3줄(x=2·6·10) → 거터 그대로 14px.</div>
+    </div>
+  </div>
+
+  <!-- ===================== B. 단일 ===================== -->
+  <h2><span class="tag good">단일</span> 헤어라인 스파인 — 시작 ▢ · 종료 ✓ · 그 사이 메인은 정직 순서</h2>
+  <p class="cn">병합 블록이 <b>신원면</b>(색 스와치 + agent_id). 거터의 가는 헤어라인이 [시작→종료]를 잇고, 그동안의 메인 메시지·툴콜은 우측에 실제 순서로 흐른다.</p>
+  <div class="stream">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="gstart" style="--hc:var(--a);left:2px"></span></div>
+        <div class="sub" style="--hc:var(--a)"><div class="shead"><span class="caret">▼</span><span class="swatch"></span><span class="stype">general-purpose</span><span class="aid">aa1844</span><span class="sname">Task 3 · workflowStats 작성</span><span class="smeta">⏵ 01:41:05</span></div>
+          <div class="sbody"><span class="concl">결론 · GREEN confirmed. 4 tests pass, 0 failures.</span> · ↳ 계획→RED→Write→GREEN</div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="dot" style="--hc:var(--a);left:2px"></span></div><div class="main"><div class="mhead"><span class="who">main</span><span class="t">01:41:12</span></div><div class="tx">Task 3 in background. Now starting Task 1 …</div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="dot" style="--hc:var(--a);left:2px"></span></div><div class="tool"><div class="mhead"><span class="twho">⚒ Read ×2 · Edit</span><span class="t">01:41:30</span></div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="dot" style="--hc:var(--a);left:2px"></span></div><div class="main"><div class="mhead"><span class="who">main</span><span class="t">01:41:58</span></div><div class="tx">Helpers confirmed. 헬퍼 추가 완료 …</div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="dot" style="--hc:var(--a);left:2px"></span></div><div class="tool"><div class="mhead"><span class="twho">⚒ Bash (cargo test)</span><span class="t">01:42:10</span></div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px;bottom:auto;height:14px"></span><span class="gend" style="--hc:var(--a);left:2px"></span></div><div class="endrow" style="--hc:var(--a)"><span>✓ Task 3 종료</span><span class="dur">· span 끝 01:42:24 · ~1m19s(파생)</span></div></div>
+    </div>
+    <div class="note">읽는 법: <b>파랑 헤어라인이 살아있는 구간</b> = 그 서브에이전트가 백그라운드로 도는 시간. <b>▢</b>=첫 사이드체인, <b>✓</b>=구간 끝. 거터 14px, 분절 0.</div>
+  </div>
+
+  <!-- ===================== C. 백그라운드 다수 ===================== -->
+  <h2><span class="tag flex">백그라운드</span> 겹쳐도 14px — 헤어라인 색으로 누가 도는지</h2>
+  <p class="cn">백그라운드 여러 개는 헤어라인을 <b>x=2·6·10px</b>에 나란히. 어떤 메인 행을 가로지르는 헤어라인 수 = 그 순간 백그라운드 N개. 신원은 각 블록 헤더의 스와치+id로 재확인(접근성 백스톱).</p>
+  <div class="stream">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="gstart" style="--hc:var(--a);left:2px"></span></div>
+        <div class="sub" style="--hc:var(--a)"><div class="shead"><span class="caret">▼</span><span class="swatch"></span><span class="stype">general-purpose</span><span class="aid">aa1844</span><span class="sname">Task 3 workflowStats</span><span class="smeta">⏵ 01:41:05</span></div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="dot" style="--hc:var(--a);left:2px"></span></div><div class="main"><div class="mhead"><span class="who">main</span><span class="chip">⟂ 백그라운드 1</span><span class="t">01:41:12</span></div><div class="tx">Task 3 in bg. Now Task 1 …</div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="hair" style="--hc:var(--b);left:6px"></span><span class="gstart" style="--hc:var(--b);left:6px"></span></div>
+        <div class="sub" style="--hc:var(--b)"><div class="shead"><span class="caret">▼</span><span class="swatch"></span><span class="stype">Explore</span><span class="aid">7b20e4</span><span class="sname">Task 4 raw 기록 조사</span><span class="smeta">⏵ 01:41:40</span></div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="hair" style="--hc:var(--b);left:6px"></span><span class="dot" style="--hc:var(--a);left:2px"></span><span class="dot" style="--hc:var(--b);left:6px"></span></div><div class="main"><div class="mhead"><span class="who">main</span><span class="chip">⟂ 백그라운드 2</span><span class="t">01:41:52</span></div><div class="tx">Helpers confirmed …</div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="hair" style="--hc:var(--b);left:6px"></span><span class="hair" style="--hc:var(--c);left:10px"></span><span class="gstart" style="--hc:var(--c);left:10px"></span></div>
+        <div class="sub" style="--hc:var(--c)"><div class="shead"><span class="caret">▼</span><span class="swatch"></span><span class="stype">general-purpose</span><span class="aid">c4d8a0</span><span class="sname">Task 5 라벨 추적</span><span class="smeta">⏵ 01:42:02</span></div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="hair" style="--hc:var(--b);left:6px"></span><span class="hair" style="--hc:var(--c);left:10px"></span><span class="dot" style="--hc:var(--a);left:2px"></span><span class="dot" style="--hc:var(--b);left:6px"></span><span class="dot" style="--hc:var(--c);left:10px"></span></div><div class="tool"><div class="mhead"><span class="twho">⚒ Bash (cargo test)</span><span class="chip">⟂ 백그라운드 3</span><span class="t">01:42:10</span></div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px"></span><span class="hair" style="--hc:var(--b);left:6px"></span><span class="hair" style="--hc:var(--c);left:10px;bottom:auto;height:14px"></span><span class="gend" style="--hc:var(--c);left:10px"></span></div><div class="endrow" style="--hc:var(--c)"><span>✓ Task 5 종료</span><span class="dur">· 01:42:20</span></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--a);left:2px;bottom:auto;height:14px"></span><span class="hair" style="--hc:var(--b);left:6px;bottom:auto;height:14px"></span><span class="gend" style="--hc:var(--a);left:2px"></span><span class="gend" style="--hc:var(--b);left:6px"></span></div><div class="endrow" style="--hc:var(--a)"><span>✓ Task 3 종료</span><span class="dur">· 1m19s</span> &nbsp;<span style="color:var(--b)">✓ Task 4 · 44s</span></div></div>
+    </div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--a)"></span>aa1844 general-purpose</span>
+      <span><span class="sw" style="background:var(--b)"></span>7b20e4 Explore</span>
+      <span><span class="sw" style="background:var(--c)"></span>c4d8a0 general-purpose</span>
+    </div>
+    <div class="note"><code>01:42:10</code> Bash 행을 가로지르는 헤어라인 <b>3줄</b> = 그 순간 백그라운드 3개. 거터는 여전히 14px.</div>
+  </div>
+
+  <!-- ===================== D. dense fallback ===================== -->
+  <h2><span class="tag dense">대량</span> 백그라운드 4개↑ — 회색 스파인 1줄 + ⟂N (히스테리시스로 깜빡임 방지)</h2>
+  <p class="cn">헤어라인이 분간 안 되는 백그라운드 <b>>3</b>이면 거터를 <b>중립 회색 1줄</b>로 접고, 개수는 <code>⟂N</code> 칩으로. 개별 신원은 (접힌) 블록 목록에서. 모드 전환은 <b>그룹 단위 임계+히스테리시스</b>(>3 진입, ≤2 복귀)로 스크롤 깜빡임 없음.</p>
+  <div class="stream">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--neutral);left:6px"></span></div><div class="tool"><div class="mhead"><span class="twho">⚒ Bash make -j</span><span class="chip" style="color:var(--fg)">⟂ 백그라운드 11</span><span class="t">02:03:10</span></div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--neutral);left:6px"></span></div><div class="main"><div class="mhead"><span class="who">main</span><span class="chip" style="color:var(--fg)">⟂ 백그라운드 11</span><span class="t">02:03:14</span></div><div class="tx">fan-out wave dispatched, collecting …</div></div></div>
+      <div class="trow" style="grid-template-columns:14px 1fr"><div class="gut"><span class="hair" style="--hc:var(--neutral);left:6px"></span></div><div class="main"><div class="mhead"><span class="who">main</span><span class="chip" style="color:var(--fg)">⟂ 백그라운드 9</span><span class="t">02:03:40</span></div><div class="tx">7 returned, 2 still running …</div></div></div>
+    </div>
+    <div class="note">대량 fan-out은 워크플로우로 묶이는 경우가 많아 그쪽 컨테이너 뷰가 담당. 거터는 "백그라운드 살아있음" 표시 + 개수만 — <b>폭은 끝까지 14px 고정.</b></div>
+  </div>
+
+  <div class="foot">
+    합의(4안→3심사, 우승=헤어라인 스파인): <b>폭 일정</b>(백그라운드 多→컬럼 아닌 3px 피치 묶음, dense는 회색 1줄+⟂N) · <b>제로 reflow</b>(거터를 본문 밀지 않게 per-row 페인트, 가상화 앵커와 비충돌) · <b>색 단일 출처</b>(<code>hash(agent_id)</code> → <code>--wimcc-agent-color</code>를 헤어라인·▢/✓·블록 보더에 공유 — <i>신규</i>, 현재 서브에이전트는 violet 하드코딩) · <b>접근성 백스톱</b>(거터는 차분한 장식, 신원은 블록 헤더 스와치+id).<br>
+    데이터 정직성(real-data anchoring): 종료 ✓는 일단 <b>구간(span) 끝</b>에서 그린다. <code>subagent_completed</code>/<code>duration_ms</code>로 정밀화하려면 먼저 실 payload를 <code>tests/fixtures/**/real/</code>에 동결 + invariant 잠금(미동결 시 duration은 "파생" 표기). per-agent per-row 멤버십도 현재 모델에 없음 → <code>concurrentBackground</code>(행별 수)·<code>concurrentMainCount</code>(블록별)로 시작, 멤버십은 구현 시 추가.
+  </div>
+</div></body></html>

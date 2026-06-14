@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>백그라운드 서브에이전트 가시성 — 거터 스파인</title>
+<style>
+  :root{
+    --bg:#0b0d12;--s1:#11141b;--s2:#161a23;--s3:#1b202a;--border:#1d212c;--bstrong:#2a3040;
+    --fg:#e6e8ee;--muted:#aab0bd;--subtle:#6a7180;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --human:#4f8cff;--success:#41c285;--warn:#f0b429;
+    /* 서브에이전트 색 = agent_id 해시 → 안정 색. 스파인·헤더·종료노드 전부 동일. */
+    --a:#7da7ff; /* aa1844 Task3 general-purpose */
+    --b:#41c285; /* 두 번째 동시 에이전트 */
+    --c:#d97aff; /* 세 번째 */
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);font-size:13px;line-height:1.5;padding:30px 26px 90px}
+  .wrap{max-width:1000px;margin:0 auto}
+  .eyebrow{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--a);font-weight:600}
+  h1{font-size:20px;margin:6px 0 8px}
+  .lede{color:var(--muted);font-size:12px;max-width:880px}
+  .lede code{background:var(--s2);padding:1px 5px;border-radius:4px;color:var(--fg)}
+  .lede b{color:var(--fg)}
+  h2{font-size:13px;margin:26px 0 6px;display:flex;gap:8px;align-items:center}
+  .tag{font-size:9px;font-weight:700;border-radius:4px;padding:2px 7px;color:var(--bg)}
+  .tag.bad{background:var(--warn)}.tag.good{background:var(--success)}.tag.flex{background:var(--c)}
+  .cn{color:var(--subtle);font-size:11px;margin:2px 0 10px}
+  .stream{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:12px 14px 14px}
+
+  /* ============ BEFORE: 분절 ============ */
+  .frag .sub{margin:5px 0;padding-left:9px;border-left:3px solid var(--a)}
+  .frag .sh{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600}
+  .frag .stype{font-size:9px;color:var(--a);background:var(--s3);border:1px solid var(--a);border-radius:4px;padding:1px 5px}
+  .frag .badfrag{font-size:9px;font-weight:700;color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:0 5px;margin-left:auto}
+  .frag .concl{margin:1px 0 0 2px;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .frag .main{margin:4px 0;padding:5px 9px;border-radius:6px;background:var(--s2);border-left:2px solid var(--human)}
+  .frag .tool{margin:4px 0;padding:5px 9px;border-radius:6px;background:var(--s3);border-left:2px solid var(--subtle)}
+  .frag .who{color:var(--human);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+  .frag .twho{color:var(--muted);font-weight:600;font-size:10px}
+  .frag .tx{font-size:11px;color:var(--fg);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* ============ AFTER: 거터 스파인 ============ */
+  /* 레이아웃: [거터(레인)] [콘텐츠]. 거터 폭은 동시 레인 수에 따라 가변. */
+  .canvas{--gutter:34px;display:grid;grid-template-columns:var(--gutter) 1fr;column-gap:12px}
+  .canvas.multi{--gutter:64px}
+
+  /* 거터: 세로 시간축. 레인 막대를 절대배치로 깔고, 행 높이는 콘텐츠가 만든다. */
+  .gutter{position:relative}
+  .lane{position:absolute;width:5px;border-radius:3px;background:var(--c, var(--a));opacity:.9}
+  .lane.l0{left:14px}     /* multi에서 첫 레인 */
+  .lane.l1{left:24px}
+  .lane.l2{left:34px}
+  .lane.single{left:14px}
+  /* 시작/종료 노드 */
+  .node{position:absolute;width:13px;height:13px;border-radius:50%;border:2px solid var(--bg);transform:translate(-4px,-50%)}
+  .node.start{box-shadow:0 0 0 1px var(--ncol)}
+  .node.end{background:var(--ncol)}
+  .ncap{position:absolute;left:0;font-size:8.5px;color:var(--subtle);transform:translateY(-50%);white-space:nowrap}
+
+  /* 콘텐츠 열 */
+  .content{position:relative}
+  .row{margin:0 0 6px}
+  /* 서브에이전트 헤더(접이식 병합 블록) — 스파인 상단에 앵커 */
+  .subhead{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;background:color-mix(in srgb, var(--hc) 12%, var(--s2));border:1px solid color-mix(in srgb, var(--hc) 35%, var(--border));border-left:3px solid var(--hc);border-radius:7px;padding:6px 10px}
+  .caret{color:var(--hc);font-size:10px}
+  .stype{font-size:9.5px;font-weight:700;color:var(--hc);background:var(--s3);border:1px solid var(--hc);border-radius:4px;padding:1px 6px}
+  .sname{color:var(--fg)}
+  .kn{flex:none;font-size:9px;font-weight:700;color:var(--bg);background:var(--hc);border-radius:4px;padding:1px 6px;font-variant-numeric:tabular-nums}
+  .smeta{margin-left:auto;color:var(--subtle);font-weight:400;font-size:10px}
+  .sbody{margin:3px 0 0;padding:5px 10px 6px;font-size:10.5px;color:var(--muted);background:var(--s2);border-radius:0 0 6px 6px;border-left:3px solid color-mix(in srgb, var(--hc) 40%, transparent)}
+  .sbody .concl{color:var(--success)}
+  .sbody .step{color:var(--muted);margin-top:1px}
+
+  /* 메인 메시지 / 툴콜 — 스파인 우측, 정직한 시간 순서 그대로 */
+  .main{padding:5px 10px;border-radius:6px;background:var(--s2);border-left:2px solid var(--human)}
+  .tool{padding:5px 10px;border-radius:6px;background:var(--s3);border-left:2px solid var(--subtle)}
+  .who{color:var(--human);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+  .twho{color:var(--muted);font-weight:600;font-size:10px}
+  .tx{font-size:11px;color:var(--fg);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .t{margin-left:auto;font-size:9px;color:var(--subtle);font-variant-numeric:tabular-nums}
+  .mhead{display:flex;align-items:center;gap:7px}
+  /* 종료 마커 행 */
+  .endrow{display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:600;color:var(--hc)}
+  .endrow .dur{color:var(--subtle);font-weight:400}
+
+  .note{margin-top:10px;color:var(--subtle);font-size:11px}.note b{color:var(--fg)}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:10.5px;color:var(--muted)}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .sw{width:14px;height:6px;border-radius:3px;display:inline-block}
+  .foot{margin-top:28px;border-top:1px solid var(--border);padding-top:14px;color:var(--subtle);font-size:11px}
+  .foot b{color:var(--fg)}.foot code{background:var(--s2);padding:1px 4px;border-radius:3px;color:var(--muted)}
+</style></head>
+<body><div class="wrap">
+  <div class="eyebrow">wimcc · replay · 백그라운드 서브에이전트 가시성</div>
+  <h1>거터 스파인 — 분절을 막고 백그라운드 존재를 시간축에 그린다</h1>
+  <p class="lede">
+    문제: 워크플로우는 잘 묶인다. 진짜 문제는 <b>단독 백그라운드 서브에이전트</b>(Agent <code>run_in_background</code>)다 —
+    실데이터 <code>aa1844</code>(Task 3, general-purpose, 파랑)가 백그라운드로 도는 동안 main이 Task 1을 진행하면,
+    중간에 <b>메인 메시지·툴콜</b>이 끼어들어 그 서브에이전트가 스트림에서 <b>조각조각</b> 흩어진다.
+    아래: 왼쪽 현재(분절), 오른쪽 제안(거터 스파인). 핵심은 <b>시간축은 정직하게 유지</b>하면서
+    서브에이전트의 <b>[시작→종료] 구간을 왼쪽 거터에 연속 레인으로</b> 세우는 것.
+  </p>
+
+  <!-- ===================== BEFORE ===================== -->
+  <h2><span class="tag bad">현재</span> 분절 — 같은 서브에이전트가 메인 사이에서 끊긴다</h2>
+  <p class="cn">main 메시지가 사이드체인 버퍼를 flush할 때마다 같은 파랑 서브에이전트가 조각난다. 시작도 끝도 안 보이고 흐름을 못 읽음.</p>
+  <div class="stream frag">
+    <div class="sub"><div class="sh"><span class="stype">general-purpose</span><span class="badfrag">조각 1/4</span></div><div class="concl">↳ 계획 읽기 · SidechainGroup 파악…</div></div>
+    <div class="main"><div class="mhead"><span class="who">Claude · main</span></div><div class="tx">Task 3 running in background. Now starting Task 1 …</div></div>
+    <div class="sub"><div class="sh"><span class="stype">general-purpose</span><span class="badfrag">조각 2/4</span></div><div class="concl">↳ RED confirmed · 실패 테스트 작성…</div></div>
+    <div class="tool"><div class="mhead"><span class="twho">⚒ Read ×2 · Edit</span></div></div>
+    <div class="main"><div class="mhead"><span class="who">Claude · main</span></div><div class="tx">Helpers confirmed. 헬퍼 추가 완료 …</div></div>
+    <div class="sub"><div class="sh"><span class="stype">general-purpose</span><span class="badfrag">조각 3/4</span></div><div class="concl">↳ Write → esbuild fix…</div></div>
+    <div class="tool"><div class="mhead"><span class="twho">⚒ Bash (cargo test)</span></div></div>
+    <div class="sub"><div class="sh"><span class="stype">general-purpose</span><span class="badfrag">조각 4/4</span></div><div class="concl">↳ GREEN confirmed. 4 tests pass, 0 failures</div></div>
+  </div>
+
+  <!-- ===================== AFTER (single) ===================== -->
+  <h2><span class="tag good">제안</span> 거터 스파인 — 시작·종료가 명백, 그동안의 메인은 정직한 순서로</h2>
+  <p class="cn">파랑 서브에이전트는 <b>병합된 한 블록(접이식)</b>으로 위에 앵커. 왼쪽 거터의 <b>연속 파랑 레인</b>이 그 [시작→종료] 구간을 세로로 잇고, 그 구간 안에서 일어난 메인 메시지·툴콜은 우측에 <b>실제 시간 순서대로</b> 흐른다. 종료는 <code>subagent_completed</code> 이벤트로 ✓ 명시.</p>
+  <div class="stream">
+    <div class="canvas" style="--hc:var(--a)">
+      <!-- 거터: 절대배치 레인 + 시작/종료 노드. top/height는 콘텐츠 높이에 맞춘 시연값. -->
+      <div class="gutter">
+        <div class="lane single" style="top:14px;bottom:30px;--c:var(--a)"></div>
+        <div class="node start" style="top:14px;background:var(--bg);--ncol:var(--a)"></div>
+        <div class="node end" style="bottom:24px;--ncol:var(--a)"></div>
+      </div>
+      <div class="content">
+        <!-- 병합된 서브에이전트 블록 (스파인 시작점) -->
+        <div class="row">
+          <div class="subhead">
+            <span class="caret">▼</span><span class="kn">bg</span>
+            <span class="stype">general-purpose</span><span class="sname">Task 3 · workflowStats 작성</span>
+            <span class="smeta">⏵ 01:41:05 시작</span>
+          </div>
+          <div class="sbody">
+            <div class="concl">결론 · GREEN confirmed. All 4 tests pass, 0 failures.</div>
+            <div class="step">↳ 계획 읽기 → SidechainGroup 파악 → RED → Write → esbuild fix → GREEN</div>
+          </div>
+        </div>
+        <!-- 그 동안 흐른 메인 (정직한 순서) -->
+        <div class="row main"><div class="mhead"><span class="who">Claude · main</span><span class="t">01:41:12</span></div><div class="tx">Task 3 running in background. Now starting Task 1 …</div></div>
+        <div class="row tool"><div class="mhead"><span class="twho">⚒ Read ×2 · Edit</span><span class="t">01:41:30</span></div></div>
+        <div class="row main"><div class="mhead"><span class="who">Claude · main</span><span class="t">01:41:58</span></div><div class="tx">Helpers confirmed. 헬퍼 추가 완료 …</div></div>
+        <div class="row tool"><div class="mhead"><span class="twho">⚒ Bash (cargo test)</span><span class="t">01:42:10</span></div></div>
+        <!-- 종료 마커 (스파인 끝점) -->
+        <div class="row endrow"><span>✓ Task 3 종료</span><span class="dur">· 01:42:24 · 1m19s · 12.4k tok</span></div>
+      </div>
+    </div>
+    <div class="note">읽는 법: <b>파랑 레인이 살아있는 구간 = 그 서브에이전트가 백그라운드로 도는 시간.</b> 레인 옆 메인 4건은 "그동안 main이 한 일". 분절 0, 시작·끝 명시.</div>
+  </div>
+
+  <!-- ===================== AFTER (multi concurrent) ===================== -->
+  <h2><span class="tag flex">동시</span> 여러 백그라운드가 겹칠 때 — 거터 레인을 나란히</h2>
+  <p class="cn">동시 실행 서브에이전트는 거터에 <b>레인을 평행으로</b> 추가한다(색=각 agent). 어떤 메인 행 옆에 레인이 몇 개 살아있는지가 곧 "그 순간 동시 N개". 시간축은 그대로 정직.</p>
+  <div class="stream">
+    <div class="canvas multi" style="--hc:var(--a)">
+      <div class="gutter">
+        <!-- 레인 A: 전 구간 / 레인 B: 중간 합류 / 레인 C: 짧게 -->
+        <div class="lane l0" style="top:14px;bottom:30px;--c:var(--a)"></div>
+        <div class="lane l1" style="top:96px;bottom:30px;--c:var(--b)"></div>
+        <div class="lane l2" style="top:150px;bottom:88px;--c:var(--c)"></div>
+        <div class="node start" style="top:14px;left:14px;background:var(--bg);--ncol:var(--a)"></div>
+        <div class="node start" style="top:96px;left:24px;background:var(--bg);--ncol:var(--b)"></div>
+        <div class="node start" style="top:150px;left:34px;background:var(--bg);--ncol:var(--c)"></div>
+        <div class="node end" style="bottom:80px;left:34px;--ncol:var(--c)"></div>
+        <div class="node end" style="bottom:24px;left:14px;--ncol:var(--a)"></div>
+        <div class="node end" style="bottom:24px;left:24px;--ncol:var(--b)"></div>
+      </div>
+      <div class="content">
+        <div class="row"><div class="subhead" style="--hc:var(--a)"><span class="caret">▼</span><span class="kn">bg</span><span class="stype">general-purpose</span><span class="sname">Task 3 workflowStats</span><span class="smeta">⏵ 01:41:05</span></div></div>
+        <div class="row main"><div class="mhead"><span class="who">Claude · main</span><span class="t">01:41:12</span></div><div class="tx">Task 3 in bg. Now Task 1 …</div></div>
+        <div class="row"><div class="subhead" style="--hc:var(--b)"><span class="caret">▼</span><span class="kn">bg</span><span class="stype">Explore</span><span class="sname">Task 4 raw 기록 조사</span><span class="smeta">⏵ 01:41:40</span></div></div>
+        <div class="row main"><div class="mhead"><span class="who">Claude · main</span><span class="t">01:41:52</span></div><div class="tx">Helpers confirmed …</div></div>
+        <div class="row"><div class="subhead" style="--hc:var(--c)"><span class="caret">▼</span><span class="kn">bg</span><span class="stype">general-purpose</span><span class="sname">Task 5 라벨 추적</span><span class="smeta">⏵ 01:42:02</span></div></div>
+        <div class="row tool"><div class="mhead"><span class="twho">⚒ Bash (cargo test)</span><span class="t">01:42:10</span></div></div>
+        <div class="row endrow" style="--hc:var(--c)"><span>✓ Task 5 종료</span><span class="dur">· 01:42:20 · 18s</span></div>
+        <div class="row main"><div class="mhead"><span class="who">Claude · main</span><span class="t">01:42:24</span></div><div class="tx">All three dispatched, continuing …</div></div>
+        <div class="row endrow" style="--hc:var(--a)"><span>✓ Task 3 종료</span><span class="dur">· 01:42:24 · 1m19s</span> &nbsp;<span style="color:var(--b)">✓ Task 4 종료 · 44s</span></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--a)"></span>Task 3 general-purpose</span>
+      <span><span class="sw" style="background:var(--b)"></span>Task 4 Explore</span>
+      <span><span class="sw" style="background:var(--c)"></span>Task 5 general-purpose</span>
+    </div>
+    <div class="note">중간 <code>01:42:10</code> Bash 행을 보면 거터에 <b>레인 3개가 동시에 살아있음</b> → 그 순간 백그라운드 3개. 색으로 누가 도는지 즉시 식별. (수십 개로 늘면 거터를 접어 "동시 N"만 + 별도 레인/waterfall 뷰로.)</div>
+  </div>
+
+  <div class="foot">
+    핵심 트레이드오프(사용자 질문에 대한 답): <b>시간축 정직성</b>과 <b>그룹 응집성</b>을 동시에 — 메인 아이템은 실제 순서 그대로 두되(정직), 서브에이전트는 거터의 <b>연속 레인</b>으로 한 덩어리처럼 보이게(응집). 콘텐츠는 상단 병합 블록이 담당(분절 복원), 거터 레인은 <b>존재 구간</b>을 담당(백그라운드 가시성).<br>
+    결정론 근거: 시작/종료/색 모두 Anthropic 데이터에서 잠금 — 시작=서브에이전트 첫 사이드체인 이벤트, 종료=<code>subagent_completed</code> OTel log_record(<code>duration_ms</code> 포함), 색=<code>agent_id</code> 해시(단일 출처).
+  </div>
+</div></body></html>
