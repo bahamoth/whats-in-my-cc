@@ -124,6 +124,13 @@ async fn serve_cmd(
         Ok(_) => {}
         Err(e) => tracing::warn!(error = ?e, "agent_id backfill failed (non-fatal)"),
     }
+    // 0024 (file path → workflow_run_id). Deterministic workflow group key, present
+    // only in raw_event.source_uri. Idempotent; new ingests fill it via store.rs.
+    match db::repo_observed::backfill_workflow_run_id(&pool).await {
+        Ok(n) if n > 0 => tracing::info!(rows = n, "backfilled workflow_run_id from source_uri"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = ?e, "workflow_run_id backfill failed (non-fatal)"),
+    }
 
     let cancel = tokio_util::sync::CancellationToken::new();
     let mut bg_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
@@ -250,6 +257,13 @@ async fn ingest_cmd(
         Ok(n) if n > 0 => tracing::info!(rows = n, "backfilled agent_id from raw payload"),
         Ok(_) => {}
         Err(e) => tracing::warn!(error = ?e, "agent_id backfill failed (non-fatal)"),
+    }
+    // 0024 (file path → workflow_run_id). Deterministic workflow group key, present
+    // only in raw_event.source_uri. Idempotent; new ingests fill it via store.rs.
+    match db::repo_observed::backfill_workflow_run_id(&pool).await {
+        Ok(n) if n > 0 => tracing::info!(rows = n, "backfilled workflow_run_id from source_uri"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = ?e, "workflow_run_id backfill failed (non-fatal)"),
     }
     let files = collect_files(path, all)?;
     if files.is_empty() {
