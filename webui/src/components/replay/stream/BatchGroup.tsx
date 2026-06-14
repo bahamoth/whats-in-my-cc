@@ -35,6 +35,7 @@ function itemEventIds(it: StreamItem): string[] {
   if (it.type === 'activity-run') return it.events.map((ae) => ae.event.event_id);
   if (it.type === 'batch-group' || it.type === 'workflow-group')
     return it.agentGroups.flatMap(itemEventIds);
+  if (it.type === 'subagent-end') return [];
   return it.items.flatMap(itemEventIds);
 }
 

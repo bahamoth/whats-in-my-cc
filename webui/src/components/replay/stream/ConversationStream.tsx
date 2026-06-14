@@ -11,6 +11,7 @@ import { ScaffoldGroup } from './ScaffoldGroup';
 import { ThinkingMarker } from './ThinkingMarker';
 import { AutoscrollToggle } from './AutoscrollToggle';
 import { BgGutter } from './BgGutter';
+import { SubagentEndCard } from './SubagentEndCard';
 import { computeBgGutter } from './streamModel';
 import type { StreamItem } from './streamModel';
 import { shouldLoadOlder, shouldAdjustOnItemResize, LOAD_OLDER_TOP_PX } from './scrollAnchor';
@@ -57,6 +58,7 @@ function itemContainsEvent(item: StreamItem, eventId: string): boolean {
   if (item.type === 'thinking') return item.events.some((e) => e.eventId === eventId);
   if (item.type === 'workflow-group')
     return item.agentGroups.some((g) => itemContainsEvent(g, eventId));
+  if (item.type === 'subagent-end') return false;
   return item.events.some((ae) => ae.event.event_id === eventId);
 }
 
@@ -370,6 +372,7 @@ export function ConversationStream({
           selectedEventId={selectedEventId}
           onSelect={onSelect}
           findingEventIds={findingEventIds}
+          flush
         />
       );
     }
@@ -411,6 +414,9 @@ export function ConversationStream({
           findingEventIds={findingEventIds}
         />
       );
+    }
+    if (item.type === 'subagent-end') {
+      return <SubagentEndCard card={item} />;
     }
     // An activity-run renders as ONE contiguous ActivityStack (its events).
     return (

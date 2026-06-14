@@ -99,6 +99,9 @@ export interface SidechainGroup {
   conclusion: string | null;
   /** 이 블록 실행 span과 겹친 main 메시지 수(백그라운드 동시진행) — annotateConcurrency. */
   concurrentMainCount?: number;
+  /** insertSubagentEndCards가 이 그룹에 끝 카드를 붙였으면 true. 그러면 결론은 끝
+   *  카드가 담당하므로 시작 카드(헤더)에선 결론 줄을 숨긴다(요청→결과 분리). */
+  hasEndCard?: boolean;
   items: StreamItem[];
 }
 
@@ -191,6 +194,24 @@ export interface ScaffoldGroup {
   commandNames: string[];
 }
 
+/** A compact "end card" for a background subagent — rendered as its own row at
+ *  the chronological END of the agent's span (after the interleaved main rows),
+ *  so the rail reads request(start card) → … → result(end card). Synthetic:
+ *  carries no source event. Inserted by insertSubagentEndCards. */
+export interface SubagentEndCard {
+  type: 'subagent-end';
+  id: string;
+  agentId: string;
+  /** hash(agent_id) color — same as the start block + gutter rail. */
+  color: string;
+  conclusion: string;
+  durationMs: number;
+  messageCount: number;
+  toolCount: number;
+  /** span end (max observed time) — drives row ordering / gutter coverage. */
+  endTimestamp: string;
+}
+
 export type StreamItem =
   | MessageItem
   | ActivityRun
@@ -198,7 +219,8 @@ export type StreamItem =
   | ThinkingMarker
   | BatchGroup
   | WorkflowGroup
-  | ScaffoldGroup;
+  | ScaffoldGroup
+  | SubagentEndCard;
 
 /** One lane cell painted in the background-subagent gutter for a given row. */
 export interface GutterCell {
@@ -507,6 +529,7 @@ function rowTimeMs(it: StreamItem): number | null {
     return Number.isNaN(n) ? null : n;
   };
   if (it.type === 'message') return t(it.timestamp);
+  if (it.type === 'subagent-end') return t(it.endTimestamp);
   if (it.type === 'activity-run') return it.events.length ? t(it.events[0].event.observed_at) : null;
   if (it.type === 'thinking') return it.events.length ? t(it.events[0].timestamp) : null;
   if (it.type === 'scaffold-group') return it.items.length ? t(it.items[0].timestamp) : null;
@@ -605,6 +628,62 @@ export function computeBgGutter(items: StreamItem[]): Map<string, GutterRow> {
     }));
     cells.sort((x, y) => x.lane - y.lane);
     out.set(it.id, { cells, dense: 0 });
+  }
+  return out;
+}
+
+/** Insert a synthetic `subagent-end` card at the chronological end of each
+ *  TOP-LEVEL background subagent's span — but only when it (a) has a conclusion
+ *  (i.e. finished) and (b) genuinely interleaved with ≥1 other top-level row in
+ *  its span (the background case). Foreground/in-progress agents get none. The
+ *  source group is flagged `hasEndCard` so its start card drops the (now
+ *  duplicated) conclusion line. Run as the OUTERMOST pipeline pass. */
+export function insertSubagentEndCards(items: StreamItem[]): StreamItem[] {
+  const inserts = new Map<number, SubagentEndCard[]>();
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (it.type !== 'sidechain-group' || !it.agentId || !it.conclusion) continue;
+    const sp = sidechainSpan(it);
+    if (!sp) continue;
+    let lastIdx = i;
+    let interleaved = false;
+    for (let j = i + 1; j < items.length; j++) {
+      const t = rowTimeMs(items[j]);
+      if (t == null) continue;
+      if (t >= sp.s && t <= sp.e) {
+        lastIdx = j;
+        interleaved = true;
+      }
+    }
+    if (!interleaved) continue;
+    let messageCount = 0;
+    let toolCount = 0;
+    for (const c of it.items) {
+      if (c.type === 'message') messageCount++;
+      else if (c.type === 'activity-run') for (const ae of c.events) if (ae.event.kind === 'tool_call') toolCount++;
+    }
+    it.hasEndCard = true;
+    const card: SubagentEndCard = {
+      type: 'subagent-end',
+      id: `end-${it.agentId}`,
+      agentId: it.agentId,
+      color: agentColor(it.agentId),
+      conclusion: it.conclusion,
+      durationMs: sp.e - sp.s,
+      messageCount,
+      toolCount,
+      endTimestamp: new Date(sp.e).toISOString(),
+    };
+    const arr = inserts.get(lastIdx) ?? [];
+    arr.push(card);
+    inserts.set(lastIdx, arr);
+  }
+  if (!inserts.size) return items;
+  const out: StreamItem[] = [];
+  for (let i = 0; i < items.length; i++) {
+    out.push(items[i]);
+    const cards = inserts.get(i);
+    if (cards) out.push(...cards);
   }
   return out;
 }
@@ -951,6 +1030,6 @@ export function buildStreamModel(
   // skill bodies, command output, interrupts, task-notifications) into one
   // collapsible block so the main conversation stays legible. Subagent/batch
   // internals are untouched — groupScaffold scans only this top-level array.
-  return groupScaffold(annotateConcurrency(mergeConcurrentGroups(items)));
+  return insertSubagentEndCards(groupScaffold(annotateConcurrency(mergeConcurrentGroups(items))));
 }
 

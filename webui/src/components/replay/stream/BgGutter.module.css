@@ -1,7 +1,9 @@
 /* Background-subagent hairline gutter — one per stream row. Constant 14px wide
    at any concurrency (lanes pack inside; ≥4 → single dense spine). align-self
    stretch makes the rails span the row's full height so adjacent rows' rails
-   read as one continuous lane, without the gutter ever changing row HEIGHT. */
+   read as one continuous lane, without the gutter ever changing row HEIGHT.
+   Lanes are anchored from the RIGHT (card-facing) edge: lane 0 nearest the card
+   so the common single-agent rail sits beside its card. */
 .gutter {
   position: relative;
   flex: none;
@@ -9,41 +11,54 @@
   align-self: stretch;
 }
 
+/* one lane = a 2px column; `right` set inline per lane index */
 .lane {
   position: absolute;
   top: 0;
   bottom: 0;
+  width: 2px;
 }
 
 .rail {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  left: 0;
   width: 2px;
   border-radius: 1px;
 }
+/* mid: full row height (continuous through interleaved rows) */
+.railMid { top: 0; bottom: 0; }
+/* start: from the node (card vertical center) DOWN — no overshoot above ▢ */
+.railStart { top: 50%; bottom: 0; }
+/* end: from the top UP TO the node (card vertical center) — no overshoot below ✓ */
+.railEnd { top: 0; height: 50%; }
 
-/* ▢ start node — hollow square at the agent's first row */
-.start {
+/* ▢ start / ✓ end node — simple small shapes, centered on the card vertically */
+.node {
   position: absolute;
-  top: 7px;
-  left: -2px;
+  left: -2.5px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 7px;
   height: 7px;
   border-radius: 2px;
-  background: var(--wimcc-bg, #0b0d12);
+  box-shadow: 0 0 0 2px var(--wimcc-bg, #0b0d12);
+}
+.nodeEnd {
+  border-radius: 50%;
+  background: var(--wimcc-success, #41c285) !important;
 }
 
-/* ✓ end node — filled dot at the agent's last covered row */
-.end {
+/* short horizontal connector from the node toward the card (visual joint) */
+.conn {
   position: absolute;
-  bottom: 7px;
-  left: -2px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1.6px var(--wimcc-bg, #0b0d12);
+  left: 1px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 2px;
+  width: 9px;
+  border-radius: 1px;
 }
+.connEnd { background: var(--wimcc-success, #41c285); }
 
 /* dense fallback (≥4 concurrent) — one neutral presence spine; identity/count
    live in the block headers + the row's bg-marker chip, not the gutter. */
@@ -51,7 +66,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 6px;
+  right: 6px;
   width: 2px;
   border-radius: 1px;
   background: var(--wimcc-fg-subtle, #6a7180);

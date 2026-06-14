@@ -1,0 +1,48 @@
+// webui/src/components/replay/stream/SubagentEndCard.tsx
+// The compact "end card" closing a background subagent's hairline rail: shows
+// when it finished, how long it ran, message/tool counts, and its conclusion —
+// so the rail reads request (start card) → … → result (this end card) without
+// expanding anything. A synthetic row (no source event); see SubagentEndCard in
+// streamModel + insertSubagentEndCards.
+import { CheckCircle2, Clock, MessageSquare, Wrench } from 'lucide-react';
+import type { SubagentEndCard as EndCard } from './streamModel';
+import { formatDuration, durationHeat } from './duration';
+import styles from './SubagentEndCard.module.css';
+
+function timeLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+export function SubagentEndCard({ card }: { card: EndCard }) {
+  return (
+    <div
+      data-testid="subagent-end-card"
+      className={styles.card}
+      style={{ ['--agentColor' as string]: card.color }}
+    >
+      <div className={styles.head}>
+        <CheckCircle2 size={13} aria-hidden className={styles.check} />
+        <span className={styles.label}>종료</span>
+        <span className={styles.time}>{timeLabel(card.endTimestamp)}</span>
+        <span className={styles.stats}>
+          <span data-heat={durationHeat(card.durationMs)}>
+            <Clock size={11} aria-hidden /> {formatDuration(card.durationMs)}
+          </span>
+          <span>
+            <MessageSquare size={11} aria-hidden /> {card.messageCount}
+          </span>
+          <span>
+            <Wrench size={11} aria-hidden /> {card.toolCount}
+          </span>
+        </span>
+      </div>
+      <div className={styles.concl}>
+        <span className={styles.conclLabel}>결론</span>
+        {card.conclusion}
+      </div>
+    </div>
+  );
+}

@@ -11,6 +11,19 @@
   border-left: 2px solid var(--agentColor, var(--wimcc-lane-context, #b07dff));
 }
 
+/* top-level standalone background subagent = the START card of the bookend. The
+   hairline gutter rail beside it is the left accent (so no border-left), and it
+   reads as a tinted card (matching the green end card) rather than a bare header.
+   Drop the nested 24px indent so the rail's ▢ node connects to this card. */
+.flush {
+  margin: 8px 0;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--agentColor, var(--wimcc-lane-context, #b07dff)) 30%, var(--wimcc-border, #1d212c));
+  border-left: none;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--agentColor, var(--wimcc-lane-context, #b07dff)) 9%, var(--wimcc-surface-2, #161a23));
+}
+
 /* filled identity swatch in the header — the accessible, re-confirmable color
    surface (the 14px gutter rail is too thin to be the sole identity cue). */
 .swatch {
@@ -175,6 +188,27 @@
 .body {
   display: flex;
   flex-direction: column;
+}
+
+/* status pill — running (no conclusion yet) vs done (concluded). Gives the
+   collapsed start card an at-a-glance state without expanding. */
+.statusRun,
+.statusDone {
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 1px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.statusRun {
+  color: var(--wimcc-warning, #f0b429);
+  border: 1px solid var(--wimcc-warning, #f0b429);
+}
+.statusDone {
+  color: var(--wimcc-success, #41c285);
+  border: 1px solid var(--wimcc-success, #41c285);
 }
 
 /* "⟂ main N건 동시" — this block ran in the background while N main messages

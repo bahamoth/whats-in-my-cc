@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildStreamModel, groupScaffold, parseWorkflowMeta, computeBgGutter } from '../streamModel';
-import type { MessageItem, StreamItem, SidechainGroup } from '../streamModel';
+import { buildStreamModel, groupScaffold, parseWorkflowMeta, computeBgGutter, insertSubagentEndCards } from '../streamModel';
+import type { MessageItem, StreamItem, SidechainGroup, SubagentEndCard } from '../streamModel';
 import { buildLlmRequestMetrics } from '../llmRequestMetrics';
 import type { ObservedEventDto } from '../../../../api/types';
 
@@ -1017,5 +1017,54 @@ describe('computeBgGutter', () => {
     const A = sgAgent('A', null, ['2026-06-14T01:00:00Z', '2026-06-14T01:05:00Z']);
     const items: StreamItem[] = [A, mainMsg('m', '2026-06-14T01:02:00Z')];
     expect(computeBgGutter(items).size).toBe(0);
+  });
+});
+
+// ── insertSubagentEndCards + end-card-aware gutter ──────────────────────────
+const sgConcl = (id: string, agentId: string | null, tss: string[], conclusion: string | null): SidechainGroup => ({
+  type: 'sidechain-group', id, agentId, agentType: null, description: null, taskEventId: null,
+  conclusion, items: tss.map((t, i) => sub(`${id}-e${i}`, t)),
+});
+
+describe('insertSubagentEndCards', () => {
+  it('background subagent (conclusion + interleaved main) → end card after last covered row; group flagged', () => {
+    const A = sgConcl('A', 'aa1844', ['2026-06-14T01:41:05Z', '2026-06-14T01:42:24Z'], 'GREEN 4 tests');
+    const items: StreamItem[] = [
+      A,
+      mainMsg('m1', '2026-06-14T01:41:12Z'),
+      mainMsg('m2', '2026-06-14T01:41:58Z'),
+      mainMsg('after', '2026-06-14T01:50:00Z'),
+    ];
+    const out = insertSubagentEndCards(items);
+    const end = out.find((i) => i.type === 'subagent-end') as SubagentEndCard;
+    expect(end).toBeTruthy();
+    expect(end.agentId).toBe('aa1844');
+    expect(end.conclusion).toBe('GREEN 4 tests');
+    const ids = out.map((i) => i.id);
+    expect(ids.indexOf(end.id)).toBeGreaterThan(ids.indexOf('m2'));
+    expect(ids.indexOf(end.id)).toBeLessThan(ids.indexOf('after'));
+    expect((out.find((i) => i.id === 'A') as SidechainGroup).hasEndCard).toBe(true);
+  });
+
+  it('foreground subagent (no interleaved main in span) → no end card', () => {
+    const A = sgConcl('A', 'a', ['2026-06-14T01:00:00Z', '2026-06-14T01:00:05Z'], 'done');
+    const items: StreamItem[] = [A, mainMsg('after', '2026-06-14T01:10:00Z')];
+    expect(insertSubagentEndCards(items).some((i) => i.type === 'subagent-end')).toBe(false);
+  });
+
+  it('no conclusion (running) → no end card', () => {
+    const A = sgConcl('A', 'a', ['2026-06-14T01:00:00Z', '2026-06-14T01:05:00Z'], null);
+    const items: StreamItem[] = [A, mainMsg('m', '2026-06-14T01:02:00Z')];
+    expect(insertSubagentEndCards(items).some((i) => i.type === 'subagent-end')).toBe(false);
+  });
+
+  it('computeBgGutter: end marker lands on the inserted end card, mains become mid', () => {
+    const A = sgConcl('A', 'aa1844', ['2026-06-14T01:41:05Z', '2026-06-14T01:42:24Z'], 'x');
+    const items = insertSubagentEndCards([A, mainMsg('m1', '2026-06-14T01:41:12Z'), mainMsg('m2', '2026-06-14T01:41:58Z')]);
+    const end = items.find((i) => i.type === 'subagent-end')!;
+    const g = computeBgGutter(items);
+    expect(g.get(end.id)!.cells[0].marker).toBe('end');
+    expect(g.get('A')!.cells[0].marker).toBe('start');
+    expect(g.get('m2')!.cells[0].marker).toBe('mid');
   });
 });

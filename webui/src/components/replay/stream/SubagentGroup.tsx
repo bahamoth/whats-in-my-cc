@@ -19,6 +19,10 @@ interface SubagentGroupProps {
   selectedEventId: string | null;
   onSelect: (eventId: string) => void;
   findingEventIds: Set<string>;
+  /** Top-level standalone background subagent: drop the nested indent + own
+   *  border (the hairline gutter rail beside it provides both), so the rail's
+   *  ▢ node connects to the card. Nested (batch/workflow) children stay indented. */
+  flush?: boolean;
 }
 
 interface GroupSummary {
@@ -36,6 +40,7 @@ function itemEventIds(it: StreamItem): string[] {
   if (it.type === 'activity-run') return it.events.map((ae) => ae.event.event_id);
   if (it.type === 'batch-group' || it.type === 'workflow-group')
     return it.agentGroups.flatMap(itemEventIds);
+  if (it.type === 'subagent-end') return [];
   return it.items.flatMap(itemEventIds);
 }
 
@@ -76,6 +81,7 @@ export function SubagentGroup({
   selectedEventId,
   onSelect,
   findingEventIds,
+  flush = false,
 }: SubagentGroupProps) {
   // Same fold policy as ActivityStack: `null` = no explicit user choice yet →
   // follow `containsSelected` (auto-open when a selection lands inside so the
@@ -95,7 +101,7 @@ export function SubagentGroup({
     <section
       data-testid="subagent-group"
       data-expanded={String(expanded)}
-      className={styles.group}
+      className={`${styles.group} ${flush ? styles.flush : ''}`}
       style={{ ['--agentColor' as string]: agentColor(group.agentId) }}
     >
       <div className={styles.headerRow}>
@@ -137,6 +143,11 @@ export function SubagentGroup({
             {group.concurrentMainCount ? (
               <span data-testid="subagent-concurrent" className={styles.concurrent}>⟂ main {group.concurrentMainCount}건 동시</span>
             ) : null}
+            {group.conclusion ? (
+              <span data-testid="subagent-status" className={styles.statusDone}>✓ 완료</span>
+            ) : (
+              <span data-testid="subagent-status" className={styles.statusRun}>● 실행 중</span>
+            )}
           </span>
         </button>
         {group.taskEventId && (
@@ -153,8 +164,9 @@ export function SubagentGroup({
         )}
       </div>
       {/* 결론 = 그 agent의 마지막 assistant_message 요약. 헤더 아래에 두어
-          접힌 상태에서도 "이 에이전트가 무엇을 결론지었나"가 한눈에 보인다. */}
-      {group.conclusion && (
+          접힌 상태에서도 "이 에이전트가 무엇을 결론지었나"가 한눈에 보인다.
+          단, 끝 카드(hasEndCard)가 결론을 담당하면 여기선 숨긴다(요청→결과 분리). */}
+      {group.conclusion && !group.hasEndCard && (
         <div data-testid="subagent-conclusion" className={styles.conclusion}>
           <span className={styles.conclusionLabel}>결론</span>
           <span className={styles.conclusionText}>{group.conclusion}</span>
