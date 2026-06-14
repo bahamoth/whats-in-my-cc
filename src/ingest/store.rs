@@ -155,6 +155,10 @@ async fn ingest_one_file(
                         let redacted_str = scan(&payload_str).masked_text;
                         ev.payload = serde_json::from_str(&redacted_str).unwrap_or(ev.payload);
                     }
+                    // Workflow-tool subagents live under <session>/subagents/workflows/
+                    // <runId>/; the runId is in the file path (not the record). Capture
+                    // it as the deterministic workflow group key.
+                    ev.workflow_run_id = subagent_meta::workflow_run_id_from_path(&meta.source_uri);
                     repo_observed::insert(pool, &ev).await?;
                     stats.observed_inserted += 1;
                     sink.emit(LiveEvent {
@@ -323,6 +327,7 @@ async fn ingest_sidecar_file(
         subkind: Some("subagent_meta".into()),
         tool_use_id,
         agent_id: Some(sc.agent_id.clone()),
+        workflow_run_id: sc.workflow_run_id.clone(),
         is_sidechain: true,
         // payload는 사이드카 JSON 전체 — unknown field 보존 원칙.
         payload: record,
