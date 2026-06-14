@@ -1216,3 +1216,22 @@ describe('syncTaskNotifications — workflow noti with no group (failed at launc
     expect(end).toMatchObject({ name: 'design-panel', status: 'failed', agentCount: 0, notificationEventId: 'noti-wf0' });
   });
 });
+
+describe('syncTaskNotifications — subagent join by task-id == agent_id (sidecar-independent)', () => {
+  it('merges the noti into the subagent (status set, noti absorbed) even with NO tool_use_id mapping', () => {
+    const sg = sgConcl('A', 'agent123', ['2026-06-14T01:00:00Z', '2026-06-14T01:05:00Z'], 'done');
+    const noti = notiMsg('noti-a', '<task-notification><task-id>agent123</task-id><tool-use-id>toolu_x</tool-use-id><status>completed</status></task-notification>');
+    const out = syncTaskNotifications(
+      [sg, noti],
+      new Map([['toolu_x', { status: 'completed', summary: null, endTimestamp: 't', eventId: 'noti-a' }]]),
+      new Map(),
+      new Map(), // agentDispatchToolUse EMPTY (sidecar not loaded)
+      new Map(),
+      new Map(),
+      new Map([['agent123', { status: 'completed', summary: null, endTimestamp: 't', eventId: 'noti-a' }]]), // notiByTaskId
+    );
+    expect((out.find((i) => i.id === 'A') as SidechainGroup).endStatus).toBe('completed');
+    expect((out.find((i) => i.id === 'A') as SidechainGroup).notificationEventId).toBe('noti-a');
+    expect(out.some((i) => i.id === 'noti-a')).toBe(false); // absorbed → no duplicate card
+  });
+});
