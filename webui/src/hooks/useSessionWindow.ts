@@ -37,6 +37,11 @@ export interface UseSessionWindowOpts {
   initialLimit?: number;
   pageLimit?: number;
   maxEvents?: number;
+  /** When mounting on a `?selected=` deep-link, load the window AROUND this event
+   *  instead of the live tail — so the target is in the buffer from the first
+   *  load and there is no tail-vs-around race (the live-session deep-link bug).
+   *  Captured once at mount by the caller; must be stable. */
+  initialAround?: string | null;
 }
 
 export interface UseSessionWindowResult {
@@ -117,11 +122,16 @@ export function useSessionWindow(
     setLoading(s);
   }, []);
 
+  const initialAround = opts.initialAround ?? null;
   const doInitial = useCallback(async () => {
     setLoadingBoth('initial');
     setError(null);
     try {
-      const resp = await getSessionEvents(sessionId, { limit: initialLimit });
+      // Deep-link mount: load AROUND the target so it is in the buffer from the
+      // first load (no tail load to race/overwrite it). Falls back to the tail.
+      const resp = initialAround
+        ? await getSessionEvents(sessionId, { around: initialAround, limit: initialLimit })
+        : await getSessionEvents(sessionId, { limit: initialLimit });
       setEvents(resp.events);
       setOldest(resp.prev_cursor);
       setNewest(resp.next_cursor);
@@ -131,7 +141,7 @@ export function useSessionWindow(
       setError(e instanceof Error ? e.message : String(e));
       setLoadingBoth('error');
     }
-  }, [sessionId, initialLimit, setLoadingBoth]);
+  }, [sessionId, initialLimit, initialAround, setLoadingBoth]);
 
   useEffect(() => {
     void doInitial();

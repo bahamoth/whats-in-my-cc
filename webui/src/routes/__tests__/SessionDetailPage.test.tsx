@@ -277,10 +277,14 @@ describe('SessionDetailPage', () => {
     await waitFor(() => expect(screen.getByRole('tablist')).toBeInTheDocument());
   });
 
-  it('deep-linked ?selected= already in the window issues no around fetch', async () => {
+  // A deep-link mount loads the window AROUND the target as the INITIAL load
+  // (not tail-then-loadAround) — so on a LIVE session the live-tip follow can't
+  // pull the buffer off the target before it lands (the regressed deep-link).
+  it('deep-linked ?selected= loads the around-window on mount and selects the event', async () => {
     const f = setupFetch({
       detail: env(sessionDetail),
       events: env(eventsWithRows),
+      around: env(eventsWithRows), // around-window contains ev1
       raw: env(raw),
     });
     const { container } = rendered('s1', '?selected=ev1');
@@ -291,8 +295,9 @@ describe('SessionDetailPage', () => {
           ?.getAttribute('data-selected'),
       ).toBe('true');
     });
+    // the initial load centered on the deep-link via ?around= (lands on a live tip).
     const calls = f.mock.calls.map((c) => String(c[0]));
-    expect(calls.some((u) => u.includes('around='))).toBe(false);
+    expect(calls.some((u) => u.includes('around=ev1'))).toBe(true);
   });
 
   it('shows 404 when session detail missing', async () => {
