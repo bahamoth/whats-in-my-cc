@@ -10,6 +10,8 @@ import { WorkflowGroup } from './WorkflowGroup';
 import { ScaffoldGroup } from './ScaffoldGroup';
 import { ThinkingMarker } from './ThinkingMarker';
 import { AutoscrollToggle } from './AutoscrollToggle';
+import { BgGutter } from './BgGutter';
+import { computeBgGutter } from './streamModel';
 import type { StreamItem } from './streamModel';
 import { shouldLoadOlder, shouldAdjustOnItemResize, LOAD_OLDER_TOP_PX } from './scrollAnchor';
 import { useAutoscroll } from '../../../hooks/useAutoscroll';
@@ -146,6 +148,11 @@ export function ConversationStream({
     [items],
   );
   const auto = useAutoscroll(parentRef, signature);
+
+  // Per-row background-subagent gutter cells (hairline lanes). Derived from the
+  // standalone sidechain-groups' spans; keyed by row id. Recomputed only when
+  // the item list changes.
+  const gutterByRow = useMemo(() => computeBgGutter(items), [items]);
 
   // Measurement-settle pin: while following (autoscroll ON), keep the viewport
   // glued to the measured bottom as rows lazily measure (estimate 64 → real
@@ -457,7 +464,10 @@ export function ConversationStream({
                   // below the start marker.
                   style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start - scrollMargin}px)` }}
                 >
-                  {renderItem(item)}
+                  <div className={styles.row}>
+                    <BgGutter row={gutterByRow.get(item.id)} />
+                    <div className={styles.rowBody}>{renderItem(item)}</div>
+                  </div>
                 </div>
               );
             })}
@@ -465,7 +475,10 @@ export function ConversationStream({
         ) : (
           fallbackItems.map((item) => (
             <div key={item.id} {...(rowEventId(item) ? { 'data-event-id': rowEventId(item) } : {})}>
-              {renderItem(item)}
+              <div className={styles.row}>
+                <BgGutter row={gutterByRow.get(item.id)} />
+                <div className={styles.rowBody}>{renderItem(item)}</div>
+              </div>
             </div>
           ))
         )}

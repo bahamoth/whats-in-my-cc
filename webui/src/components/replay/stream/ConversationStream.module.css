@@ -37,3 +37,16 @@
   white-space: nowrap;
   overflow: hidden;
 }
+
+/* Per-row layout: fixed background-subagent gutter + the row body. The gutter is
+   a height-neutral flex sibling (it never grows the row height), so the
+   virtualizer's measured offsets / prepend anchor / resize rule are unaffected. */
+.row {
+  display: flex;
+  align-items: stretch;
+}
+
+.rowBody {
+  flex: 1 1 auto;
+  min-width: 0;
+}
