@@ -1,22 +1,16 @@
 /* Workflow completion card — closes the workflow's orange gutter rail with the
    deterministic status + summary from its <task-notification>. Green on success,
    red on failed, amber on killed; flush like the other top-level end cards. */
+/* COHESION: the workflow's own color (orange) for identity — same as its gutter
+   rail + start card — so start↔end read as one unit. Success/failure is carried
+   by the STATUS PILL (+ check glyph), not by recoloring the whole card. */
 .card {
   margin: 4px 0 8px 0;
-  border: 1px solid color-mix(in srgb, var(--wimcc-success, #41c285) 30%, var(--wimcc-border, #1d212c));
-  border-left: 3px solid var(--wimcc-success, #41c285);
-  background: color-mix(in srgb, var(--wimcc-success, #41c285) 8%, var(--wimcc-surface-2, #161a23));
+  border: 1px solid color-mix(in srgb, var(--wimcc-lane-quality, #ff8a4c) 30%, var(--wimcc-border, #1d212c));
+  border-left: 3px solid var(--wimcc-lane-quality, #ff8a4c);
+  background: color-mix(in srgb, var(--wimcc-lane-quality, #ff8a4c) 8%, var(--wimcc-surface-2, #161a23));
   border-radius: 7px;
   padding: 6px 10px;
-}
-.card[data-status='fail'] {
-  border-color: color-mix(in srgb, var(--wimcc-danger, #ef4747) 34%, var(--wimcc-border, #1d212c));
-  border-left-color: var(--wimcc-danger, #ef4747);
-  background: color-mix(in srgb, var(--wimcc-danger, #ef4747) 8%, var(--wimcc-surface-2, #161a23));
-}
-.card[data-status='killed'] {
-  border-color: color-mix(in srgb, var(--wimcc-warning, #f0b429) 30%, var(--wimcc-border, #1d212c));
-  border-left-color: var(--wimcc-warning, #f0b429);
 }
 
 .head {
@@ -25,12 +19,13 @@
   gap: 6px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--wimcc-success, #41c285);
+  color: var(--wimcc-lane-quality, #ff8a4c);
 }
-.card[data-status='fail'] .head { color: var(--wimcc-danger, #ef4747); }
-.card[data-status='killed'] .head { color: var(--wimcc-warning, #f0b429); }
 
-.check { flex: none; }
+/* the check glyph reflects the OUTCOME (green/red/amber) */
+.check { flex: none; color: var(--wimcc-success, #41c285); }
+.card[data-status='fail'] .check { color: var(--wimcc-danger, #ef4747); }
+.card[data-status='killed'] .check { color: var(--wimcc-warning, #f0b429); }
 .label { flex: none; }
 .name { color: var(--wimcc-fg, #e6e8ee); font-weight: 700; }
 .time { font-variant-numeric: tabular-nums; font-weight: 400; color: var(--wimcc-fg-subtle, #6a7180); }
@@ -84,11 +79,9 @@
   font-weight: 700;
   font-size: 9px;
   letter-spacing: 0.03em;
-  color: var(--wimcc-success, #41c285);
+  color: var(--wimcc-lane-quality, #ff8a4c);
   margin-right: 5px;
 }
-.card[data-status='fail'] .summaryLabel { color: var(--wimcc-danger, #ef4747); }
-.card[data-status='killed'] .summaryLabel { color: var(--wimcc-warning, #f0b429); }
 
 .card[role='button'] { cursor: pointer; }
 .card[role='button']:hover { filter: brightness(1.08); }

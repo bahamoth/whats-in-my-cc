@@ -4910,6 +4910,17 @@ vitest: 69 passed
         <code>endStatus</code> 헬퍼. <code>computeBgGutter</code>를 일반 "track"으로 확장 —
         sidechain-group(해시색)에 더해 <b>workflow-group(주황) 레일</b>을 그 workflow-end
         카드까지 북엔드. 흡수된 노티 event_id는 end card가 scroll 타깃으로 대신(점프).</li>
+      <li><strong>워크플로우 카드 마감 + 색 일치감 + 실패 워크플로우</strong>(후속 라운드, 사용자 지적 6건):
+        ⓐ 미니간트 막대를 <b>per-agent 색(agentColor)</b>으로(전부 violet이던 것 — 스트림·거터와 일치).
+        ⓑ 가장 긴 막대의 duration 라벨이 카드 밖으로 잘리던 것 → <code>.gantt</code> 우측 reserve.
+        ⓒ WorkflowGroup을 <b>flush 카드</b>로(24px 들여쓰기·border-left 제거) → 주황 거터 레일이
+        시작 카드에 연결. ⓓ <b>색 일치감</b>: 한 유닛=한 색(워크플로우 주황 / 서브에이전트 agentColor)을
+        rail·시작·끝 카드·끝 노드에 공유, 성공/실패/취소는 <b>status pill + ✓/✗ 글리프</b>로만
+        표현(끝 카드를 초록으로 갈아끼우지 않음) — 시작↔끝 시각 일관. ⓔ <b>실패/0-agent 워크플로우</b>:
+        WorkflowGroup이 안 생기는(런치 시 실패) 워크플로우도 노티를 <code>tool_use_id</code>로 Workflow
+        호출에 이어 <b>workflow-end 카드(✗ failed)</b>로 표면 — 실데이터 검증(<code>01KV2AQJ</code> →
+        name <code>compact-gutter-design-panel</code>·failed·0 agents). ⓕ 시작 카드 선택: WorkflowGroup에
+        "호출" 점프(→ Workflow tool_call) 추가 — 단 그 호출이 로드 윈도우에 있을 때만 노출(window-scoped).</li>
       <li><strong>백그라운드 Bash 연결 + 카드 선택성</strong>(후속, 사용자 지적): ④ 그룹이
         없는 <b>백그라운드 Bash</b> 노티는 흡수/치환 대신 <em>그 자리에 유지하되 enrich</em> —
         <code>MessageItem.notification</code>(status·summary·toolLabel·callEventId)로 "무엇이

@@ -1,13 +1,13 @@
-/* Background-subagent end card — closes the hairline rail with the result. Green
-   accent (= the ✓ end node) so "완료" reads by color; indented to align with the
-   start block (SubagentGroup margin-left:24px). */
+/* Background-subagent end card. COHESION: uses the agent's own color (--agentColor,
+   = its start block + gutter rail) for identity so start↔end read as one unit;
+   the OUTCOME (completed/failed/killed) is carried by the status pill + check
+   glyph, not by recoloring the whole card. Flush (no extra indent) so the gutter
+   node connects. */
 .card {
-  /* flush like a top-level SubagentGroup: the green ✓ gutter node connects to
-     this card, so no extra indent. */
   margin: 4px 0 8px 0;
-  border: 1px solid color-mix(in srgb, var(--wimcc-success, #41c285) 28%, var(--wimcc-border, #1d212c));
-  border-left: 3px solid var(--wimcc-success, #41c285);
-  background: color-mix(in srgb, var(--wimcc-success, #41c285) 8%, var(--wimcc-surface-2, #161a23));
+  border: 1px solid color-mix(in srgb, var(--agentColor, var(--wimcc-lane-context, #b07dff)) 28%, var(--wimcc-border, #1d212c));
+  border-left: 3px solid var(--agentColor, var(--wimcc-lane-context, #b07dff));
+  background: color-mix(in srgb, var(--agentColor, var(--wimcc-lane-context, #b07dff)) 8%, var(--wimcc-surface-2, #161a23));
   border-radius: 7px;
   padding: 6px 10px;
 }
@@ -18,14 +18,17 @@
   gap: 6px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--wimcc-success, #41c285);
+  color: var(--agentColor, var(--wimcc-lane-context, #b07dff));
 }
 
-.check { flex: none; }
+/* check glyph = the outcome color (green/red/amber) */
+.check { flex: none; color: var(--wimcc-success, #41c285); }
+.card[data-status='fail'] .check { color: var(--wimcc-danger, #ef4747); }
+.card[data-status='killed'] .check { color: var(--wimcc-warning, #f0b429); }
 .label { flex: none; }
 .time { font-variant-numeric: tabular-nums; }
 
-/* status from a matched <task-notification> (Agent run_in_background) */
+/* status pill from a matched <task-notification> — carries the outcome color */
 .statusPill {
   flex: none;
   font-size: 9px;
@@ -33,22 +36,10 @@
   padding: 1px 7px;
   border-radius: 10px;
   border: 1px solid currentColor;
+  color: var(--wimcc-success, #41c285);
 }
-
-/* fail/killed recolor the card + check + status to read the outcome at a glance */
-.card[data-status='fail'] {
-  border-color: color-mix(in srgb, var(--wimcc-danger, #ef4747) 34%, var(--wimcc-border, #1d212c));
-  border-left-color: var(--wimcc-danger, #ef4747);
-  background: color-mix(in srgb, var(--wimcc-danger, #ef4747) 8%, var(--wimcc-surface-2, #161a23));
-}
-.card[data-status='fail'] .head,
-.card[data-status='fail'] .conclLabel { color: var(--wimcc-danger, #ef4747); }
-.card[data-status='killed'] {
-  border-color: color-mix(in srgb, var(--wimcc-warning, #f0b429) 30%, var(--wimcc-border, #1d212c));
-  border-left-color: var(--wimcc-warning, #f0b429);
-}
-.card[data-status='killed'] .head,
-.card[data-status='killed'] .conclLabel { color: var(--wimcc-warning, #f0b429); }
+.card[data-status='fail'] .statusPill { color: var(--wimcc-danger, #ef4747); }
+.card[data-status='killed'] .statusPill { color: var(--wimcc-warning, #f0b429); }
 
 .jump {
   display: inline-flex;

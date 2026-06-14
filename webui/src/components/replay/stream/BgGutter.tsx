@@ -36,8 +36,12 @@ export function BgGutter({ row }: { row: GutterRow | undefined }) {
               )}
               {c.marker === 'end' && (
                 <>
-                  <div className={`${styles.conn} ${styles.connEnd}`} />
-                  <div data-testid="gutter-end" className={`${styles.node} ${styles.nodeEnd}`} />
+                  <div className={styles.conn} style={{ background: c.color }} />
+                  <div
+                    data-testid="gutter-end"
+                    className={`${styles.node} ${styles.nodeEnd}`}
+                    style={{ background: c.color }}
+                  />
                 </>
               )}
             </div>
