@@ -7,6 +7,20 @@ function asObj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
 }
 
+/** Workflow tool_call의 `payload.input.script`에 박힌 `meta = {name, description}`
+ *  리터럴에서 이름·설명만 끌어낸다. 스크립트 전체 평가가 아니라 표층 정규식 —
+ *  meta는 순수 리터럴 규약(작은/큰따옴표만)이라 충분하다. 못 찾으면 null. */
+export function parseWorkflowMeta(script: string): {
+  name: string | null;
+  description: string | null;
+} {
+  const pick = (key: string): string | null => {
+    const m = script.match(new RegExp(key + "\\s*:\\s*['\"]([^'\"]*)['\"]"));
+    return m ? m[1] : null;
+  };
+  return { name: pick('name'), description: pick('description') };
+}
+
 // ---------------------------------------------------------------------------
 // buildStreamModel — Slice S2: stream classifier (message / activity / drop)
 // ---------------------------------------------------------------------------
@@ -93,6 +107,24 @@ export interface BatchGroup {
   settled: boolean;
 }
 
+/** `Workflow` 툴이 띄운 fan-out 서브에이전트 묶음. main 체인엔 Workflow tool_call
+ *  1개 + turn_id만 남으므로(사이드카·per-agent tool_call 없음) 같은 turn의
+ *  Workflow call로 묶는다. 동시성은 에이전트 사이에만, 각 자식은 직렬. */
+export interface WorkflowGroup {
+  type: 'workflow-group';
+  id: string;
+  /** meta.name (없으면 null → 컴포넌트가 '워크플로우'로 표기). */
+  name: string | null;
+  description: string | null;
+  /** 디스패치한 Workflow tool_call의 event_id (점프 타깃). */
+  taskEventId: string | null;
+  agentGroups: SidechainGroup[];
+  /** 실행 종료 후 main의 첫 assistant_message = 종합. null=진행 중/미관측. */
+  synthesis: string | null;
+  /** 모든 자식이 결론 보유면 true. */
+  settled: boolean;
+}
+
 /** Caller linkage harvested from `attachment_meta`/`subagent_meta` sidecar
  *  events (real layout: `<session>/subagents/agent-<id>.meta.json`, frozen in
  *  tests/fixtures/.../subagent_sidecar_v01 — sample 1, CC 2.1.176). */
@@ -150,6 +182,7 @@ export type StreamItem =
   | SidechainGroup
   | ThinkingMarker
   | BatchGroup
+  | WorkflowGroup
   | ScaffoldGroup;
 
 /** True for a TOP-LEVEL user-side scaffold message: a real user_message
@@ -322,11 +355,25 @@ export function buildStreamModel(
   // them together); joined back from a child's sidecar toolUseId.
   const callMsgByUse = new Map<string, string | null>();
   const attributionByAgent = new Map<string, string>();
+  // turn_id → 그 turn의 Workflow tool_call들(시간순). Workflow 에이전트는 사이드카가
+  // 없어 message_id로 안 잡히므로, 자신의 turn_id에서 시작 시각 이전의 가장 늦은
+  // Workflow call에 귀속한다(한 turn에 다중 Workflow 디스패치 대비).
+  const wfCallsByTurn = new Map<
+    string,
+    { eventId: string; at: string; name: string | null; description: string | null }[]
+  >();
   for (const e of events) {
     if (e.kind === 'tool_result' && e.tool_use_id) resultByUse.set(e.tool_use_id, e);
     if (e.kind === 'tool_call' && e.tool_use_id) {
       callEventByUse.set(e.tool_use_id, e.event_id);
       callMsgByUse.set(e.tool_use_id, e.message_id ?? null);
+    }
+    if (e.kind === 'tool_call' && e.tool_name === 'Workflow' && e.turn_id) {
+      const input = asObj(asObj(e.payload).input);
+      const meta = parseWorkflowMeta(typeof input.script === 'string' ? input.script : '');
+      const arr = wfCallsByTurn.get(e.turn_id) ?? [];
+      arr.push({ eventId: e.event_id, at: e.observed_at, ...meta });
+      wfCallsByTurn.set(e.turn_id, arr);
     }
     const agent = e.agent_id || null;
     if (!agent) continue;
@@ -346,6 +393,8 @@ export function buildStreamModel(
     }
   }
 
+  for (const arr of wfCallsByTurn.values()) arr.sort((a, b) => a.at.localeCompare(b.at));
+
   const items: StreamItem[] = [];
 
   // Parallel Task dispatches interleave their sidechain events by timestamp, so
@@ -363,6 +412,9 @@ export function buildStreamModel(
   const scFirstIdByKey = new Map<string, string>();
   const scOrder: string[] = [];
   let lastScAgent: string | null = null;
+  // per-agent turn_id + 최초 시작 시각 — Workflow 귀속(turn_id)·시작순 정렬에 쓴다.
+  const scTurnByKey = new Map<string, string | null>();
+  const scStartByKey = new Map<string, string>();
   /** Build one SidechainGroup from an accumulated per-agent buffer. */
   const makeSidechainGroup = (key: string, buf: StreamItem[]): SidechainGroup => {
     const agentId = key === NULL_AGENT_KEY ? null : key;
@@ -392,7 +444,7 @@ export function buildStreamModel(
   // after the batch returns). At most one is ever pending — a flush produces
   // one batch slot, and the next main assistant_message consumes it — so a
   // single reference, not a queue, expresses the intent.
-  let pendingBatch: BatchGroup | null = null;
+  let pendingSynthesis: BatchGroup | WorkflowGroup | null = null;
   const flushSidechain = () => {
     // 1) Materialize one SidechainGroup per accumulated agent buffer (order
     //    preserved by scOrder).
@@ -408,50 +460,84 @@ export function buildStreamModel(
     lastScAgent = null;
     if (!groups.length) return;
 
-    // 2) Group siblings by their dispatching message_id (same assistant turn).
-    //    A child's dispatch message_id = its sidecar toolUseId → callMsgByUse.
-    //    Siblings with no resolvable message_id (no sidecar / pre-0023) get a
-    //    unique solo key so they never merge — degrade to a plain SidechainGroup.
-    const byMsg = new Map<string, SidechainGroup[]>();
-    const msgOrder: string[] = [];
+    // 2) Route each agent group: (a) 사이드카 message_id가 잡히면 Agent-배치,
+    //    (b) 아니면 같은 turn_id의 Workflow tool_call(시작 시각 이전 가장 늦은 것)
+    //    이 있으면 워크플로우 실행, (c) 그 외엔 solo. Workflow 에이전트는 사이드카가
+    //    없어 (a)에서 안 잡히고 (b)에서 turn_id로 묶인다.
+    type Bucket = {
+      kind: 'batch' | 'wf' | 'solo';
+      wf?: { eventId: string; name: string | null; description: string | null };
+      sibs: SidechainGroup[];
+    };
+    const byKey = new Map<string, Bucket>();
+    const keyOrder: string[] = [];
+    const put = (key: string, kind: Bucket['kind'], g: SidechainGroup, wf?: Bucket['wf']) => {
+      let b = byKey.get(key);
+      if (!b) {
+        b = { kind, sibs: [], wf };
+        byKey.set(key, b);
+        keyOrder.push(key);
+      }
+      b.sibs.push(g);
+    };
     for (const g of groups) {
       const tu = g.agentId ? metaByAgent.get(g.agentId)?.toolUseId ?? null : null;
       const mid = tu ? callMsgByUse.get(tu) ?? null : null;
-      const key = mid ?? `solo-${g.id}`;
-      let bucket = byMsg.get(key);
-      if (!bucket) {
-        bucket = [];
-        byMsg.set(key, bucket);
-        msgOrder.push(key);
+      if (mid) {
+        put(`msg-${mid}`, 'batch', g);
+        continue;
       }
-      bucket.push(g);
+      const turn = g.agentId ? scTurnByKey.get(g.agentId) ?? null : null;
+      const start = g.agentId ? scStartByKey.get(g.agentId) ?? '' : '';
+      const calls = turn ? wfCallsByTurn.get(turn) ?? [] : [];
+      let chosen: { eventId: string; at: string; name: string | null; description: string | null } | null = null;
+      for (const c of calls) if (c.at <= start) chosen = c; // 시작 이전 가장 늦은 call
+      if (!chosen && calls.length) chosen = calls[0];
+      if (chosen) {
+        put(`wf-${chosen.eventId}`, 'wf', g, { eventId: chosen.eventId, name: chosen.name, description: chosen.description });
+        continue;
+      }
+      put(`solo-${g.id}`, 'solo', g);
     }
 
-    // 3) N>=2 siblings → BatchGroup (wraps the parallel siblings into one
-    //    chronological slot). N==1 → the bare SidechainGroup (no wrapper).
-    for (const key of msgOrder) {
-      const sibs = byMsg.get(key)!;
-      if (sibs.length >= 2) {
+    // 3) Materialize: workflow → WorkflowGroup(자식 N>=1), batch(N>=2) → BatchGroup,
+    //    그 외 → bare SidechainGroup. 가장 최근 flush된 그룹이 synthesis를 기다린다.
+    for (const key of keyOrder) {
+      const b = byKey.get(key)!;
+      if (b.kind === 'wf') {
+        const wg: WorkflowGroup = {
+          type: 'workflow-group',
+          id: `wf-${b.sibs[0].id}`,
+          name: b.wf?.name ?? null,
+          description: b.wf?.description ?? null,
+          taskEventId: b.wf?.eventId ?? null,
+          agentGroups: b.sibs,
+          synthesis: null,
+          settled: b.sibs.every((s) => s.conclusion != null),
+        };
+        items.push(wg);
+        pendingSynthesis = wg;
+      } else if (b.kind === 'batch' && b.sibs.length >= 2) {
         const batch: BatchGroup = {
           type: 'batch-group',
-          id: `batch-${sibs[0].id}`,
-          agentGroups: sibs,
+          id: `batch-${b.sibs[0].id}`,
+          agentGroups: b.sibs,
           synthesis: null,
-          settled: sibs.every((s) => s.conclusion != null),
+          settled: b.sibs.every((s) => s.conclusion != null),
         };
         items.push(batch);
-        pendingBatch = batch; // the most recently flushed batch awaits synthesis
+        pendingSynthesis = batch;
       } else {
-        items.push(sibs[0]);
+        items.push(b.sibs[0]);
       }
     }
   };
   /** Fill the pending batch's synthesis from the first main assistant_message
    *  after the batch returned, then clear it (one synthesis per batch). */
   const fillPendingSynthesis = (text: string) => {
-    if (!pendingBatch) return;
-    if (pendingBatch.synthesis == null) pendingBatch.synthesis = text.trim().slice(0, 200);
-    pendingBatch = null;
+    if (!pendingSynthesis) return;
+    if (pendingSynthesis.synthesis == null) pendingSynthesis.synthesis = text.trim().slice(0, 200);
+    pendingSynthesis = null;
   };
   const emitSidechain = (it: StreamItem, agentId: string | null) => {
     const key = agentId ?? lastScAgent ?? NULL_AGENT_KEY;
@@ -503,6 +589,11 @@ export function buildStreamModel(
     const sc = !!e.is_sidechain;
     const agent = e.agent_id || null; // '' (NULL TEXT row mapping) → null
     const c = classify(e);
+    if (sc && agent) {
+      if (!scTurnByKey.has(agent)) scTurnByKey.set(agent, e.turn_id ?? null);
+      const prev = scStartByKey.get(agent);
+      if (!prev || e.observed_at < prev) scStartByKey.set(agent, e.observed_at);
+    }
     if (c.cat === 'message') {
       flush();
       emit(

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildStreamModel, groupScaffold } from '../streamModel';
+import { buildStreamModel, groupScaffold, parseWorkflowMeta } from '../streamModel';
 import type { MessageItem, StreamItem } from '../streamModel';
 import { buildLlmRequestMetrics } from '../llmRequestMetrics';
 import type { ObservedEventDto } from '../../../../api/types';
@@ -26,6 +26,21 @@ function llmRequestSpan(
     payload: {},
   });
 }
+
+describe('parseWorkflowMeta', () => {
+  it('meta 리터럴에서 name·description 추출', () => {
+    const s =
+      "export const meta = {\n  name: 'review-changes',\n  description: 'Review the diff',\n  phases: []\n}\nphase('x')";
+    expect(parseWorkflowMeta(s)).toEqual({ name: 'review-changes', description: 'Review the diff' });
+  });
+  it('큰따옴표·없는 필드 처리', () => {
+    expect(parseWorkflowMeta('export const meta = { name: "wf-1" }')).toEqual({
+      name: 'wf-1',
+      description: null,
+    });
+    expect(parseWorkflowMeta('no meta here')).toEqual({ name: null, description: null });
+  });
+});
 
 describe('buildStreamModel', () => {
   it('reads user text from BOTH content and text fields (#bug: 7971 empty cards)', () => {
@@ -522,15 +537,63 @@ const scAsst = (ag: string, ev: string, text: string) =>
 const mainToolCall = (ev: string, tool: string) =>
   base({ event_id: ev, kind: 'tool_call', tool_name: tool, tool_use_id: ev, payload: { tool_name: tool, input: {} } });
 
-/** All sidechain-groups regardless of whether they sit inside a batch-group. */
+// ── Workflow fan-out helpers (2026-06-14): a Workflow tool_call leaves only
+//    turn_id on its spawned sidechain agents (no sidecar, no per-agent call). ──
+const wfCall = (mid: string, ev: string, tu: string, turn: string, name: string) =>
+  base({
+    event_id: ev, message_id: mid, turn_id: turn, kind: 'tool_call', tool_name: 'Workflow', tool_use_id: tu,
+    payload: { tool_name: 'Workflow', input: { script: `export const meta = { name: '${name}' }` } },
+  });
+const wfUser = (ag: string, ev: string, turn: string) =>
+  base({ event_id: ev, kind: 'user_message', is_sidechain: true, agent_id: ag, turn_id: turn, payload: { content: 'prompt' } });
+const wfAsst = (ag: string, ev: string, turn: string, text: string) =>
+  base({ event_id: ev, kind: 'assistant_message', is_sidechain: true, agent_id: ag, turn_id: turn, payload: { text } });
+
+/** All sidechain-groups regardless of whether they sit inside a batch/workflow group. */
 function collectSidechainGroups(items: any[]): any[] {
   const out: any[] = [];
   for (const it of items) {
     if (it.type === 'sidechain-group') out.push(it);
-    if (it.type === 'batch-group') out.push(...it.agentGroups);
+    if (it.type === 'batch-group' || it.type === 'workflow-group') out.push(...it.agentGroups);
   }
   return out;
 }
+
+describe('buildStreamModel — workflow grouping (turn_id, 2026-06-14)', () => {
+  it('Workflow tool_call + 같은 turn 사이드체인 에이전트 → WorkflowGroup', () => {
+    const evs = [
+      asstMain('m1', '워크플로우 실행'),
+      wfCall('m1', 'wfc', 'tu-wf', 't1', 'review-changes'),
+      wfUser('A', 'au', 't1'),
+      wfUser('B', 'bu', 't1'),
+      wfAsst('A', 'a1', 't1', 'A 결론'),
+      wfAsst('B', 'b1', 't1', 'B 결론'),
+      asstMain('m2', '워크플로우 종합 X'),
+    ];
+    const items = buildStreamModel(evs);
+    const wf = items.find((i: any) => i.type === 'workflow-group') as any;
+    expect(wf).toBeTruthy();
+    expect(wf.name).toBe('review-changes');
+    expect(wf.taskEventId).toBe('wfc');
+    expect(wf.agentGroups.map((g: any) => g.agentId).sort()).toEqual(['A', 'B']);
+    expect(wf.synthesis).toContain('종합');
+    expect(wf.settled).toBe(true);
+  });
+  it('사이드카 있는 Agent-배치는 여전히 BatchGroup (Workflow로 흡수 안 됨)', () => {
+    const evs = [
+      asstMain('m1', '병렬'),
+      taskCall('m1', 'tcA', 'tuA'),
+      taskCall('m1', 'tcB', 'tuB'),
+      sidecar('A', 'tuA', 'Explore', 'A'),
+      sidecar('B', 'tuB', 'Explore', 'B'),
+      scAsst('A', 'a1', 'A끝'),
+      scAsst('B', 'b1', 'B끝'),
+    ];
+    const items = buildStreamModel(evs);
+    expect(items.some((i: any) => i.type === 'batch-group')).toBe(true);
+    expect(items.some((i: any) => i.type === 'workflow-group')).toBe(false);
+  });
+});
 
 describe('buildStreamModel — parallel batch grouping (#13 design 2026-06-13)', () => {
   it('병렬 형제는 BatchGroup으로 래핑되고 자식은 agent별 SidechainGroup', () => {
