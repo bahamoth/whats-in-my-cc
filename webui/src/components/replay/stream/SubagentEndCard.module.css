@@ -102,6 +102,8 @@
    the scroll container (overflow-y:auto forces overflow-x:auto + scrollbar-gutter).
    An inset box-shadow follows the border-radius and never clips. Accent blue =
    same selection language as MessageCard, distinct from the card's identity color. */
+/* selection = deep orange (짙은 주황), 1px to match the other boxes' selection
+   thickness. Inset so the full-width card's ring never clips on the right. */
 .card[data-selected='true'] {
-  box-shadow: inset 0 0 0 1px var(--wimcc-accent, #4f8cff);
+  box-shadow: inset 0 0 0 1px #ea580c;
 }
