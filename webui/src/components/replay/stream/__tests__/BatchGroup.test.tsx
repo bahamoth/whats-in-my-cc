@@ -41,6 +41,7 @@ const fixtureBatch: BatchGroupModel = {
     childGroup({ id: 'sc-A', agentId: 'A', description: '조사 A', conclusion: 'A 결론' }),
     childGroup({ id: 'sc-B', agentId: 'B', description: '조사 B', conclusion: 'B 결론' }),
   ],
+  dispatchMessageId: 'm1',
   synthesis: '두 결과를 종합하면 X',
   settled: true,
 };
