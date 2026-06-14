@@ -4910,6 +4910,14 @@ vitest: 69 passed
         <code>endStatus</code> 헬퍼. <code>computeBgGutter</code>를 일반 "track"으로 확장 —
         sidechain-group(해시색)에 더해 <b>workflow-group(주황) 레일</b>을 그 workflow-end
         카드까지 북엔드. 흡수된 노티 event_id는 end card가 scroll 타깃으로 대신(점프).</li>
+      <li><strong>백그라운드 Bash 연결 + 카드 선택성</strong>(후속, 사용자 지적): ④ 그룹이
+        없는 <b>백그라운드 Bash</b> 노티는 흡수/치환 대신 <em>그 자리에 유지하되 enrich</em> —
+        <code>MessageItem.notification</code>(status·summary·toolLabel·callEventId)로 "무엇이
+        끝났나(Bash · 명령)"를 깔끔히 렌더 + 원래 명령으로 점프(<code>callMetaByUse</code> 조인).
+        실데이터 검증(vite-node): noti <code>01KV2F0NCN</code> → <code>Bash · cargo test …</code>
+        completed(exit 0) + callEventId. ⑤ 합성 end card(workflow/subagent)가 클릭 안 되던 것
+        수정 — 카드 전체 selectable(→ 완료 노티 선택) + WorkflowGroup에 "호출" 점프(→ Workflow
+        tool_call) 추가. 합성 카드라 onClick 미배선이었을 뿐, 막을 이유 없었음.</li>
     </ul>
     <p>
       <strong>검증</strong>: TDD red→green, webui 557 green(parse 3 · sync 3 · gutter wf-track 1 ·

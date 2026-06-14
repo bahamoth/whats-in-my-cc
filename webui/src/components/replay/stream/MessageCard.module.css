@@ -317,3 +317,42 @@
   border-radius: 4px;
   border-bottom-left-radius: 3px;
 }
+
+/* a <task-notification> rendered as a clean "what finished" line: status glyph +
+   tool/command label + summary + jump to the originating command. */
+.notiCompletion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+}
+.notiStatus {
+  flex: none;
+  font-weight: 700;
+  font-size: 9px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  border: 1px solid currentColor;
+  color: var(--wimcc-success, #41c285);
+}
+.notiCompletion[data-status='fail'] .notiStatus { color: var(--wimcc-danger, #ef4747); }
+.notiCompletion[data-status='killed'] .notiStatus { color: var(--wimcc-warning, #f0b429); }
+.notiTool {
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  color: var(--wimcc-fg, #e6e8ee);
+  font-weight: 600;
+}
+.notiSummary { color: var(--wimcc-fg-muted, #aab0bd); min-width: 0; }
+.notiJump {
+  flex: none;
+  padding: 1px 7px;
+  background: none;
+  border: 1px solid var(--wimcc-border-strong, #2a3040);
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  color: var(--wimcc-lane-context, #b07dff);
+}
+.notiJump:hover { background: var(--wimcc-surface-3, #1b202a); }

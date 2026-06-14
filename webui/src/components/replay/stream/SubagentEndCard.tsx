@@ -6,6 +6,7 @@
 // <task-notification> gives a deterministic status (completed/failed/killed) +
 // a jump to the notification 원문. A synthetic row (no source event); see
 // SubagentEndCard in streamModel + insertSubagentEndCards/syncTaskNotifications.
+import type { KeyboardEvent } from 'react';
 import { CheckCircle2, Clock, MessageSquare, Wrench, Bell } from 'lucide-react';
 import type { SubagentEndCard as EndCard } from './streamModel';
 import { formatDuration, durationHeat } from './duration';
@@ -26,12 +27,26 @@ interface Props {
 
 export function SubagentEndCard({ card, onSelect }: Props) {
   const status = card.status ? endStatusLabel(card.status) : null;
+  const selectable = !!(card.notificationEventId && onSelect);
   return (
     <div
       data-testid="subagent-end-card"
       className={styles.card}
       data-status={status?.kind ?? 'done'}
       style={{ ['--agentColor' as string]: card.color }}
+      {...(selectable
+        ? {
+            role: 'button',
+            tabIndex: 0,
+            onClick: () => onSelect!(card.notificationEventId!),
+            onKeyDown: (e: KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelect!(card.notificationEventId!);
+              }
+            },
+          }
+        : {})}
     >
       <div className={styles.head}>
         <CheckCircle2 size={13} aria-hidden className={styles.check} />
@@ -57,7 +72,10 @@ export function SubagentEndCard({ card, onSelect }: Props) {
               data-testid="subagent-end-jump"
               className={styles.jump}
               title="종료 알림 원문으로 이동"
-              onClick={() => onSelect(card.notificationEventId!)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(card.notificationEventId!);
+              }}
             >
               <Bell size={10} aria-hidden /> 알림
             </button>

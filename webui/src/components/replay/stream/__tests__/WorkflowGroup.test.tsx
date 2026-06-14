@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { WorkflowGroup } from '../WorkflowGroup';
 import type { WorkflowGroup as WG, SidechainGroup } from '../streamModel';
@@ -34,5 +34,11 @@ describe('WorkflowGroup', () => {
       <WorkflowGroup group={{ ...wg, concurrentMainCount: 3 }} selectedEventId={null} onSelect={noop} findingEventIds={new Set()} />,
     );
     expect(screen.getByTestId('wf-concurrent')).toHaveTextContent('main 3건 동시');
+  });
+  it('호출 버튼이 Workflow tool_call을 선택 — 시작 카드 선택 가능', () => {
+    const sel = vi.fn();
+    render(<WorkflowGroup group={wg} selectedEventId={null} onSelect={sel} findingEventIds={new Set()} />);
+    fireEvent.click(screen.getByTestId('wf-jump'));
+    expect(sel).toHaveBeenCalledWith('wfc');
   });
 });

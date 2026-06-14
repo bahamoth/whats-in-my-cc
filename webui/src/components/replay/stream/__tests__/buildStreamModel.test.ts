@@ -1178,3 +1178,24 @@ describe('computeBgGutter — workflow track (orange rail bookend)', () => {
     expect(g.get('wfend-W')!.cells[0].marker).toBe('end');
   });
 });
+
+describe('syncTaskNotifications — background command (Bash) connection', () => {
+  it('a staying noti is enriched with toolLabel/callEventId/status (jump to the command)', () => {
+    const noti = notiMsg('noti-bash', '<task-notification><tool-use-id>toolu_bash</tool-use-id><status>completed</status><summary>cargo test done</summary></task-notification>');
+    const out = syncTaskNotifications(
+      [mainMsg('m', '2026-06-14T01:00:00Z'), noti],
+      new Map([['toolu_bash', { status: 'completed', summary: 'cargo test done', endTimestamp: 't', eventId: 'noti-bash' }]]),
+      new Map(),
+      new Map(),
+      new Map([['toolu_bash', { eventId: 'bashcall-ev', label: 'Bash · cargo test' }]]),
+    );
+    const n = out.find((i) => i.id === 'noti-bash') as MessageItem;
+    expect(n).toBeTruthy(); // stays (not absorbed/replaced)
+    expect(n.notification).toMatchObject({
+      status: 'completed',
+      summary: 'cargo test done',
+      toolLabel: 'Bash · cargo test',
+      callEventId: 'bashcall-ev',
+    });
+  });
+});

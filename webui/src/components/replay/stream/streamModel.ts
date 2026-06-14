@@ -78,6 +78,18 @@ export interface MessageItem {
    *  none. Drives the "서브에이전트 N개 동시 실행" marker — the subject is the
    *  OTHER agents, not this message (annotateConcurrency). */
   concurrentBackground?: number;
+  /** Set on a `<task-notification>` message whose <tool-use-id> matched a
+   *  dispatching tool_call that is NOT a workflow/subagent (e.g. a background
+   *  Bash) — so the noti can render as a clean "what finished" card and jump to
+   *  the originating command (syncTaskNotifications). */
+  notification?: {
+    status: string | null;
+    summary: string | null;
+    /** the dispatching tool (e.g. "Bash") + a short command label. */
+    toolLabel: string | null;
+    /** event_id of the originating tool_call (jump target), null if not loaded. */
+    callEventId: string | null;
+  };
 }
 
 export interface ActivityEvent {
@@ -606,7 +618,11 @@ export function syncTaskNotifications(
   notiByToolUse: Map<string, TaskNoti>,
   wfToolUseByEvent: Map<string, string>,
   agentDispatchToolUse: Map<string, string>,
+  callMetaByUse: Map<string, { eventId: string; label: string }> = new Map(),
 ): StreamItem[] {
+  // invert: noti event_id → its tool_use_id (to enrich the staying noti message).
+  const toolUseByNotiEvent = new Map<string, string>();
+  for (const [tu, n] of notiByToolUse) toolUseByNotiEvent.set(n.eventId, tu);
   const wfEndByNotiEvent = new Map<string, WorkflowEndCard>();
   const absorbNotiEvents = new Set<string>();
   for (const it of items) {
@@ -641,7 +657,6 @@ export function syncTaskNotifications(
       }
     }
   }
-  if (!wfEndByNotiEvent.size && !absorbNotiEvents.size) return items;
   const out: StreamItem[] = [];
   for (const it of items) {
     if (it.type === 'message') {
@@ -651,6 +666,19 @@ export function syncTaskNotifications(
         continue;
       }
       if (absorbNotiEvents.has(it.eventId)) continue; // absorbed into the subagent end card
+      // a STAYING notification (background command / unmatched-to-a-group): enrich
+      // it so it reads as "what finished" + can jump to the originating command.
+      const tu = toolUseByNotiEvent.get(it.eventId);
+      if (tu) {
+        const noti = notiByToolUse.get(tu)!;
+        const call = callMetaByUse.get(tu);
+        it.notification = {
+          status: noti.status,
+          summary: noti.summary,
+          toolLabel: call?.label ?? null,
+          callEventId: call?.eventId ?? null,
+        };
+      }
     }
     out.push(it);
   }
@@ -874,6 +902,9 @@ export function buildStreamModel(
   // `<task-notification>` completion events keyed by their <tool-use-id> (the
   // deterministic join back to the dispatching Workflow/Agent/Bash call).
   const notiByToolUse = new Map<string, TaskNoti>();
+  // tool_call event_id + short label per tool_use_id — lets a background-command
+  // noti (e.g. Bash) say what finished and jump to the originating command.
+  const callMetaByUse = new Map<string, { eventId: string; label: string }>();
   // Workflow tool_call들(이름 메타). 워크플로우가 띄운 에이전트는 events의
   // `workflow_run_id`(파일 경로 `…/subagents/workflows/<runId>/` 유래)로 결정론적으로
   // 묶는다. 그룹에 이름을 붙이려고 run_id ↔ Workflow tool_call을 잇는데, run_id는 call의
@@ -889,6 +920,10 @@ export function buildStreamModel(
     if (e.kind === 'tool_call' && e.tool_use_id) {
       callEventByUse.set(e.tool_use_id, e.event_id);
       callMsgByUse.set(e.tool_use_id, e.message_id ?? null);
+      const inp = asObj(asObj(e.payload).input);
+      const cmd = typeof inp.command === 'string' ? inp.command.split('\n')[0].trim() : null;
+      const label = cmd ? `${e.tool_name ?? 'Bash'} · ${cmd.slice(0, 80)}` : e.tool_name ?? 'tool';
+      callMetaByUse.set(e.tool_use_id, { eventId: e.event_id, label });
     }
     if (e.kind === 'tool_call' && e.tool_name === 'Workflow' && e.tool_use_id) {
       const input = asObj(asObj(e.payload).input);
@@ -1228,6 +1263,7 @@ export function buildStreamModel(
         notiByToolUse,
         wfToolUseByEvent,
         agentDispatchToolUse,
+        callMetaByUse,
       ),
     ),
   );

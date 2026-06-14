@@ -89,3 +89,6 @@
 }
 .card[data-status='fail'] .summaryLabel { color: var(--wimcc-danger, #ef4747); }
 .card[data-status='killed'] .summaryLabel { color: var(--wimcc-warning, #f0b429); }
+
+.card[role='button'] { cursor: pointer; }
+.card[role='button']:hover { filter: brightness(1.08); }

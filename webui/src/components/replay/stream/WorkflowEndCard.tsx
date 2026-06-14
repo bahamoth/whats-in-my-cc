@@ -4,6 +4,7 @@
 // status (completed/failed/killed) + summary + a jump to the notification 원문 —
 // replacing the heuristic "first message after = synthesis". Synthetic row; see
 // WorkflowEndCard in streamModel + syncTaskNotifications.
+import type { KeyboardEvent } from 'react';
 import { CheckCircle2, Bell } from 'lucide-react';
 import type { WorkflowEndCard as EndCard } from './streamModel';
 import { endStatusLabel } from './endStatus';
@@ -23,8 +24,26 @@ interface Props {
 
 export function WorkflowEndCard({ card, onSelect }: Props) {
   const status = endStatusLabel(card.status);
+  const selectable = !!onSelect;
   return (
-    <div data-testid="workflow-end-card" className={styles.card} data-status={status.kind}>
+    <div
+      data-testid="workflow-end-card"
+      className={styles.card}
+      data-status={status.kind}
+      {...(selectable
+        ? {
+            role: 'button',
+            tabIndex: 0,
+            onClick: () => onSelect!(card.notificationEventId),
+            onKeyDown: (e: KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSelect!(card.notificationEventId);
+              }
+            },
+          }
+        : {})}
+    >
       <div className={styles.head}>
         <CheckCircle2 size={13} aria-hidden className={styles.check} />
         <span className={styles.label}>워크플로우 종료</span>
@@ -40,7 +59,10 @@ export function WorkflowEndCard({ card, onSelect }: Props) {
               data-testid="workflow-end-jump"
               className={styles.jump}
               title="종료 알림 원문으로 이동"
-              onClick={() => onSelect(card.notificationEventId)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(card.notificationEventId);
+              }}
             >
               <Bell size={10} aria-hidden /> 알림
             </button>
