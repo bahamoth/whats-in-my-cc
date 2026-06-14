@@ -28,6 +28,81 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
     selectedEventId != null && stack.events.some((ae) => ae.event.event_id === selectedEventId);
   const expanded = userOverride ?? containsSelected;
 
+  const renderItem = (ae: ActivityStackData['events'][number]) => {
+    const label = nodeLabel({ node_kind: ae.event.kind, payload: ae.event.payload, telemetry: ae.event.telemetry, tag: ae.event.tag, is_meta: ae.event.is_meta });
+    const isSelected = selectedEventId === ae.event.event_id;
+    // hook_event carries its own success/duration in its payload (not a
+    // matched tool_result), so derive the badge + duration from there.
+    const hook = ae.event.kind === 'hook_event' ? hookFacet(ae.event.payload) : null;
+    return (
+      <div
+        key={ae.event.event_id}
+        data-testid="activity-item"
+        data-selected={String(isSelected)}
+        role="button"
+        tabIndex={0}
+        className={styles.item}
+        onClick={() => onSelect(ae.event.event_id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelect(ae.event.event_id);
+          }
+        }}
+      >
+        <span className={styles.itemPrimary}>{label.primary}</span>
+        {(() => { const tr = ae.event.tag; return tr && tr.disposition === 'tagged' && tr.value
+          ? <span data-testid="event-tag-chip" className={styles.tagChip} data-verb={tagVerb(tr.value as Tag)}>{tr.value}</span> : null; })()}
+        {label.secondary && (
+          <span className={styles.itemSecondary}>{label.secondary}</span>
+        )}
+        {(() => {
+          // One right-aligned meta cluster for every item — order: time,
+          // then status — so tool and hook rows line up consistently.
+          // hook time/status come from the event's own payload; tool's
+          // from the upstream-computed durationMs + matched result.
+          const status: 'ok' | 'error' | null = hook
+            ? (hook.success == null ? null : hook.success ? 'ok' : 'error')
+            : ae.result == null
+            ? null
+            : ae.result.isError
+            ? 'error'
+            : 'ok';
+          const durationMs = hook ? hook.durationMs : ae.durationMs ?? null;
+          if (durationMs == null && status == null) return null;
+          return (
+            <span data-testid="activity-meta" className={styles.meta}>
+              {status === 'ok' && <span className={styles.itemBadgeOk}>ok</span>}
+              {status === 'error' && <span className={styles.itemBadgeError}>error</span>}
+              {durationMs != null && (
+                <span className={styles.duration} data-heat={durationHeat(durationMs)}>
+                  {formatDuration(durationMs)}
+                </span>
+              )}
+            </span>
+          );
+        })()}
+      </div>
+    );
+  };
+
+  // A run of exactly one event hides nothing behind a chevron — the collapsed
+  // header would just repeat the tool name + duration. Render it inline (the
+  // lone item, selectable) with no toggle shell. Single-item collapse removed.
+  if (stack.events.length === 1) {
+    return (
+      <div
+        data-testid="activity-stack"
+        data-single="true"
+        data-count={String(summary.count)}
+        data-errors={String(summary.errorCount)}
+        className={`${styles.stack} ${styles.single}`}
+      >
+        <div className={styles.items}>{renderItem(stack.events[0])}</div>
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid="activity-stack"
@@ -66,63 +141,7 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
 
       {expanded && (
         <div className={styles.items}>
-          {stack.events.map((ae) => {
-            const label = nodeLabel({ node_kind: ae.event.kind, payload: ae.event.payload, telemetry: ae.event.telemetry, tag: ae.event.tag, is_meta: ae.event.is_meta });
-            const isSelected = selectedEventId === ae.event.event_id;
-            // hook_event carries its own success/duration in its payload (not a
-            // matched tool_result), so derive the badge + duration from there.
-            const hook = ae.event.kind === 'hook_event' ? hookFacet(ae.event.payload) : null;
-            return (
-              <div
-                key={ae.event.event_id}
-                data-testid="activity-item"
-                data-selected={String(isSelected)}
-                role="button"
-                tabIndex={0}
-                className={styles.item}
-                onClick={() => onSelect(ae.event.event_id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelect(ae.event.event_id);
-                  }
-                }}
-              >
-                <span className={styles.itemPrimary}>{label.primary}</span>
-                {(() => { const tr = ae.event.tag; return tr && tr.disposition === 'tagged' && tr.value
-                  ? <span data-testid="event-tag-chip" className={styles.tagChip} data-verb={tagVerb(tr.value as Tag)}>{tr.value}</span> : null; })()}
-                {label.secondary && (
-                  <span className={styles.itemSecondary}>{label.secondary}</span>
-                )}
-                {(() => {
-                  // One right-aligned meta cluster for every item — order: time,
-                  // then status — so tool and hook rows line up consistently.
-                  // hook time/status come from the event's own payload; tool's
-                  // from the upstream-computed durationMs + matched result.
-                  const status: 'ok' | 'error' | null = hook
-                    ? (hook.success == null ? null : hook.success ? 'ok' : 'error')
-                    : ae.result == null
-                    ? null
-                    : ae.result.isError
-                    ? 'error'
-                    : 'ok';
-                  const durationMs = hook ? hook.durationMs : ae.durationMs ?? null;
-                  if (durationMs == null && status == null) return null;
-                  return (
-                    <span data-testid="activity-meta" className={styles.meta}>
-                      {status === 'ok' && <span className={styles.itemBadgeOk}>ok</span>}
-                      {status === 'error' && <span className={styles.itemBadgeError}>error</span>}
-                      {durationMs != null && (
-                        <span className={styles.duration} data-heat={durationHeat(durationMs)}>
-                          {formatDuration(durationMs)}
-                        </span>
-                      )}
-                    </span>
-                  );
-                })()}
-              </div>
-            );
-          })}
+          {stack.events.map((ae) => renderItem(ae))}
         </div>
       )}
     </div>

@@ -132,6 +132,25 @@ describe('ActivityStack', () => {
     expect(fold.querySelector('[data-heat]')?.getAttribute('data-heat')).toBe('hot');
   });
 
+  it('renders a single-event run inline, with no collapse toggle and no "1 events" count', () => {
+    // A run of exactly one event hides nothing behind a chevron — the collapsed
+    // header would just repeat the tool name + duration. So a 1-event stack is
+    // shown inline (the lone item, selectable) with no toggle shell.
+    const onSelect = vi.fn();
+    const single: ActivityStackData = { events: [
+      { event: { event_id: 's1', kind: 'tool_call', observed_at: 'z', tool_name: 'Read',
+        payload: { tool_name: 'Read', input: { file_path: '/a/x.ts' } } } as any,
+        result: { isError: false }, durationMs: 18 },
+    ] };
+    render(<ActivityStack stack={single} selectedEventId={null} onSelect={onSelect} />);
+    expect(screen.queryByTestId('activity-stack-toggle')).toBeNull();
+    const item = screen.getByTestId('activity-item');
+    expect(within(item).getByText('Read')).toBeInTheDocument();
+    fireEvent.click(item);
+    expect(onSelect).toHaveBeenCalledWith('s1');
+    expect(screen.queryByText(/1 events/)).toBeNull();
+  });
+
   it('renders a tag chip for a tagged Bash event (read.file) and none for control', () => {
     // 칩은 서버가 계산한 `tag` 필드로 렌더된다 (분류는 core 분류기 몫).
     const ev = (command: string, id: string, tag: unknown) => ({ event_id: id, kind: 'tool_call', tool_name: 'Bash', observed_at: '2026-05-31T00:00:00Z', tag, payload: { input: { command } } });
