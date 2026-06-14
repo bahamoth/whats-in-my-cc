@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Workflow as WorkflowIcon } from 'lucide-react';
+import { ChevronDown, ChevronRight, Workflow as WorkflowIcon, CornerUpLeft } from 'lucide-react';
 import { SubagentGroup } from './SubagentGroup';
 import { formatDuration } from './duration';
 import { workflowStats, workflowTimeline, agentDurationHeat } from './workflowStats';
@@ -42,6 +42,18 @@ export function WorkflowGroup({ group, selectedEventId, onSelect, findingEventId
             ) : null}
           </span>
         </button>
+        {group.taskEventId && (
+          <button
+            data-testid="wf-jump"
+            className={styles.jump}
+            title="이 워크플로우를 띄운 Workflow 호출로 이동"
+            aria-label="Workflow 호출로 이동"
+            onClick={() => onSelect(group.taskEventId!)}
+          >
+            <CornerUpLeft size={12} aria-hidden />
+            호출
+          </button>
+        )}
       </div>
 
       <div data-testid="wf-synthesis" className={styles.synthesis}>

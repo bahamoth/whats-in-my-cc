@@ -6,6 +6,7 @@ import { User, Bot, BrainCog, Lightbulb, CornerDownRight, Info, Code2, Type, Ter
 import type { MessageItem } from './streamModel';
 import { userDisplayText } from './messageOrigin';
 import { formatModel } from './nodeLabel';
+import { endStatusLabel } from './endStatus';
 import styles from './MessageCard.module.css';
 
 function timeLabel(iso: string): string {
@@ -198,7 +199,36 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
         {...(clampable ? { 'data-clamped': String(clamped) } : {})}
         className={`${styles.bubble} ${bubbleClass} ${styled ? styles.markdown : ''} ${clamped ? styles.clamped : ''}`}
       >
-        {styled ? <Markdown remarkPlugins={[remarkGfm]}>{displayText}</Markdown> : displayText}
+        {item.notification ? (
+          <span
+            data-testid="noti-completion"
+            className={styles.notiCompletion}
+            data-status={item.notification.status ? endStatusLabel(item.notification.status).kind : 'other'}
+          >
+            <span className={styles.notiStatus}>
+              {item.notification.status ? endStatusLabel(item.notification.status).text : '완료'}
+            </span>
+            {item.notification.toolLabel && <span className={styles.notiTool}>{item.notification.toolLabel}</span>}
+            {item.notification.summary && <span className={styles.notiSummary}>{item.notification.summary}</span>}
+            {item.notification.callEventId && (
+              <button
+                data-testid="noti-jump"
+                className={styles.notiJump}
+                title="원래 명령으로 이동"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect(item.notification!.callEventId!);
+                }}
+              >
+                ↳ 명령
+              </button>
+            )}
+          </span>
+        ) : styled ? (
+          <Markdown remarkPlugins={[remarkGfm]}>{displayText}</Markdown>
+        ) : (
+          displayText
+        )}
       </div>
       {clampable && (
         <button

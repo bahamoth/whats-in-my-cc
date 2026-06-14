@@ -39,3 +39,20 @@
   border: 1px solid var(--wimcc-border-strong, #2a3040);
   white-space: nowrap;
 }
+
+/* jump to the dispatching Workflow tool_call (makes the start card selectable) */
+.jump {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  background: none;
+  border: 1px solid var(--wimcc-border, #1d212c);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  color: var(--wimcc-fg-muted, #aab0bd);
+}
+.jump:hover { color: var(--wimcc-fg, #e6e8ee); background: var(--wimcc-surface-3, #1b202a); }

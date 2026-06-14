@@ -35,4 +35,12 @@ describe('WorkflowEndCard', () => {
     await u.click(screen.getByTestId('workflow-end-jump'));
     expect(onSelect).toHaveBeenCalledWith('noti-1');
   });
+
+  it('the whole card is selectable (clicking it selects the notification)', async () => {
+    const u = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<WorkflowEndCard card={card()} onSelect={onSelect} />);
+    await u.click(screen.getByTestId('workflow-end-card'));
+    expect(onSelect).toHaveBeenCalledWith('noti-1');
+  });
 });

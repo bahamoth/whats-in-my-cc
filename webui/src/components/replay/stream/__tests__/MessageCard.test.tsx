@@ -25,6 +25,28 @@ describe('MessageCard', () => {
     );
     expect(screen.getByTestId('bg-marker')).toHaveTextContent('백그라운드 2개 실행 중');
   });
+  it('a connected task-notification renders status + tool + summary, and jumps to the command', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(
+      <MessageCard
+        item={m({
+          role: 'user',
+          origin: 'notification',
+          text: '<task-notification>...</task-notification>',
+          notification: { status: 'completed', summary: 'cargo test done', toolLabel: 'Bash · cargo test', callEventId: 'bashcall' },
+        })}
+        selected={false}
+        onSelect={onSelect}
+      />,
+    );
+    const c = screen.getByTestId('noti-completion');
+    expect(c).toHaveTextContent('completed');
+    expect(c).toHaveTextContent('Bash · cargo test');
+    expect(c).toHaveTextContent('cargo test done');
+    await user.click(screen.getByTestId('noti-jump'));
+    expect(onSelect).toHaveBeenCalledWith('bashcall');
+  });
   it('assistant message aligns left with model name', () => {
     render(<MessageCard item={m({ role: 'assistant', model: 'claude-opus-4-8', text: '답변' })} selected={false} onSelect={() => {}} />);
     const c = screen.getByTestId('message-card');
