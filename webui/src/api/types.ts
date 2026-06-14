@@ -60,6 +60,10 @@ export type ObservedEventDto = {
   /** subagent jsonl의 top-level `agentId` — 병렬 서브에이전트 구분 키. 비-subagent
    *  이벤트는 null 또는 ''(NULL TEXT 컬럼의 row 매핑 관례)로 온다. */
   agent_id?: string | null;
+  /** Workflow run id for Workflow-tool-spawned subagents, from the file path
+   *  `…/subagents/workflows/<runId>/`. The deterministic group key for a workflow
+   *  fan-out. null/absent for non-workflow events. */
+  workflow_run_id?: string | null;
   is_meta: boolean | number;
   /** OTel span events carry their extracted span data here (span_name +
    *  flat attributes). Absent on non-span events. C4 (Tier 3-1): span name
