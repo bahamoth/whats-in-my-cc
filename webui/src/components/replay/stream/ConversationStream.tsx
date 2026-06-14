@@ -6,6 +6,7 @@ import { MessageCard } from './MessageCard';
 import { ActivityStack } from './ActivityStack';
 import { SubagentGroup } from './SubagentGroup';
 import { BatchGroup } from './BatchGroup';
+import { WorkflowGroup } from './WorkflowGroup';
 import { ScaffoldGroup } from './ScaffoldGroup';
 import { ThinkingMarker } from './ThinkingMarker';
 import { AutoscrollToggle } from './AutoscrollToggle';
@@ -52,6 +53,8 @@ function itemContainsEvent(item: StreamItem, eventId: string): boolean {
     return item.agentGroups.some((g) => itemContainsEvent(g, eventId));
   if (item.type === 'scaffold-group') return item.items.some((i) => i.eventId === eventId);
   if (item.type === 'thinking') return item.events.some((e) => e.eventId === eventId);
+  if (item.type === 'workflow-group')
+    return item.agentGroups.some((g) => itemContainsEvent(g, eventId));
   return item.events.some((ae) => ae.event.event_id === eventId);
 }
 
@@ -375,6 +378,16 @@ export function ConversationStream({
     if (item.type === 'batch-group') {
       return (
         <BatchGroup
+          group={item}
+          selectedEventId={selectedEventId}
+          onSelect={onSelect}
+          findingEventIds={findingEventIds}
+        />
+      );
+    }
+    if (item.type === 'workflow-group') {
+      return (
+        <WorkflowGroup
           group={item}
           selectedEventId={selectedEventId}
           onSelect={onSelect}

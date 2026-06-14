@@ -33,7 +33,8 @@ function itemEventIds(it: StreamItem): string[] {
   if (it.type === 'message') return [it.eventId];
   if (it.type === 'thinking') return it.events.map((e) => e.eventId);
   if (it.type === 'activity-run') return it.events.map((ae) => ae.event.event_id);
-  if (it.type === 'batch-group') return it.agentGroups.flatMap(itemEventIds);
+  if (it.type === 'batch-group' || it.type === 'workflow-group')
+    return it.agentGroups.flatMap(itemEventIds);
   return it.items.flatMap(itemEventIds);
 }
 
