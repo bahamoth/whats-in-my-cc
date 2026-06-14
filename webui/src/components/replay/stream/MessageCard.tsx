@@ -162,6 +162,15 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
         <Icon size={14} aria-hidden className={styles.icon} />
         <span className={styles.label}>{label}</span>
         <span data-testid="source-badge" className={styles.sourceBadge}>{sourceTag}</span>
+        {item.duringBackground && (
+          <span
+            data-testid="bg-marker"
+            className={styles.bgMarker}
+            title="백그라운드 서브에이전트/워크플로우 실행 중에 진행된 main 메시지"
+          >
+            ⟂ 백그라운드 실행 중
+          </span>
+        )}
         {hasFinding && (
           <Lightbulb
             size={12}
