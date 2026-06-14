@@ -85,3 +85,8 @@
 
 .card[role='button'] { cursor: pointer; }
 .card[role='button']:hover { filter: brightness(1.08); }
+
+.card[data-selected='true'] {
+  outline: 2px solid var(--wimcc-lane-quality, #ff8a4c);
+  outline-offset: 1px;
+}
