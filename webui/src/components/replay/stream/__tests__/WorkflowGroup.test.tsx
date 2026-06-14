@@ -41,4 +41,24 @@ describe('WorkflowGroup', () => {
     fireEvent.click(screen.getByTestId('wf-jump'));
     expect(sel).toHaveBeenCalledWith('wfc');
   });
+
+  it('단일 에이전트 워크플로우는 평탄화: 래퍼 토글·간트·통계 없이 자식을 직접 노출', () => {
+    // N=1이면 1-바 간트·"최대 병렬 1"·이중 chevron이 무의미하다. 워크플로우 정체성
+    // (이름·종합·호출 점프)은 한 줄로 남기고 자식 SubagentGroup을 바로 노출한다.
+    const single: WG = { ...wg, agentGroups: [child('A', '2026-06-14T00:38:00Z')] };
+    render(<WorkflowGroup group={single} selectedEventId={null} onSelect={noop} findingEventIds={new Set()} />);
+    expect(screen.queryByTestId('wf-toggle')).toBeNull(); // 래퍼 chevron 없음
+    expect(screen.queryByTestId('wf-lane')).toBeNull(); // 1-바 간트 없음
+    expect(screen.queryByTestId('wf-stats')).toBeNull(); // 통계 없음
+    expect(screen.getByTestId('subagent-group')).toBeInTheDocument(); // 자식 직접 노출
+    expect(screen.getByText('review-changes')).toBeInTheDocument(); // 워크플로우명 유지
+  });
+
+  it('단일 에이전트 평탄화에서도 호출 점프는 유지', () => {
+    const sel = vi.fn();
+    const single: WG = { ...wg, agentGroups: [child('A', '2026-06-14T00:38:00Z')] };
+    render(<WorkflowGroup group={single} selectedEventId={null} onSelect={sel} findingEventIds={new Set()} />);
+    fireEvent.click(screen.getByTestId('wf-jump'));
+    expect(sel).toHaveBeenCalledWith('wfc');
+  });
 });

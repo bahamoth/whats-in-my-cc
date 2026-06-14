@@ -15,6 +15,9 @@
 .icon { flex: none; }
 .chip { flex: none; padding: 2px 7px; border-radius: 4px; font-weight: 600; font-size: 10px; line-height: 1.4; color: var(--wimcc-lane-quality, #ff8a4c); background: var(--wimcc-surface-3, #1b202a); border: 1px solid var(--wimcc-lane-quality, #ff8a4c); }
 .name { flex: none; color: var(--wimcc-fg, #e6e8ee); font-weight: 600; }
+/* single-agent flatten: a compact one-line workflow label above the lone child */
+.flatLabel { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--wimcc-lane-quality, #ff8a4c); padding: 2px 0 5px; }
+.flatSynth { flex: 1 1 auto; min-width: 0; font-weight: 400; color: var(--wimcc-fg-muted, #aab0bd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meta { flex: none; margin-left: auto; display: flex; align-items: center; gap: 8px; font-weight: 400; color: var(--wimcc-fg-subtle, #6a7180); }
 .status { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--wimcc-fg-muted, #aab0bd); }
 .duration { font-variant-numeric: tabular-nums; }

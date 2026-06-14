@@ -25,6 +25,38 @@ export function WorkflowGroup({ group, selectedEventId, onSelect, findingEventId
   const tl = useMemo(() => workflowTimeline(group.agentGroups), [group.agentGroups]);
   const pct = (n: number) => (tl.spanMs > 0 ? (n / tl.spanMs) * 100 : 0);
 
+  // Single-agent workflow: a 1-bar gantt, "최대 병렬 1" stats, and a wrapper
+  // chevron over one child are noise (the synth's primary single-item offender).
+  // Keep the workflow identity as a compact one-line label and render the lone
+  // child directly — it stays collapsible on its own (no double shell).
+  if (group.agentGroups.length === 1) {
+    const only = group.agentGroups[0];
+    return (
+      <section data-testid="workflow-group" data-flattened="true" className={styles.group}>
+        <div className={styles.flatLabel}>
+          <WorkflowIcon size={12} className={styles.icon} aria-hidden />
+          <span className={styles.chip}>워크플로우</span>
+          <span className={styles.name}>{group.name ?? '워크플로우'}</span>
+          <span className={styles.status}>{group.settled ? '✓' : '⏳'}</span>
+          {group.synthesis && <span className={styles.flatSynth}>· {group.synthesis}</span>}
+          {group.taskEventId && (
+            <button
+              data-testid="wf-jump"
+              className={styles.jump}
+              title="이 워크플로우를 띄운 Workflow 호출로 이동"
+              aria-label="Workflow 호출로 이동"
+              onClick={() => onSelect(group.taskEventId!)}
+            >
+              <CornerUpLeft size={12} aria-hidden />
+              호출
+            </button>
+          )}
+        </div>
+        <SubagentGroup group={only} selectedEventId={selectedEventId} onSelect={onSelect} findingEventIds={findingEventIds} />
+      </section>
+    );
+  }
+
   return (
     <section data-testid="workflow-group" data-expanded={String(expanded)} className={styles.group}>
       <div className={styles.headerRow}>
