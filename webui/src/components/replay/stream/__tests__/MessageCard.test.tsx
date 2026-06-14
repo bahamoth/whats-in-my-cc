@@ -15,15 +15,15 @@ describe('MessageCard', () => {
     expect(screen.getByText('You')).toBeInTheDocument();
     expect(screen.getByText('질문')).toBeInTheDocument();
   });
-  it('duringBackground 메시지에 "백그라운드 실행 중" 마커', () => {
+  it('concurrentBackground 메시지에 "서브에이전트 N개 동시 실행" 마커 (이 메시지가 아님)', () => {
     const { rerender } = render(
       <MessageCard item={m({ role: 'assistant', text: '답변' })} selected={false} onSelect={() => {}} />,
     );
     expect(screen.queryByTestId('bg-marker')).toBeNull();
     rerender(
-      <MessageCard item={m({ role: 'assistant', text: '답변', duringBackground: true })} selected={false} onSelect={() => {}} />,
+      <MessageCard item={m({ role: 'assistant', text: '답변', concurrentBackground: 2 })} selected={false} onSelect={() => {}} />,
     );
-    expect(screen.getByTestId('bg-marker')).toHaveTextContent('백그라운드 실행 중');
+    expect(screen.getByTestId('bg-marker')).toHaveTextContent('서브에이전트 2개 동시 실행');
   });
   it('assistant message aligns left with model name', () => {
     render(<MessageCard item={m({ role: 'assistant', model: 'claude-opus-4-8', text: '답변' })} selected={false} onSelect={() => {}} />);
