@@ -2,6 +2,7 @@
 import type { ObservedEventDto } from '../../../api/types';
 import type { LlmRequestMetrics } from './llmRequestMetrics';
 import { messageOrigin, type MessageOrigin } from './messageOrigin';
+import { agentColor } from '../../../lib/colorHash';
 
 function asObj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
@@ -198,6 +199,23 @@ export type StreamItem =
   | BatchGroup
   | WorkflowGroup
   | ScaffoldGroup;
+
+/** One lane cell painted in the background-subagent gutter for a given row. */
+export interface GutterCell {
+  /** x-slot 0..2 (stable per agent for its whole life). */
+  lane: number;
+  agentId: string;
+  /** hash(agent_id) color — shared with the SubagentGroup block header. */
+  color: string;
+  marker: 'start' | 'mid' | 'end';
+}
+
+/** Per-row gutter descriptor. `dense>0` ⇒ collapse to one neutral spine + count
+ *  (≥4 background subagents overlap this row); otherwise render `cells`. */
+export interface GutterRow {
+  cells: GutterCell[];
+  dense: number;
+}
 
 /** True for a TOP-LEVEL user-side scaffold message: a real user_message
  *  (not a subagent prompt) whose caller classification is anything but a typed
@@ -478,6 +496,117 @@ export function annotateConcurrency(items: StreamItem[]): StreamItem[] {
     }
   }
   return items;
+}
+
+const MAX_LANES = 3;
+
+/** Representative wall-clock (ms) of a top-level row for gutter coverage tests. */
+function rowTimeMs(it: StreamItem): number | null {
+  const t = (iso: string) => {
+    const n = new Date(iso).getTime();
+    return Number.isNaN(n) ? null : n;
+  };
+  if (it.type === 'message') return t(it.timestamp);
+  if (it.type === 'activity-run') return it.events.length ? t(it.events[0].event.observed_at) : null;
+  if (it.type === 'thinking') return it.events.length ? t(it.events[0].timestamp) : null;
+  if (it.type === 'scaffold-group') return it.items.length ? t(it.items[0].timestamp) : null;
+  // group containers: earliest child event
+  const groups = it.type === 'sidechain-group' ? [it] : it.agentGroups;
+  let min = Infinity;
+  for (const g of groups)
+    for (const c of g.items) {
+      if (c.type === 'message') {
+        const x = t(c.timestamp);
+        if (x != null) min = Math.min(min, x);
+      } else if (c.type === 'activity-run') {
+        for (const ae of c.events) {
+          const x = t(ae.event.observed_at);
+          if (x != null) min = Math.min(min, x);
+        }
+      }
+    }
+  return Number.isFinite(min) ? min : null;
+}
+
+function sidechainSpan(g: SidechainGroup): { s: number; e: number } | null {
+  let s = Infinity;
+  let e = -Infinity;
+  const see = (iso: string) => {
+    const n = new Date(iso).getTime();
+    if (!Number.isNaN(n)) {
+      s = Math.min(s, n);
+      e = Math.max(e, n);
+    }
+  };
+  for (const it of g.items) {
+    if (it.type === 'message') see(it.timestamp);
+    else if (it.type === 'activity-run') for (const ae of it.events) see(ae.event.observed_at);
+    else if (it.type === 'thinking') for (const ev of it.events) see(ev.timestamp);
+  }
+  return e > s ? { s, e } : null;
+}
+
+/** Per-row background-subagent gutter. Lanes come ONLY from TOP-LEVEL
+ *  sidechain-groups (standalone background subagents); batch/workflow containers
+ *  have their own viz and contribute no lanes. Greedy interval partitioning caps
+ *  at 3 lanes (stable x per agent for its whole life); a row covered by an agent
+ *  that could not get a lane (≥4 simultaneous) is `dense`. Markers: the agent's
+ *  own block row = 'start', its last covered row = 'end', covered rows between =
+ *  'mid'. Returns a Map keyed by row item.id (rows with no coverage are absent).*/
+export function computeBgGutter(items: StreamItem[]): Map<string, GutterRow> {
+  type Ag = { agentId: string; blockId: string; s: number; e: number; lane: number; endRowId: string | null };
+  const agents: Ag[] = [];
+  for (const it of items) {
+    if (it.type !== 'sidechain-group' || !it.agentId) continue;
+    const sp = sidechainSpan(it);
+    if (sp) agents.push({ agentId: it.agentId, blockId: it.id, s: sp.s, e: sp.e, lane: -1, endRowId: null });
+  }
+  const out = new Map<string, GutterRow>();
+  if (!agents.length) return out;
+
+  // greedy lane assignment (stable per agent): sort by start, lowest free lane.
+  agents.sort((a, b) => a.s - b.s);
+  const laneFreeAt = new Array(MAX_LANES).fill(-Infinity);
+  for (const a of agents) {
+    for (let L = 0; L < MAX_LANES; L++) {
+      if (a.s >= laneFreeAt[L]) {
+        a.lane = L;
+        laneFreeAt[L] = a.e;
+        break;
+      }
+    }
+  }
+
+  // last covered row per agent (for the ✓ end marker): walk rows in order.
+  for (const a of agents) {
+    let last: string | null = null;
+    for (const it of items) {
+      const t = rowTimeMs(it);
+      if (t != null && t >= a.s && t <= a.e) last = it.id;
+    }
+    a.endRowId = last;
+  }
+
+  for (const it of items) {
+    const t = rowTimeMs(it);
+    if (t == null) continue;
+    const covering = agents.filter((a) => t >= a.s && t <= a.e);
+    if (!covering.length) continue;
+    const overflow = covering.some((a) => a.lane < 0);
+    if (overflow) {
+      out.set(it.id, { cells: [], dense: covering.length });
+      continue;
+    }
+    const cells: GutterCell[] = covering.map((a) => ({
+      lane: a.lane,
+      agentId: a.agentId,
+      color: agentColor(a.agentId),
+      marker: a.blockId === it.id ? 'start' : a.endRowId === it.id ? 'end' : 'mid',
+    }));
+    cells.sort((x, y) => x.lane - y.lane);
+    out.set(it.id, { cells, dense: 0 });
+  }
+  return out;
 }
 
 export function buildStreamModel(
