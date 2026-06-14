@@ -181,3 +181,29 @@ describe('SubagentGroup color identity (hairline gutter)', () => {
     expect(screen.getByTestId('subagent-swatch')).toBeInTheDocument();
   });
 });
+
+describe('SubagentGroup — status pill + end-card-aware conclusion', () => {
+  it('shows "실행 중" when no conclusion, "완료" when concluded', () => {
+    const { rerender } = render(
+      <SubagentGroup group={{ ...group, conclusion: null }} selectedEventId={null} onSelect={() => {}} findingEventIds={new Set()} />,
+    );
+    expect(screen.getByTestId('subagent-status')).toHaveTextContent('실행 중');
+    rerender(
+      <SubagentGroup group={{ ...group, conclusion: '결론' }} selectedEventId={null} onSelect={() => {}} findingEventIds={new Set()} />,
+    );
+    expect(screen.getByTestId('subagent-status')).toHaveTextContent('완료');
+  });
+
+  it('hides the inline conclusion when an end card carries it (hasEndCard)', () => {
+    const { rerender } = render(
+      <SubagentGroup group={{ ...group, conclusion: '핵심 결론' }} selectedEventId={null} onSelect={() => {}} findingEventIds={new Set()} />,
+    );
+    // no end card → conclusion stays on the start card
+    expect(screen.getByTestId('subagent-conclusion')).toHaveTextContent('핵심 결론');
+    rerender(
+      <SubagentGroup group={{ ...group, conclusion: '핵심 결론', hasEndCard: true }} selectedEventId={null} onSelect={() => {}} findingEventIds={new Set()} />,
+    );
+    // end card present → start card drops the (duplicated) conclusion line
+    expect(screen.queryByTestId('subagent-conclusion')).toBeNull();
+  });
+});
