@@ -4921,6 +4921,17 @@ vitest: 69 passed
         호출에 이어 <b>workflow-end 카드(✗ failed)</b>로 표면 — 실데이터 검증(<code>01KV2AQJ</code> →
         name <code>compact-gutter-design-panel</code>·failed·0 agents). ⓕ 시작 카드 선택: WorkflowGroup에
         "호출" 점프(→ Workflow tool_call) 추가 — 단 그 호출이 로드 윈도우에 있을 때만 노출(window-scoped).</li>
+      <li><strong>LIVE 세션 딥링크 회귀 수정 + end card 선택 하이라이트</strong>(후속): 활성(라이브)
+        세션에서 <code>?selected=</code>로 버퍼 밖 이벤트를 직접 열면 그 위치로 이동 못 하던 버그
+        (정적 세션은 정상) — 원인은 초기 tail 로드 + 라이브 tip follow가 SSE 백필로 윈도우를
+        tip으로 끌어, deep-link <code>loadAround</code>가 덮여 사라짐(StrictMode 이중 마운트로 tail
+        로드가 around와 경쟁). 수정: 마운트 시 <code>?selected=</code>가 있으면 (a) 초기 윈도우
+        로드를 <b>tail이 아니라 그 이벤트 around로</b>(<code>useSessionWindow.initialAround</code>,
+        tail↔around 경쟁 제거) (b) follow를 <b>detach 시작</b>(<code>useAutoscroll.initialFollow</code>
+        +<code>followingRef</code>)해 SSE가 tip으로 안 끌게. 실측: 라이브 00fae5d9에서 딥링크가 around-
+        윈도우 로드+detail 패널+카드 선택까지 도달. 흡수된 noti 타깃은 그 <code>subagent-end</code>/
+        <code>workflow-end</code> 카드를 선택 하이라이트(<code>data-selected</code>)로 표시. (잔여: scrollToIndex
+        정밀도는 동적 높이 drift로 카드가 뷰포트 중앙에서 약간 벗어날 수 있음.)</li>
       <li><strong>중복 종료 카드 머지 수정 + 색 가독성</strong>(후속, 사용자 지적): 한 서브에이전트
         종료가 <b>카드 2개</b>(span 파생 subagent-end + 흡수 안 된 task-notification)로 찍히던 버그 —
         원인은 noti↔서브에이전트 조인이 사이드카 <code>tool_use_id</code>에만 의존했는데 사이드카(디스패치
