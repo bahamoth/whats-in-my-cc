@@ -4829,6 +4829,61 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="bg-subagent-hairline-gutter-2026-06-14">
+    <h2>백그라운드 서브에이전트 헤어라인 거터 — 분절 없이 백그라운드 존재를 시간축에 (2026-06-14)</h2>
+    <p>
+      단독 <strong>백그라운드</strong> 서브에이전트(Agent 툴 <code>run_in_background</code>)는
+      그 실행 동안 main 메시지·툴콜이 끼어들어 스트림에서 조각조각 흩어진다(워크플로우는
+      컨테이너로 이미 잘 묶이므로 문제 아님 — 사용자 확인). 4안 설계→3인 심사 패널을
+      거쳐 채택한 "헤어라인 거터": <strong>시간축은 정직하게</strong>(main 아이템 순서
+      불변) 두고, 왼쪽 <strong>고정 ~14px 거터</strong>에 서브에이전트의 [시작→종료]
+      구간을 연속 색 레일로 세운다. 콘텐츠는 상단 병합 블록(접이식)이, 레일은 존재
+      구간만 담당. 용어는 Claude 어휘에 맞춰 "백그라운드"(not "동시").
+    </p>
+    <ul>
+      <li><strong>폭 일정(사용자 제약)</strong>: 동시 N개여도 거터는 14px 고정 —
+        에이전트마다 컬럼을 늘리지 않고, 1px 헤어라인을 3px 피치(x=2·6·10)로 묶는다
+        (≤3 레인). <code>computeBgGutter</code>가 greedy interval partitioning으로
+        에이전트당 레인을 평생 고정 할당(스크롤 깜빡임 없음); 레인을 못 받은(동시 ≥4)
+        에이전트가 덮는 행은 <strong>dense</strong>(중립 회색 1줄 + 개수)로 접는다.</li>
+      <li><strong>색 단일 출처</strong>: <code>webui/src/lib/colorHash.ts</code>의
+        <code>agentColor(agent_id)</code> = 결정론 hash→고정 8색 팔레트(신규 —
+        <code>--wimcc-lane-*</code>는 event kind 의미 팔레트라 재사용 금지). 헤어라인
+        레일·▢/✓ 노드·SubagentGroup 블록 보더/타입/칩/스와치가 같은 색을 쓴다.
+        <code>SubagentGroup</code>은 기존 violet 하드코딩(<code>--wimcc-lane-context</code>)을
+        인라인 <code>--agentColor</code> CSS 변수로 대체(이 리포에서 인라인 CSS var를
+        쓰는 첫 사례). 접근성 백스톱: 1~3px 레일은 색맹에 약하므로 권위 신원면은
+        블록 헤더(색 스와치 + agent_id 텍스트)다.</li>
+      <li><strong>가상화 안전</strong>: 거터는 row 높이를 바꾸지 않는 flex sibling
+        (<code>align-self:stretch</code>)으로 주입 — virtualizer는 높이만 측정에 쓰므로
+        prepend anchor·<code>shouldAdjustScrollPositionOnItemSizeChange</code> geometric
+        rule·<code>scrollPendingRef</code>가 전부 그대로다. 본문은 14px 우측 이동만.</li>
+      <li><strong>데이터 정직성(real-data anchoring)</strong>: 종료 ✓는
+        <code>subagent_completed</code> 이벤트가 <em>아니라</em> 구간(span) 끝
+        (이벤트 timestamp의 min/max) 기준 — 그 이벤트/<code>duration_ms</code>는 코드·실
+        fixture 어디에도 없다(검증됨). duration은 "파생" 표기. <code>agent_id</code>는
+        migration 0023으로 DTO에 있고 실 fixture 동결됨.</li>
+      <li><strong>알게 된 동작(window-scoped) </strong>: <code>computeBgGutter</code>는
+        <em>로드된</em> 최상위 sidechain-group 아이템에서 에이전트를 도출한다. 따라서
+        긴 에이전트의 블록이 로드 창 밖이고 그 사이 main만 로드된 구간(예: 딥링크로
+        span 한가운데로 점프)에선 레일이 안 보인다. 일반 스크롤은 블록+사이 main이
+        같은 창에 함께 로드되므로 정상. (개선 여지: 에이전트 span을 raw 이벤트에서
+        창 독립으로 도출 — 추후.)</li>
+    </ul>
+    <p>
+      <strong>검증</strong>: TDD red→green, webui 539 green(colorHash 4 ·
+      computeBgGutter 5 · BgGutter 4 · SubagentGroup color 2 + MessageCard 용어
+      갱신). <code>tsc --noEmit</code> clean. <strong>브라우저 smoke</strong>: 정적
+      세션 실데이터에서 확인 — <code>b4196731</code>에서 레일·▢ 시작·색 일관성(레일=
+      스와치=타입=칩=보더)·14px 폭·레이아웃 무회귀를 시각 확인; <code>1136040a</code>의
+      genuine 백그라운드 에이전트 <code>ab495b22</code>(Agent 툴 디스패치, 694s, main 7건
+      교차)에서 DOM 카운트 <code>rails:22 · starts:1 · ends:1</code>로 다중행 스팬 레일과
+      시작·종료 노드가 실데이터에 렌더됨을 확인. 완벽한 단일 프레임 스크린샷은 딥링크
+      scroll-to-index 드리프트로 못 담음(기능 결함 아님, 별개 사안). 승인 프로토타입:
+      <code>webui/public/wf-bg-hairline-proto.html</code>.
+    </p>
+  </section>
+
 </main>
 </div>
 </body></html>
