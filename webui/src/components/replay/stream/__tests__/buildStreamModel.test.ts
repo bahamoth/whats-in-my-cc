@@ -537,17 +537,20 @@ const scAsst = (ag: string, ev: string, text: string) =>
 const mainToolCall = (ev: string, tool: string) =>
   base({ event_id: ev, kind: 'tool_call', tool_name: tool, tool_use_id: ev, payload: { tool_name: tool, input: {} } });
 
-// ── Workflow fan-out helpers (2026-06-14): a Workflow tool_call leaves only
-//    turn_id on its spawned sidechain agents (no sidecar, no per-agent call). ──
-const wfCall = (mid: string, ev: string, tu: string, turn: string, name: string) =>
+// ── Workflow fan-out helpers (2026-06-14): the Workflow tool_call returns a run
+//    id in its tool_result; spawned subagents carry `workflow_run_id` (from the
+//    file path), the deterministic group key. turn_id drifts across the run so it
+//    is NOT used — agents may carry different turn_ids yet one run_id. ──
+const wfCall = (mid: string, ev: string, tu: string, name: string, runId: string) => [
   base({
-    event_id: ev, message_id: mid, turn_id: turn, kind: 'tool_call', tool_name: 'Workflow', tool_use_id: tu,
+    event_id: ev, message_id: mid, kind: 'tool_call', tool_name: 'Workflow', tool_use_id: tu,
     payload: { tool_name: 'Workflow', input: { script: `export const meta = { name: '${name}' }` } },
-  });
-const wfUser = (ag: string, ev: string, turn: string) =>
-  base({ event_id: ev, kind: 'user_message', is_sidechain: true, agent_id: ag, turn_id: turn, payload: { content: 'prompt' } });
-const wfAsst = (ag: string, ev: string, turn: string, text: string) =>
-  base({ event_id: ev, kind: 'assistant_message', is_sidechain: true, agent_id: ag, turn_id: turn, payload: { text } });
+  }),
+  // The Workflow tool returns immediately with the run id in its result text.
+  base({ event_id: `${ev}-r`, kind: 'tool_result', tool_use_id: tu, payload: { tool_result: { content: `Run ID: ${runId}` } } }),
+];
+const wfAsst = (ag: string, ev: string, runId: string, text: string, turn?: string) =>
+  base({ event_id: ev, kind: 'assistant_message', is_sidechain: true, agent_id: ag, workflow_run_id: runId, turn_id: turn ?? null, payload: { text } });
 
 /** All sidechain-groups regardless of whether they sit inside a batch/workflow group. */
 function collectSidechainGroups(items: any[]): any[] {
@@ -559,15 +562,13 @@ function collectSidechainGroups(items: any[]): any[] {
   return out;
 }
 
-describe('buildStreamModel — workflow grouping (turn_id, 2026-06-14)', () => {
-  it('Workflow tool_call + 같은 turn 사이드체인 에이전트 → WorkflowGroup', () => {
+describe('buildStreamModel — workflow grouping (workflow_run_id, 2026-06-14)', () => {
+  it('같은 workflow_run_id 사이드체인 → WorkflowGroup; 이름은 tool_result run id로 연결', () => {
     const evs = [
       asstMain('m1', '워크플로우 실행'),
-      wfCall('m1', 'wfc', 'tu-wf', 't1', 'review-changes'),
-      wfUser('A', 'au', 't1'),
-      wfUser('B', 'bu', 't1'),
-      wfAsst('A', 'a1', 't1', 'A 결론'),
-      wfAsst('B', 'b1', 't1', 'B 결론'),
+      ...wfCall('m1', 'wfc', 'tu-wf', 'review-changes', 'wf_x'),
+      wfAsst('A', 'a1', 'wf_x', 'A 결론'),
+      wfAsst('B', 'b1', 'wf_x', 'B 결론'),
       asstMain('m2', '워크플로우 종합 X'),
     ];
     const items = buildStreamModel(evs);
@@ -579,7 +580,25 @@ describe('buildStreamModel — workflow grouping (turn_id, 2026-06-14)', () => {
     expect(wf.synthesis).toContain('종합');
     expect(wf.settled).toBe(true);
   });
-  it('사이드카 있는 Agent-배치는 여전히 BatchGroup (Workflow로 흡수 안 됨)', () => {
+  it('파이프라인: turn_id가 달라도 같은 run_id면 한 WorkflowGroup (이전 분리 버그 회귀가드)', () => {
+    const evs = [
+      asstMain('m1', 'wf'),
+      wfAsst('A', 'a1', 'wf_y', 'A끝', 't1'),
+      wfAsst('B', 'b1', 'wf_y', 'B끝', 't2'),
+    ];
+    const items = buildStreamModel(evs);
+    const wf = items.find((i: any) => i.type === 'workflow-group') as any;
+    expect(wf).toBeTruthy();
+    expect(wf.agentGroups.map((g: any) => g.agentId).sort()).toEqual(['A', 'B']);
+  });
+  it('run id 매칭 안 돼도(name null) run_id로 묶인다', () => {
+    const evs = [asstMain('m1', 'wf'), wfAsst('A', 'a1', 'wf_z', 'A끝'), wfAsst('B', 'b1', 'wf_z', 'B끝')];
+    const items = buildStreamModel(evs);
+    const wf = items.find((i: any) => i.type === 'workflow-group') as any;
+    expect(wf.agentGroups).toHaveLength(2);
+    expect(wf.name).toBeNull();
+  });
+  it('사이드카 있는 Agent-배치는 여전히 BatchGroup (workflow로 흡수 안 됨)', () => {
     const evs = [
       asstMain('m1', '병렬'),
       taskCall('m1', 'tcA', 'tuA'),
@@ -592,6 +611,43 @@ describe('buildStreamModel — workflow grouping (turn_id, 2026-06-14)', () => {
     const items = buildStreamModel(evs);
     expect(items.some((i: any) => i.type === 'batch-group')).toBe(true);
     expect(items.some((i: any) => i.type === 'workflow-group')).toBe(false);
+  });
+});
+
+describe('buildStreamModel — concurrent fragment merge (2026-06-14)', () => {
+  it('백그라운드 사이드체인이 main에 끊겨도 한 SidechainGroup으로 병합(디스패치 앵커)', () => {
+    const evs = [scAsst('A', 'a1', '첫 단계'), asstMain('m1', 'main 끼어듦'), scAsst('A', 'a2', '둘째 단계')];
+    const items = buildStreamModel(evs);
+    const subs = collectSidechainGroups(items);
+    expect(subs).toHaveLength(1);
+    const texts = subs[0].items
+      .filter((i: any) => i.type === 'message' && i.role === 'assistant')
+      .map((m: any) => m.text);
+    expect(texts).toEqual(['첫 단계', '둘째 단계']); // 순차 순서 보존
+    expect(subs[0].conclusion).toBe('둘째 단계');
+    expect(items.some((i: any) => i.type === 'message')).toBe(true); // main은 블록 뒤에 남음
+  });
+  it('백그라운드 워크플로우가 main에 끊겨도 한 WorkflowGroup으로 병합', () => {
+    const evs = [
+      ...wfCall('m0', 'wfc', 'tu', 'review', 'wf_p'),
+      wfAsst('A', 'a1', 'wf_p', 'A1'),
+      asstMain('mm', 'main 끼어듦'),
+      wfAsst('A', 'a2', 'wf_p', 'A2'),
+      wfAsst('B', 'b1', 'wf_p', 'B1'),
+    ];
+    const items = buildStreamModel(evs);
+    const wfs = items.filter((i: any) => i.type === 'workflow-group') as any[];
+    expect(wfs).toHaveLength(1);
+    expect(wfs[0].agentGroups.map((g: any) => g.agentId).sort()).toEqual(['A', 'B']);
+    const a = wfs[0].agentGroups.find((g: any) => g.agentId === 'A');
+    expect(
+      a.items.filter((i: any) => i.type === 'message' && i.role === 'assistant').map((m: any) => m.text),
+    ).toEqual(['A1', 'A2']); // A의 두 조각이 한 자식으로
+  });
+  it('다른 에이전트는 안 합쳐진다', () => {
+    const evs = [scAsst('A', 'a1', 'A'), asstMain('m1', 'x'), scAsst('C', 'c1', 'C')];
+    const items = buildStreamModel(evs);
+    expect(collectSidechainGroups(items).map((g: any) => g.agentId).sort()).toEqual(['A', 'C']);
   });
 });
 
