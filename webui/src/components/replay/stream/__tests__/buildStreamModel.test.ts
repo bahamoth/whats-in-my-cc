@@ -591,6 +591,27 @@ describe('buildStreamModel — workflow grouping (workflow_run_id, 2026-06-14)',
     expect(wf).toBeTruthy();
     expect(wf.agentGroups.map((g: any) => g.agentId).sort()).toEqual(['A', 'B']);
   });
+  it('워크플로우 에이전트가 사이드카(toolUseId 없음)+run_id면 WorkflowGroup (실데이터 형태)', () => {
+    // 653ea169 워크플로우 에이전트는 agentType="general-purpose" 사이드카(toolUseId 없음) +
+    // workflow_run_id를 동시에 갖는다. 사이드카 경로가 가로채면 안 되고 run_id로 묶여야 한다.
+    const scMeta = (ag: string, run: string) =>
+      base({
+        event_id: `meta-${ag}`, kind: 'attachment_meta', subkind: 'subagent_meta',
+        is_sidechain: true, agent_id: ag, workflow_run_id: run,
+        payload: { agentType: 'general-purpose' },
+      });
+    const evs = [
+      scMeta('A', 'wf_q'),
+      scMeta('B', 'wf_q'),
+      wfAsst('A', 'a1', 'wf_q', 'A끝'),
+      wfAsst('B', 'b1', 'wf_q', 'B끝'),
+    ];
+    const items = buildStreamModel(evs);
+    const wfs = items.filter((i: any) => i.type === 'workflow-group') as any[];
+    expect(wfs).toHaveLength(1);
+    expect(wfs[0].agentGroups.map((g: any) => g.agentId).sort()).toEqual(['A', 'B']);
+    expect(items.some((i: any) => i.type === 'sidechain-group')).toBe(false); // solo로 안 빠짐
+  });
   it('run id 매칭 안 돼도(name null) run_id로 묶인다', () => {
     const evs = [asstMain('m1', 'wf'), wfAsst('A', 'a1', 'wf_z', 'A끝'), wfAsst('B', 'b1', 'wf_z', 'B끝')];
     const items = buildStreamModel(evs);
