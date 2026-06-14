@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>인터리브/분절 — main 메시지·툴콜이 끼어들 때</title>
+<style>
+  :root{
+    --bg:#0b0d12;--s1:#11141b;--s2:#161a23;--s3:#1b202a;--border:#1d212c;--bstrong:#2a3040;
+    --fg:#e6e8ee;--muted:#aab0bd;--subtle:#6a7180;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --human:#4f8cff;--success:#41c285;--warn:#f0b429;
+    --c1:#7da7ff; /* aa1844 (Task3) 인스턴스 색 */
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);font-size:13px;line-height:1.5;padding:30px 26px 80px}
+  .wrap{max-width:920px;margin:0 auto}
+  .eyebrow{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--c1);font-weight:600}
+  h1{font-size:19px;margin:6px 0 6px}.lede{color:var(--muted);font-size:12px;max-width:840px}
+  .lede code{background:var(--s2);padding:1px 5px;border-radius:4px;color:var(--fg)}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
+  @media(max-width:860px){.cols{grid-template-columns:1fr}}
+  .col h2{font-size:13px;margin:0 0 3px;display:flex;gap:8px;align-items:center}
+  .tag{font-size:9px;font-weight:700;border-radius:4px;padding:2px 7px;color:var(--bg)}.tag.bad{background:var(--warn)}.tag.good{background:var(--success)}
+  .cn{color:var(--subtle);font-size:11px;margin:0 0 10px;min-height:28px}
+  .stream{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:11px 12px 13px}
+
+  /* subagent block (instance color c1) */
+  .sub{margin:5px 0;padding-left:9px;border-left:3px solid var(--c1)}
+  .sh{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600}
+  .stype{font-size:9px;color:var(--c1);background:var(--s3);border:1px solid var(--c1);border-radius:4px;padding:1px 5px}
+  .frag{font-size:9px;font-weight:700;color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:0 5px;margin-left:auto}
+  .smeta{margin-left:auto;font-size:10px;color:var(--subtle);font-weight:400}
+  .concl{margin:1px 0 0 2px;font-size:10.5px;color:var(--success);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .step{font-size:10.5px;color:var(--muted);margin:1px 0 1px 4px;display:flex;gap:6px}
+  .step .k{flex:none;width:48px;color:var(--subtle);font-size:9px}.step.t .k{color:var(--success)}
+
+  /* main message / tool run, with concurrent dot badge */
+  .main{margin:4px 0;padding:5px 9px;border-radius:6px;background:var(--s2);border-left:2px solid var(--human)}
+  .tool{margin:4px 0;padding:5px 9px;border-radius:6px;background:var(--s3);border-left:2px solid var(--subtle)}
+  .row{display:flex;align-items:center;gap:7px;font-size:10px}
+  .who{color:var(--human);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .twho{color:var(--muted);font-weight:600}
+  .bdg{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:9px;color:var(--muted);background:var(--bg);border:1px solid var(--bstrong);border-radius:5px;padding:1px 6px}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;background:var(--c1)}
+  .tx{font-size:11px;color:var(--fg);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .foot{margin-top:24px;border-top:1px solid var(--border);padding-top:12px;color:var(--subtle);font-size:11px}.foot b{color:var(--fg)}
+</style></head>
+<body><div class="wrap">
+  <div class="eyebrow">wimcc · replay · 인터리브 / 분절</div>
+  <h1>main 메시지·툴콜이 중간에 끼어들 때</h1>
+  <p class="lede">실데이터 <code>aa1844</code>(Task 3, general-purpose, 색=파랑) 백그라운드 실행 중 main이 Task 1을 진행 — <b>메시지 + 툴콜</b>이 끼어든다. 왼쪽 현재(분절), 오른쪽 제안(병합+색+동시 점).</p>
+
+  <div class="cols">
+    <!-- BEFORE -->
+    <div class="col">
+      <h2><span class="tag bad">현재</span> 분절</h2>
+      <p class="cn">main 메시지마다 같은 서브에이전트(파랑)가 끊김. 사이 툴콜·메시지와 뒤섞여 흐름을 못 읽음.</p>
+      <div class="stream">
+        <div class="sub"><div class="sh"><span class="stype">general-purpose</span><span class="frag">조각 1</span></div><div class="concl">↳ 계획 읽기…</div></div>
+        <div class="main"><div class="row"><span class="who">Claude · main</span></div><div class="tx">Task 3 running in background. Now Task 1 …</div></div>
+        <div class="sub"><div class="sh"><span class="stype">general-purpose</span><span class="frag">조각 2</span></div><div class="concl">↳ SidechainGroup 파악…</div></div>
+        <div class="tool"><div class="row"><span class="twho">⚒ Read ×2 · Edit</span></div></div>
+        <div class="sub"><div class="sh"><span class="stype">general-purpose</span><span class="frag">조각 3</span></div><div class="concl">↳ RED confirmed…</div></div>
+        <div class="main"><div class="row"><span class="who">Claude · main</span></div><div class="tx">Helpers confirmed. Starting Task 1 …</div></div>
+        <div class="sub"><div class="sh"><span class="stype">general-purpose</span><span class="frag">조각 4</span></div><div class="concl">↳ GREEN confirmed. 4 tests pass</div></div>
+      </div>
+    </div>
+
+    <!-- AFTER -->
+    <div class="col">
+      <h2><span class="tag good">제안</span> 병합 + 색 + 동시 점</h2>
+      <p class="cn">파랑 블록 하나로 코herent. 끼어든 main 메시지·툴콜은 뒤로 흐르며 <b>파랑 점 "동시 1"</b>로 그 서브에이전트가 도는 중임을 표시.</p>
+      <div class="stream">
+        <div class="sub">
+          <div class="sh"><span class="stype">general-purpose</span><span class="sname">Task 3 workflowStats</span><span class="smeta">✓ 1m19s · ⟂ main 4건 동시</span></div>
+          <div class="concl">결론 · GREEN confirmed. All 4 tests pass, 0 failures.</div>
+          <div class="step"><span class="k">prompt</span>계획 읽기 → SidechainGroup 파악</div>
+          <div class="step t"><span class="k">Write·Bash</span>RED → Write → esbuild fix → GREEN</div>
+        </div>
+        <div class="main"><div class="row"><span class="who">Claude · main</span><span class="bdg">⟂ 서브에이전트 동시 1 <span class="dot"></span></span></div><div class="tx">Task 3 running in background. Now Task 1 …</div></div>
+        <div class="tool"><div class="row"><span class="twho">⚒ Read ×2 · Edit</span><span class="bdg">⟂ 서브에이전트 동시 1 <span class="dot"></span></span></div></div>
+        <div class="main"><div class="row"><span class="who">Claude · main</span><span class="bdg">⟂ 서브에이전트 동시 1 <span class="dot"></span></span></div><div class="tx">Helpers confirmed. Starting Task 1 …</div></div>
+        <div class="main"><div class="row"><span class="who">Claude · main</span><span class="bdg">⟂ 서브에이전트 동시 1 <span class="dot"></span></span></div><div class="tx">Now confirm it fails (red):</div></div>
+      </div>
+    </div>
+  </div>
+
+  <h2 style="font-size:13px;margin:22px 0 8px">④ 배지 스케일링 — 동시 30개면?</h2>
+  <div class="stream">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="main"><div class="row"><span class="who">Claude · main</span><span class="bdg">⟂ 서브에이전트 동시 2 <span class="dot"></span><span class="dot" style="background:#41c285"></span></span></div><div class="tx">소수(≤6): 점으로 개별 색 표시 — 누가 도는지 즉시 매칭.</div></div>
+      <div class="main"><div class="row"><span class="who">Claude · main</span><span class="bdg">⟂ 서브에이전트 동시 6 <span class="dot"></span><span class="dot" style="background:#41c285"></span><span class="dot" style="background:#f0b429"></span><span class="dot" style="background:#d97aff"></span><span class="dot" style="background:#ff8a4c"></span><span class="dot" style="background:#2bd0d0"></span></span></div><div class="tx">경계(6): 아직 점이 읽힌다.</div></div>
+      <div class="main"><div class="row"><span class="who">Claude · main</span><span class="bdg" style="color:var(--fg)">⟂ 서브에이전트 <b>30</b>개 동시 <span style="color:var(--subtle);font-weight:400">→ 레인 뷰</span></span></div><div class="tx">대량(>6): <b>점 없이 숫자만.</b> 30개 점은 난장판 — 개별 색·정체는 레인/waterfall에서 본다(배지는 "몇 개 동시"만).</div></div>
+      <div class="main"><div class="row"><span class="who">Claude · main</span><span class="bdg">⟂ 동시 30 <span class="dot"></span><span class="dot" style="background:#41c285"></span><span class="dot" style="background:#f0b429"></span><span style="color:var(--subtle);font-size:9px">+27</span></span></div><div class="tx">절충안: 대표 점 3 + "+27"(원하면). 단 "대표 3개"가 임의라 다소 모호 — 내 추천은 위(숫자만).</div></div>
+    </div>
+    <div style="margin-top:8px;color:var(--subtle);font-size:11px">규칙: <b>점은 N≤6에서만</b>, 그 이상은 숫자만. 색으로 개별 추적은 <b>레인 뷰</b>(focus+context·hue 해시)가 담당.</div>
+  </div>
+
+  <div class="foot">
+    핵심: 파랑(=aa1844) 색이 블록↔동시 점에서 일관 → 어느 서브에이전트가 도는 중인지 색으로 즉시 매칭(소수일 때).<br>
+    구분(정직): <b>main 메시지</b>는 실제로 사이드체인을 flush해 분절 → merge가 한 블록으로 복원. <b>main 툴콜</b>은 설계상 분절 안 시킴(버퍼 유지) — 하지만 "그 동안 도는 중"이므로 동일하게 <b>동시 점</b> 배지를 붙인다(현재 마커는 메시지에만 → 툴콜 run에도 확장 필요).
+  </div>
+</div></body></html>

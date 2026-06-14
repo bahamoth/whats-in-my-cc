@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>레일 수정 — 클립 + 카드 연결</title>
+<style>
+  :root{
+    --bg:#0b0d12;--s1:#11141b;--s2:#161a23;--s3:#1b202a;--border:#1d212c;--bstrong:#2a3040;
+    --fg:#e6e8ee;--muted:#aab0bd;--subtle:#6a7180;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --human:#4f8cff;--success:#41c285;--warn:#f0b429;--a:#7da7ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);font-size:13px;line-height:1.5;padding:28px 26px 90px}
+  .wrap{max-width:1000px;margin:0 auto}
+  .eyebrow{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--a);font-weight:600}
+  h1{font-size:20px;margin:6px 0 8px}
+  .lede{color:var(--muted);font-size:12px;max-width:900px}.lede b{color:var(--fg)}.lede code{background:var(--s2);padding:1px 5px;border-radius:4px;color:var(--fg)}
+  h2{font-size:13px;margin:24px 0 6px;display:flex;gap:8px;align-items:center}
+  .tag{font-size:9px;font-weight:700;border-radius:4px;padding:2px 7px;color:var(--bg)}.tag.bad{background:var(--warn)}.tag.good{background:var(--success)}
+  .cn{color:var(--subtle);font-size:11px;margin:2px 0 10px}
+  .stream{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:12px 14px 14px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:880px){.cols{grid-template-columns:1fr}}
+
+  /* gutter는 좁고, 레일은 거터의 '오른쪽 끝'(카드에 붙는 쪽)에 둔다 */
+  .trow{display:grid;grid-template-columns:18px 1fr;column-gap:7px}
+  .gut{position:relative}
+  /* 레일 x = 거터 오른쪽 끝(=카드 왼쪽에 인접) */
+  .RAILX{right:1px}
+
+  /* main 카드 */
+  .main{padding:5px 9px;border-radius:6px;background:var(--s2);border-left:2px solid var(--human)}
+  .who{color:var(--human);font-weight:600;font-size:10px;text-transform:uppercase}
+  .tx{font-size:10.5px;color:var(--fg);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* 카드 */
+  .swatch{flex:none;width:10px;height:10px;border-radius:3px;background:var(--a)}
+  .startcard{border:1px solid color-mix(in srgb,var(--a) 35%,var(--border));border-left:3px solid var(--a);background:color-mix(in srgb,var(--a) 12%,var(--s2));border-radius:7px;padding:7px 10px}
+  .sc-l1{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600}
+  .sc-type{color:var(--a)}.sc-id{font-size:9.5px;color:var(--subtle);font-weight:400}
+  .pill{margin-left:auto;font-size:9px;font-weight:700;border-radius:10px;padding:1px 8px}
+  .pill.run{color:var(--warn);border:1px solid var(--warn)}
+  .sc-task{margin-top:3px;font-size:11px;color:var(--fg)}.sc-task b{color:var(--a);font-weight:700;font-size:9px;margin-right:5px}
+  .sc-when{margin-top:3px;font-size:9.5px;color:var(--subtle);display:flex;gap:10px}
+  .endcard{border:1px solid color-mix(in srgb,var(--success) 30%,var(--border));border-left:3px solid var(--success);background:color-mix(in srgb,var(--success) 9%,var(--s2));border-radius:7px;padding:7px 10px}
+  .ec-l1{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:var(--success)}
+  .ec-stats{margin-left:auto;display:flex;gap:9px;font-weight:400;font-size:10px;color:var(--subtle)}
+  .ec-concl{margin-top:3px;font-size:11px;color:var(--fg)}.ec-concl b{color:var(--success);font-weight:700;font-size:9px;margin-right:5px}
+
+  /* ===== BEFORE: 행 전체 높이 레일 → 노드 넘침 + 카드 미연결 ===== */
+  .bHair{position:absolute;right:1px;top:0;bottom:0;width:2px;background:var(--a)}
+  .bStart{position:absolute;right:-2px;top:9px;width:8px;height:8px;border-radius:2px;background:var(--bg);box-shadow:0 0 0 1.6px var(--a)}
+  .bEnd{position:absolute;right:-2px;bottom:9px;width:8px;height:8px;border-radius:50%;background:var(--a);box-shadow:0 0 0 1.6px var(--bg)}
+
+  /* ===== AFTER: 레일 클립([노드..노드]) + 노드가 카드 세로중앙에 붙음 ===== */
+  /* 시작행: 레일은 노드(=카드 세로중앙)에서 아래로만. 노드 위엔 선 없음. */
+  .aHairDown{position:absolute;right:1px;top:50%;bottom:0;width:2px;background:linear-gradient(var(--a),color-mix(in srgb,var(--a) 70%,var(--success)))}
+  /* mid행: 전체 높이 */
+  .aHairFull{position:absolute;right:1px;top:0;bottom:0;width:2px;background:color-mix(in srgb,var(--a) 80%,var(--success))}
+  /* 끝행: 레일은 위에서 노드(카드 세로중앙)까지만. 노드 아래엔 선 없음. */
+  .aHairUp{position:absolute;right:1px;top:0;height:50%;width:2px;background:color-mix(in srgb,var(--a) 55%,var(--success))}
+  /* 노드: 카드 세로중앙에 정렬, 카드 쪽으로 가로 연결선 */
+  .aStart{position:absolute;right:-3px;top:50%;transform:translateY(-50%);width:13px;height:13px;border-radius:3px;background:var(--a);display:flex;align-items:center;justify-content:center;color:var(--bg);font-size:8px;font-weight:900;box-shadow:0 0 0 2px var(--bg)}
+  .aEnd{position:absolute;right:-3px;top:50%;transform:translateY(-50%);width:13px;height:13px;border-radius:50%;background:var(--success);display:flex;align-items:center;justify-content:center;color:var(--bg);font-size:8px;font-weight:900;box-shadow:0 0 0 2px var(--bg)}
+  /* 노드→카드 연결 짧은 가로 elbow (카드 세로중앙) */
+  .aConn{position:absolute;right:-7px;top:50%;transform:translateY(-50%);width:8px;height:2px;background:var(--a)}
+  .aConnE{position:absolute;right:-7px;top:50%;transform:translateY(-50%);width:8px;height:2px;background:var(--success)}
+
+  .note{margin-top:10px;color:var(--subtle);font-size:11px}.note b{color:var(--fg)}
+  .foot{margin-top:26px;border-top:1px solid var(--border);padding-top:14px;color:var(--subtle);font-size:11px}.foot b{color:var(--fg)}.foot code{background:var(--s2);padding:1px 4px;border-radius:3px}
+</style></head>
+<body><div class="wrap">
+  <div class="eyebrow">wimcc · replay · 레일 수정</div>
+  <h1>레일을 노드에서 클립 + 카드에 연결</h1>
+  <p class="lede">
+    지적 반영: ① 레일이 <b>▶/✓ 아이콘을 넘쳐</b> 흐르던 건 행마다 레일을 <b>행 전체 높이</b>로 칠했기 때문 →
+    시작 행은 <b>노드부터 아래로만</b>, 끝 행은 <b>위에서 노드까지만</b> 그려 클립. ② 노드를 <b>카드 상단 라인에 정렬 + 짧은 가로 연결선</b>으로
+    카드에 붙여, 레일이 <b>시작 카드에서 나와 끝 카드로 들어가는</b> 하나의 흐름으로 읽힌다.
+  </p>
+
+  <div class="cols">
+    <!-- BEFORE -->
+    <div>
+      <h2><span class="tag bad">현재</span> 행 전체 레일 → 노드 넘침 · 카드 미연결</h2>
+      <p class="cn">레일이 ▶ 위, ✓ 아래로 삐져나옴(잉여). 노드는 카드와 떨어져 떠 있음.</p>
+      <div class="stream">
+        <div class="trow"><div class="gut"><div class="bHair"></div><div class="bStart"></div></div>
+          <div class="startcard"><div class="sc-l1"><span class="swatch"></span><span class="sc-type">general-purpose</span><span class="sc-id">a2f768</span><span class="pill run">● 실행 중</span></div><div class="sc-task"><b>요청</b>Plan 6 resolve_outcome 검증 보강</div></div>
+        </div>
+        <div class="trow"><div class="gut"><div class="bHair"></div></div><div class="main"><span class="who">Claude · main</span><div class="tx">그 동안 main이 Task 1 진행…</div></div></div>
+        <div class="trow"><div class="gut"><div class="bHair"></div></div><div class="main"><span class="who">Claude · main</span><div class="tx">⚒ Read ×2 · Edit …</div></div></div>
+        <div class="trow"><div class="gut"><div class="bHair"></div><div class="bEnd"></div></div>
+          <div class="endcard"><div class="ec-l1"><span>✓ 종료 18:51:06</span><span class="ec-stats"><span>⏱ 33m 4s</span><span>💬 63</span></span></div><div class="ec-concl"><b>결론</b>Unknown 반환 — tool_failure 미발화.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AFTER -->
+    <div>
+      <h2><span class="tag good">수정</span> 노드에서 클립 · 카드에 연결</h2>
+      <p class="cn">레일은 ▶에서 시작 ✓에서 끝(넘침 0). 노드가 카드 상단에 가로선으로 연결 — 카드에서 나와 카드로 들어감.</p>
+      <div class="stream">
+        <div class="trow"><div class="gut"><div class="aHairDown"></div><div class="aStart">▶</div><div class="aConn"></div></div>
+          <div class="startcard"><div class="sc-l1"><span class="swatch"></span><span class="sc-type">general-purpose</span><span class="sc-id">a2f768</span><span class="pill run">● 실행 중</span></div><div class="sc-task"><b>요청</b>Plan 6 resolve_outcome 검증 보강</div></div>
+        </div>
+        <div class="trow"><div class="gut"><div class="aHairFull"></div></div><div class="main"><span class="who">Claude · main</span><div class="tx">그 동안 main이 Task 1 진행…</div></div></div>
+        <div class="trow"><div class="gut"><div class="aHairFull"></div></div><div class="main"><span class="who">Claude · main</span><div class="tx">⚒ Read ×2 · Edit …</div></div></div>
+        <div class="trow"><div class="gut"><div class="aHairUp"></div><div class="aEnd">✓</div><div class="aConnE"></div></div>
+          <div class="endcard"><div class="ec-l1"><span>✓ 종료 18:51:06</span><span class="ec-stats"><span>⏱ 33m 4s</span><span>💬 63</span></span></div><div class="ec-concl"><b>결론</b>Unknown 반환 — tool_failure 미발화.</div></div>
+        </div>
+      </div>
+      <div class="note">레일: 시작 노드(파랑 ▶)→끝 노드(초록 ✓)만, 그 사이 main 2건을 가로지름. 위·아래 잉여선 없음.</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    구현: <code>BgGutter</code>에서 <b>marker별 레일 높이</b>를 분기 — <code>start</code>=노드↓(top:node), <code>end</code>=↑노드(height:node), <code>mid</code>=full.
+    노드는 카드 상단 라인(첫 줄 중앙)에 정렬하고 카드로 가는 2px 가로 연결선 추가. 레일 x는 거터 오른쪽 끝(카드 인접)으로.
+    트레이드오프: 시작/끝 행은 부분 레일이라 연속성은 노드가 잇는다(노드가 시각적 조인트). 단독 행(시작=끝)일 땐 ▶만(아주 짧은 stub).
+  </div>
+</div></body></html>

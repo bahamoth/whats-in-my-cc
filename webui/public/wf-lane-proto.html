@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>서브에이전트 색 일관성 — 블록·배지·레인</title>
+<style>
+  :root{
+    --bg:#0b0d12;--s1:#11141b;--s2:#161a23;--s3:#1b202a;--border:#1d212c;--bstrong:#2a3040;
+    --fg:#e6e8ee;--muted:#aab0bd;--subtle:#6a7180;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --human:#4f8cff;--wf:#ff8a4c;--success:#41c285;
+    /* 서브에이전트 색 = agent_id 해시 → 안정 색(5~10 순환). 한 번 정해 어디서나 동일. */
+    --p0:#7da7ff;--p1:#41c285;--p2:#f0b429;--p3:#d97aff;--p4:#ff8a4c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--mono);font-size:13px;line-height:1.5;padding:30px 28px 80px}
+  .wrap{max-width:980px;margin:0 auto}
+  .eyebrow{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--wf);font-weight:600}
+  h1{font-size:19px;margin:6px 0 6px}
+  .lede{color:var(--muted);font-size:12px;max-width:840px}
+  .lede code{background:var(--s2);padding:1px 5px;border-radius:4px;color:var(--fg)}
+  h2{font-size:13px;margin:22px 0 8px}
+  .stream{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:14px 16px 16px}
+
+  /* workflow container (type=orange) holding children colored per-instance */
+  .wfhead{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--wf);margin-bottom:6px}
+  .wfchip{border:1px solid var(--wf);border-radius:5px;padding:1px 7px;font-size:10px}
+
+  /* subagent block — rail + k/N chip use the INSTANCE color (was fixed violet) */
+  .sub{margin:5px 0 5px 8px;padding-left:10px;border-left:3px solid var(--c)}
+  .subhead{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600}
+  .kn{flex:none;font-size:9px;font-weight:700;color:var(--bg);background:var(--c);border-radius:4px;padding:1px 5px;font-variant-numeric:tabular-nums}
+  .stype{font-size:10px;font-weight:600;color:var(--c);background:var(--s3);border:1px solid var(--c);border-radius:4px;padding:1px 6px}
+  .sname{color:var(--fg)}
+  .smeta{margin-left:auto;color:var(--subtle);font-weight:400;font-size:10px}
+  .concl{margin:1px 0 0 4px;font-size:11px;color:var(--success);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* main badge with colored dots (same colors) */
+  .main{margin:6px 0;padding:6px 10px;border-radius:7px;background:var(--s2);border-left:2px solid var(--human)}
+  .mhead{display:flex;align-items:center;gap:8px;font-size:10px}
+  .who{color:var(--human);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .badge{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);background:var(--s3);border:1px solid var(--bstrong);border-radius:5px;padding:2px 7px}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .mtx{font-size:11.5px;color:var(--fg);margin-top:2px}
+
+  /* lane timeline (same colors) */
+  .axis{position:relative;height:14px;margin:8px 0 6px 150px;border-bottom:1px dashed var(--bstrong)}
+  .tick{position:absolute;top:0;transform:translateX(-50%);font-size:9px;color:var(--subtle)}
+  .lane{display:flex;align-items:center;height:22px;margin:3px 0}
+  .lname{flex:none;width:144px;padding-right:6px;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);overflow:hidden;white-space:nowrap}
+  .track{position:relative;flex:1 1 auto;height:100%}
+  .bar{position:absolute;top:50%;transform:translateY(-50%);height:12px;border-radius:3px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.3);background:var(--c)}
+  .cap{position:absolute;left:calc(100% + 5px);top:50%;transform:translateY(-50%);font-size:9px;color:var(--subtle);font-variant-numeric:tabular-nums}
+  .note{margin-top:8px;color:var(--subtle);font-size:11px}
+  .foot{margin-top:24px;border-top:1px solid var(--border);padding-top:12px;color:var(--subtle);font-size:11px}
+  .foot b{color:var(--fg)}
+</style></head>
+<body><div class="wrap">
+  <div class="eyebrow">wimcc · replay · 서브에이전트 색 일관성</div>
+  <h1>한 서브에이전트 = 한 색 — 블록·배지·레인 전부 동일</h1>
+  <p class="lede">실데이터 <code>witmcc-ux-investigate</code> 5개. 색은 <code>agent_id</code> 해시로 한 번 정하고 <b>스트림 블록 레일 + k/N 칩 + main 배지 점 + 레인 막대</b>에 모두 같은 값을 쓴다. 같은 색을 세로로 따라가면 한 에이전트의 흐름(블록↔배지↔레인)이 한눈에 이어진다. (타입은 색이 아니라 "Subagent" 칩·들여쓰기로 표현.)</p>
+
+  <h2>① 스트림 — 자식 블록도 인스턴스 색</h2>
+  <div class="stream">
+    <div class="wfhead"><span class="wfchip">워크플로우</span> witmcc-ux-investigate · 5 agents · ✓5/5 · 38m <span style="color:var(--subtle);font-weight:400;font-size:10px">(컨테이너=타입 orange, 자식=인스턴스 색)</span></div>
+    <div class="sub" style="--c:var(--p0)"><div class="subhead"><span class="kn">1/5</span><span class="stype">Explore</span><span class="sname">raw 기록 버그 조사</span><span class="smeta">✓ 38m</span></div><div class="concl">결론 · 구조화 분석 반환 완료</div></div>
+    <div class="sub" style="--c:var(--p1)"><div class="subhead"><span class="kn">2/5</span><span class="stype">Explore</span><span class="sname">채팅 정렬 버그 조사</span><span class="smeta">✓ 36m</span></div><div class="concl">결론 · findings 반환</div></div>
+    <div class="sub" style="--c:var(--p2)"><div class="subhead"><span class="kn">3/5</span><span class="stype">Explore</span><span class="sname">layout/lane 조사</span><span class="smeta">✓ 24m</span></div><div class="concl">결론 · 분석 완료</div></div>
+    <div class="sub" style="--c:var(--p3)"><div class="subhead"><span class="kn">4/5</span><span class="stype">Explore</span><span class="sname">"You" 라벨링 조사</span><span class="smeta">✓ 4m</span></div><div class="concl">결론 · 라벨 추적 완료</div></div>
+    <div class="sub" style="--c:var(--p4)"><div class="subhead"><span class="kn">5/5</span><span class="stype">Explore</span><span class="sname">디자인 의도 수집</span><span class="smeta">✓ 2m</span></div><div class="concl">결론 · 토큰·규칙 정리</div></div>
+  </div>
+
+  <h2>② main 배지 — 같은 색 점</h2>
+  <div class="stream">
+    <div class="main"><div class="mhead"><span class="who">Claude · main</span>
+      <span class="badge">⟂ 서브에이전트 동시 <b style="color:var(--fg)">5</b><span class="dot" style="background:var(--p0)"></span><span class="dot" style="background:var(--p1)"></span><span class="dot" style="background:var(--p2)"></span><span class="dot" style="background:var(--p3)"></span><span class="dot" style="background:var(--p4)"></span></span></div>
+      <div class="mtx">병렬 5개 직후 — 점 5개(블록과 같은 색).</div></div>
+    <div class="main"><div class="mhead"><span class="who">Claude · main</span>
+      <span class="badge">⟂ 서브에이전트 동시 <b style="color:var(--fg)">2</b><span class="dot" style="background:var(--p0)"></span><span class="dot" style="background:var(--p1)"></span></span></div>
+      <div class="mtx">24분 후 — raw(1/5)·정렬(2/5)만 남음 → 점 2개, 같은 색.</div></div>
+  </div>
+
+  <h2>③ 레인 — 같은 색 막대</h2>
+  <div class="stream">
+    <div class="axis"><span class="tick" style="left:0%">0</span><span class="tick" style="left:26%">10m</span><span class="tick" style="left:53%">20m</span><span class="tick" style="left:79%">30m</span><span class="tick" style="left:100%">38m</span></div>
+    <div class="lane"><span class="lname"><span class="kn" style="--c:var(--p0)">1/5</span>raw 버그</span><div class="track"><div class="bar" style="--c:var(--p0);left:0;width:100%"><span class="cap">38m</span></div></div></div>
+    <div class="lane"><span class="lname"><span class="kn" style="--c:var(--p1)">2/5</span>정렬 버그</span><div class="track"><div class="bar" style="--c:var(--p1);left:0;width:95%"><span class="cap">36m</span></div></div></div>
+    <div class="lane"><span class="lname"><span class="kn" style="--c:var(--p2)">3/5</span>layout</span><div class="track"><div class="bar" style="--c:var(--p2);left:0;width:63%"><span class="cap">24m</span></div></div></div>
+    <div class="lane"><span class="lname"><span class="kn" style="--c:var(--p3)">4/5</span>labeling</span><div class="track"><div class="bar" style="--c:var(--p3);left:0;width:10%"><span class="cap">4m</span></div></div></div>
+    <div class="lane"><span class="lname"><span class="kn" style="--c:var(--p4)">5/5</span>design intent</span><div class="track"><div class="bar" style="--c:var(--p4);left:0;width:5%"><span class="cap">2m</span></div></div></div>
+    <div class="note">→ ①②③에서 같은 색을 세로로 따라가면 1/5(파랑)~5/5(주황)이 블록↔배지↔레인으로 일관되게 이어진다.</div>
+  </div>
+
+  <div class="foot">
+    핵심: <b>색 = agent_id 해시(결정론, 단일 출처)</b> → SubagentGroup 레일/칩 · main 배지 점 · 레인 막대에서 동일 적용. 설계 트레이드오프: 서브에이전트 레일이 고정 violet → <b>인스턴스 색</b>으로 바뀜(타입은 "Subagent"/agentType 칩·들여쓰기로 표현). 배치/워크플로우 컨테이너 레일은 타입색(teal/orange) 유지, 자식만 인스턴스 색.
+  </div>
+</div></body></html>

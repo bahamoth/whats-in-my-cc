@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>거터 시작·끝 표현 재설계 프로토타입</title>
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#12161f; --card:#171c26; --card2:#1b212d;
+    --line:#222936; --fg:#c9d1d9; --sub:#7b8494; --faint:#5a6273;
+    --green:#4fd08a; --green-dim:#2f7d54; --orange:#ff8a4c; --sel:#6db3ff;
+    --rail-w:2px; --gutter-w:18px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);
+    font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:920px;margin:0 auto;padding:28px 22px 80px}
+  h1{font-size:18px;font-weight:650;letter-spacing:-.01em;margin:0 0 4px}
+  .lede{color:var(--sub);font-size:13px;margin:0 0 22px;max-width:680px}
+  .lede code{color:var(--green);background:#0e1f17;padding:1px 5px;border-radius:4px;font-size:12px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:5;
+    background:linear-gradient(var(--bg) 70%,transparent);padding:10px 0 14px}
+  .toolbar button{appearance:none;border:1px solid var(--line);background:var(--panel);
+    color:var(--sub);padding:7px 13px;border-radius:8px;font-size:12.5px;cursor:pointer;
+    transition:.14s;font-weight:550}
+  .toolbar button:hover{border-color:#33405a;color:var(--fg)}
+  .toolbar button.on{background:#10241a;border-color:var(--green-dim);color:var(--green)}
+  .toolbar button.cur.on{background:#241313;border-color:#7d3a2f;color:#ff9d8a}
+  .caption{margin:6px 0 16px;color:var(--sub);font-size:12.5px;min-height:18px}
+  .caption b{color:var(--fg);font-weight:600}
+
+  /* ── stream ───────────────────────────── */
+  .stream{position:relative}
+  .railLayer{position:absolute;left:0;top:0;width:var(--gutter-w);height:100%;pointer-events:none;z-index:2}
+  .row{display:flex;align-items:stretch;margin:0 0 9px}
+  .gutterPad{flex:none;width:var(--gutter-w)}
+  .card{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:11px 14px;min-width:0}
+  .card.activity{background:transparent;border-style:solid;border-color:#1c2230;
+    color:var(--sub);display:flex;align-items:center;gap:8px;font-size:12.5px;padding:9px 14px}
+  .card.msg .who{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub);margin-bottom:5px}
+  .card.msg .who b{color:var(--fg);font-weight:600}
+  .pill{font-size:10.5px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--sub)}
+  .pill.bg{color:var(--green);border-color:var(--green-dim);background:#0e1f17}
+  .card .body{font-size:13px;color:#aeb6c2}
+  .think{display:flex;align-items:center;gap:9px;color:var(--sub);font-size:12.5px;
+    background:transparent;border-color:#1a202c}
+  .think .dot{width:13px;height:13px;border-radius:50%;border:1.6px solid #3a4considerable}
+  .think .dot{width:13px;height:13px;border-radius:50%;border:1.6px solid #3a4252;flex:none}
+
+  /* subagent group card */
+  .card.subagent{background:var(--card2)}
+  .card.subagent .head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:12.5px}
+  .card.subagent .name{color:var(--fg);font-weight:600}
+  .swatch{width:9px;height:9px;border-radius:3px;background:var(--green);flex:none}
+  .meta{color:var(--faint);font-size:11.5px}
+  .gantt{margin-top:9px;height:7px;border-radius:4px;background:#0e1117;overflow:hidden;position:relative}
+  .gantt i{position:absolute;top:0;bottom:0;background:var(--green);opacity:.85;border-radius:4px}
+
+  /* subagent-identity accent (new variants): a soft agent-color edge on the card */
+  .stream:not(.v-current) .card.subagent.accent{box-shadow:inset 3px 0 0 var(--green)}
+
+  /* ── rail rendering (positioned by JS) ── */
+  .rail{position:absolute;width:var(--rail-w);background:var(--green);border-radius:1px}
+  /* A · end-caps */
+  .v-endcaps .rail{border-radius:1px}
+  .cap{position:absolute;left:50%;transform:translateX(-50%);background:var(--green);
+    box-shadow:0 0 0 3px var(--bg)}
+  .cap.start{width:9px;height:9px;border-radius:3px}          /* ▢ start, at the very top */
+  .cap.end{width:9px;height:9px;border-radius:50%;background:transparent;border:2px solid var(--green)} /* ◯ end, at the very bottom */
+  /* B · pill */
+  .v-pill .rail{border-radius:99px;width:3px}
+  /* C · faded */
+  .v-faded .rail{background:linear-gradient(var(--green) 0 0) ;-webkit-mask:linear-gradient(to bottom,transparent,#000 18px,#000 calc(100% - 18px),transparent);
+    mask:linear-gradient(to bottom,transparent,#000 18px,#000 calc(100% - 18px),transparent);width:3px}
+
+  .legend{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);color:var(--sub);font-size:12.5px}
+  .legend b{color:var(--fg)}
+  .key{display:inline-flex;align-items:center;gap:6px;margin-right:16px}
+  .kbox{width:11px;height:11px;border-radius:3px;background:var(--green)}
+  .kring{width:11px;height:11px;border-radius:50%;border:2px solid var(--green)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>백그라운드 서브에이전트 거터 — 시작·끝 표현 재설계</h1>
+  <p class="lede">초록 레일 = 백그라운드 서브에이전트 <code>aa1844</code>(general-purpose)의 동시 실행 구간.
+  현재는 시작점(▢)이 서브에이전트 그룹 카드에 찍혀 <b>레일 중간</b>에 박히고, 그 위 추론 카드에는 끊긴 레일이 떠서
+  "추론 카드에서 시작"하는 것처럼 보임(자기모순) + 가로 커넥터가 카드와 어긋남. 아래에서 대안을 비교하세요.</p>
+
+  <div class="toolbar">
+    <button class="cur" data-v="current">현재 (문제)</button>
+    <button data-v="endcaps">A · 양끝 마커 (추천)</button>
+    <button data-v="pill">B · 라운드 필</button>
+    <button data-v="faded">C · 페이드 끝</button>
+  </div>
+  <div class="caption" id="cap"></div>
+
+  <div class="stream v-endcaps" id="stream">
+    <div class="railLayer" id="railLayer"></div>
+
+    <div class="row"><div class="gutterPad"></div>
+      <div class="card msg"><div class="who"><b>Opus 4.8</b> · 10:40:56</div>
+      <div class="body">Branch up, scratch gone. Now dispatching Task 3 (workflowStats) as a background subagent in parallel…</div></div></div>
+
+    <div class="row"><div class="gutterPad"></div>
+      <div class="card activity">⛓ Agent · 1 event · <span style="color:var(--faint)">백그라운드 디스패치</span></div></div>
+
+    <div class="row" data-cover><div class="gutterPad"></div>
+      <div class="card think"><span class="dot"></span> 추론 · 309 tok · 7.0s
+      <span style="margin-left:auto;color:var(--faint);font-size:11px">← 현재 레일이 여기서 시작</span></div></div>
+
+    <div class="row" data-cover data-subagent><div class="gutterPad"></div>
+      <div class="card subagent accent"><div class="head"><span class="swatch"></span>
+        <span class="pill bg">Subagent</span><span class="name">general-purpose · aa1844</span>
+        <span class="meta">메시지 10 · 도구 10 · 1m 8s</span></div>
+        <div class="gantt"><i style="left:2%;width:34%"></i><i style="left:40%;width:55%;opacity:.6"></i></div></div></div>
+
+    <div class="row" data-cover><div class="gutterPad"></div>
+      <div class="card msg"><div class="who"><b>Opus 4.8</b> · <span class="pill bg" style="font-size:10px">↧ 백그라운드 1개 실행 중</span> · 10:41:11</div>
+      <div class="body">Task 3 running in background. Now Task 1 inline — let me read the test harness…</div></div></div>
+
+    <div class="row" data-cover><div class="gutterPad"></div>
+      <div class="card activity">⛓ Bash · PreToolUse:Bash · 2 events</div></div>
+
+    <div class="row" data-cover><div class="gutterPad"></div>
+      <div class="card think"><span class="dot"></span> 추론 · 717 tok · 11.9s</div></div>
+
+    <div class="row" data-cover><div class="gutterPad"></div>
+      <div class="card msg"><div class="who"><b>Opus 4.8</b> · 10:41:21</div>
+      <div class="body">The test file uses an <code>ev(...)</code> helper; let me verify which helpers actually exist…</div></div></div>
+
+    <div class="row" data-cover data-last><div class="gutterPad"></div>
+      <div class="card activity">⛓ Read · 1 event · <span style="color:var(--faint)">서브에이전트 종료</span></div></div>
+
+    <div class="row"><div class="gutterPad"></div>
+      <div class="card msg"><div class="who"><b>Opus 4.8</b> · 10:41:55</div>
+      <div class="body">Task 3 finished in the background. Folding workflowStats results into Task 4…</div></div></div>
+  </div>
+
+  <div class="legend">
+    <div style="margin-bottom:8px"><b>A · 양끝 마커</b> — 레일은 끊김 없이 한 줄. 시작 <span class="key"><span class="kbox"></span></span>·끝 <span class="key"><span class="kring"></span></span> 마커는 레일의 <b>실제 양 끝</b>(첫 동시 행 위, 마지막 동시 행 아래)에만. 그룹 카드는 왼쪽 초록 엣지로 "서브에이전트"임을 표시(거터 점 아님). 커넥터 제거.</div>
+    <div style="margin-bottom:8px"><b>B · 라운드 필</b> — 마커 없이 끝이 둥근 한 줄. 가장 미니멀.</div>
+    <div><b>C · 페이드 끝</b> — 양끝이 부드럽게 사라짐. 어떤 카드도 "경계점"으로 지목하지 않음.</div>
+  </div>
+</div>
+
+<script>
+const stream = document.getElementById('stream');
+const railLayer = document.getElementById('railLayer');
+const capEl = document.getElementById('cap');
+const captions = {
+  current: '<b>현재</b>: 시작 ▢가 그룹 카드(레일 중간)에 박히고, 추론 카드 위 레일이 끊겨 떠 있음 — "추론에서 시작"처럼 보이는 자기모순 + 끊긴 선 + 어긋난 가로 커넥터.',
+  endcaps: '<b>A · 양끝 마커 (추천)</b>: 한 줄 연속 레일. ▢ 시작/◯ 끝은 레일의 실제 양 끝에만. 그룹 카드는 왼쪽 엣지로 식별. 자기모순·끊김·커넥터 모두 해소.',
+  pill:    '<b>B · 라운드 필</b>: 마커 없이 끝이 둥근 한 줄. 가장 절제된 표현.',
+  faded:   '<b>C · 페이드 끝</b>: 양끝이 부드럽게 페이드. 특정 카드를 경계점으로 지목하지 않음.',
+};
+
+function clearRail(){ railLayer.innerHTML=''; }
+function add(cls, top, height, extra){
+  const d=document.createElement('div'); d.className=cls;
+  d.style.top=top+'px'; if(height!=null) d.style.height=height+'px';
+  if(extra) Object.assign(d.style, extra);
+  railLayer.appendChild(d); return d;
+}
+
+function render(variant){
+  clearRail();
+  stream.className = 'stream v-'+variant;
+  capEl.innerHTML = captions[variant];
+  const rows=[...stream.querySelectorAll('.row')];
+  const covered=rows.filter(r=>r.hasAttribute('data-cover'));
+  if(!covered.length) return;
+  const baseTop=stream.getBoundingClientRect().top;
+  const first=covered[0].getBoundingClientRect();
+  const last=covered[covered.length-1].getBoundingClientRect();
+  const top=first.top-baseTop, bottom=last.bottom-baseTop;
+  const railX = 'calc(var(--gutter-w) - 8px)'; // near the card (right-anchored)
+
+  if(variant==='current'){
+    // mimic the bug: orphan segment on the thinking card + node mid-rail on group + gap
+    const think=covered[0].getBoundingClientRect();
+    const group=stream.querySelector('[data-subagent]').getBoundingClientRect();
+    const tTop=think.top-baseTop, tBot=think.bottom-baseTop;
+    const gMid=(group.top+group.bottom)/2-baseTop, gBot=group.bottom-baseTop;
+    // orphan full-height rail on the thinking card
+    add('rail', tTop, tBot-tTop, {left:railX});
+    // node (▢) at the group card center + rail downward from it
+    add('rail', gMid, bottom-gMid, {left:railX});
+    const node=add('rail', gMid-3.5, 7, {left:'calc('+railX+' - 2.5px)', width:'7px', borderRadius:'2px', boxShadow:'0 0 0 2px var(--bg)'});
+    // horizontal connector (misaligned)
+    add('rail', gMid-1, 2, {left:'calc('+railX+' + 2px)', width:'10px', borderRadius:'1px'});
+    return;
+  }
+
+  // new variants: one continuous rail
+  const rail=add('rail', top, bottom-top, {left:railX});
+  if(variant==='endcaps'){
+    const s=document.createElement('div'); s.className='cap start';
+    s.style.top=top+'px'; s.style.left='calc('+railX+' + 1px)'; s.style.transform='translate(-50%,-50%)';
+    railLayer.appendChild(s);
+    const e=document.createElement('div'); e.className='cap end';
+    e.style.top=bottom+'px'; e.style.left='calc('+railX+' + 1px)'; e.style.transform='translate(-50%,-50%)';
+    railLayer.appendChild(e);
+  }
+}
+
+let cur='endcaps';
+document.querySelectorAll('.toolbar button').forEach(b=>{
+  b.onclick=()=>{ cur=b.dataset.v;
+    document.querySelectorAll('.toolbar button').forEach(x=>x.classList.toggle('on', x===b));
+    render(cur);
+  };
+});
+document.querySelector('[data-v="endcaps"]').classList.add('on');
+window.addEventListener('resize', ()=>render(cur));
+render(cur);
+</script>
+</body>
+</html>
