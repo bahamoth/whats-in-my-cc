@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildStreamModel, groupScaffold, parseWorkflowMeta } from '../streamModel';
-import type { MessageItem, StreamItem } from '../streamModel';
+import { buildStreamModel, groupScaffold, parseWorkflowMeta, computeBgGutter } from '../streamModel';
+import type { MessageItem, StreamItem, SidechainGroup } from '../streamModel';
 import { buildLlmRequestMetrics } from '../llmRequestMetrics';
 import type { ObservedEventDto } from '../../../../api/types';
 
@@ -961,5 +961,61 @@ describe('buildStreamModel — wires groupScaffold (top-level only)', () => {
     // The sidechain-group is one top-level item — never wrapped in a scaffold-group.
     expect(items.some((i: any) => i.type === 'scaffold-group')).toBe(false);
     expect(items.some((i: any) => i.type === 'sidechain-group')).toBe(true);
+  });
+});
+
+// ── computeBgGutter: per-row background-subagent lane cells ──────────────────
+const sub = (id: string, ts: string): MessageItem => ({
+  type: 'message', id, eventId: id, role: 'assistant', model: null, text: id, timestamp: ts, sidechain: true,
+});
+const mainMsg = (id: string, ts: string): MessageItem => ({
+  type: 'message', id, eventId: id, role: 'assistant', model: null, text: id, timestamp: ts, sidechain: false,
+});
+const sgAgent = (id: string, agentId: string | null, tss: string[]): SidechainGroup => ({
+  type: 'sidechain-group', id, agentId, agentType: null, description: null, taskEventId: null,
+  conclusion: null, items: tss.map((t, i) => sub(`${id}-e${i}`, t)),
+});
+
+describe('computeBgGutter', () => {
+  it('single bg agent: start on its block, mid on interleaved mains, end on last covered', () => {
+    const A = sgAgent('A', 'aa1844', ['2026-06-14T01:41:05Z', '2026-06-14T01:42:24Z']);
+    const items: StreamItem[] = [
+      A,
+      mainMsg('m1', '2026-06-14T01:41:12Z'),
+      mainMsg('m2', '2026-06-14T01:41:58Z'),
+      mainMsg('m3', '2026-06-14T01:50:00Z'), // after A's span → no cell
+    ];
+    const g = computeBgGutter(items);
+    expect(g.get('A')!.cells[0]).toMatchObject({ lane: 0, agentId: 'aa1844', marker: 'start' });
+    expect(g.get('m1')!.cells[0]).toMatchObject({ lane: 0, marker: 'mid' });
+    expect(g.get('m2')!.cells[0]).toMatchObject({ lane: 0, marker: 'end' });
+    expect(g.get('m3')).toBeUndefined();
+  });
+
+  it('three concurrent bg agents pack into lanes 0,1,2 (gutter width constant)', () => {
+    const A = sgAgent('A', 'a', ['2026-06-14T01:00:00Z', '2026-06-14T01:10:00Z']);
+    const B = sgAgent('B', 'b', ['2026-06-14T01:01:00Z', '2026-06-14T01:09:00Z']);
+    const C = sgAgent('C', 'c', ['2026-06-14T01:02:00Z', '2026-06-14T01:08:00Z']);
+    const items: StreamItem[] = [A, B, C, mainMsg('m', '2026-06-14T01:05:00Z')];
+    const row = computeBgGutter(items).get('m')!;
+    expect(row.cells.map((c) => c.lane).sort()).toEqual([0, 1, 2]);
+    expect(new Set(row.cells.map((c) => c.agentId)).size).toBe(3);
+    expect(row.dense).toBe(0);
+  });
+
+  it('four concurrent → dense (count, no per-lane cells) for the overflow-covered row', () => {
+    const mk = (k: string) => sgAgent(k, k, ['2026-06-14T01:00:00Z', '2026-06-14T01:10:00Z']);
+    const items: StreamItem[] = [mk('a'), mk('b'), mk('c'), mk('d'), mainMsg('m', '2026-06-14T01:05:00Z')];
+    expect(computeBgGutter(items).get('m')!.dense).toBe(4);
+  });
+
+  it('no bg agents → empty map', () => {
+    expect(computeBgGutter([mainMsg('m', '2026-06-14T01:00:00Z')]).size).toBe(0);
+  });
+
+  it('agentId null → no lane contributed (graceful)', () => {
+    const A = sgAgent('A', null, ['2026-06-14T01:00:00Z', '2026-06-14T01:05:00Z']);
+    const items: StreamItem[] = [A, mainMsg('m', '2026-06-14T01:02:00Z')];
+    expect(computeBgGutter(items).size).toBe(0);
   });
 });
