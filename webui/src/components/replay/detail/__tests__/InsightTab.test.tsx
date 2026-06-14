@@ -3,8 +3,8 @@
  * InsightTab 5-layer skeleton: H(header+badge+chips) → ①WHAT → ②HOW(metrics)
  * → ③SIGNALS. Fully event-driven (no graph node).
  */
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { InsightTab } from '../InsightTab';
 import type { SignalDto, ObservedEventDto } from '../../../../api/types';
 
@@ -85,6 +85,20 @@ describe('InsightTab', () => {
       <InsightTab signals={[signal({})]} event={toolEvent} toolMetrics={toolMetrics} llmMetrics={null} />,
     );
     expect(screen.getByText('Signals')).toBeInTheDocument();
+  });
+
+  it('copies the FULL correlation id to the clipboard when its chip is clicked', () => {
+    // The chip clips long ids visually (140px) — but the value must stay
+    // copyable in full, or an observability tool hides the very identifier a
+    // user needs to grep. Clicking the chip writes the untruncated id.
+    const writeText = vi.fn();
+    Object.assign(navigator, { clipboard: { writeText } });
+    const e = ev('x', 'assistant_message');
+    e.request_id = 'req_011Cc2BAnDxWQCMDSNP9QpRb';
+    render(<InsightTab signals={[]} event={e} toolMetrics={null} llmMetrics={null} />);
+    const chip = screen.getByRole('button', { name: /request_id/i });
+    fireEvent.click(chip);
+    expect(writeText).toHaveBeenCalledWith('req_011Cc2BAnDxWQCMDSNP9QpRb');
   });
 });
 

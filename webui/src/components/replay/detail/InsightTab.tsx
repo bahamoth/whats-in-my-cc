@@ -4,6 +4,7 @@
 // compact header + the entity's COLLECTED metrics (EntityMetricsPanel, with
 // plain-language ⓘ tooltips) + that event's Signals. The full raw payload
 // lives in the Raw tab.
+import { useState } from 'react';
 import type { SignalDto, ObservedEventDto } from '../../../api/types';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import { nodeLabel } from '../stream/nodeLabel';
@@ -33,6 +34,29 @@ const KIND_ICON: Record<string, string> = {
   diff: '±',
   other: '·',
 };
+
+/** A correlation-id chip. The value is visually clipped (long ids), but clicking
+ *  copies the FULL id — an observability tool must never hide the identifier a
+ *  user needs to grep. Full value also lives in the title (hover reveals it). */
+function CopyChip({ field, label, value }: { field: string; label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className={styles.corrChip}
+      title={`${field}: ${value} — 클릭하여 복사`}
+      aria-label={`${field} ${value}`}
+      onClick={() => {
+        navigator.clipboard?.writeText(value);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1200);
+      }}
+    >
+      {label} <code>{value}</code>
+      <span className={styles.copyHint} aria-hidden>{copied ? '✓' : '⧉'}</span>
+    </button>
+  );
+}
 
 function SignalsList({ signals }: { signals: SignalDto[] }) {
   return (
@@ -82,24 +106,13 @@ export function InsightTab({ signals, event, toolMetrics, llmMetrics, matchedRes
             <span className={styles.nodeId}>{event.event_id}</span>
           </div>
 
-          {/* Correlation chips (tool_use_id / request_id / turn_id) — display-only */}
+          {/* Correlation chips (tool_use_id / request_id / turn_id) — click to copy
+              the FULL id (the value is only visually clipped). */}
           {(event.tool_use_id || event.request_id || event.turn_id) && (
             <div className={styles.corrChips}>
-              {event.tool_use_id && (
-                <span className={styles.corrChip} title="tool_use_id">
-                  tool <code>{event.tool_use_id}</code>
-                </span>
-              )}
-              {event.request_id && (
-                <span className={styles.corrChip} title="request_id">
-                  req <code>{event.request_id}</code>
-                </span>
-              )}
-              {event.turn_id && (
-                <span className={styles.corrChip} title="turn_id">
-                  turn <code>{event.turn_id}</code>
-                </span>
-              )}
+              {event.tool_use_id && <CopyChip field="tool_use_id" label="tool" value={event.tool_use_id} />}
+              {event.request_id && <CopyChip field="request_id" label="req" value={event.request_id} />}
+              {event.turn_id && <CopyChip field="turn_id" label="turn" value={event.turn_id} />}
             </div>
           )}
 

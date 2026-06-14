@@ -28,7 +28,7 @@
   border: 1px solid rgba(163, 113, 247, 0.3);
 }
 
-/* Correlation chips: tool_use_id / request_id / turn_id — display only */
+/* Correlation chips: tool_use_id / request_id / turn_id — click to copy full id */
 .corrChips { display: flex; flex-wrap: wrap; gap: 6px; }
 .corrChip {
   display: inline-flex;
@@ -37,10 +37,18 @@
   padding: 2px 7px;
   border-radius: 3px;
   font-size: 11px;
+  font-family: inherit;
   color: var(--wimcc-fg-subtle, #6a7180);
   background: var(--wimcc-surface-3, #1b202a);
   border: 1px solid var(--wimcc-border, #1d212c);
+  cursor: pointer;
 }
+.corrChip:hover {
+  color: var(--wimcc-fg-muted, #aab0bd);
+  border-color: var(--wimcc-border-strong, #2a3040);
+}
+.copyHint { color: var(--wimcc-fg-subtle, #6a7180); font-size: 10px; }
+.corrChip:hover .copyHint { color: var(--wimcc-accent, #4f8cff); }
 .corrChip code {
   font-family: var(--wimcc-mono, ui-monospace, monospace);
   font-size: 10px;
