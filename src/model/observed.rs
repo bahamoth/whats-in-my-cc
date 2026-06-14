@@ -152,6 +152,11 @@ pub struct ObservedEvent {
     /// Subagent identifier for sidechain events (transcript `agentId`). None for
     /// main-session events. Lets re_read scope by individual subagent.
     pub agent_id: Option<String>,
+    /// Workflow run id for Workflow-tool-spawned subagents, derived from the file
+    /// path `…/subagents/workflows/<runId>/agent-<id>.{jsonl,meta.json}`. The
+    /// deterministic group key for a workflow fan-out (turn_id drifts across the
+    /// run; OTel parent_agent_id is null for workflow agents). None otherwise.
+    pub workflow_run_id: Option<String>,
     pub is_meta: bool,
     pub cwd: Option<String>,
     pub git_branch: Option<String>,

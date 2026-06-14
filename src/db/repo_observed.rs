@@ -22,19 +22,19 @@ async fn insert_inner(pool: &SqlitePool, e: &ObservedEvent, ignore: bool) -> Res
             event_id, raw_event_id, schema_version, session_id, event_uuid, parent_uuid,
             observed_at, actor, kind, subkind, tool_use_id, tool_name, request_id,
             message_id, turn_id, source_tool_assistant_uuid, source_tool_use_id,
-            is_sidechain, agent_id, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
+            is_sidechain, agent_id, workflow_run_id, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
             trace_id, span_id, parent_span_id, latency_ms,
             payload, parser_version)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
     } else {
         "INSERT INTO observed_event(
             event_id, raw_event_id, schema_version, session_id, event_uuid, parent_uuid,
             observed_at, actor, kind, subkind, tool_use_id, tool_name, request_id,
             message_id, turn_id, source_tool_assistant_uuid, source_tool_use_id,
-            is_sidechain, agent_id, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
+            is_sidechain, agent_id, workflow_run_id, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
             trace_id, span_id, parent_span_id, latency_ms,
             payload, parser_version)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
     };
     let res = sqlx::query(sql)
         .bind(&e.event_id)
@@ -56,6 +56,7 @@ async fn insert_inner(pool: &SqlitePool, e: &ObservedEvent, ignore: bool) -> Res
         .bind(&e.source_tool_use_id)
         .bind(e.is_sidechain as i64)
         .bind(&e.agent_id)
+        .bind(&e.workflow_run_id)
         .bind(e.is_meta as i64)
         .bind(&e.cwd)
         .bind(&e.git_branch)
@@ -97,6 +98,34 @@ pub async fn backfill_agent_id(pool: &SqlitePool) -> Result<u64> {
              END
              FROM raw_event r WHERE r.raw_event_id = observed_event.raw_event_id
            ) = 1",
+    )
+    .execute(pool)
+    .await?;
+    Ok(res.rows_affected())
+}
+
+/// Backfill `workflow_run_id` on existing rows from the raw transcript file path.
+/// Workflow-tool subagents live under `…/subagents/workflows/<runId>/agent-*`, and
+/// the runId is the deterministic workflow group key — present only in the file
+/// path (`raw_event.source_uri`), never in the record. Idempotent (only NULL rows).
+/// Lets an already-ingested DB gain workflow grouping on serve startup without a
+/// full init-db / re-ingest.
+pub async fn backfill_workflow_run_id(pool: &SqlitePool) -> Result<u64> {
+    let res = sqlx::query(
+        "UPDATE observed_event
+         SET workflow_run_id = (
+             SELECT substr(tail, 1, instr(tail, '/') - 1) FROM (
+                 SELECT substr(
+                     r.source_uri,
+                     instr(r.source_uri, '/subagents/workflows/') + length('/subagents/workflows/')
+                 ) AS tail
+                 FROM raw_event r WHERE r.raw_event_id = observed_event.raw_event_id
+             )
+         )
+         WHERE workflow_run_id IS NULL
+           AND raw_event_id IN (
+             SELECT raw_event_id FROM raw_event WHERE source_uri LIKE '%/subagents/workflows/%'
+           )",
     )
     .execute(pool)
     .await?;
@@ -742,6 +771,7 @@ fn row_to_observed(r: sqlx::sqlite::SqliteRow) -> ObservedEvent {
         source_tool_use_id: r.try_get("source_tool_use_id").ok(),
         is_sidechain: r.get::<i64, _>("is_sidechain") != 0,
         agent_id: r.try_get("agent_id").ok(),
+        workflow_run_id: r.try_get("workflow_run_id").ok(),
         is_meta: r.get::<i64, _>("is_meta") != 0,
         cwd: r.try_get("cwd").ok(),
         git_branch: r.try_get("git_branch").ok(),
