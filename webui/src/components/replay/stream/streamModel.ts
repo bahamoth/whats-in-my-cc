@@ -620,6 +620,7 @@ export function syncTaskNotifications(
   agentDispatchToolUse: Map<string, string>,
   callMetaByUse: Map<string, { eventId: string; label: string }> = new Map(),
   wfNameByToolUse: Map<string, string | null> = new Map(),
+  notiByTaskId: Map<string, TaskNoti> = new Map(),
 ): StreamItem[] {
   // invert: noti event_id → its tool_use_id (to enrich the staying noti message).
   const toolUseByNotiEvent = new Map<string, string>();
@@ -649,8 +650,11 @@ export function syncTaskNotifications(
         });
       }
     } else if (it.type === 'sidechain-group' && it.agentId) {
+      // Join the completion noti to this subagent by EITHER the dispatch
+      // tool_use_id (needs the sidecar) OR — more robustly, sidecar-independent —
+      // the noti's <task-id>, which for a background Agent IS the agent_id.
       const tu = agentDispatchToolUse.get(it.agentId);
-      const noti = tu ? notiByToolUse.get(tu) : undefined;
+      const noti = (tu ? notiByToolUse.get(tu) : undefined) ?? notiByTaskId.get(it.agentId);
       if (noti) {
         it.endStatus = noti.status ?? undefined;
         it.notificationEventId = noti.eventId;
@@ -922,6 +926,9 @@ export function buildStreamModel(
   // `<task-notification>` completion events keyed by their <tool-use-id> (the
   // deterministic join back to the dispatching Workflow/Agent/Bash call).
   const notiByToolUse = new Map<string, TaskNoti>();
+  // …also keyed by <task-id>, which for a background Agent IS its agent_id — a
+  // sidecar-independent join from a completion noti to its subagent group.
+  const notiByTaskId = new Map<string, TaskNoti>();
   // tool_call event_id + short label per tool_use_id — lets a background-command
   // noti (e.g. Bash) say what finished and jump to the originating command.
   const callMetaByUse = new Map<string, { eventId: string; label: string }>();
@@ -954,13 +961,15 @@ export function buildStreamModel(
       const pp = asObj(e.payload);
       const content = typeof pp.content === 'string' ? pp.content : typeof pp.text === 'string' ? pp.text : '';
       const noti = parseTaskNotification(content);
-      if (noti && noti.toolUseId) {
-        notiByToolUse.set(noti.toolUseId, {
+      if (noti) {
+        const rec: TaskNoti = {
           status: noti.status,
           summary: noti.summary,
           endTimestamp: e.observed_at,
           eventId: e.event_id,
-        });
+        };
+        if (noti.toolUseId) notiByToolUse.set(noti.toolUseId, rec);
+        if (noti.taskId) notiByTaskId.set(noti.taskId, rec);
       }
     }
     const agent = e.agent_id || null;
@@ -1287,6 +1296,7 @@ export function buildStreamModel(
         agentDispatchToolUse,
         callMetaByUse,
         wfNameByToolUse,
+        notiByTaskId,
       ),
     ),
   );

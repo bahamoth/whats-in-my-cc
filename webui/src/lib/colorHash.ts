@@ -8,16 +8,18 @@
 // gutter is a calm presence indicator, and the authoritative re-confirmable
 // identity is the block header (swatch + agent_id text), not the hue.
 
-/** 8 readable hues (dark-bg first; mid-tones stay legible in light mode). */
+/** 8 distinct, vivid hues tuned for legibility as THIN rails / small bars on the
+ *  dark bg (brighter + better-separated than the prior mid-tones); still readable
+ *  in light mode. Distinct from the human accent + semantic --wimcc-lane-* tokens. */
 export const AGENT_PALETTE = [
-  '#7da7ff', // blue
-  '#41c285', // green
-  '#d97aff', // violet
-  '#ff8a4c', // orange
-  '#2bd0d0', // teal
-  '#f0b429', // amber
-  '#ef6f9c', // pink
-  '#9d8bff', // periwinkle
+  '#6db3ff', // blue
+  '#4fd08a', // green
+  '#c98cff', // violet
+  '#ff9d54', // orange
+  '#33d2cf', // teal
+  '#f5c542', // amber
+  '#ff7ea8', // pink
+  '#9f93ff', // periwinkle
 ] as const;
 
 const NEUTRAL = 'var(--wimcc-fg-subtle, #6a7180)';

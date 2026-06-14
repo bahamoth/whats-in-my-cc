@@ -4921,6 +4921,14 @@ vitest: 69 passed
         호출에 이어 <b>workflow-end 카드(✗ failed)</b>로 표면 — 실데이터 검증(<code>01KV2AQJ</code> →
         name <code>compact-gutter-design-panel</code>·failed·0 agents). ⓕ 시작 카드 선택: WorkflowGroup에
         "호출" 점프(→ Workflow tool_call) 추가 — 단 그 호출이 로드 윈도우에 있을 때만 노출(window-scoped).</li>
+      <li><strong>중복 종료 카드 머지 수정 + 색 가독성</strong>(후속, 사용자 지적): 한 서브에이전트
+        종료가 <b>카드 2개</b>(span 파생 subagent-end + 흡수 안 된 task-notification)로 찍히던 버그 —
+        원인은 noti↔서브에이전트 조인이 사이드카 <code>tool_use_id</code>에만 의존했는데 사이드카(디스패치
+        시점)가 종료 윈도우 밖이라 미해소. 수정: <b>noti의 <code>&lt;task-id&gt;</code> == agent_id</b>
+        (백그라운드 Agent는 task-id가 곧 agent_id)로도 조인 — 사이드카 독립. 실데이터 검증(<code>ad1d85d9</code>:
+        2카드→1카드, status completed 부착). 참고로 OTel <code>log_record</code>(종료 텔레메트리)는 transcript
+        task-notification과 <em>다른 파이프라인의 별개 레코드</em>이며 stream 카드로 렌더되지 않음(drop). 색:
+        agentColor 팔레트를 다크 배경 thin-rail 가독성 위해 더 밝고 분리된 8색으로 튜닝.</li>
       <li><strong>백그라운드 Bash 연결 + 카드 선택성</strong>(후속, 사용자 지적): ④ 그룹이
         없는 <b>백그라운드 Bash</b> 노티는 흡수/치환 대신 <em>그 자리에 유지하되 enrich</em> —
         <code>MessageItem.notification</code>(status·summary·toolLabel·callEventId)로 "무엇이
