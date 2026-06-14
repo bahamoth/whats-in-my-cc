@@ -649,6 +649,19 @@ describe('buildStreamModel — concurrent fragment merge (2026-06-14)', () => {
     const items = buildStreamModel(evs);
     expect(collectSidechainGroups(items).map((g: any) => g.agentId).sort()).toEqual(['A', 'C']);
   });
+  it('백그라운드 블록 span과 겹친 main 메시지에 duringBackground + 블록 concurrentMainCount', () => {
+    const at = (s: string) => `2026-06-14T00:00:${s}Z`;
+    const evs = [
+      base({ event_id: 'a1', kind: 'assistant_message', is_sidechain: true, agent_id: 'A', observed_at: at('01'), payload: { text: '첫' } }),
+      base({ event_id: 'm1', message_id: 'm1', kind: 'assistant_message', observed_at: at('05'), payload: { text: '끼어듦' } }),
+      base({ event_id: 'a2', kind: 'assistant_message', is_sidechain: true, agent_id: 'A', observed_at: at('10'), payload: { text: '끝' } }),
+    ];
+    const items = buildStreamModel(evs);
+    const sub = collectSidechainGroups(items)[0];
+    expect(sub.concurrentMainCount).toBe(1); // A span[01,10]과 겹친 main 1건
+    const main = items.find((i: any) => i.type === 'message' && !i.sidechain) as any;
+    expect(main.duringBackground).toBe(true);
+  });
 });
 
 describe('buildStreamModel — parallel batch grouping (#13 design 2026-06-13)', () => {

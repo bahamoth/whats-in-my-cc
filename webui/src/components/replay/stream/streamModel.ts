@@ -48,6 +48,10 @@ export interface MessageItem {
   origin?: MessageOrigin;
   /** The invoked command (e.g. "/model") when origin==='command', else null. */
   commandName?: string | null;
+  /** True when this MAIN message's timestamp falls within a background
+   *  agent/workflow group's run span — i.e. it happened concurrently while that
+   *  block ran. Drives the "백그라운드 실행 중" marker (annotateConcurrency). */
+  duringBackground?: boolean;
 }
 
 export interface ActivityEvent {
@@ -91,6 +95,8 @@ export interface SidechainGroup {
   taskEventId: string | null;
   /** 그 agent의 마지막 assistant_message 요약 — 축약 줄의 "결론". null=미관측/진행중. */
   conclusion: string | null;
+  /** 이 블록 실행 span과 겹친 main 메시지 수(백그라운드 동시진행) — annotateConcurrency. */
+  concurrentMainCount?: number;
   items: StreamItem[];
 }
 
@@ -108,6 +114,8 @@ export interface BatchGroup {
   synthesis: string | null;
   /** 전부 완료 추정(모든 자식이 결론 보유)이면 true. 스트리밍 중 false. */
   settled: boolean;
+  /** 이 배치 실행 span과 겹친 main 메시지 수(백그라운드 동시진행). */
+  concurrentMainCount?: number;
 }
 
 /** `Workflow` 툴이 띄운 fan-out 서브에이전트 묶음. main 체인엔 Workflow tool_call
@@ -126,6 +134,8 @@ export interface WorkflowGroup {
   synthesis: string | null;
   /** 모든 자식이 결론 보유면 true. */
   settled: boolean;
+  /** 이 워크플로우 실행 span과 겹친 main 메시지 수(백그라운드 동시진행). */
+  concurrentMainCount?: number;
 }
 
 /** Caller linkage harvested from `attachment_meta`/`subagent_meta` sidecar
@@ -404,6 +414,65 @@ export function mergeConcurrentGroups(items: StreamItem[]): StreamItem[] {
     }
   }
   return out;
+}
+
+/** Mark MAIN messages that ran concurrently with a background block, and count
+ *  per block. A block's run span = [min,max] observed time over its (recursive)
+ *  sidechain items; a top-level main message whose timestamp falls in that span
+ *  happened while the block ran (anchor-at-dispatch puts those messages after the
+ *  block, so the "백그라운드 실행 중" marker reads naturally). Foreground blocks
+ *  (main blocked) have no main messages in span → count 0 → no marker/badge. */
+export function annotateConcurrency(items: StreamItem[]): StreamItem[] {
+  const tms = (iso: string): number | null => {
+    const t = new Date(iso).getTime();
+    return Number.isNaN(t) ? null : t;
+  };
+  const spanOf = (g: SidechainGroup): { s: number; e: number } | null => {
+    let s = Infinity;
+    let e = -Infinity;
+    const see = (iso: string) => {
+      const t = tms(iso);
+      if (t != null) {
+        s = Math.min(s, t);
+        e = Math.max(e, t);
+      }
+    };
+    for (const it of g.items) {
+      if (it.type === 'message') see(it.timestamp);
+      else if (it.type === 'activity-run') for (const ae of it.events) see(ae.event.observed_at);
+      else if (it.type === 'thinking') for (const ev of it.events) see(ev.timestamp);
+    }
+    return e > s ? { s, e } : null;
+  };
+  const blocks: { s: number; e: number; group: SidechainGroup | BatchGroup | WorkflowGroup }[] = [];
+  for (const it of items) {
+    if (it.type !== 'sidechain-group' && it.type !== 'batch-group' && it.type !== 'workflow-group')
+      continue;
+    const scs: SidechainGroup[] = it.type === 'sidechain-group' ? [it] : it.agentGroups;
+    let s = Infinity;
+    let e = -Infinity;
+    for (const g of scs) {
+      const sp = spanOf(g);
+      if (sp) {
+        s = Math.min(s, sp.s);
+        e = Math.max(e, sp.e);
+      }
+    }
+    if (e > s) blocks.push({ s, e, group: it });
+  }
+  if (!blocks.length) return items;
+  for (const it of items) {
+    if (it.type !== 'message' || it.sidechain) continue;
+    const t = tms(it.timestamp);
+    if (t == null) continue;
+    for (const b of blocks) {
+      if (t >= b.s && t <= b.e) {
+        it.duringBackground = true;
+        b.group.concurrentMainCount = (b.group.concurrentMainCount ?? 0) + 1;
+      }
+    }
+  }
+  return items;
 }
 
 export function buildStreamModel(
@@ -748,6 +817,6 @@ export function buildStreamModel(
   // skill bodies, command output, interrupts, task-notifications) into one
   // collapsible block so the main conversation stays legible. Subagent/batch
   // internals are untouched — groupScaffold scans only this top-level array.
-  return groupScaffold(mergeConcurrentGroups(items));
+  return groupScaffold(annotateConcurrency(mergeConcurrentGroups(items)));
 }
 
