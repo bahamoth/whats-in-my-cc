@@ -6,7 +6,19 @@
 .group {
   margin: 8px 0 8px 24px;
   padding-left: 10px;
-  border-left: 2px solid var(--wimcc-lane-context, #b07dff);
+  /* per-agent identity color (hash) — single source of truth shared with the
+     hairline gutter rail; falls back to the subagent violet pre-0023. */
+  border-left: 2px solid var(--agentColor, var(--wimcc-lane-context, #b07dff));
+}
+
+/* filled identity swatch in the header — the accessible, re-confirmable color
+   surface (the 14px gutter rail is too thin to be the sole identity cue). */
+.swatch {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--agentColor, var(--wimcc-lane-context, #b07dff));
 }
 
 /* header row = fold toggle (flex:1) + jump-to-Task button as SIBLINGS — the
@@ -35,7 +47,7 @@
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
-  color: var(--wimcc-lane-context, #b07dff);
+  color: var(--agentColor, var(--wimcc-lane-context, #b07dff));
   border-radius: 4px;
 }
 
@@ -61,7 +73,7 @@
 .agentType {
   flex: none;
   font-weight: 600;
-  color: var(--wimcc-lane-context, #b07dff);
+  color: var(--agentColor, var(--wimcc-lane-context, #b07dff));
 }
 
 /* jump to the dispatching Task tool_call on the main chain */
@@ -94,7 +106,7 @@
   padding: 2px 5px;
   border-radius: 4px;
   font-weight: 400;
-  color: var(--wimcc-lane-context, #b07dff);
+  color: var(--agentColor, var(--wimcc-lane-context, #b07dff));
   background: var(--wimcc-surface-3, #1b202a);
   border: 1px solid var(--wimcc-border, #1d212c);
 }

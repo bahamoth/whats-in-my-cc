@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import { SubagentGroup } from '../SubagentGroup';
 import type { SidechainGroup } from '../streamModel';
+import { agentColor } from '../../../../lib/colorHash';
 
 const group: SidechainGroup = {
   type: 'sidechain-group',
@@ -152,5 +153,31 @@ describe('SubagentGroup', () => {
       />,
     );
     expect(screen.queryByTestId('subagent-conclusion')).toBeNull();
+  });
+});
+
+describe('SubagentGroup color identity (hairline gutter)', () => {
+  it('sets --agentColor from hash(agentId) and shows a color swatch', () => {
+    render(
+      <SubagentGroup group={group} selectedEventId={null} onSelect={() => {}} findingEventIds={new Set()} />,
+    );
+    const section = screen.getByTestId('subagent-group');
+    expect(section.style.getPropertyValue('--agentColor')).toBe(agentColor('a3f9c2d41b'));
+    expect(screen.getByTestId('subagent-swatch')).toBeInTheDocument();
+  });
+
+  it('agentId null → neutral var, swatch still present (graceful)', () => {
+    render(
+      <SubagentGroup
+        group={{ ...group, agentId: null }}
+        selectedEventId={null}
+        onSelect={() => {}}
+        findingEventIds={new Set()}
+      />,
+    );
+    expect(screen.getByTestId('subagent-group').style.getPropertyValue('--agentColor')).toBe(
+      agentColor(null),
+    );
+    expect(screen.getByTestId('subagent-swatch')).toBeInTheDocument();
   });
 });
