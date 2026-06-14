@@ -11,18 +11,18 @@
   align-self: stretch;
 }
 
-/* one lane = a 2px column; `right` set inline per lane index */
+/* one lane = a hairline column; `right` set inline per lane index */
 .lane {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 2px;
+  width: 1px;
 }
 
 .rail {
   position: absolute;
   left: 0;
-  width: 2px;
+  width: 1px;
   border-radius: 1px;
 }
 /* mid: full row height (continuous through interleaved rows) */
@@ -32,14 +32,17 @@
 /* end: from the top UP TO the node (card vertical center) — no overshoot below ✓ */
 .railEnd { top: 0; height: 50%; }
 
-/* ▢ start / ✓ end node — simple small shapes, centered on the card vertically */
+/* ▢ start / ✓ end node — simple small shapes, centered ON THE RAIL (not pulled
+   toward the card). The rail is adjacent to the card already, so no horizontal
+   connector is needed — it only ever read as a misaligned tick. The node sits on
+   the rail's vertical center with a bg halo so it reads as a clean cap. */
 .node {
   position: absolute;
-  left: -2.5px;
+  left: -2.5px; /* centers the 6px node on the 1px rail */
   top: 50%;
   transform: translateY(-50%);
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 2px;
   box-shadow: 0 0 0 2px var(--wimcc-bg, #0b0d12);
 }
@@ -49,18 +52,6 @@
   border-radius: 50%;
 }
 
-/* short horizontal connector from the node toward the card (visual joint) */
-.conn {
-  position: absolute;
-  left: 1px;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 2px;
-  width: 9px;
-  border-radius: 1px;
-}
-.connEnd { background: var(--wimcc-success, #41c285); }
-
 /* dense fallback (≥4 concurrent) — one neutral presence spine; identity/count
    live in the block headers + the row's bg-marker chip, not the gutter. */
 .dense {
@@ -68,7 +59,7 @@
   top: 0;
   bottom: 0;
   right: 6px;
-  width: 2px;
+  width: 1px;
   border-radius: 1px;
   background: var(--wimcc-fg-subtle, #6a7180);
   opacity: 0.7;
