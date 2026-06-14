@@ -110,6 +110,7 @@ function batch(over: Partial<BatchGroup> = {}): BatchGroup {
       scGroup({ id: 'sc-A', agentId: 'A' }),
       scGroup({ id: 'sc-B', agentId: 'B', conclusion: 'B 결론' }),
     ],
+    dispatchMessageId: 'm1',
     synthesis: '두 결과를 종합하면 X',
     settled: true,
     ...over,
