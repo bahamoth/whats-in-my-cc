@@ -808,6 +808,7 @@ fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Val
         "turn_id": e.turn_id,
         "is_sidechain": e.is_sidechain,
         "agent_id": e.agent_id,
+        "workflow_run_id": e.workflow_run_id,
         "is_meta": e.is_meta,
         "trace_id": e.trace_id,
         "span_id": e.span_id,
