@@ -64,6 +64,17 @@
   --wimcc-motion-base: 220ms;
   --wimcc-motion-slow: 400ms;
   --wimcc-easing-spring: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Evolved language (UX redesign 2026-06-14, A+B): replace the uniform
+   * hairline grid with surface elevation + a softer radius scale, and a
+   * tightened type scale. See docs/superpowers/specs/2026-06-14-witmcc-ux-redesign-design.md §3. */
+  --wimcc-radius-sm: 7px;
+  --wimcc-radius-md: 11px;
+  --wimcc-radius-lg: 14px;
+  /* card lift — a near-invisible top highlight + a deep, soft drop so cards read
+   * as floating on the bg without a drawn border. elev-2 for grouped panels. */
+  --wimcc-elev-1: 0 1px 0 rgba(255, 255, 255, 0.025), 0 8px 24px -20px rgba(0, 0, 0, 0.85);
+  --wimcc-elev-2: 0 1px 0 rgba(255, 255, 255, 0.03), 0 14px 36px -22px rgba(0, 0, 0, 0.9);
 }
 
 @media (prefers-reduced-motion: reduce) {

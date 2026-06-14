@@ -109,14 +109,16 @@
   color: var(--wimcc-warning, #f0b429);
 }
 
-/* ---- bubble ---- */
+/* ---- bubble ----
+ * A tone (2026-06-14): surface elevation instead of the old hairline look —
+ * softer radius, a touch more padding + line-height for readability. */
 .bubble {
-  padding: 8px 12px;
-  border-radius: 10px;
+  padding: 11px 14px;
+  border-radius: var(--wimcc-radius-md, 11px);
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 13.5px;
+  line-height: 1.6;
 }
 
 /* user: right-aligned accent bubble */
@@ -126,10 +128,11 @@
   border-bottom-right-radius: 3px;
 }
 
-/* assistant: left surface bubble */
+/* assistant: left surface bubble, lifted off the bg by elevation (no border) */
 .assistantBubble {
   background: var(--wimcc-surface-2, #161a23);
   color: var(--wimcc-fg, #e6e8ee);
+  box-shadow: var(--wimcc-elev-1);
   border-bottom-left-radius: 3px;
 }
 
@@ -137,6 +140,7 @@
 .subagentBubble {
   background: var(--wimcc-surface-2, #161a23);
   color: var(--wimcc-fg-muted, #aab0bd);
+  box-shadow: var(--wimcc-elev-1);
   border-bottom-left-radius: 3px;
 }
 
