@@ -619,6 +619,7 @@ export function syncTaskNotifications(
   wfToolUseByEvent: Map<string, string>,
   agentDispatchToolUse: Map<string, string>,
   callMetaByUse: Map<string, { eventId: string; label: string }> = new Map(),
+  wfNameByToolUse: Map<string, string | null> = new Map(),
 ): StreamItem[] {
   // invert: noti event_id → its tool_use_id (to enrich the staying noti message).
   const toolUseByNotiEvent = new Map<string, string>();
@@ -666,9 +667,28 @@ export function syncTaskNotifications(
         continue;
       }
       if (absorbNotiEvents.has(it.eventId)) continue; // absorbed into the subagent end card
-      // a STAYING notification (background command / unmatched-to-a-group): enrich
-      // it so it reads as "what finished" + can jump to the originating command.
+      // a STAYING notification (no matched group): if it's a WORKFLOW noti that
+      // produced no group (e.g. failed at launch / 0 agents), still surface a
+      // workflow-end card so the failure is visible + connected. Otherwise (a
+      // background command like Bash) enrich the message so it reads as "what
+      // finished" + can jump to the originating command.
       const tu = toolUseByNotiEvent.get(it.eventId);
+      if (tu && wfNameByToolUse.has(tu)) {
+        const noti = notiByToolUse.get(tu)!;
+        out.push({
+          type: 'workflow-end',
+          id: `wfend-noti-${it.eventId}`,
+          workflowId: `nogroup-${tu}`,
+          name: wfNameByToolUse.get(tu) ?? null,
+          color: WORKFLOW_COLOR,
+          status: noti.status ?? 'completed',
+          summary: noti.summary,
+          endTimestamp: noti.endTimestamp,
+          agentCount: 0,
+          notificationEventId: it.eventId,
+        });
+        continue;
+      }
       if (tu) {
         const noti = notiByToolUse.get(tu)!;
         const call = callMetaByUse.get(tu);
@@ -1255,6 +1275,8 @@ export function buildStreamModel(
   for (const c of wfCalls) wfToolUseByEvent.set(c.eventId, c.toolUseId);
   const agentDispatchToolUse = new Map<string, string>();
   for (const [agentId, meta] of metaByAgent) if (meta.toolUseId) agentDispatchToolUse.set(agentId, meta.toolUseId);
+  const wfNameByToolUse = new Map<string, string | null>();
+  for (const c of wfCalls) wfNameByToolUse.set(c.toolUseId, c.name);
 
   return insertSubagentEndCards(
     groupScaffold(
@@ -1264,6 +1286,7 @@ export function buildStreamModel(
         wfToolUseByEvent,
         agentDispatchToolUse,
         callMetaByUse,
+        wfNameByToolUse,
       ),
     ),
   );

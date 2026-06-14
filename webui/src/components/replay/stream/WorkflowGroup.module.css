@@ -1,4 +1,13 @@
-.group { margin: 8px 0 8px 24px; padding-left: 10px; border-left: 2px solid var(--wimcc-lane-quality, #ff8a4c); }
+/* flush like a top-level subagent: the orange hairline gutter rail beside it is
+   the left accent, so no extra indent/border-left → the rail's ▢ start node
+   connects to this card. */
+.group {
+  margin: 8px 0;
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--wimcc-lane-quality, #ff8a4c) 30%, var(--wimcc-border, #1d212c));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--wimcc-lane-quality, #ff8a4c) 8%, var(--wimcc-surface-2, #161a23));
+}
 .headerRow { display: flex; align-items: center; gap: 4px; }
 .header { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; overflow: hidden; padding: 4px 6px 4px 0; background: none; border: none; cursor: pointer; text-align: left; font-family: inherit; font-size: 11px; font-weight: 600; color: var(--wimcc-lane-quality, #ff8a4c); border-radius: 4px; }
 .header:hover { background: var(--wimcc-surface-2, #161a23); }
@@ -17,7 +26,9 @@
 .stat { font-size: 10px; color: var(--wimcc-fg-muted, #aab0bd); background: var(--wimcc-surface-2, #161a23); border: 1px solid var(--wimcc-border, #1d212c); border-radius: 4px; padding: 2px 7px; }
 .stat b { color: var(--wimcc-fg, #e6e8ee); font-variant-numeric: tabular-nums; }
 .stat[data-heat='hot'] b { color: var(--wimcc-danger, #ef4747); }
-.gantt { margin: 2px 0 4px 19px; }
+/* padding-right reserves room for the outside-right duration label so the
+   LONGEST bar (≈100% width) doesn't push its label off the card edge. */
+.gantt { margin: 2px 0 4px 19px; padding-right: 46px; }
 .lane { display: flex; align-items: center; height: 15px; margin: 2px 0; }
 .laneLabel { flex: none; width: 120px; padding-right: 8px; text-align: right; color: var(--wimcc-fg-muted, #aab0bd); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .track { position: relative; flex: 1 1 auto; height: 100%; }

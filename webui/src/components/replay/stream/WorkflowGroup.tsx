@@ -74,8 +74,8 @@ export function WorkflowGroup({ group, selectedEventId, onSelect, findingEventId
           <div key={l.id} data-testid="wf-lane" className={styles.lane}>
             <span className={styles.laneLabel} title={l.label}>{l.label}</span>
             <div className={styles.track}>
-              <div className={styles.bar} data-heat={agentDurationHeat(l.durMs)}
-                   style={{ left: `${pct(l.startMs)}%`, width: `${Math.max(1.5, pct(l.durMs))}%` }}>
+              <div className={styles.bar}
+                   style={{ left: `${pct(l.startMs)}%`, width: `${Math.max(1.5, pct(l.durMs))}%`, background: l.color }}>
                 <span className={styles.barLabel}>{formatDuration(l.durMs)}</span>
               </div>
             </div>

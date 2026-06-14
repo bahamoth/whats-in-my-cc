@@ -43,9 +43,10 @@
   border-radius: 2px;
   box-shadow: 0 0 0 2px var(--wimcc-bg, #0b0d12);
 }
+/* end node = a CIRCLE (vs the start square) in the SAME unit color as the rail —
+   cohesion; the success/fail outcome lives on the end card's status pill. */
 .nodeEnd {
   border-radius: 50%;
-  background: var(--wimcc-success, #41c285) !important;
 }
 
 /* short horizontal connector from the node toward the card (visual joint) */

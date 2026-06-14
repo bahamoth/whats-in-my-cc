@@ -1199,3 +1199,20 @@ describe('syncTaskNotifications — background command (Bash) connection', () =>
     });
   });
 });
+
+describe('syncTaskNotifications — workflow noti with no group (failed at launch)', () => {
+  it('a Workflow noti that produced no WorkflowGroup still becomes a workflow-end card', () => {
+    const noti = notiMsg('noti-wf0', '<task-notification><tool-use-id>toolu_wf0</tool-use-id><status>failed</status><summary>Error: boom at launch</summary></task-notification>');
+    const out = syncTaskNotifications(
+      [mainMsg('m', '2026-06-14T01:00:00Z'), noti],
+      new Map([['toolu_wf0', { status: 'failed', summary: 'Error: boom at launch', endTimestamp: 't', eventId: 'noti-wf0' }]]),
+      new Map(), // no workflow-group → no taskEventId match
+      new Map(),
+      new Map(),
+      new Map([['toolu_wf0', 'design-panel']]), // wfNameByToolUse: it WAS a Workflow call
+    );
+    expect(out.some((i) => i.id === 'noti-wf0')).toBe(false); // replaced
+    const end = out.find((i) => i.type === 'workflow-end') as WorkflowEndCard;
+    expect(end).toMatchObject({ name: 'design-panel', status: 'failed', agentCount: 0, notificationEventId: 'noti-wf0' });
+  });
+});
