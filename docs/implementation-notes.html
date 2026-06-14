@@ -4884,6 +4884,49 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section id="task-notification-sync-2026-06-14">
+    <h2>task-notification ↔ 워크플로우/백그라운드 종료 싱크 (2026-06-14)</h2>
+    <p>
+      떠다니던 하네스 <code>&lt;task-notification&gt;</code>("알림")을 그 작업의 <strong>결정론적
+      종료 마커</strong>로 묶는다. 조인 키는 <strong>실 transcript로 검증</strong>: 노티의
+      <code>&lt;tool-use-id&gt;</code> == 그 작업을 띄운 tool_call의 id — 워크플로우 노티
+      <code>toolu_0151…</code>가 <code>Workflow</code> tool_use 블록 id와, bash 노티가
+      <code>Bash</code> tool_call과 일치(2026-06-14, session 00fae5d9). 같은 백그라운드
+      가시화 에픽의 다음 슬라이스(서브에이전트 북엔드의 워크플로우판).
+    </p>
+    <ul>
+      <li><strong>파서</strong> <code>parseTaskNotification(content)</code> — <code>tool-use-id</code>·
+        <code>status</code>(completed/failed/killed)·<code>summary</code> 추출. 실 노티 본문으로
+        anchoring(테스트).</li>
+      <li><strong>싱크</strong> <code>syncTaskNotifications</code> (annotateConcurrency 後·
+        groupScaffold 前 — 노티가 아직 top-level일 때): ① WorkflowGroup → 디스패치
+        Workflow call의 tool_use_id로 노티 조인 → 떠다니는 노티를 그 자리에서
+        <code>workflow-end</code> 카드로 <b>치환</b>(status·summary·정확 종료시각 = 권위;
+        추정 synthesis 대체). ② Agent <code>run_in_background</code> 서브에이전트 →
+        SidechainGroup에 <code>endStatus</code>/notification 부착(서브에이전트 end card가
+        status 표시) + 노티 <b>흡수</b>(드롭). ③ 미매칭 노티(배경 Bash 등)는 그대로.</li>
+      <li><strong>UI</strong>: <code>WorkflowEndCard</code>(신규, 초록/실패 빨강/취소 amber +
+        "알림 원문" 점프) · <code>SubagentEndCard</code>에 status pill + 점프 · 공유
+        <code>endStatus</code> 헬퍼. <code>computeBgGutter</code>를 일반 "track"으로 확장 —
+        sidechain-group(해시색)에 더해 <b>workflow-group(주황) 레일</b>을 그 workflow-end
+        카드까지 북엔드. 흡수된 노티 event_id는 end card가 scroll 타깃으로 대신(점프).</li>
+    </ul>
+    <p>
+      <strong>검증</strong>: TDD red→green, webui 557 green(parse 3 · sync 3 · gutter wf-track 1 ·
+      WorkflowEndCard 3 · SubagentEndCard status 1 …). tsc clean, SPA build green. <strong>모델
+      실데이터 검증</strong>: 실 워크플로우 lifecycle 윈도우(653ea169, Workflow call 05:28 →
+      noti 05:34)에 <code>buildStreamModel</code>을 vite-node로 직접 돌려 <code>workflow-end</code>
+      카드 1건(name <code>plan-remaining-redesign-slices</code>·status <code>completed</code>·6
+      agents·summary from noti) 산출 확인 — 파스→조인→카드까지 실데이터로 동작. <strong>한계
+      (정직)</strong>: 워크플로우 end card의 <em>브라우저 렌더 스크린샷</em>은 못 담음 — 조인엔
+      Workflow call+noti가 같은 로드 윈도우에 있어야 하는데(window-scoped) 둘이 6분 떨어져
+      <code>?around=</code> 윈도우+loadOlder(제스처 게이트)로 동시 로드가 안 됨. 기능 결함
+      아니라 deep-link/윈도우 staging 한계(거터 슬라이스와 동류). 승인 프로토타입:
+      <code>webui/public/wf-noti-sync-proto.html</code>. <strong>real-data anchoring</strong>:
+      tool-use-id 조인은 transcript로 검증; status/summary는 노티 payload에서 직접.
+    </p>
+  </section>
+
 </main>
 </div>
 </body></html>

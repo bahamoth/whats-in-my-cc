@@ -2,11 +2,14 @@
 // The compact "end card" closing a background subagent's hairline rail: shows
 // when it finished, how long it ran, message/tool counts, and its conclusion —
 // so the rail reads request (start card) → … → result (this end card) without
-// expanding anything. A synthetic row (no source event); see SubagentEndCard in
-// streamModel + insertSubagentEndCards.
-import { CheckCircle2, Clock, MessageSquare, Wrench } from 'lucide-react';
+// expanding anything. When the subagent was Agent run_in_background, a matched
+// <task-notification> gives a deterministic status (completed/failed/killed) +
+// a jump to the notification 원문. A synthetic row (no source event); see
+// SubagentEndCard in streamModel + insertSubagentEndCards/syncTaskNotifications.
+import { CheckCircle2, Clock, MessageSquare, Wrench, Bell } from 'lucide-react';
 import type { SubagentEndCard as EndCard } from './streamModel';
 import { formatDuration, durationHeat } from './duration';
+import { endStatusLabel } from './endStatus';
 import styles from './SubagentEndCard.module.css';
 
 function timeLabel(iso: string): string {
@@ -16,17 +19,29 @@ function timeLabel(iso: string): string {
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-export function SubagentEndCard({ card }: { card: EndCard }) {
+interface Props {
+  card: EndCard;
+  onSelect?: (eventId: string) => void;
+}
+
+export function SubagentEndCard({ card, onSelect }: Props) {
+  const status = card.status ? endStatusLabel(card.status) : null;
   return (
     <div
       data-testid="subagent-end-card"
       className={styles.card}
+      data-status={status?.kind ?? 'done'}
       style={{ ['--agentColor' as string]: card.color }}
     >
       <div className={styles.head}>
         <CheckCircle2 size={13} aria-hidden className={styles.check} />
         <span className={styles.label}>종료</span>
         <span className={styles.time}>{timeLabel(card.endTimestamp)}</span>
+        {status && (
+          <span data-testid="subagent-end-status" className={styles.statusPill}>
+            {status.text}
+          </span>
+        )}
         <span className={styles.stats}>
           <span data-heat={durationHeat(card.durationMs)}>
             <Clock size={11} aria-hidden /> {formatDuration(card.durationMs)}
@@ -37,6 +52,16 @@ export function SubagentEndCard({ card }: { card: EndCard }) {
           <span>
             <Wrench size={11} aria-hidden /> {card.toolCount}
           </span>
+          {card.notificationEventId && onSelect && (
+            <button
+              data-testid="subagent-end-jump"
+              className={styles.jump}
+              title="종료 알림 원문으로 이동"
+              onClick={() => onSelect(card.notificationEventId!)}
+            >
+              <Bell size={10} aria-hidden /> 알림
+            </button>
+          )}
         </span>
       </div>
       <div className={styles.concl}>

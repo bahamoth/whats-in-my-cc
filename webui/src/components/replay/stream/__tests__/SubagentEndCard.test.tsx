@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, it, expect, vi } from 'vitest';
 import { SubagentEndCard } from '../SubagentEndCard';
 import type { SubagentEndCard as EndCard } from '../streamModel';
 
@@ -24,5 +25,15 @@ describe('SubagentEndCard', () => {
     expect(el).toHaveTextContent('63');
     expect(el).toHaveTextContent('139');
     expect(el).toHaveTextContent('결론');
+  });
+
+  it('with a matched task-notification: status pill + jump to 원문 (Agent run_in_background)', async () => {
+    const u = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<SubagentEndCard card={{ ...card, status: 'failed', notificationEventId: 'noti-a' }} onSelect={onSelect} />);
+    expect(screen.getByTestId('subagent-end-card')).toHaveAttribute('data-status', 'fail');
+    expect(screen.getByTestId('subagent-end-status')).toHaveTextContent('failed');
+    await u.click(screen.getByTestId('subagent-end-jump'));
+    expect(onSelect).toHaveBeenCalledWith('noti-a');
   });
 });

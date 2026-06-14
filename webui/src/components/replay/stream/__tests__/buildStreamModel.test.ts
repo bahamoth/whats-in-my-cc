@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildStreamModel, groupScaffold, parseWorkflowMeta, computeBgGutter, insertSubagentEndCards } from '../streamModel';
+import { buildStreamModel, groupScaffold, parseWorkflowMeta, computeBgGutter, insertSubagentEndCards, parseTaskNotification } from '../streamModel';
 import type { MessageItem, StreamItem, SidechainGroup, SubagentEndCard } from '../streamModel';
 import { buildLlmRequestMetrics } from '../llmRequestMetrics';
 import type { ObservedEventDto } from '../../../../api/types';
@@ -1066,5 +1066,115 @@ describe('insertSubagentEndCards', () => {
     expect(g.get(end.id)!.cells[0].marker).toBe('end');
     expect(g.get('A')!.cells[0].marker).toBe('start');
     expect(g.get('m2')!.cells[0].marker).toBe('mid');
+  });
+});
+
+// ── parseTaskNotification ───────────────────────────────────────────────────
+// Real samples frozen from session 00fae5d9 transcript (CC, 2026-06-14): the
+// workflow noti's <tool-use-id> was VERIFIED to equal the `Workflow` tool_use
+// block id (grep), and the bash noti's equals a `Bash` tool_call — so tool-use-id
+// is the deterministic join key from a completion notification to its dispatch.
+describe('parseTaskNotification', () => {
+  it('extracts tool-use-id / status / summary from a real workflow completion noti', () => {
+    const content = [
+      '<task-notification>',
+      '<task-id>wsn1u4f2u</task-id>',
+      '<tool-use-id>toolu_0151ZcxNvtFKooWWuTuu6eaW</tool-use-id>',
+      '<output-file>/tmp/x.output</output-file>',
+      '<status>completed</status>',
+      '<summary>Dynamic workflow "Map real wimcc code" completed</summary>',
+      '</task-notification>',
+    ].join('\n');
+    expect(parseTaskNotification(content)).toEqual({
+      taskId: 'wsn1u4f2u',
+      toolUseId: 'toolu_0151ZcxNvtFKooWWuTuu6eaW',
+      status: 'completed',
+      summary: 'Dynamic workflow "Map real wimcc code" completed',
+    });
+  });
+  it('captures failed / killed status', () => {
+    const c = '<task-notification><tool-use-id>toolu_x</tool-use-id><status>failed</status><summary>Error: boom</summary></task-notification>';
+    expect(parseTaskNotification(c)).toMatchObject({ toolUseId: 'toolu_x', status: 'failed', summary: 'Error: boom' });
+  });
+  it('returns null for non-notification text', () => {
+    expect(parseTaskNotification('just a normal message')).toBeNull();
+  });
+});
+
+// ── syncTaskNotifications: noti ↔ workflow/subagent completion ───────────────
+import { syncTaskNotifications } from '../streamModel';
+import type { WorkflowGroup, WorkflowEndCard } from '../streamModel';
+
+const notiMsg = (id: string, content: string): MessageItem => ({
+  type: 'message', id, eventId: id, role: 'user', model: null, text: content,
+  timestamp: '2026-06-14T02:00:00Z', sidechain: false, origin: 'notification',
+});
+const wfGroup = (id: string, taskEventId: string | null, name: string | null): WorkflowGroup => ({
+  type: 'workflow-group', id, name, description: null, taskEventId, agentGroups: [], synthesis: null, settled: false,
+});
+
+describe('syncTaskNotifications', () => {
+  it('workflow: enriches the group + replaces the noti message with a workflow-end card', () => {
+    const wf = wfGroup('wf1', 'wfcall-ev', 'facts');
+    const noti = notiMsg('noti-wf', '<task-notification><tool-use-id>toolu_wf</tool-use-id><status>completed</status><summary>done</summary></task-notification>');
+    const items: StreamItem[] = [wf, mainMsg('m', '2026-06-14T01:30:00Z'), noti];
+    const out = syncTaskNotifications(
+      items,
+      new Map([['toolu_wf', { status: 'completed', summary: 'done', endTimestamp: '2026-06-14T02:00:00Z', eventId: 'noti-wf' }]]),
+      new Map([['wfcall-ev', 'toolu_wf']]),
+      new Map(),
+    );
+    expect((out.find((i) => i.id === 'wf1') as WorkflowGroup).endStatus).toBe('completed');
+    expect(out.some((i) => i.id === 'noti-wf')).toBe(false);
+    const end = out.find((i) => i.type === 'workflow-end') as WorkflowEndCard;
+    expect(end).toMatchObject({ workflowId: 'wf1', status: 'completed', summary: 'done', name: 'facts', notificationEventId: 'noti-wf' });
+  });
+
+  it('subagent: enriches the sidechain-group + absorbs (drops) the noti', () => {
+    const sg = sgConcl('A', 'a1', ['2026-06-14T01:00:00Z', '2026-06-14T01:05:00Z'], 'x');
+    const noti = notiMsg('noti-ag', '<task-notification><tool-use-id>toolu_ag</tool-use-id><status>failed</status><summary>boom</summary></task-notification>');
+    const out = syncTaskNotifications(
+      [sg, noti],
+      new Map([['toolu_ag', { status: 'failed', summary: 'boom', endTimestamp: '2026-06-14T01:05:00Z', eventId: 'noti-ag' }]]),
+      new Map(),
+      new Map([['a1', 'toolu_ag']]),
+    );
+    expect((out.find((i) => i.id === 'A') as SidechainGroup).endStatus).toBe('failed');
+    expect((out.find((i) => i.id === 'A') as SidechainGroup).notificationEventId).toBe('noti-ag');
+    expect(out.some((i) => i.id === 'noti-ag')).toBe(false);
+  });
+
+  it('unmatched noti (no dispatching group) stays in the stream', () => {
+    const noti = notiMsg('noti-x', '<task-notification><tool-use-id>toolu_unknown</tool-use-id><status>completed</status></task-notification>');
+    const out = syncTaskNotifications(
+      [noti],
+      new Map([['toolu_unknown', { status: 'completed', summary: null, endTimestamp: 't', eventId: 'noti-x' }]]),
+      new Map(),
+      new Map(),
+    );
+    expect(out.some((i) => i.id === 'noti-x')).toBe(true);
+  });
+});
+
+describe('computeBgGutter — workflow track (orange rail bookend)', () => {
+  it('a workflow-group + its workflow-end card form one track: start on the group, end on the card', () => {
+    const child = (id: string, ts: string): SidechainGroup => ({
+      type: 'sidechain-group', id, agentId: id, agentType: null, description: null,
+      taskEventId: null, conclusion: null, items: [sub(`${id}-e`, ts)],
+    });
+    const wf: WorkflowGroup = {
+      type: 'workflow-group', id: 'W', name: 'wf', description: null, taskEventId: null,
+      agentGroups: [child('c1', '2026-06-14T01:00:00Z'), child('c2', '2026-06-14T01:01:00Z')],
+      synthesis: null, settled: true,
+    };
+    const wfEnd: WorkflowEndCard = {
+      type: 'workflow-end', id: 'wfend-W', workflowId: 'W', name: 'wf', color: '#ff8a4c',
+      status: 'completed', summary: 'ok', endTimestamp: '2026-06-14T01:05:00Z', agentCount: 2, notificationEventId: 'noti',
+    };
+    const items: StreamItem[] = [wf, mainMsg('m', '2026-06-14T01:02:00Z'), wfEnd];
+    const g = computeBgGutter(items);
+    expect(g.get('W')!.cells[0]).toMatchObject({ marker: 'start', color: '#ff8a4c' });
+    expect(g.get('m')!.cells[0].marker).toBe('mid');
+    expect(g.get('wfend-W')!.cells[0].marker).toBe('end');
   });
 });
