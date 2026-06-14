@@ -73,6 +73,20 @@
   color: var(--wimcc-fg-subtle, #6a7180);
 }
 
+/* "백그라운드 실행 중" — quiet marker on a MAIN message that ran while a
+   background subagent/workflow block was executing. Uses the subagent violet to
+   tie it to the block above. */
+.bgMarker {
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--wimcc-lane-context, #b07dff);
+  background: var(--wimcc-surface-3, #1b202a);
+  border: 1px solid var(--wimcc-lane-context, #b07dff);
+}
+
 /* raw ↔ styled markdown view toggle — quiet icon button in the head row */
 .mdToggle {
   display: inline-flex;

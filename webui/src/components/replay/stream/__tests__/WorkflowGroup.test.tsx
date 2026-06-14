@@ -29,4 +29,10 @@ describe('WorkflowGroup', () => {
     fireEvent.click(screen.getByTestId('wf-toggle'));
     expect(screen.getAllByTestId('subagent-group').length).toBe(2);
   });
+  it('concurrentMainCount>0이면 "main N건 동시" 배지', () => {
+    render(
+      <WorkflowGroup group={{ ...wg, concurrentMainCount: 3 }} selectedEventId={null} onSelect={noop} findingEventIds={new Set()} />,
+    );
+    expect(screen.getByTestId('wf-concurrent')).toHaveTextContent('main 3건 동시');
+  });
 });

@@ -110,6 +110,9 @@ export function BatchGroup({
                 {formatDuration(spanMs)}
               </span>
             )}
+            {group.concurrentMainCount ? (
+              <span data-testid="batch-concurrent" className={styles.concurrent}>⟂ main {group.concurrentMainCount}건 동시</span>
+            ) : null}
           </span>
         </button>
       </div>

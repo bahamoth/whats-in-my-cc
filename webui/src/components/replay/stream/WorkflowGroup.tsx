@@ -36,6 +36,9 @@ export function WorkflowGroup({ group, selectedEventId, onSelect, findingEventId
             <span>{stats.agentCount} agents</span>
             <span className={styles.status}>{group.settled ? `✓ ${stats.agentCount}/${stats.agentCount}` : '⏳'}</span>
             {tl.spanMs > 0 && <span className={styles.duration} data-heat={agentDurationHeat(stats.longestMs)}>{formatDuration(tl.spanMs)}</span>}
+            {group.concurrentMainCount ? (
+              <span data-testid="wf-concurrent" className={styles.concurrent}>⟂ main {group.concurrentMainCount}건 동시</span>
+            ) : null}
           </span>
         </button>
       </div>

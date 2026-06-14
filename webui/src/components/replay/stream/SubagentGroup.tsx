@@ -127,6 +127,9 @@ export function SubagentGroup({
                 {formatDuration(summary.durationMs)}
               </span>
             )}
+            {group.concurrentMainCount ? (
+              <span data-testid="subagent-concurrent" className={styles.concurrent}>⟂ main {group.concurrentMainCount}건 동시</span>
+            ) : null}
           </span>
         </button>
         {group.taskEventId && (
