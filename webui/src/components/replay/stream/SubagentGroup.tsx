@@ -11,6 +11,7 @@ import { ActivityStack } from './ActivityStack';
 import { ThinkingMarker } from './ThinkingMarker';
 import { formatDuration, durationHeat } from './duration';
 import type { SidechainGroup, StreamItem } from './streamModel';
+import { agentColor } from '../../../lib/colorHash';
 import styles from './SubagentGroup.module.css';
 
 interface SubagentGroupProps {
@@ -91,7 +92,12 @@ export function SubagentGroup({
   const preview = group.description || summary.promptPreview;
 
   return (
-    <section data-testid="subagent-group" data-expanded={String(expanded)} className={styles.group}>
+    <section
+      data-testid="subagent-group"
+      data-expanded={String(expanded)}
+      className={styles.group}
+      style={{ ['--agentColor' as string]: agentColor(group.agentId) }}
+    >
       <div className={styles.headerRow}>
         <button
           data-testid="subagent-toggle"
@@ -104,6 +110,7 @@ export function SubagentGroup({
             : <ChevronRight size={13} aria-hidden className={styles.chevron} />}
           <CornerDownRight size={13} aria-hidden className={styles.icon} />
           <span className={styles.label}>Subagent</span>
+          <span data-testid="subagent-swatch" className={styles.swatch} aria-hidden />
           {group.agentType && (
             <span data-testid="subagent-type" className={styles.agentType}>
               {group.agentType}
