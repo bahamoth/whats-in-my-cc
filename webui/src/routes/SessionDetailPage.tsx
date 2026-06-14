@@ -171,6 +171,14 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const loadAround = window_.loadAround;
   useEffect(() => {
     if (!selectedEventId) return;
+    // While FOLLOWING the live tip, do NOT drag the window back to the selected
+    // event. Resuming follow (autoscroll toggle ON) reloads to the tail on
+    // purpose — the reader chose "latest" over the deep-linked event. Without
+    // this guard, loadTail removes the (early) selected event from the window
+    // and this effect immediately loadAround()s back to it, so the jump-to-latest
+    // never lands (it snaps back to the deep-link slice). Selection is preserved
+    // in the DetailPanel; only the auto-scroll-back is suppressed.
+    if (followingRef.current) return;
     if (windowLoading !== 'idle') return;
     if (windowEvents.some((e) => e.event_id === selectedEventId)) return;
     if (triedAroundRef.current === selectedEventId) return;
@@ -326,6 +334,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               onSelect={selectStreamCard}
               onLoadOlder={window_.loadOlder}
               canLoadOlder={window_.oldest !== null}
+              onLoadNewer={window_.loadNewer}
+              canLoadNewer={!window_.atLiveTip}
               onFollowingChange={handleFollowingChange}
               initialFollow={!mountedOnDeepLink}
               pendingNewCount={pendingNew}

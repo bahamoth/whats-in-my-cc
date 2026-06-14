@@ -15,7 +15,7 @@ import { SubagentEndCard } from './SubagentEndCard';
 import { WorkflowEndCard } from './WorkflowEndCard';
 import { computeBgGutter } from './streamModel';
 import type { StreamItem } from './streamModel';
-import { shouldLoadOlder, shouldAdjustOnItemResize, LOAD_OLDER_TOP_PX } from './scrollAnchor';
+import { shouldLoadOlder, shouldLoadNewer, shouldAdjustOnItemResize, LOAD_OLDER_TOP_PX, LOAD_NEWER_BOTTOM_PX } from './scrollAnchor';
 import { useAutoscroll } from '../../../hooks/useAutoscroll';
 import styles from './ConversationStream.module.css';
 
@@ -36,6 +36,12 @@ interface ConversationStreamProps {
   /** Whether older history remains to be paged in (drives the near-top trigger
    *  and stops it once the session start is reached). */
   canLoadOlder?: boolean;
+  /** Page in the next NEWER window. Called when the reader (autoscroll OFF —
+   *  reading history) scrolls down near the bottom and `canLoadNewer` is true.
+   *  This grows a detached/deep-linked window forward toward the live tip. */
+  onLoadNewer?: () => void;
+  /** Whether newer events remain to be paged in (false at the live tip). */
+  canLoadNewer?: boolean;
   /** Reports the follow state (true = following the live tip, false = reading
    *  history) so the page can pause SSE backfill while detached and catch up on
    *  resume. Fired on every change. */
@@ -76,6 +82,8 @@ export function ConversationStream({
   findingEventIds,
   onLoadOlder,
   canLoadOlder = false,
+  onLoadNewer,
+  canLoadNewer = false,
   onFollowingChange,
   pendingNewCount,
   footerExtra,
@@ -157,7 +165,14 @@ export function ConversationStream({
     }),
     [items],
   );
-  const auto = useAutoscroll(parentRef, signature, { initialFollow });
+  // canResumeFollow: hitting the buffer bottom may resume following ONLY when the
+  // window is at the live tip. While newer events remain to page (canLoadNewer),
+  // the bottom is a detached slice edge — forward-paging grows it instead of
+  // jumping to the tail. The explicit toggle (enable) still re-engages regardless.
+  const auto = useAutoscroll(parentRef, signature, {
+    initialFollow,
+    canResumeFollow: !canLoadNewer,
+  });
 
   // Per-row background-subagent gutter cells (hairline lanes). Derived from the
   // standalone sidechain-groups' spans; keyed by row id. Recomputed only when
@@ -208,6 +223,26 @@ export function ConversationStream({
     if (!el) return;
     const prevScrollTop = prevScrollTopRef.current;
     prevScrollTopRef.current = el.scrollTop;
+    // Forward paging while READING HISTORY (autoscroll OFF): scrolling DOWN near
+    // the bottom pages the next NEWER window, so a detached/deep-linked window is
+    // not a stuck slice — it grows toward the live tip just like loadOlder grows
+    // it backward. Gated on !auto.autoscroll so it never competes with the live
+    // follow path (which owns forward loading while following).
+    if (onLoadNewer && canLoadNewer && !auto.autoscroll) {
+      if (
+        shouldLoadNewer({
+          scrollTop: el.scrollTop,
+          prevScrollTop,
+          scrollHeight: el.scrollHeight,
+          clientHeight: el.clientHeight,
+          hasInteracted: hasInteractedRef.current,
+          canLoadNewer,
+          bottomThreshold: Math.max(LOAD_NEWER_BOTTOM_PX, el.clientHeight),
+        })
+      ) {
+        onLoadNewer();
+      }
+    }
     if (!onLoadOlder) return;
     // Prefetch a full viewport ahead (floor LOAD_OLDER_TOP_PX) so the next page
     // is prepended before the reader hits the absolute top — seamless upward

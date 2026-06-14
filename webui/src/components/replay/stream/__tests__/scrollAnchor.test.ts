@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isNearTop, shouldLoadOlder, shouldAdjustOnItemResize, LOAD_OLDER_TOP_PX } from '../scrollAnchor';
+import { isNearTop, shouldLoadOlder, shouldLoadNewer, shouldAdjustOnItemResize, LOAD_OLDER_TOP_PX } from '../scrollAnchor';
 
 describe('isNearTop', () => {
   it('true at the very top', () => {
@@ -97,5 +97,26 @@ describe('shouldAdjustOnItemResize — measurement growth must not eat upward sc
     expect(
       shouldAdjustOnItemResize({ itemEnd: 1000, scrollOffset: 600, scrollAdjustments: 500 }),
     ).toBe(true);
+  });
+});
+
+describe('shouldLoadNewer — page NEWER history on a downward near-bottom user scroll (forward paging)', () => {
+  const base = { hasInteracted: true, canLoadNewer: true, scrollHeight: 5000, clientHeight: 1000 };
+  it('fires when scrolling DOWN into the near-bottom zone', () => {
+    // distanceFromBottom = 5000 - (3800+1000) = 200 (within zone), scrolling down
+    expect(shouldLoadNewer({ ...base, scrollTop: 3800, prevScrollTop: 3400 })).toBe(true);
+  });
+  it('fires when pinned at the absolute bottom regardless of direction', () => {
+    expect(shouldLoadNewer({ ...base, scrollTop: 4000, prevScrollTop: 4000 })).toBe(true); // distance 0
+  });
+  it('does NOT fire when scrolling UP (excludes the live-append/anchor)', () => {
+    expect(shouldLoadNewer({ ...base, scrollTop: 3900, prevScrollTop: 4000 })).toBe(false);
+  });
+  it('does NOT fire far from the bottom', () => {
+    expect(shouldLoadNewer({ ...base, scrollTop: 1000, prevScrollTop: 900 })).toBe(false);
+  });
+  it('does NOT fire without interaction or when no newer pages remain', () => {
+    expect(shouldLoadNewer({ ...base, hasInteracted: false, scrollTop: 4000, prevScrollTop: 4000 })).toBe(false);
+    expect(shouldLoadNewer({ ...base, canLoadNewer: false, scrollTop: 4000, prevScrollTop: 4000 })).toBe(false);
   });
 });

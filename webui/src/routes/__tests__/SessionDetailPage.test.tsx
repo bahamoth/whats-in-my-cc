@@ -300,6 +300,61 @@ describe('SessionDetailPage', () => {
     expect(calls.some((u) => u.includes('around=ev1'))).toBe(true);
   });
 
+  // Resuming follow (autoscroll toggle ON) from a deep-link slice reloads to the
+  // TAIL on purpose — the reader chose "latest". The loadAround effect must NOT
+  // drag the window back to the (now off-window) selected event. Regression:
+  // loadTail removed ev-old from the window, loadAround() snapped the buffer back
+  // to the deep-link slice, so the jump-to-latest never landed.
+  it('resuming follow from a deep-link reloads to the tail and does NOT snap back via loadAround', async () => {
+    const evOld = {
+      event_id: 'ev-old', raw_event_id: 'r0', session_id: 's1', event_uuid: null,
+      parent_uuid: null, observed_at: '2026-05-19T09:00:00Z', actor: 'user',
+      kind: 'user_message', subkind: null, tool_use_id: null, tool_name: null,
+      turn_id: null, is_sidechain: false, is_meta: false,
+      payload: { content: 'an old deep-linked message' },
+    };
+    const f = setupFetch({
+      detail: env(sessionDetail),
+      // TAIL window (ev1/ev2) — does NOT contain ev-old.
+      events: env({
+        events: eventsWithRows.events,
+        prev_cursor: '2026-05-19T10:00:00Z|ev1',
+        next_cursor: null,
+      }),
+      // Deep-link around-window: ev-old only, with a non-null next_cursor so the
+      // window is DETACHED (newer events still to page — not the live tip).
+      around: env({
+        events: [evOld],
+        prev_cursor: '2026-05-19T09:00:00Z|ev-old',
+        next_cursor: '2026-05-19T10:00:00Z|ev1',
+      }),
+      raw: env({ ...raw, event_id: 'ev-old' }),
+    });
+    const { container } = rendered('s1', '?selected=ev-old');
+
+    // mount loads the around-window; the deep-linked event renders.
+    await waitFor(() =>
+      expect(container.querySelector('[data-event-id="ev-old"]')).toBeInTheDocument(),
+    );
+    const aroundCount = () =>
+      f.mock.calls.map((c) => String(c[0])).filter((u) => u.includes('around=ev-old')).length;
+    expect(aroundCount()).toBe(1);
+
+    // resume follow: toggle autoscroll ON → reload to the tail.
+    const toggle = screen.getByRole('button', { name: /자동 스크롤/ });
+    await act(async () => {
+      fireEvent.click(toggle);
+    });
+
+    // the tail (ev1/ev2) renders and the window is NOT snapped back to ev-old…
+    await waitFor(() =>
+      expect(container.querySelector('[data-event-id="ev1"]')).toBeInTheDocument(),
+    );
+    expect(container.querySelector('[data-event-id="ev-old"]')).not.toBeInTheDocument();
+    // …and crucially no SECOND around fetch was issued after the toggle.
+    expect(aroundCount()).toBe(1);
+  });
+
   it('shows 404 when session detail missing', async () => {
     setupFetch({
       detail: new Response('{"detail":"session nope not found"}', { status: 404 }),
