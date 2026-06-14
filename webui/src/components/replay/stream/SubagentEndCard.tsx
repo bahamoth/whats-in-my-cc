@@ -23,9 +23,10 @@ function timeLabel(iso: string): string {
 interface Props {
   card: EndCard;
   onSelect?: (eventId: string) => void;
+  selected?: boolean;
 }
 
-export function SubagentEndCard({ card, onSelect }: Props) {
+export function SubagentEndCard({ card, onSelect, selected = false }: Props) {
   const status = card.status ? endStatusLabel(card.status) : null;
   const selectable = !!(card.notificationEventId && onSelect);
   return (
@@ -33,6 +34,7 @@ export function SubagentEndCard({ card, onSelect }: Props) {
       data-testid="subagent-end-card"
       className={styles.card}
       data-status={status?.kind ?? 'done'}
+      data-selected={String(selected)}
       style={{ ['--agentColor' as string]: card.color }}
       {...(selectable
         ? {

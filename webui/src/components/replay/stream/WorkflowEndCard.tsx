@@ -20,9 +20,10 @@ function timeLabel(iso: string): string {
 interface Props {
   card: EndCard;
   onSelect?: (eventId: string) => void;
+  selected?: boolean;
 }
 
-export function WorkflowEndCard({ card, onSelect }: Props) {
+export function WorkflowEndCard({ card, onSelect, selected = false }: Props) {
   const status = endStatusLabel(card.status);
   const selectable = !!onSelect;
   return (
@@ -30,6 +31,7 @@ export function WorkflowEndCard({ card, onSelect }: Props) {
       data-testid="workflow-end-card"
       className={styles.card}
       data-status={status.kind}
+      data-selected={String(selected)}
       {...(selectable
         ? {
             role: 'button',

@@ -95,3 +95,9 @@
 /* selectable (has a matched notification) → whole card clicks through to it */
 .card[role='button'] { cursor: pointer; }
 .card[role='button']:hover { background: color-mix(in srgb, var(--wimcc-success, #41c285) 13%, var(--wimcc-surface-2, #161a23)); }
+
+/* deep-link / selection highlight (the absorbed noti targets this card) */
+.card[data-selected='true'] {
+  outline: 2px solid var(--agentColor, var(--wimcc-lane-context, #b07dff));
+  outline-offset: 1px;
+}
