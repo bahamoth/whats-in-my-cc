@@ -16,6 +16,7 @@ import type {
   ActivityRun,
   ActivityEvent,
   BatchGroup,
+  WorkflowGroup,
   SidechainGroup,
   ScaffoldGroup,
 } from '../streamModel';
@@ -110,6 +111,23 @@ function batch(over: Partial<BatchGroup> = {}): BatchGroup {
       scGroup({ id: 'sc-B', agentId: 'B', conclusion: 'B 결론' }),
     ],
     synthesis: '두 결과를 종합하면 X',
+    settled: true,
+    ...over,
+  };
+}
+
+function wfGroup(over: Partial<WorkflowGroup> = {}): WorkflowGroup {
+  return {
+    type: 'workflow-group',
+    id: 'wf-sc-A',
+    name: 'review-changes',
+    description: null,
+    taskEventId: 'wfc',
+    agentGroups: [
+      scGroup({ id: 'sc-A', agentId: 'A' }),
+      scGroup({ id: 'sc-B', agentId: 'B', conclusion: 'B 결론' }),
+    ],
+    synthesis: '워크플로우 종합 결과 X',
     settled: true,
     ...over,
   };
@@ -288,6 +306,38 @@ describe('ConversationStream', () => {
       />,
     );
     expect(screen.getByTestId('batch-group')).toHaveAttribute('data-expanded', 'true');
+    expect(screen.getAllByTestId('subagent-group').length).toBeGreaterThan(0);
+  });
+
+  // A workflow-group renders the dedicated WorkflowGroup container. Collapsed by
+  // default (settled), but synthesis + stats + mini-gantt stay visible; children
+  // (SubagentGroups) hidden until expanded.
+  it('renders a workflow-group as the WorkflowGroup container (collapsed shows synthesis+chart)', () => {
+    render(
+      <ConversationStream
+        items={[msg('a', 'first'), wfGroup()]}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('workflow-group')).toBeInTheDocument();
+    expect(screen.getByTestId('wf-synthesis')).toHaveTextContent('워크플로우 종합 결과 X');
+    expect(screen.getByTestId('wf-stats')).toHaveTextContent('최대 병렬');
+    expect(screen.getAllByTestId('wf-lane').length).toBe(2);
+    expect(screen.queryByTestId('subagent-group')).toBeNull();
+  });
+
+  it('auto-expands a workflow-group whose child holds the selected event', () => {
+    render(
+      <ConversationStream
+        items={[wfGroup()]}
+        selectedEventId="aMsg"
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('workflow-group')).toHaveAttribute('data-expanded', 'true');
     expect(screen.getAllByTestId('subagent-group').length).toBeGreaterThan(0);
   });
 
