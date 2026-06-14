@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.7.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.6.0...v0.7.0) (2026-06-14)
+
+
+### Features
+
+* add background subagent gutter and bookend UI prototypes ([36f139d](https://github.com/bahamoth/whats-in-my-cc/commit/36f139da6405b683e019a7f64f711edc91234c23))
+* **api:** events 응답에 workflow_run_id 노출 ([9ded426](https://github.com/bahamoth/whats-in-my-cc/commit/9ded4268a7e9a80c5e690f88af21c8892f0187dc))
+* **db:** observed_event.workflow_run_id(0024) + repo + source_uri backfill ([6250b0c](https://github.com/bahamoth/whats-in-my-cc/commit/6250b0c1d60bef03bb979f25e77edad7bb27bac4))
+* **ingest:** workflow run_id 경로 파서(workflows/&lt;runId&gt;/) + 이벤트 주입 + 사이드카 ([50cb8cc](https://github.com/bahamoth/whats-in-my-cc/commit/50cb8ccaff7b209f1d2606a39f6504cfd981c65f))
+* **webui:** "백그라운드 실행 중" 마커 + "main N건 동시" 배지(승인 프로토타입 마감) ([908f4a4](https://github.com/bahamoth/whats-in-my-cc/commit/908f4a4a98ddb5b709fb10e00067dfb00ffdebd8))
+* **webui:** agentColor — 결정론 hash(agent_id)→안정 팔레트(가시화 색 단일 출처) ([97b7222](https://github.com/bahamoth/whats-in-my-cc/commit/97b7222ab418af02baec47a0eee2c162e2d29ef4))
+* **webui:** annotateConcurrency — 백그라운드 동시진행 main 표식·블록 동시 카운트 ([b96017b](https://github.com/bahamoth/whats-in-my-cc/commit/b96017b311cb12b1a0d5cfee5d2979d39e8ba368))
+* **webui:** BgGutter — per-row 헤어라인 거터(14px 고정, virtualizer 높이 불변) ConversationStream 통합 ([6626d33](https://github.com/bahamoth/whats-in-my-cc/commit/6626d337a76e3168ee37ec24a6c6e97168b6cecd))
+* **webui:** computeBgGutter — 단독 백그라운드 서브에이전트의 per-row 레인(≤3 팩킹, &gt;3 dense) ([8af8bca](https://github.com/bahamoth/whats-in-my-cc/commit/8af8bca15ba1ff22b4d1aae6cf9b56b29c81938e))
+* **webui:** ConversationStream·itemEventIds에 WorkflowGroup 통합 ([26b2db6](https://github.com/bahamoth/whats-in-my-cc/commit/26b2db6ff23e5f3994e09c8fe334ade3fb12cb2e))
+* **webui:** SubagentGroup 인스턴스 색(--agentColor)+신원 스와치(violet 하드코딩 대체) ([edcf85d](https://github.com/bahamoth/whats-in-my-cc/commit/edcf85d4412a9d8c5702c02ce4f56bae9bf61894))
+* **webui:** task-notification을 워크플로우/백그라운드 종료에 싱크 — tool_use_id 조인으로 workflow-end 카드(status/summary)+서브에이전트 end card status+거터 워크플로우 레일 ([60535c4](https://github.com/bahamoth/whats-in-my-cc/commit/60535c450d0db057340cf699dbee373d435a7ad3))
+* **webui:** Workflow fan-out을 turn_id로 WorkflowGroup 라우팅 + parseWorkflowMeta ([d695579](https://github.com/bahamoth/whats-in-my-cc/commit/d695579ebed4509a23464a610210ecea5ee97e70))
+* **webui:** workflow 통계·타임라인·언어중립 라벨·heat 헬퍼 ([37fb465](https://github.com/bahamoth/whats-in-my-cc/commit/37fb465e0b9f2b0ec08616bed318acab9d38c43a))
+* **webui:** WorkflowGroup 컴포넌트 — 접힘에 종합+통계+미니간트 ([8c6aa59](https://github.com/bahamoth/whats-in-my-cc/commit/8c6aa59f2d18db4aa8855c7bf21c4fa8a32b58af))
+* **webui:** WorkflowGroup을 workflow_run_id로 결정론 그룹핑(turn_id 추론 폐기) + 백그라운드 조각 병합(mergeConcurrentGroups) ([decb5cb](https://github.com/bahamoth/whats-in-my-cc/commit/decb5cb351ea62c37f756ea9d1acae6ff97651a3))
+* **webui:** 백그라운드 Bash 노티 연결(무엇이 끝났나+명령 점프) + 합성 end card/워크플로우 시작 카드 선택 가능 ([2008a35](https://github.com/bahamoth/whats-in-my-cc/commit/2008a35f66a3c03b80ada051b94f0ee2cc68f29f))
+* **webui:** 백그라운드 서브에이전트 시작/끝 북엔드 — 끝 카드(SubagentEndCard)+레일 노드 클립/카드 연결+시작 카드 상태칩 ([e82d2a3](https://github.com/bahamoth/whats-in-my-cc/commit/e82d2a378e1cb6437f0acd091dc091a0e4e2e38b))
+* **webui:** 워크플로우 카드 마감 — per-agent 간트색·라벨 reserve·flush(거터 연결)·색 일치감(유닛색+status pill)·실패/0-agent 워크플로우 end 카드 ([f6b76e7](https://github.com/bahamoth/whats-in-my-cc/commit/f6b76e77e242451ba3af3293a14d1e023e0f722c))
+
+
+### Bug Fixes
+
+* **webui:** bg-marker 용어 '동시'→'백그라운드'(Claude 어휘 일치) ([4d3ddb9](https://github.com/bahamoth/whats-in-my-cc/commit/4d3ddb947d263247bc66b8bfa7dea952d291c86e))
+* **webui:** LIVE 세션 딥링크 회귀 — 마운트 시 around-윈도우 초기로드+follow detach(tip 끌림 제거) + end card 선택 하이라이트 ([73c9b78](https://github.com/bahamoth/whats-in-my-cc/commit/73c9b78a714994686554f34ab00958aa8ccbf9ce))
+* **webui:** 백그라운드 거터 시작점을 서브에이전트에 고정 + 심미 정리 ([f40e8fb](https://github.com/bahamoth/whats-in-my-cc/commit/f40e8fb93bf7e7acfc965f7b6de0276d30cf0072))
+* **webui:** 백그라운드 동시 마커를 '서브에이전트 N개 동시 실행'으로 — 주어 명확화(이 메시지가 아님) + 동시 실행 에이전트 수 ([2b65142](https://github.com/bahamoth/whats-in-my-cc/commit/2b651427249540c0942cd9df77527b0a40bbcd7d))
+* **webui:** 분리 deep-link 윈도우의 전방 페이징 + 자동스크롤 토글 latest 복귀 ([262a552](https://github.com/bahamoth/whats-in-my-cc/commit/262a552c0782632371c0fcaf222621f012d93609))
+* **webui:** 서브에이전트 종료 중복 카드 머지(task-id==agent_id 조인, 사이드카 독립) + agentColor 팔레트 가독성 튜닝 ([ea52fa0](https://github.com/bahamoth/whats-in-my-cc/commit/ea52fa0477f7654bef0556f98e652fc21129bcad))
+* **webui:** 종료/노티 카드 선택 링을 다른 박스와 동일한 1px로 정정 ([088588d](https://github.com/bahamoth/whats-in-my-cc/commit/088588d5131271ecc569c1618575c9a2208191bc))
+* **webui:** 종료/노티 카드 선택 링을 짙은 주황(#ea580c)으로 ([96757cb](https://github.com/bahamoth/whats-in-my-cc/commit/96757cb4ce941534fe6f5f43e26a8a7fefb1fd99))
+* **webui:** 종료/노티 카드 선택을 기존 테두리 recolor로 (2px 이중선 제거) ([3384bae](https://github.com/bahamoth/whats-in-my-cc/commit/3384bae6d56082ed9587a23321293ebb2a3f51ec))
+
 ## [0.6.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.5.0...v0.6.0) (2026-06-13)
 
 
