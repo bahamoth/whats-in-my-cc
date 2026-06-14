@@ -51,11 +51,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const metricsQuery = useSessionMetricsQuery(sessionId, { enabled: analysisOpen && !!sessionId });
 
-  // Event id from a `?selected=` deep-link present AT MOUNT (captured once, so it
-  // stays stable as the user later selects other events). Drives the initial
-  // around-window + detached follow so a live-session deep-link actually lands.
-  const [initialDeepLinkId] = useState(() => sel.selectedNodeId);
-  const window_ = useSessionWindow(sessionId, { initialAround: initialDeepLinkId });
+  const window_ = useSessionWindow(sessionId);
 
   // SSE envelopes are lightweight notifications WITHOUT a payload — appending
   // them directly would yield content-less events that the stream model drops
@@ -81,12 +77,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   // count the pending arrivals for the "N ↓" badge; on resume we reload() to the
   // live tip to catch up. ConversationStream reports the follow state up here.
   const reload = window_.reload;
-  // If the page MOUNTED on a `?selected=` deep-link, start DETACHED: the initial
-  // load is the around-window (above), so following the live tip would let the
-  // first SSE backfill pull the window off it and the card never lands
-  // (regressed deep-link on LIVE sessions; static ones were unaffected).
-  const mountedOnDeepLink = initialDeepLinkId !== null;
-  const followingRef = useRef(!mountedOnDeepLink);
+  const followingRef = useRef(true);
   const [pendingNew, setPendingNew] = useState(0);
   const handleFollowingChange = useCallback(
     (following: boolean) => {
@@ -327,7 +318,6 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               onLoadOlder={window_.loadOlder}
               canLoadOlder={window_.oldest !== null}
               onFollowingChange={handleFollowingChange}
-              initialFollow={!mountedOnDeepLink}
               pendingNewCount={pendingNew}
               footerExtra={
                 <UntaggedBashPanel events={window_.events} onJump={selectStreamCard} />

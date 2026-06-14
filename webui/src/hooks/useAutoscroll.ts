@@ -49,10 +49,6 @@ export interface UseAutoscrollResult {
 
 export interface UseAutoscrollOpts {
   bottomThreshold?: number;
-  /** Start detached (not following the live tip). Set when the page mounts on a
-   *  `?selected=` deep-link, so live SSE backfill does not pull the window off
-   *  the loadAround target before it can be scrolled into view. Default true. */
-  initialFollow?: boolean;
 }
 
 // How far the reader must scroll UP from our last pinned position to count as a
@@ -76,7 +72,7 @@ export function useAutoscroll(
 ): UseAutoscrollResult {
   const threshold = opts.bottomThreshold ?? DEFAULT_BOTTOM_THRESHOLD;
 
-  const [autoscroll, setAutoscroll] = useState(opts.initialFollow ?? true);
+  const [autoscroll, setAutoscroll] = useState(true);
   const [newCount, setNewCount] = useState(0);
 
   // Mirror autoscroll into a ref so the items-change effect reads the current
