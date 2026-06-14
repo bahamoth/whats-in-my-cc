@@ -38,4 +38,25 @@ describe('BgGutter', () => {
     expect(screen.getByTestId('gutter')).toBeInTheDocument();
     expect(screen.queryAllByTestId('gutter-rail')).toHaveLength(0);
   });
+
+  // A+B unified timeline (2026-06-14): the gutter cell IS the time-spine. Every
+  // row draws a continuous main spine line (so rows read as one axis) and a
+  // node colored by the row's primary kind. Background-subagent lanes branch off
+  // the same spine (the gutter is absorbed into the spine).
+  it('always renders the continuous main time-spine line', () => {
+    render(<BgGutter row={undefined} />);
+    expect(screen.getByTestId('spine-line')).toBeInTheDocument();
+  });
+
+  it('renders a kind-colored node on the spine for the row', () => {
+    render(<BgGutter row={undefined} kind="user" />);
+    const node = screen.getByTestId('spine-node');
+    expect(node).toBeInTheDocument();
+    expect(node).toHaveAttribute('data-kind', 'user');
+  });
+
+  it('omits the spine node when the row has no primary kind', () => {
+    render(<BgGutter row={undefined} kind={null} />);
+    expect(screen.queryByTestId('spine-node')).toBeNull();
+  });
 });

@@ -1,17 +1,64 @@
-/* Background-subagent hairline gutter — one per stream row. Constant 14px wide
-   at any concurrency (lanes pack inside; ≥4 → single dense spine). align-self
-   stretch makes the rails span the row's full height so adjacent rows' rails
-   read as one continuous lane, without the gutter ever changing row HEIGHT.
-   Lanes are anchored from the RIGHT (card-facing) edge: lane 0 nearest the card
-   so the common single-agent rail sits beside its card. */
+/* Unified left TIME-SPINE cell — one per stream row (A+B redesign, 2026-06-14).
+   Constant 30px wide. A continuous main spine line sits at left:7px on EVERY
+   row (so stacked rows read as one vertical time axis); the row's node sits on
+   it; background-subagent lanes branch off to its right (lane 0 nearest the
+   spine), packing at a 4px pitch (≥4 → single dense spine). align-self stretch
+   makes the rails span the row's full height so adjacent rows' rails read as one
+   continuous lane, without the gutter ever changing row HEIGHT. */
 .gutter {
   position: relative;
   flex: none;
-  width: 14px;
+  width: 30px;
   align-self: stretch;
 }
 
-/* one lane = a hairline column; `right` set inline per lane index */
+/* main time-spine — a continuous hairline at a fixed x on EVERY row. */
+.spine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 7px;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--wimcc-border, #1d212c) 8%,
+    var(--wimcc-border, #1d212c) 92%,
+    transparent
+  );
+}
+
+/* the row's node on the spine — colored by primary kind, with a bg halo so it
+   reads as a clean dot punched through the axis. */
+.spineNode {
+  position: absolute;
+  left: 7px;
+  top: 13px;
+  width: 8px;
+  height: 8px;
+  margin-left: -3.5px; /* center the 8px node on the 1px line at left:7px */
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--wimcc-bg, #0b0d12);
+  background: var(--wimcc-fg-subtle, #6a7180);
+}
+.spineNode[data-kind='user'] { background: var(--wimcc-accent, #4f8cff); }
+.spineNode[data-kind='assistant'] { background: var(--wimcc-fg-muted, #aab0bd); }
+.spineNode[data-kind='batch'],
+.spineNode[data-kind='workflow'] { background: var(--wimcc-lane-quality, #ff8a4c); }
+.spineNode[data-kind='tool'],
+.spineNode[data-kind='thinking'],
+.spineNode[data-kind='scaffold'] {
+  width: 6px;
+  height: 6px;
+  top: 14px;
+  margin-left: -2.5px;
+}
+.spineNode[data-kind='tool'] { background: var(--wimcc-lane-action, #41c285); }
+.spineNode[data-kind='thinking'] { background: var(--wimcc-lane-context, #b07dff); }
+.spineNode[data-kind='scaffold'] { background: var(--wimcc-scaffold, #b07dff); }
+
+/* one background-subagent lane = a hairline column; `left` set inline per lane
+   index so lanes pack just to the RIGHT of the spine (branching off it). */
 .lane {
   position: absolute;
   top: 0;
@@ -32,10 +79,7 @@
 /* end: from the top UP TO the node (card vertical center) — no overshoot below ✓ */
 .railEnd { top: 0; height: 50%; }
 
-/* ▢ start / ✓ end node — simple small shapes, centered ON THE RAIL (not pulled
-   toward the card). The rail is adjacent to the card already, so no horizontal
-   connector is needed — it only ever read as a misaligned tick. The node sits on
-   the rail's vertical center with a bg halo so it reads as a clean cap. */
+/* ▢ start / ✓ end node — small shapes centered ON THE RAIL, with a bg halo. */
 .node {
   position: absolute;
   left: -2.5px; /* centers the 6px node on the 1px rail */
@@ -52,13 +96,14 @@
   border-radius: 50%;
 }
 
-/* dense fallback (≥4 concurrent) — one neutral presence spine; identity/count
-   live in the block headers + the row's bg-marker chip, not the gutter. */
+/* dense fallback (≥4 concurrent) — one neutral presence spine just right of the
+   main axis; identity/count live in the block headers + the row's bg-marker
+   chip, not the gutter. */
 .dense {
   position: absolute;
   top: 0;
   bottom: 0;
-  right: 6px;
+  left: 13px;
   width: 1px;
   border-radius: 1px;
   background: var(--wimcc-fg-subtle, #6a7180);
