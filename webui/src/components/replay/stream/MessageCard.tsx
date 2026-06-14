@@ -166,9 +166,9 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
           <span
             data-testid="bg-marker"
             className={styles.bgMarker}
-            title={`이 메시지가 진행되는 동안 서브에이전트 ${item.concurrentBackground}개가 백그라운드로 실행 중이었음 (이 메시지가 백그라운드라는 뜻이 아님)`}
+            title={`이 메시지가 진행되는 동안 백그라운드 서브에이전트 ${item.concurrentBackground}개가 실행 중이었음 (이 메시지가 백그라운드라는 뜻이 아님)`}
           >
-            ⟂ 서브에이전트 {item.concurrentBackground}개 동시 실행
+            ⟂ 백그라운드 {item.concurrentBackground}개 실행 중
           </span>
         ) : null}
         {hasFinding && (
