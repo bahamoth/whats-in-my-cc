@@ -29,10 +29,9 @@ pub struct SidecarRef {
 }
 
 /// 경로가 subagent 사이드카면 세션·agent·(워크플로우면 run) id를 돌려준다.
-/// 두 레이아웃을 처리한다:
+/// 그 외 레이아웃은 None — ingest는 건드리지 않는다. 두 레이아웃을 처리한다:
 ///   - 일반:     `…/<sessionId>/subagents/agent-*.meta.json`
 ///   - 워크플로우: `…/<sessionId>/subagents/workflows/<runId>/agent-*.meta.json`
-/// 그 외 레이아웃은 None — ingest는 건드리지 않는다.
 pub fn sidecar_path_parts(path: &Path) -> Option<SidecarRef> {
     let name = path.file_name()?.to_str()?;
     let agent_id = name.strip_prefix("agent-")?.strip_suffix(".meta.json")?;
@@ -112,9 +111,10 @@ mod tests {
 
     #[test]
     fn sidecar_parts_handles_workflows_layer() {
-        let sc =
-            sidecar_path_parts(Path::new("/x/SESS/subagents/workflows/wf_abc/agent-a1.meta.json"))
-                .unwrap();
+        let sc = sidecar_path_parts(Path::new(
+            "/x/SESS/subagents/workflows/wf_abc/agent-a1.meta.json",
+        ))
+        .unwrap();
         assert_eq!(sc.session_id, "SESS");
         assert_eq!(sc.agent_id, "a1");
         assert_eq!(sc.workflow_run_id.as_deref(), Some("wf_abc"));
