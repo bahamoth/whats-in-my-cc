@@ -5,7 +5,7 @@
 
 [English](README.md) · **한국어**
 
-**Claude Code가 실제로 무엇을 했는지 — 말이 아니라 실행을 다시 본다.**
+**Claude Code의 모든 내부 동작을 측정하고 기록해 사람과 에이전트 모두에게 실행 가시성을 제공합니다.**
 
 ## What's in my cc?
 
