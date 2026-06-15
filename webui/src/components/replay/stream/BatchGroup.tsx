@@ -17,6 +17,7 @@ import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, GitFork } from 'lucide-react';
 import { SubagentGroup } from './SubagentGroup';
 import { formatDuration, durationHeat } from './duration';
+import { workflowTimeline, agentDurationHeat } from './workflowStats';
 import type { BatchGroup as BatchGroupModel, SidechainGroup, StreamItem } from './streamModel';
 import styles from './BatchGroup.module.css';
 
@@ -84,6 +85,11 @@ export function BatchGroup({
   const n = group.agentGroups.length;
   const doneCount = group.agentGroups.filter((g) => g.conclusion != null).length;
   const spanMs = useMemo(() => batchSpanMs(group.agentGroups), [group.agentGroups]);
+  // Always-visible mini-gantt: one lane per agent (start offset + duration) so a
+  // batch shows its concurrency at a glance, symmetric with WorkflowGroup (the
+  // FanPanel "요약 상시" model — spec §6.5).
+  const tl = useMemo(() => workflowTimeline(group.agentGroups), [group.agentGroups]);
+  const pct = (ms: number) => (tl.spanMs > 0 ? (ms / tl.spanMs) * 100 : 0);
 
   const synthesis = group.synthesis;
 
@@ -123,6 +129,23 @@ export function BatchGroup({
       <div data-testid="batch-synthesis" className={styles.synthesis}>
         <span className={styles.synthesisLabel}>종합</span>
         <span className={styles.synthesisText}>{synthesis || '진행 중'}</span>
+      </div>
+      {/* always-visible mini-gantt — concurrency at a glance, even collapsed */}
+      <div className={styles.gantt}>
+        {tl.lanes.map((l) => (
+          <div key={l.id} data-testid="batch-lane" className={styles.lane}>
+            <span className={styles.laneLabel} title={l.label}>{l.label}</span>
+            <div className={styles.track}>
+              <div
+                className={styles.bar}
+                data-heat={agentDurationHeat(l.durMs)}
+                style={{ left: `${pct(l.startMs)}%`, width: `${Math.max(1.5, pct(l.durMs))}%`, background: l.color }}
+              >
+                <span className={styles.barLabel}>{formatDuration(l.durMs)}</span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
       {expanded && (
         <div className={styles.body}>

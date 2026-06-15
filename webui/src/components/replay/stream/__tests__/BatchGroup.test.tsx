@@ -105,6 +105,21 @@ describe('BatchGroup', () => {
     expect(screen.getByTestId('batch-status')).toHaveTextContent('✓ 2/2');
   });
 
+  it('접혀 있어도 에이전트별 미니 간트 레인이 항상 보인다 (요약 상시)', () => {
+    // FanPanel 모델(스펙 S5): 배치 요약은 종합 한 줄 + 동시성을 보여주는 간트가
+    // 항상 보여야 한다(워크플로우와 대칭). 접힘 기본 상태에서도 레인이 노출된다.
+    render(
+      <BatchGroup
+        group={fixtureBatch}
+        selectedEventId={null}
+        onSelect={() => {}}
+        findingEventIds={new Set()}
+      />,
+    );
+    expect(screen.getByTestId('batch-group')).toHaveAttribute('data-expanded', 'false');
+    expect(screen.getAllByTestId('batch-lane')).toHaveLength(fixtureBatch.agentGroups.length);
+  });
+
   it('펼치면 자식 SubagentGroup 들 보임', () => {
     render(
       <BatchGroup
