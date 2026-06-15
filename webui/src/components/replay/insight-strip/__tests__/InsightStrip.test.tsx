@@ -111,3 +111,31 @@ describe('InsightStrip', () => {
     expect(card.getAttribute('data-provenance')).toBe('measured');
   });
 });
+
+describe('InsightStrip — S8 sparklines', () => {
+  const turns = [
+    {
+      turn_id: 't1', first_observed_at: '', last_observed_at: '',
+      tool_call_total: 0, tool_histogram: {}, tag_histogram: {}, files_edited: [],
+      tokens: { input_tokens: 100, cache_creation_input_tokens: 0, cache_read_input_tokens: 900, output_tokens: 50 },
+    },
+    {
+      turn_id: 't2', first_observed_at: '', last_observed_at: '',
+      tool_call_total: 0, tool_histogram: {}, tag_histogram: {}, files_edited: [],
+      tokens: { input_tokens: 200, cache_creation_input_tokens: 0, cache_read_input_tokens: 600, output_tokens: 100 },
+    },
+  ];
+
+  it('renders a sparkline with one bar per turn on the tokens card', () => {
+    render(<InsightStrip usage={usage} verificationRuns={[]} signals={[]} turns={turns} />);
+    const card = screen.getByTestId('insight-card-tokens');
+    const spark = within(card).getByTestId('sparkline');
+    expect(spark.querySelectorAll('[data-bar]')).toHaveLength(2);
+  });
+
+  it('renders no sparkline when no turns are supplied', () => {
+    render(<InsightStrip usage={usage} verificationRuns={[]} signals={[]} />);
+    const card = screen.getByTestId('insight-card-tokens');
+    expect(within(card).queryByTestId('sparkline')).toBeNull();
+  });
+});

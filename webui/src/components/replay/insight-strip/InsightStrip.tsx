@@ -13,8 +13,14 @@ import type {
   SessionUsageDto,
   VerificationRunDto,
   SignalDto,
+  TurnRollupDto,
 } from '../../../api/types';
-import { buildInsightCards, type InsightBaseline, type InsightCardId } from './insightCards';
+import {
+  buildInsightCards,
+  type InsightBaseline,
+  type InsightCardId,
+  type SparklineTint,
+} from './insightCards';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import { InfoTip } from './InfoTip';
 import styles from './InsightStrip.module.css';
@@ -25,6 +31,21 @@ interface InsightStripProps {
   signals: SignalDto[] | undefined;
   /** slice 6 — optional cross-session baseline; omitted today. */
   baseline?: InsightBaseline;
+  /** S8 — per-turn rollup for intra-session sparklines. */
+  turns?: TurnRollupDto[];
+}
+
+/** S8 — a compact bar sparkline. Values are normalised to the series max so the
+ *  trend shape reads at a glance; an all-zero series renders flat. */
+function Sparkline({ values, tint }: { values: number[]; tint?: SparklineTint }) {
+  const max = Math.max(...values, 0);
+  return (
+    <div className={styles.spark} data-testid="sparkline" data-tint={tint ?? 'blue'} aria-hidden>
+      {values.map((v, i) => (
+        <i key={i} data-bar style={{ height: `${max > 0 ? Math.round((v / max) * 100) : 2}%` }} />
+      ))}
+    </div>
+  );
 }
 
 export function InsightStrip(props: InsightStripProps) {
@@ -33,6 +54,7 @@ export function InsightStrip(props: InsightStripProps) {
     verificationRuns: props.verificationRuns,
     signals: props.signals,
     baseline: props.baseline,
+    turns: props.turns,
   });
   const [openId, setOpenId] = useState<InsightCardId | null>(null);
 
@@ -69,6 +91,9 @@ export function InsightStrip(props: InsightStripProps) {
                   <span className={styles.baselineDelta}>{card.baselineDelta}</span>
                 )}
               </div>
+              {card.sparkline && card.sparkline.length > 0 && (
+                <Sparkline values={card.sparkline} tint={card.sparklineTint} />
+              )}
             </div>
           );
         })}

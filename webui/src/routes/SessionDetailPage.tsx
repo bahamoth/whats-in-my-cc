@@ -18,6 +18,7 @@ import {
   useVerificationRunsQuery,
   useSessionUsageQuery,
   useUsageBaselineQuery,
+  useSessionTurnsQuery,
   useEventRawQuery,
   useCorrelatedEventsQuery,
   useSessionMetricsQuery,
@@ -47,6 +48,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const verificationRuns = useVerificationRunsQuery(sessionId);
   const usage = useSessionUsageQuery(sessionId);
   const baseline = useUsageBaselineQuery();
+  const turns = useSessionTurnsQuery(sessionId);
 
   // Analysis surface — separate from replay (spec §8.3, 원칙 7)
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -296,9 +298,13 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               signals={signals.data}
               baseline={
                 baseline.data
-                  ? { cache_hit_ratio: baseline.data.cache_hit_ratio.median }
+                  ? {
+                      cache_hit_ratio: baseline.data.cache_hit_ratio.median,
+                      billed_tokens: baseline.data.billed_tokens.median,
+                    }
                   : undefined
               }
+              turns={turns.data?.turns}
             />
             <MetaStrip session={detail.data} events={window_.events} />
             <button

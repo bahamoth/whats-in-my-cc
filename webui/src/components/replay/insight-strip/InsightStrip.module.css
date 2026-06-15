@@ -79,6 +79,25 @@
   color: var(--wimcc-fg-subtle);
 }
 
+/* S8 — intra-session bar sparkline. fact-only tints (design §6.3). */
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 22px;
+  margin-top: 8px;
+}
+.spark i {
+  flex: 1 1 0;
+  min-width: 1px;
+  border-radius: 1px;
+  background: var(--wimcc-accent);
+  opacity: 0.65;
+}
+.spark[data-tint='blue'] i { background: var(--wimcc-accent); }
+.spark[data-tint='green'] i { background: var(--wimcc-success); }
+.spark[data-tint='amber'] i { background: var(--wimcc-warning); }
+
 .drill {
   padding: 10px 12px;
   background: var(--wimcc-surface-2);

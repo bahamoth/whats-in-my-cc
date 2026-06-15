@@ -18,13 +18,15 @@ import type {
   SessionUsageDto,
   VerificationRunDto,
   SignalDto,
+  TurnRollupDto,
 } from '../../../api/types';
 import { formatPct, formatTokens, formatUsd } from '../../../lib/format';
 import type { Provenance } from './provenance';
 
-/** Optional cross-session baseline (slice 6). Absent today → no delta shown. */
+/** Optional cross-session baseline (slice 6 + S8). Absent fields → no delta. */
 export interface InsightBaseline {
   cache_hit_ratio?: number | null;
+  billed_tokens?: number | null;
 }
 
 export interface InsightInputs {
@@ -32,7 +34,13 @@ export interface InsightInputs {
   verificationRuns: VerificationRunDto[] | undefined;
   signals: SignalDto[] | undefined;
   baseline?: InsightBaseline;
+  /** S8 — per-turn rollup; drives intra-session sparklines (token-derived
+   *  cards only — context / tokens / cost). Absent → no sparkline. */
+  turns?: TurnRollupDto[];
 }
+
+/** S8 — fact-only sparkline tints (design §6.3): 맥락·비용=blue. */
+export type SparklineTint = 'green' | 'amber' | 'blue';
 
 export type InsightCardId =
   | 'context'
@@ -59,6 +67,36 @@ export interface InsightCardModel {
   };
   /** Optional "vs your median" delta (slice 6); undefined when no baseline. */
   baselineDelta?: string;
+  /** S8 — per-turn trend (raw values; the strip normalises to bar heights).
+   *  Undefined when no per-turn data is available. */
+  sparkline?: number[];
+  /** S8 — fact-only tint for the sparkline. */
+  sparklineTint?: SparklineTint;
+}
+
+/** S8 — per-turn cache-hit ratio = cache_read / (cache_read + cache_creation +
+ *  input); turns whose denominator is 0 contribute 0. Mirrors the card metric. */
+function perTurnCacheHit(turns: TurnRollupDto[]): number[] | undefined {
+  const series = turns
+    .filter((t) => t.tokens)
+    .map((t) => {
+      const k = t.tokens!;
+      const denom = k.cache_read_input_tokens + k.cache_creation_input_tokens + k.input_tokens;
+      return denom > 0 ? k.cache_read_input_tokens / denom : 0;
+    });
+  return series.length > 0 ? series : undefined;
+}
+
+/** S8 — per-turn billed tokens = input + cache_creation + output (cache_read is
+ *  free, never billed). Drives both the tokens and (proxy) cost sparklines. */
+function perTurnBilled(turns: TurnRollupDto[]): number[] | undefined {
+  const series = turns
+    .filter((t) => t.tokens)
+    .map((t) => {
+      const k = t.tokens!;
+      return k.input_tokens + k.cache_creation_input_tokens + k.output_tokens;
+    });
+  return series.length > 0 ? series : undefined;
 }
 
 // /usage 토큰 component에서 cache hit ratio 계산(window=세션 전체)
@@ -111,6 +149,13 @@ function contextCard(inputs: InsightInputs): InsightCardModel {
     const d = Math.round((ratio - base) * 100);
     card.baselineDelta = `${d >= 0 ? '+' : ''}${d}%p vs 중앙값`;
   }
+  if (inputs.turns) {
+    const spark = perTurnCacheHit(inputs.turns);
+    if (spark) {
+      card.sparkline = spark;
+      card.sparklineTint = 'blue';
+    }
+  }
   return card;
 }
 
@@ -125,7 +170,7 @@ function tokensCard(inputs: InsightInputs): InsightCardModel {
     };
   }
   const u = inputs.usage;
-  return {
+  const card: InsightCardModel = {
     id: 'tokens', title: '토큰',
     value: `청구 ${formatTokens(u.billed_tokens)}`,
     detail: `캐시 읽기 ${formatTokens(u.cache_read_input_tokens)} (무료)`,
@@ -139,6 +184,19 @@ function tokensCard(inputs: InsightInputs): InsightCardModel {
       ],
     },
   };
+  const baseMedian = inputs.baseline?.billed_tokens;
+  if (typeof baseMedian === 'number' && baseMedian > 0) {
+    const d = Math.round((u.billed_tokens / baseMedian - 1) * 100);
+    card.baselineDelta = `${d >= 0 ? '+' : ''}${d}% vs 중앙값`;
+  }
+  if (inputs.turns) {
+    const spark = perTurnBilled(inputs.turns);
+    if (spark) {
+      card.sparkline = spark;
+      card.sparklineTint = 'blue';
+    }
+  }
+  return card;
 }
 
 function verificationCard(inputs: InsightInputs): InsightCardModel {
@@ -227,7 +285,7 @@ function costCard(inputs: InsightInputs): InsightCardModel {
   }
   const u = inputs.usage;
   const unpriced = u.models_without_pricing.length > 0;
-  return {
+  const card: InsightCardModel = {
     id: 'cost', title: '비용',
     value: formatUsd(u.estimated_cost_usd),
     detail: unpriced
@@ -240,6 +298,16 @@ function costCard(inputs: InsightInputs): InsightCardModel {
       ),
     },
   };
+  // S8 — cost has no per-turn pricing breakdown; bill ∝ cost, so the per-turn
+  // billed-tokens series is an honest *shape* proxy for the cost trend.
+  if (inputs.turns) {
+    const spark = perTurnBilled(inputs.turns);
+    if (spark) {
+      card.sparkline = spark;
+      card.sparklineTint = 'blue';
+    }
+  }
+  return card;
 }
 
 export function buildInsightCards(inputs: InsightInputs): InsightCardModel[] {

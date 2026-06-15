@@ -447,7 +447,22 @@ pub async fn session_turns(
     let evs = repo_observed::list_session_conversation(&pool, &id)
         .await
         .expect("db");
-    let rollup = crate::insight::turn_rollup::rollup(&id, &evs);
+    let mut rollup = crate::insight::turn_rollup::rollup(&id, &evs);
+    // S8 — attach per-turn token sums (usage_facet ⋈ observed_event on turn_id)
+    // so the KPI strip can draw intra-session sparklines.
+    let by_turn = repo_usage_facet::tokens_by_turn(&pool, &id)
+        .await
+        .unwrap_or_default();
+    for t in rollup.turns.iter_mut() {
+        if let Some(&(input, cc, cr, output)) = by_turn.get(&t.turn_id) {
+            t.tokens = Some(crate::insight::turn_rollup::TurnTokens {
+                input_tokens: input,
+                cache_creation_input_tokens: cc,
+                cache_read_input_tokens: cr,
+                output_tokens: output,
+            });
+        }
+    }
     Ok(Json(Envelope {
         meta: ResponseMeta::now(),
         data: rollup,

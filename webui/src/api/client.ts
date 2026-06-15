@@ -10,6 +10,7 @@ import type {
   SessionUsageDto,
   UsageBaselineDto,
   SessionMetricsDto,
+  TurnRollupResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -103,3 +104,7 @@ export const getDiffHunks = (id: string): Promise<DiffHunkDto[]> =>
 
 export const getSessionMetrics = (id: string): Promise<SessionMetricsDto> =>
   jsonGet<SessionMetricsDto>(`/v1/sessions/${encodeURIComponent(id)}/metrics`);
+
+/** S8 — per-turn rollup (incl. per-turn token sums) for the KPI sparklines. */
+export const getSessionTurns = (id: string): Promise<TurnRollupResponse> =>
+  jsonGet<TurnRollupResponse>(`/v1/sessions/${encodeURIComponent(id)}/turns`);

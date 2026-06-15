@@ -279,3 +279,52 @@ describe('buildInsightCards — baseline delta (slice 6, optional)', () => {
     expect(c.baselineDelta).toBeUndefined();
   });
 });
+
+// S8 (UX 재설계) — intra-session sparklines from per-turn tokens + tokens baseline.
+describe('buildInsightCards — S8 sparklines (per-turn tokens)', () => {
+  const turns = [
+    {
+      turn_id: 't1', first_observed_at: '', last_observed_at: '',
+      tool_call_total: 0, tool_histogram: {}, tag_histogram: {}, files_edited: [],
+      tokens: { input_tokens: 100, cache_creation_input_tokens: 0, cache_read_input_tokens: 900, output_tokens: 50 },
+    },
+    {
+      turn_id: 't2', first_observed_at: '', last_observed_at: '',
+      tool_call_total: 0, tool_histogram: {}, tag_histogram: {}, files_edited: [],
+      tokens: { input_tokens: 200, cache_creation_input_tokens: 0, cache_read_input_tokens: 600, output_tokens: 100 },
+    },
+  ];
+
+  it('context card gets a per-turn cache-hit-ratio sparkline (blue tint)', () => {
+    const c = byId({ ...EMPTY, usage, turns }).get('context')!;
+    // cacheHit per turn: 900/(900+0+100)=0.9, 600/(600+0+200)=0.75
+    expect(c.sparkline).toEqual([0.9, 0.75]);
+    expect(c.sparklineTint).toBe('blue');
+  });
+
+  it('tokens card gets a per-turn billed sparkline', () => {
+    const c = byId({ ...EMPTY, usage, turns }).get('tokens')!;
+    // billed per turn = input + cache_creation + output: 150, 300
+    expect(c.sparkline).toEqual([150, 300]);
+  });
+
+  it('cost card reuses the per-turn billed sparkline (cost ∝ billed tokens)', () => {
+    const c = byId({ ...EMPTY, usage, turns }).get('cost')!;
+    expect(c.sparkline).toEqual([150, 300]);
+    expect(c.sparklineTint).toBe('blue');
+  });
+
+  it('omits sparklines gracefully when no turn tokens are present', () => {
+    const c = byId({ ...EMPTY, usage }).get('context')!;
+    expect(c.sparkline).toBeUndefined();
+  });
+
+  it('attaches a billed-tokens vs-median delta to the tokens card', () => {
+    const c = byId({
+      ...EMPTY, usage,
+      baseline: { cache_hit_ratio: 0.9, billed_tokens: 2_700_000 },
+    }).get('tokens')!;
+    // usage.billed_tokens = 5.4M vs median 2.7M → +100%
+    expect(c.baselineDelta).toBe('+100% vs 중앙값');
+  });
+});
