@@ -18,6 +18,7 @@ import {
   getEventRaw,
   getCorrelatedEvents,
   getSessionMetrics,
+  getSessionTurns,
 } from '../api/client';
 import type {
   SessionDetail,
@@ -29,6 +30,7 @@ import type {
   RawEventResponse,
   SessionEventsResponse,
   SessionMetricsDto,
+  TurnRollupResponse,
 } from '../api/types';
 
 export const sessionKeys = {
@@ -42,6 +44,7 @@ export const sessionKeys = {
   verificationRuns: (id: string) => ['session', id, 'verification-runs'] as const,
   usage: (id: string) => ['session', id, 'usage'] as const,
   metrics: (id: string) => ['session', id, 'metrics'] as const,
+  turns: (id: string) => ['session', id, 'turns'] as const,
 };
 
 /** insight-redesign #6 — store-wide usage baseline (not session-scoped). */
@@ -86,6 +89,15 @@ export function useSessionUsageQuery(id: string, opts?: QOpts<SessionUsageDto>) 
   return useQuery<SessionUsageDto>({
     queryKey: sessionKeys.usage(id),
     queryFn: () => getSessionUsage(id),
+    enabled: !!id,
+    ...opts,
+  });
+}
+
+export function useSessionTurnsQuery(id: string, opts?: QOpts<TurnRollupResponse>) {
+  return useQuery<TurnRollupResponse>({
+    queryKey: sessionKeys.turns(id),
+    queryFn: () => getSessionTurns(id),
     enabled: !!id,
     ...opts,
   });

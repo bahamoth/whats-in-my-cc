@@ -32,6 +32,18 @@ pub struct TurnUserMessage {
     pub excerpt: String,
 }
 
+/// S8 (UX 재설계) — per-turn token sums (from `usage_facet`, joined by
+/// `turn_id`). Drives the KPI strip's intra-session sparklines. `None` when no
+/// usage rows are correlated to the turn (e.g. tool-only assistant turns, or
+/// the MCP path that does not attach token sums).
+#[derive(Debug, Serialize)]
+pub struct TurnTokens {
+    pub input_tokens: i64,
+    pub cache_creation_input_tokens: i64,
+    pub cache_read_input_tokens: i64,
+    pub output_tokens: i64,
+}
+
 #[derive(Debug, Serialize)]
 pub struct TurnRollup {
     pub turn_id: String,
@@ -48,6 +60,9 @@ pub struct TurnRollup {
     /// Distinct file paths touched by Edit/Write/NotebookEdit in this turn,
     /// in first-touch order.
     pub files_edited: Vec<String>,
+    /// S8 — per-turn token sums; attached by the HTTP handler after rollup.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokens: Option<TurnTokens>,
 }
 
 #[derive(Debug, Serialize)]
@@ -203,6 +218,7 @@ pub fn rollup(session_id: &str, events: &[ObservedEvent]) -> TurnRollupResponse 
             tool_histogram: a.histogram,
             tag_histogram: a.tags,
             files_edited: a.files,
+            tokens: None,
         })
         .collect();
 

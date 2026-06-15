@@ -82,6 +82,33 @@ export type ObservedEventDto = {
   payload: unknown;
 };
 
+/** S8 (UX 재설계) — per-turn token sums (present only on turns with correlated
+ *  usage rows). Drives the KPI strip's intra-session sparklines. */
+export type TurnTokensDto = {
+  input_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  output_tokens: number;
+};
+
+/** Dogfood 2026-06-12 — one entry per user prompt turn. S8 adds `tokens`. */
+export type TurnRollupDto = {
+  turn_id: string;
+  first_observed_at: string;
+  last_observed_at: string;
+  tool_call_total: number;
+  tool_histogram: Record<string, number>;
+  tag_histogram: Record<string, number>;
+  files_edited: string[];
+  tokens?: TurnTokensDto;
+};
+
+export type TurnRollupResponse = {
+  session_id: string;
+  turns: TurnRollupDto[];
+  file_churn: Array<{ file_path: string; turn_count: number; edit_count: number }>;
+};
+
 /** Slice-9 — `events` removed. Use `GET /v1/sessions/:id/events?...` for the
  *  cursor-paged window. See {@link SessionEventsResponse}. */
 export type SessionDetail = {

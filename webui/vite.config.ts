@@ -7,8 +7,12 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // Default to the local serve on :7878. `WIMCC_PROXY_TARGET` lets a dev
+      // point the preview at an isolated serve instance (e.g. a snapshot DB on
+      // an alternate port) without restarting the serve the live Claude session
+      // exports to — see memory `serve-restart-kills-live-claude`.
       '/v1': {
-        target: 'http://127.0.0.1:7878',
+        target: process.env.WIMCC_PROXY_TARGET || 'http://127.0.0.1:7878',
         changeOrigin: false,
       },
     },

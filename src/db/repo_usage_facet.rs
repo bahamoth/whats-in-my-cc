@@ -189,6 +189,44 @@ pub async fn session_aggregate(pool: &SqlitePool, session_id: &str) -> Result<Us
     })
 }
 
+/// S8 (UX 재설계) — per-turn token sums for a session, keyed by `turn_id`.
+/// usage_facet has no turn_id of its own, so it is joined to observed_event on
+/// `raw_event_id` (the assistant line that carried `message.usage`); the turn
+/// is observed_event.turn_id (= the transcript `promptId`). Turns with no
+/// correlated usage row are simply absent from the map.
+pub async fn tokens_by_turn(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<std::collections::HashMap<String, (i64, i64, i64, i64)>> {
+    let rows = sqlx::query(
+        "SELECT oe.turn_id AS turn_id,
+                COALESCE(SUM(uf.input_tokens),0) AS input_tokens,
+                COALESCE(SUM(uf.cache_creation_input_tokens),0) AS cc,
+                COALESCE(SUM(uf.cache_read_input_tokens),0) AS cr,
+                COALESCE(SUM(uf.output_tokens),0) AS output_tokens
+         FROM usage_facet uf
+         JOIN observed_event oe ON oe.raw_event_id = uf.raw_event_id
+         WHERE uf.session_id = ? AND oe.turn_id IS NOT NULL AND oe.turn_id != ''
+         GROUP BY oe.turn_id",
+    )
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+    let mut out = std::collections::HashMap::new();
+    for r in rows {
+        out.insert(
+            r.get::<String, _>("turn_id"),
+            (
+                r.get::<i64, _>("input_tokens"),
+                r.get::<i64, _>("cc"),
+                r.get::<i64, _>("cr"),
+                r.get::<i64, _>("output_tokens"),
+            ),
+        );
+    }
+    Ok(out)
+}
+
 /// insight-redesign #6 — per-session metric rows for the cross-session
 /// baseline. One row per session that has at least one usage_facet row.
 /// billed_tokens = input + cache_creation + output (cache_read NOT billed).
