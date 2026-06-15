@@ -53,7 +53,23 @@ UI 토글 없이 **`prefers-color-scheme`** 기반 — S10 라이트 검증은 �
 `fb6b8e3a`의 21:33 "Agent…" 행들은 **BatchGroup으로 미검출**(standalone SubagentGroup) — 실제
 "병렬 배치" 스모크 세션을 따로 찾아야 함(653ea169도 workflow-fanout 위주라 batch 적을 수 있음).
 
-## 남은 일 (PR #62 체크리스트, 우선순위·의존성)
+## ✅ 완료 (2026-06-16) — S5–S10 + S6/S7/S8 백엔드
+
+전 슬라이스 구현·TDD·브라우저 스모크 완료, PR #62 ready. 상세·편차는
+`docs/implementation-notes.html#ux-redesign-ab-2026-06-16`.
+
+- **S6** 세션목록 풀스택 — `/v1/sessions`에 slug·model·project·preview(migration 불필요) + 목록 재설계(슬러그·pill·preview·상대시간·검색·카드스택). `d592029`
+- **S7** Detail — HOW 소제목(LLM 동작·토큰·비용)·그룹 provenance pill·Signal evidence 점프·WhatSection fade. `d429729`
+- **S8** KPI — turns에 per-turn 토큰(usage_facet⋈observed_event) + 컨텍스트·토큰·비용 스파크라인 + usage/baseline 델타(검증·도구실패는 데이터 없어 생략). `2829771`
+- **S9** Analysis — 이미 완료(AnalysisPanel + 2191544), 검증만.
+- **S10** 라이트모드 토큰·키보드(j/k/e·/)·dismissible 범례·반응형 800px. z(그룹토글)·≥4 밀집은 보류. `8a7d880`
+- **S5** FanPanel 인라인 드릴 — 레인 클릭 시 그 에이전트만(BatchGroup·WorkflowGroup), 12-에이전트 실세션 스모크. `8fdf773`
+
+주의: serve 재기동이 라이브 claude를 종료시킴 → 격리 serve(:7879 + 스냅샷 + `WIMCC_PROXY_TARGET`)로 스모크. 메모리 [[serve-restart-kills-live-claude]].
+
+남은 후속(별도): ≥4 동시 에이전트 밀집 spine+"+N"(목업 후속), 키보드 z(그룹 토글).
+
+## 남은 일 (원래 체크리스트 — 위 완료로 해소됨, 이력 보존)
 - **S5 FanPanel 잔여**: 현재 BatchGroup/WorkflowGroup은 요약(간트+종합) 상시 + 펼치면 자식
   SubagentGroup(각자 드릴) — 기능적으로 근접. 미완: 레인 클릭 시 **그 에이전트만 인라인 드릴**
   (현재는 그룹 전체 펼침). 큰 reorg + 디자인 민감 → 사용자 눈 + 실제 배치 세션 필요.
