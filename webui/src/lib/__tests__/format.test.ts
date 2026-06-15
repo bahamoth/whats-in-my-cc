@@ -10,7 +10,15 @@
  * See plan §10.1 PR-3.
  */
 import { describe, expect, it } from 'vitest';
-import { formatMs, formatUsd, formatTokens, formatPct, formatBytes } from '../format';
+import {
+  formatMs,
+  formatUsd,
+  formatTokens,
+  formatPct,
+  formatBytes,
+  relativeTime,
+  formatModel,
+} from '../format';
 
 describe('formatMs', () => {
   it('renders sub-second as Xms', () => {
@@ -99,5 +107,50 @@ describe('formatBytes', () => {
     expect(formatBytes(null)).toBe('—');
     expect(formatBytes(NaN)).toBe('—');
     expect(formatBytes(-1)).toBe('—');
+  });
+});
+
+// S6 (UX 재설계) — Korean relative time for the session list "last seen" column.
+describe('relativeTime', () => {
+  const now = Date.parse('2026-06-15T12:00:00Z');
+  it('renders just-now under a minute as 방금', () => {
+    expect(relativeTime('2026-06-15T11:59:40Z', now)).toBe('방금');
+  });
+  it('renders minutes', () => {
+    expect(relativeTime('2026-06-15T11:57:00Z', now)).toBe('3분 전');
+  });
+  it('renders hours', () => {
+    expect(relativeTime('2026-06-15T10:00:00Z', now)).toBe('2시간 전');
+  });
+  it('renders days', () => {
+    expect(relativeTime('2026-06-13T12:00:00Z', now)).toBe('2일 전');
+  });
+  it('falls back to a date for older timestamps', () => {
+    // > 30 days → ISO date prefix, not a relative phrase
+    expect(relativeTime('2026-04-01T12:00:00Z', now)).toBe('2026-04-01');
+  });
+  it('returns placeholder for invalid input', () => {
+    expect(relativeTime('not-a-date', now)).toBe('—');
+    expect(relativeTime('', now)).toBe('—');
+  });
+});
+
+// S6 — humanise the raw model id for the session list / KPI tags.
+describe('formatModel', () => {
+  it('humanises opus / sonnet / haiku ids', () => {
+    expect(formatModel('claude-opus-4-8')).toBe('Opus 4.8');
+    expect(formatModel('claude-sonnet-4-6')).toBe('Sonnet 4.6');
+    expect(formatModel('claude-haiku-4-5-20251001')).toBe('Haiku 4.5');
+  });
+  it('strips a [1m] context suffix', () => {
+    expect(formatModel('claude-opus-4-8[1m]')).toBe('Opus 4.8');
+  });
+  it('returns the raw id when it does not match the known shape', () => {
+    expect(formatModel('gpt-4o')).toBe('gpt-4o');
+  });
+  it('returns placeholder for empty / nullish', () => {
+    expect(formatModel(null)).toBe('—');
+    expect(formatModel(undefined)).toBe('—');
+    expect(formatModel('')).toBe('—');
   });
 });

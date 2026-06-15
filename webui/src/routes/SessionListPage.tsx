@@ -3,10 +3,17 @@ import { Link } from 'react-router-dom';
 import { listSessions, ApiError } from '../api/client';
 import type { SessionListItem } from '../api/types';
 import { useLiveStream, type LiveEnvelope } from '../hooks/useLiveStream';
+import { relativeTime, formatModel } from '../lib/format';
 import styles from './SessionListPage.module.css';
 
-type SortKey = 'last_observed_at' | 'first_observed_at' | 'event_count' | 'session_id';
+type SortKey = 'last_observed_at' | 'event_count' | 'session_id';
 type SortDir = 'asc' | 'desc';
+
+const SORT_LABELS: Record<SortKey, string> = {
+  session_id: 'session',
+  last_observed_at: 'last seen',
+  event_count: 'events',
+};
 
 type State =
   | { kind: 'loading' }
@@ -36,11 +43,6 @@ const TRANSCRIPT_KINDS = new Set([
   'session_state',
 ]);
 const OTEL_KINDS = new Set(['otel_span', 'metric_sample', 'log_record']);
-// Slice-10a — file_event / git_commit kinds are gone; diff_hunk lives in a
-// side-table and is never exposed via observed_event.by_kind. The mix
-// therefore drops its file_git column entirely. The Files lane is still
-// rendered on the detail page (driven by the graph builder reading the
-// diff_hunk table), it just no longer shows up as a per-session source tag.
 
 type SourceMix = {
   transcript: number;
@@ -59,14 +61,20 @@ function sourceMix(byKind?: Record<string, number>): SourceMix {
   return mix;
 }
 
+// S6 — project pill shows the last path segment of the cwd ("whats-in-my-cc"),
+// not the full absolute path. The full path stays available on hover (title).
+function projectBasename(p?: string): string | undefined {
+  if (!p) return undefined;
+  const parts = p.replace(/\/+$/, '').split('/');
+  return parts[parts.length - 1] || p;
+}
+
 const LIVE_THRESHOLD_MS = 60_000;
 
 function isLive(envelopeAtMs: number | undefined, nowMs: number): boolean {
   // slice-8 — flag sessions whose last SSE envelope arrived within the live
-  // window. Replaces slice-7's last_observed_at-based predicate; the new
-  // semantic asks "is the client *currently observing* this session?" rather
-  // than "was this row recent the last time we fetched?". Honest signal:
-  // turns OFF when stream goes silent, ON when an envelope arrives.
+  // window. Honest signal: turns OFF when stream goes silent, ON when an
+  // envelope arrives.
   if (envelopeAtMs === undefined) return false;
   return nowMs - envelopeAtMs <= LIVE_THRESHOLD_MS;
 }
@@ -76,9 +84,7 @@ function compare(a: SessionListItem, b: SessionListItem, key: SortKey): number {
     case 'event_count':
       return a.event_count - b.event_count;
     case 'session_id':
-      return a.session_id.localeCompare(b.session_id);
-    case 'first_observed_at':
-      return a.first_observed_at.localeCompare(b.first_observed_at);
+      return (a.slug ?? a.session_id).localeCompare(b.slug ?? b.session_id);
     case 'last_observed_at':
     default:
       return a.last_observed_at.localeCompare(b.last_observed_at);
@@ -90,12 +96,22 @@ function SortIndicator({ active, dir }: { active: boolean; dir: SortDir }) {
   return <span className={styles.sortActive}> {dir === 'desc' ? '▼' : '▲'}</span>;
 }
 
+// S6 — case-insensitive substring match across the identity facets so the
+// search box finds a session by slug, project, model, UUID, or preview text.
+function matchesQuery(r: SessionListItem, q: string): boolean {
+  if (!q) return true;
+  const needle = q.toLowerCase();
+  return [r.slug, r.project, r.session_id, r.first_user_message_preview, r.model]
+    .some((f) => f?.toLowerCase().includes(needle));
+}
+
 export default function SessionListPage() {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [sortKey, setSortKey] = useState<SortKey>('last_observed_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  // ticks every 5s so the live badge re-evaluates the 60s window even when no
-  // envelope arrives (a stream that went silent should flip OFF after 60s).
+  const [query, setQuery] = useState('');
+  // ticks every 5s so the live badge re-evaluates the 60s window and the
+  // relative-time column re-renders even when no envelope arrives.
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setNowMs(Date.now()), 5_000);
@@ -120,8 +136,6 @@ export default function SessionListPage() {
 
   // slice-8 — subscribe to the global SSE stream. On each envelope, update
   // envelopeAt and mark the matching row's last_observed_at + event_count.
-  // For unknown session_ids, trigger a baseline refetch so the new row
-  // appears (cheaper than synthesising a partial row client-side).
   const onEnvelope = useCallback(
     (env: LiveEnvelope) => {
       setEnvelopeAt((prev) => {
@@ -162,15 +176,15 @@ export default function SessionListPage() {
     },
   });
 
-  const sortedRows = useMemo(() => {
+  const visibleRows = useMemo(() => {
     if (state.kind !== 'ok') return [];
-    const copy = state.rows.slice();
+    const copy = state.rows.filter((r) => matchesQuery(r, query));
     copy.sort((a, b) => {
       const c = compare(a, b, sortKey);
       return sortDir === 'asc' ? c : -c;
     });
     return copy;
-  }, [state, sortKey, sortDir]);
+  }, [state, sortKey, sortDir, query]);
 
   const onHeaderClick = (key: SortKey) => {
     if (sortKey === key) {
@@ -180,6 +194,8 @@ export default function SessionListPage() {
       setSortDir(key === 'session_id' ? 'asc' : 'desc');
     }
   };
+
+  const totalRows = state.kind === 'ok' ? state.rows.length : 0;
 
   return (
     <div className={styles.page}>
@@ -194,58 +210,79 @@ export default function SessionListPage() {
           <button type="button" onClick={() => void load()}>Retry</button>
         </div>
       )}
-      {state.kind === 'ok' && state.rows.length === 0 && (
+      {state.kind === 'ok' && totalRows === 0 && (
         <div className={styles.empty}>
           <p>No sessions yet.</p>
           <p>Run <code>wimcc serve --auto-migrate</code> and let claude code talk to it, or backfill with <code>wimcc ingest --all</code>.</p>
         </div>
       )}
-      {state.kind === 'ok' && state.rows.length > 0 && (
+      {state.kind === 'ok' && totalRows > 0 && (
         <>
-          <p className={styles.hint}>
-            {sortedRows.length} sessions · sorted by <strong>{sortKey}</strong> {sortDir === 'desc' ? '↓' : '↑'} · click a column header to change
-          </p>
+          <div className={styles.toolbar}>
+            <p className={styles.hint}>
+              {visibleRows.length} sessions · sorted by <strong>{SORT_LABELS[sortKey]}</strong>{' '}
+              {sortDir === 'desc' ? '↓' : '↑'}
+            </p>
+            <input
+              className={styles.search}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="⌕ 프로젝트·슬러그 검색…"
+              aria-label="세션 검색"
+            />
+          </div>
           <table className={styles.table}>
             <thead>
               <tr>
                 <th onClick={() => onHeaderClick('session_id')} className={styles.sortable}>
-                  session_id<SortIndicator active={sortKey === 'session_id'} dir={sortDir} />
-                </th>
-                <th onClick={() => onHeaderClick('first_observed_at')} className={styles.sortable}>
-                  first_observed_at<SortIndicator active={sortKey === 'first_observed_at'} dir={sortDir} />
+                  session<SortIndicator active={sortKey === 'session_id'} dir={sortDir} />
                 </th>
                 <th onClick={() => onHeaderClick('last_observed_at')} className={styles.sortable}>
-                  last_observed_at<SortIndicator active={sortKey === 'last_observed_at'} dir={sortDir} />
+                  last seen<SortIndicator active={sortKey === 'last_observed_at'} dir={sortDir} />
                 </th>
-                <th onClick={() => onHeaderClick('event_count')} className={styles.sortable}>
+                <th onClick={() => onHeaderClick('event_count')} className={`${styles.sortable} ${styles.numHead}`}>
                   events<SortIndicator active={sortKey === 'event_count'} dir={sortDir} />
                 </th>
                 <th>sources</th>
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map((r) => {
+              {visibleRows.map((r) => {
                 const mix = sourceMix(r.by_kind);
-                const otelOnly =
-                  mix.transcript === 0 && mix.hook === 0 && mix.otel > 0;
+                const otelOnly = mix.transcript === 0 && mix.hook === 0 && mix.otel > 0;
                 const live = isLive(envelopeAt.get(r.session_id), nowMs);
+                const label = r.slug ?? r.session_id;
+                const proj = projectBasename(r.project);
                 return (
                   <tr key={r.session_id} className={otelOnly ? styles.otelOnly : undefined}>
-                    <td>
-                      <Link to={`/sessions/${r.session_id}`}>{r.session_id}</Link>
-                      {live && (
-                        <span
-                          className={styles.liveBadge}
-                          data-testid="live-badge"
-                          title="received an SSE envelope within 60s — claude is currently active"
-                        >
-                          {' '}LIVE
-                        </span>
+                    <td className={styles.sessionCell}>
+                      <div className={styles.top}>
+                        <Link to={`/sessions/${r.session_id}`} className={styles.slug} title={r.session_id}>
+                          {label}
+                        </Link>
+                        {proj && (
+                          <span className={styles.proj} title={r.project}>{proj}</span>
+                        )}
+                        {live && (
+                          <span
+                            className={styles.liveBadge}
+                            data-testid="live-badge"
+                            title="received an SSE envelope within 60s — claude is currently active"
+                          >
+                            ● live
+                          </span>
+                        )}
+                        {r.model && <span className={styles.model}>{formatModel(r.model)}</span>}
+                      </div>
+                      {r.first_user_message_preview && (
+                        <div className={styles.prev}>{r.first_user_message_preview}</div>
                       )}
                     </td>
-                    <td>{r.first_observed_at}</td>
-                    <td>{r.last_observed_at}</td>
-                    <td>{r.event_count}</td>
+                    <td className={styles.relCell} title={r.last_observed_at}>
+                      {relativeTime(r.last_observed_at, nowMs)}
+                    </td>
+                    <td className={styles.eventsCell}>{r.event_count.toLocaleString()}</td>
                     <td className={styles.mix}>
                       {mix.transcript > 0 && (
                         <span className={`${styles.tag} ${styles.tagTranscript}`}>txn {mix.transcript}</span>
