@@ -32,7 +32,11 @@
 /* padding-right reserves room for the outside-right duration label so the
    LONGEST bar (≈100% width) doesn't push its label off the card edge. */
 .gantt { margin: 2px 0 4px 19px; padding-right: 46px; }
-.lane { display: flex; align-items: center; height: 15px; margin: 2px 0; }
+/* S5 — lane is a drill button: reset native chrome, full-row click target. */
+.lane { display: flex; align-items: center; height: 15px; margin: 2px 0; width: 100%; padding: 0; background: none; border: none; cursor: pointer; border-radius: 3px; }
+.lane:hover { background: var(--wimcc-surface-2); }
+.lane:focus-visible { outline: 1px solid var(--wimcc-accent); outline-offset: 1px; }
+.lane[data-drilled='true'] .laneLabel { color: var(--wimcc-fg); font-weight: 600; }
 .laneLabel { flex: none; width: 120px; padding-right: 8px; text-align: right; color: var(--wimcc-fg-muted, #aab0bd); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .track { position: relative; flex: 1 1 auto; height: 100%; }
 .bar { position: absolute; top: 50%; transform: translateY(-50%); height: 7px; border-radius: 3px; background: var(--wimcc-lane-context, #b07dff); box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }

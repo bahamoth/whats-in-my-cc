@@ -29,6 +29,22 @@ describe('WorkflowGroup', () => {
     fireEvent.click(screen.getByTestId('wf-toggle'));
     expect(screen.getAllByTestId('subagent-group').length).toBe(2);
   });
+  it('S5: 레인 클릭 시 그 에이전트만 인라인 드릴 (전체 펼침 아님)', () => {
+    render(<WorkflowGroup group={wg} selectedEventId={null} onSelect={noop} findingEventIds={new Set()} />);
+    fireEvent.click(screen.getAllByTestId('wf-lane')[0]);
+    expect(screen.getAllByTestId('subagent-group').length).toBe(1);
+    expect(screen.getByTestId('workflow-group')).toHaveAttribute('data-expanded', 'false');
+    expect(screen.getByText('A 결론')).toBeInTheDocument();
+    expect(screen.queryByText('B 결론')).toBeNull();
+  });
+  it('S5: 드릴된 레인 재클릭하면 접힘', () => {
+    render(<WorkflowGroup group={wg} selectedEventId={null} onSelect={noop} findingEventIds={new Set()} />);
+    const lane0 = () => screen.getAllByTestId('wf-lane')[0];
+    fireEvent.click(lane0());
+    expect(screen.getAllByTestId('subagent-group').length).toBe(1);
+    fireEvent.click(lane0());
+    expect(screen.queryByTestId('subagent-group')).toBeNull();
+  });
   it('concurrentMainCount>0이면 "main N건 동시" 배지', () => {
     render(
       <WorkflowGroup group={{ ...wg, concurrentMainCount: 3 }} selectedEventId={null} onSelect={noop} findingEventIds={new Set()} />,

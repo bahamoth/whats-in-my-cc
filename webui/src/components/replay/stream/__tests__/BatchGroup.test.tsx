@@ -146,6 +146,55 @@ describe('BatchGroup', () => {
     expect(screen.getByTestId('batch-group')).toHaveAttribute('data-expanded', 'true');
   });
 
+  // ---- S5 (UX 재설계 §6.5) — per-lane inline drill ----
+
+  it('레인 클릭 시 그 에이전트만 인라인 드릴 (전체 펼침 아님)', () => {
+    render(
+      <BatchGroup
+        group={fixtureBatch}
+        selectedEventId={null}
+        onSelect={() => {}}
+        findingEventIds={new Set()}
+      />,
+    );
+    fireEvent.click(screen.getAllByTestId('batch-lane')[0]);
+    // only agent A's sub-timeline is mounted — NOT a full expand
+    expect(screen.getAllByTestId('subagent-group')).toHaveLength(1);
+    expect(screen.getByTestId('batch-group')).toHaveAttribute('data-expanded', 'false');
+    expect(screen.getByText('A 결론')).toBeInTheDocument();
+    expect(screen.queryByText('B 결론')).toBeNull();
+  });
+
+  it('두 번째 레인을 클릭하면 둘 다 독립적으로 드릴된다', () => {
+    render(
+      <BatchGroup
+        group={fixtureBatch}
+        selectedEventId={null}
+        onSelect={() => {}}
+        findingEventIds={new Set()}
+      />,
+    );
+    fireEvent.click(screen.getAllByTestId('batch-lane')[0]);
+    fireEvent.click(screen.getAllByTestId('batch-lane')[1]);
+    expect(screen.getAllByTestId('subagent-group')).toHaveLength(2);
+  });
+
+  it('드릴된 레인을 다시 클릭하면 접힌다', () => {
+    render(
+      <BatchGroup
+        group={fixtureBatch}
+        selectedEventId={null}
+        onSelect={() => {}}
+        findingEventIds={new Set()}
+      />,
+    );
+    const lane0 = () => screen.getAllByTestId('batch-lane')[0];
+    fireEvent.click(lane0());
+    expect(screen.getAllByTestId('subagent-group')).toHaveLength(1);
+    fireEvent.click(lane0());
+    expect(screen.queryByTestId('subagent-group')).toBeNull();
+  });
+
   it('forwards onSelect from a child to the host', () => {
     const onSelect = vi.fn();
     render(

@@ -76,11 +76,27 @@ export function BatchGroup({
   // false) defaults to EXPANDED so progress is visible without a click. An
   // explicit toggle always wins.
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
+  // S5 — per-lane inline drill: which agents are individually expanded in place
+  // (independent of the full "전체 펼치기"). Clicking a gantt lane toggles its
+  // agent here; the whole-group toggle / running / contains-selected still
+  // drives `expanded` (= show ALL), preserving the existing behaviour.
+  const [drilled, setDrilled] = useState<Set<string>>(() => new Set());
+  const toggleDrill = (id: string) =>
+    setDrilled((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const containsSelected =
     selectedEventId != null &&
     group.agentGroups.some((g) => itemEventIds(g).includes(selectedEventId));
   const defaultExpanded = containsSelected || !group.settled;
   const expanded = userOverride ?? defaultExpanded;
+  // Agents to render in place: all when fully expanded, else just the drilled.
+  const renderedAgents = expanded
+    ? group.agentGroups
+    : group.agentGroups.filter((g) => drilled.has(g.id));
 
   const n = group.agentGroups.length;
   const doneCount = group.agentGroups.filter((g) => g.conclusion != null).length;
@@ -130,26 +146,39 @@ export function BatchGroup({
         <span className={styles.synthesisLabel}>종합</span>
         <span className={styles.synthesisText}>{synthesis || '진행 중'}</span>
       </div>
-      {/* always-visible mini-gantt — concurrency at a glance, even collapsed */}
+      {/* always-visible mini-gantt — concurrency at a glance, even collapsed.
+          S5: each lane is a button that drills JUST that agent in place. */}
       <div className={styles.gantt}>
-        {tl.lanes.map((l) => (
-          <div key={l.id} data-testid="batch-lane" className={styles.lane}>
-            <span className={styles.laneLabel} title={l.label}>{l.label}</span>
-            <div className={styles.track}>
-              <div
-                className={styles.bar}
-                data-heat={agentDurationHeat(l.durMs)}
-                style={{ left: `${pct(l.startMs)}%`, width: `${Math.max(1.5, pct(l.durMs))}%`, background: l.color }}
-              >
-                <span className={styles.barLabel}>{formatDuration(l.durMs)}</span>
+        {tl.lanes.map((l) => {
+          const isDrilled = expanded || drilled.has(l.id);
+          return (
+            <button
+              key={l.id}
+              type="button"
+              data-testid="batch-lane"
+              data-drilled={isDrilled ? 'true' : undefined}
+              className={styles.lane}
+              aria-expanded={isDrilled}
+              title={`${l.label} — 클릭하여 펼치기`}
+              onClick={() => toggleDrill(l.id)}
+            >
+              <span className={styles.laneLabel}>{l.label}</span>
+              <div className={styles.track}>
+                <div
+                  className={styles.bar}
+                  data-heat={agentDurationHeat(l.durMs)}
+                  style={{ left: `${pct(l.startMs)}%`, width: `${Math.max(1.5, pct(l.durMs))}%`, background: l.color }}
+                >
+                  <span className={styles.barLabel}>{formatDuration(l.durMs)}</span>
+                </div>
               </div>
-            </div>
-          </div>
-        ))}
+            </button>
+          );
+        })}
       </div>
-      {expanded && (
+      {renderedAgents.length > 0 && (
         <div className={styles.body}>
-          {group.agentGroups.map((g) => (
+          {renderedAgents.map((g) => (
             <SubagentGroup
               key={g.id}
               group={g}
