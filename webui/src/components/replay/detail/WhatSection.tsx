@@ -77,13 +77,15 @@ function ToolCallBody({ event, matchedResult }: WhatSectionProps) {
     <div className={styles.what}>
       <div className={styles.cmd}>{cmdText}</div>
       {resultContent !== null && (
-        <div className={isError ? styles.err : styles.out}>
-          {isError && <span className={styles.errBadge}>오류</span>}
-          <span>{result?.text}</span>
+        <>
+          <div className={`${isError ? styles.err : styles.out} ${result?.truncated ? styles.truncated : ''}`}>
+            {isError && <span className={styles.errBadge}>오류</span>}
+            <span>{result?.text}</span>
+          </div>
           {result?.truncated && (
-            <span className={styles.truncNote}> …(truncated; Raw 탭에서 전문)</span>
+            <span className={styles.truncNote}>… {OUTPUT_TRUNCATE.toLocaleString()}자 이후 잘림 — Raw 탭에서 전문</span>
           )}
-        </div>
+        </>
       )}
     </div>
   );
@@ -101,10 +103,10 @@ export function WhatSection({ event, matchedResult }: WhatSectionProps) {
       const { text, truncated } = truncate(content);
       return (
         <div className={styles.what}>
-          <div className={styles.prose}>
-            {text}
-            {truncated && <span className={styles.truncNote}> …(Raw 탭에서 전문)</span>}
-          </div>
+          <div className={`${styles.prose} ${truncated ? styles.truncated : ''}`}>{text}</div>
+          {truncated && (
+            <span className={styles.truncNote}>… {OUTPUT_TRUNCATE.toLocaleString()}자 이후 잘림 — Raw 탭에서 전문</span>
+          )}
         </div>
       );
     }
@@ -114,10 +116,10 @@ export function WhatSection({ event, matchedResult }: WhatSectionProps) {
       const { text, truncated } = truncate(text_);
       return (
         <div className={styles.what}>
-          <div className={styles.prose}>
-            {text}
-            {truncated && <span className={styles.truncNote}> …(Raw 탭에서 전문)</span>}
-          </div>
+          <div className={`${styles.prose} ${truncated ? styles.truncated : ''}`}>{text}</div>
+          {truncated && (
+            <span className={styles.truncNote}>… {OUTPUT_TRUNCATE.toLocaleString()}자 이후 잘림 — Raw 탭에서 전문</span>
+          )}
         </div>
       );
     }

@@ -356,6 +356,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               llmMetrics={selectedLlmMetrics}
               rawBlocks={rawBlocks}
               matchedResult={matchedToolResult}
+              onSelectEvent={selectStreamCard}
             />
           </div>
         </div>

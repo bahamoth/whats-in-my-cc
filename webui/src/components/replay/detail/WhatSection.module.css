@@ -94,6 +94,15 @@
 
 /* Truncation annotation */
 .truncNote {
-  color: var(--wimcc-fg-subtle, #6a7180);
+  display: block;
+  margin-top: 2px;
+  color: var(--wimcc-accent, #4f8cff);
   font-size: 11px;
+}
+/* S7 — the truncated body fades at its bottom edge so the cut is visible, not a
+ * silent slice. The "전문" anchor (.truncNote) sits OUTSIDE this masked block so
+ * it stays fully legible. */
+.truncated {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
 }

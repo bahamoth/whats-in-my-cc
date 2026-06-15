@@ -28,9 +28,11 @@ interface DetailPanelProps {
   /** The matching tool_result event when the selected event is a tool_call.
    *  Used by WhatSection (① WHAT layer) to show the full tool output. */
   matchedResult?: ObservedEventDto | null;
+  /** S7 — jump to an evidence event id from a Signal (Insight tab). */
+  onSelectEvent?: (eventId: string) => void;
 }
 
-export function DetailPanel({ event, record, signals, toolMetrics, llmMetrics, rawBlocks, matchedResult }: DetailPanelProps) {
+export function DetailPanel({ event, record, signals, toolMetrics, llmMetrics, rawBlocks, matchedResult, onSelectEvent }: DetailPanelProps) {
   const [chosen, setChosen] = useState<TabId | null>(null);
   const active = chosen ?? 'insight';
 
@@ -83,6 +85,7 @@ export function DetailPanel({ event, record, signals, toolMetrics, llmMetrics, r
             toolMetrics={toolMetrics ?? null}
             llmMetrics={llmMetrics ?? null}
             matchedResult={matchedResult ?? null}
+            onSelectEvent={onSelectEvent}
           />
         )}
         {active === 'raw' && <RawTab nodeId={event.event_id} record={record} blocks={rawBlocks} />}
