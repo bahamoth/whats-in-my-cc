@@ -27,6 +27,8 @@ import { useSessionWindow } from '../hooks/useSessionWindow';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
 import { UntaggedBashPanel } from '../components/replay/stream/UntaggedBashPanel';
 import { buildStreamModel } from '../components/replay/stream/streamModel';
+import { stepEventId, nextErrorEventId } from '../components/replay/stream/streamKeyboard';
+import { StreamLegend } from '../components/replay/stream/StreamLegend';
 import { buildLlmRequestMetrics } from '../components/replay/stream/llmRequestMetrics';
 import type { RawBlock } from '../components/replay/detail/RawTab';
 import { buildRawBlocksFromEvents } from '../components/replay/detail/rawBlocks';
@@ -162,6 +164,31 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const selectedEventId = sel.selectedNodeId;
   const selectedStreamEventId = selectedEventId;
   const selectStreamCard = (eventId: string) => sel.setSelectedNodeId(eventId);
+
+  // S10 (§7.4) — stream keyboard nav: j/k move the selection down/up the spine,
+  // e jumps to the next error event. The existing scroll-into-view effect
+  // (ConversationStream) brings the new selection into view. Ignored while
+  // typing in a field or when a modifier is held (lets ⌘K etc. pass through).
+  const setSelectedNodeId = sel.setSelectedNodeId;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return;
+      let next: string | null = null;
+      if (e.key === 'j') next = stepEventId(streamItems, selectedEventId, 'down');
+      else if (e.key === 'k') next = stepEventId(streamItems, selectedEventId, 'up');
+      else if (e.key === 'e') next = nextErrorEventId(streamItems, selectedEventId);
+      else return;
+      if (next) {
+        e.preventDefault();
+        setSelectedNodeId(next);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [streamItems, selectedEventId, setSelectedNodeId]);
 
   // Deep-link `?selected=<event_id>` outside the loaded window (the initial
   // load is the newest tail): fetch the window AROUND the event and replace
@@ -329,6 +356,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
           )}
 
           <div className={styles.stream} data-slot="stream">
+            <StreamLegend />
             {window_.loading === 'older' && (
               <div className={styles.loadingOlder} role="status" aria-live="polite">
                 <span className={styles.spinner} aria-hidden />

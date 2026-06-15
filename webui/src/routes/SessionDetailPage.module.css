@@ -131,11 +131,11 @@
   .spinner { animation: none; }
 }
 
-@media (max-width: 860px) {
-  /* Narrow: stack the panels and let the page (AppShell `.main`) scroll as one
-     column. Reverting `.page` to normal block flow makes the grid's flex:1
-     inert, so the stacked content grows naturally instead of being squeezed
-     into one viewport. */
+/* S10 (§7.3) — normalised breakpoint at 800px (was 860). Narrow: stack the
+   panels and let the page (AppShell `.main`) scroll as one column. Reverting
+   `.page` to normal block flow makes the grid's flex:1 inert, so the stacked
+   content grows naturally instead of being squeezed into one viewport. */
+@media (max-width: 800px) {
   .page {
     display: block;
     height: auto;
@@ -146,6 +146,16 @@
     height: auto;
     grid-template-areas:
       "kpi"
+      "stream"
+      "detail";
+  }
+  .gridWithAnalysis {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    height: auto;
+    grid-template-areas:
+      "kpi"
+      "analysis"
       "stream"
       "detail";
   }
