@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { BarChart3 } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { MetaStrip } from '../components/MetaStrip';
 import { DetailPanel } from '../components/replay/detail/DetailPanel';
@@ -305,6 +306,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               aria-pressed={analysisOpen}
               onClick={() => setAnalysisOpen((v) => !v)}
             >
+              <BarChart3 size={13} aria-hidden />
               분석
             </button>
           </div>
