@@ -57,7 +57,7 @@ export function StreamLegend() {
       </div>
       <div className={styles.group}>
         <span className={styles.keys}>
-          <kbd>j</kbd>/<kbd>k</kbd> 이동 · <kbd>e</kbd> 다음 오류 · <kbd>/</kbd> 검색
+          <kbd>j</kbd>/<kbd>k</kbd> 이동 · <kbd>e</kbd> 다음 오류
         </span>
       </div>
       <button type="button" className={styles.close} onClick={dismiss} aria-label="범례 닫기">
