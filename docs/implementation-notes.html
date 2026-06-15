@@ -5078,6 +5078,83 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section>
+    <h2 id="ux-redesign-ab-2026-06-16">UX 재설계 A+B 하이브리드 — 전 화면 완료 (S5–S10 + S6/S7/S8 백엔드, 2026-06-16)</h2>
+    <p>
+      설계 SSOT: <code>docs/superpowers/specs/2026-06-14-witmcc-ux-redesign-design.md</code>. 슬라이스
+      S1–S4(접힘 제거·토큰·spine·평탄화)는 선행 커밋, 본 세션에서 <strong>S5–S10</strong>과 S6/S7/S8
+      백엔드를 마무리했다(PR #62). 전부 TDD red 우선 + 브라우저 스모크 후 commit.
+    </p>
+    <h3>S6 세션 목록 (풀스택) — 식별 facet</h3>
+    <p>
+      <code>/v1/sessions</code>에 <code>slug</code>·<code>model</code>·<code>project</code>·
+      <code>first_user_message_preview</code> 4종 추가(<code>repo_observed::session_facets</code>, 반환 id
+      집합에 대한 grouped 패스 4개). 출처: <code>slug</code>=<code>system_summary</code> 페이로드
+      <code>$.slug</code>(세션당 안정·hook 세션만, 14/19), <code>model</code>=dominant assistant
+      <code>$.model</code>(텍스트 응답 없는 tool-only 세션은 null), <code>project</code>=최신 비어있지 않은
+      <code>cwd</code>, preview=첫 비어있지 않은 user_message(슬래시-커맨드 래퍼 <code>&lt;command-…&gt;</code>
+      ·<code>&lt;local-command-…&gt;</code> 스킵, 140자 char-safe). <strong>전부 기존 payload/컬럼이라
+      migration·reingest 불필요.</strong> slug 의미는 real fixture <code>session_facts_v01.jsonl</code>로 잠금.
+      프론트는 슬러그 우선(UUID 폴백)·프로젝트 pill(basename)·모델 태그·preview 말줄임·상대시간·검색.
+    </p>
+    <h3>S7 Detail HOW 소제목 + provenance + Signal 점프</h3>
+    <p>
+      HOW 지표를 <code>MetricGroup</code>으로 묶어 <strong>LLM 동작 / 토큰 / 비용</strong>(도구는 도구 실행,
+      hook은 hook 실행) 소제목 + provenance pill. <strong>편차</strong>: 설계 §6.6은 "행마다 provenance"이나,
+      한 그룹의 모든 행이 같은 출처(OTel <code>llm_request</code> span·<code>log_record</code> facet·
+      <code>api_request_log</code>)라 동일 pill 12개는 노이즈 → <strong>그룹 단위 pill</strong>로 한 번만 표기
+      (전부 <code>측정</code>). 비용 행은 소제목 '비용'과 중복 피해 '청구 비용'으로 명명. Signal 클릭 시 첫
+      evidence 이벤트로 점프(<code>onSelectEvent</code>→기존 <code>selectStreamCard</code>·loadAround 재사용).
+      WhatSection 2000자 절단은 하단 fade(mask) + "전문은 Raw 탭에서" 앵커.
+    </p>
+    <h3>S8 KPI 스파크라인·베이스라인 (풀스택)</h3>
+    <p>
+      <code>/v1/sessions/:id/turns</code> 각 턴에 per-turn 토큰 합계 추가(<code>usage_facet ⋈
+      observed_event</code> on <code>raw_event_id</code> GROUP BY <code>turn_id</code> →
+      <code>TurnRollup.tokens</code>; <code>rollup()</code>은 순수 유지, 핸들러가 채움). reingest 불필요.
+      프론트 <code>InsightStrip</code>에 막대 스파크라인 + 베이스라인 델타. <strong>스파크라인은 컨텍스트·
+      토큰·비용 카드에만</strong>(per-turn 토큰 유도) — 검증·도구실패는 신뢰할 per-turn 데이터가 없어
+      정직하게 생략. 비용은 청구 토큰 비례 proxy(추정 유지). 베이스라인 델타는 <code>/v1/usage/baseline</code>
+      코호트 중앙값(cache_hit_ratio·billed_tokens) — fingerprint는 코호트 키만 줘서 metric 중앙값은
+      usage/baseline이 출처. fact-only tint(맥락·비용=blue).
+    </p>
+    <h3>S9 Analysis 재설계 — 이미 완료</h3>
+    <p>
+      detector 분포 막대·단일 signal 인라인 드릴·evidence 점프·판단 색 없음은 <code>AnalysisPanel</code>에
+      이미 구현, 토글 아이콘(BarChart3)·max-height 60vh 가변은 선행 커밋 2191544. 신규 코드 없음(검증만).
+    </p>
+    <h3>S10 마감 — 라이트모드·키보드·범례·반응형</h3>
+    <ul>
+      <li><strong>라이트모드</strong>: <code>tokens.css</code> <code>@media(prefers-color-scheme:light)</code>
+        토큰 일괄 override(표면·텍스트·시맨틱·레인 hue를 light 대비로, fact-only 규율 유지) + color-scheme.
+        UI 토글 없음. 검증은 토큰 강제 주입(스크린샷 viewport가 OS 토글을 못 잡아).</li>
+      <li><strong>키보드(§7.4)</strong>: <code>streamKeyboard.ts</code> 순수 헬퍼(j/k 스파인 이동·e 다음 오류) →
+        SessionDetailPage <code>keydown</code>(입력·수정키 무시, 기존 scroll-into-view 재사용), '/' → 세션목록
+        검색 포커스. <strong>z(그룹 토글) 보류</strong> — 이질적 그룹 상태 배선 필요(문서화).</li>
+      <li><strong>a11y</strong>: <code>StreamLegend</code>(레인·duration heat·키보드 힌트 dismissible 범례,
+        localStorage 영속) — spine 거터는 <code>aria-hidden</code> 장식이라 범례가 색의 접근성 키.</li>
+      <li><strong>반응형</strong>: detail 브레이크포인트 860→<strong>800</strong> 정규화 + analysis 그리드 스택.
+        narrow 뷰포트는 스크린샷 도구가 1728px 고정이라 강제 주입으로 1열 스택 시각 확인.</li>
+    </ul>
+    <h3>S5 FanPanel 인라인 SubTimeline 드릴</h3>
+    <p>
+      BatchGroup·WorkflowGroup의 미니 간트 레인을 버튼으로 만들어 <strong>레인 클릭 시 그 에이전트의
+      SubagentGroup만 in-place 드릴</strong>(<code>drilled: Set&lt;agentId&gt;</code>, 독립 토글·재클릭 접힘).
+      평면 아코디언 금지. 전체 펼치기(헤더)·실행중 자동펼침·contains-selected는 기존대로 <code>expandAll</code>로
+      전체 렌더 — <code>drilled</code>와 직교라 기존 테스트 전부 보존. 실 세션 653ea169의 12-에이전트
+      워크플로우 <code>kpi-metric-audit</code>에서 12레인 간트 상시 + 단일 레인 드릴(<code>data-expanded=false</code>,
+      subagent-group=1) 라이브 검증. <strong>≥4 동시 밀집 표현은 별도 목업 후속(미구현)</strong>.
+    </p>
+    <h3>개발 워크플로우 주의 — serve 재기동이 라이브 claude를 종료</h3>
+    <p>
+      누적 <code>.wimcc.sqlite</code> 위 serve startup 처리가 라이브 claude 세션을 종료시키는 현상(사용자
+      보고). 백엔드 스모크는 라이브가 OTLP를 export하는 :7878을 건드리지 않고 <strong>스냅샷 복사본 +
+      별도 포트 :7879</strong>로 격리 serve를 띄우고, Vite는 <code>WIMCC_PROXY_TARGET</code>(vite.config.ts에
+      env override 추가)로 프록시만 격리 인스턴스로 돌렸다. (stale <code>vite.config.js</code> tsc 산출물이
+      <code>.ts</code>보다 우선 로드되던 잠복 버그도 제거.)
+    </p>
+  </section>
+
 </main>
 </div>
 </body></html>
