@@ -5,7 +5,7 @@
 
 **English** · [한국어](README.ko.md)
 
-**Replay what Claude Code actually did — not what it said.**
+**Replay what Claude Code actually did. Every step visible to both humans and agents.**
 
 ## What's in my cc?
 
