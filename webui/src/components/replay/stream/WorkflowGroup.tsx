@@ -19,6 +19,15 @@ function itemEventIds(it: StreamItem): string[] {
 
 export function WorkflowGroup({ group, selectedEventId, onSelect, findingEventIds }: Props) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
+  // S5 — per-lane inline drill (independent of the full "전체 펼치기" toggle).
+  const [drilled, setDrilled] = useState<Set<string>>(() => new Set());
+  const toggleDrill = (id: string) =>
+    setDrilled((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const containsSelected = selectedEventId != null && group.agentGroups.some((g) => itemEventIds(g).includes(selectedEventId));
   const expanded = userOverride ?? (containsSelected || !group.settled);
   const stats = useMemo(() => workflowStats(group.agentGroups), [group.agentGroups]);
@@ -100,24 +109,36 @@ export function WorkflowGroup({ group, selectedEventId, onSelect, findingEventId
         {stats.incomplete > 0 && <span className={styles.stat}>미완 <b>{stats.incomplete}</b></span>}
       </div>
 
-      {/* 항상 보이는 컴팩트 미니 간트 */}
+      {/* 항상 보이는 컴팩트 미니 간트 — S5: 레인 클릭 시 그 에이전트만 인라인 드릴 */}
       <div className={styles.gantt}>
-        {tl.lanes.map((l) => (
-          <div key={l.id} data-testid="wf-lane" className={styles.lane}>
-            <span className={styles.laneLabel} title={l.label}>{l.label}</span>
-            <div className={styles.track}>
-              <div className={styles.bar}
-                   style={{ left: `${pct(l.startMs)}%`, width: `${Math.max(1.5, pct(l.durMs))}%`, background: l.color }}>
-                <span className={styles.barLabel}>{formatDuration(l.durMs)}</span>
+        {tl.lanes.map((l) => {
+          const isDrilled = expanded || drilled.has(l.id);
+          return (
+            <button
+              key={l.id}
+              type="button"
+              data-testid="wf-lane"
+              data-drilled={isDrilled ? 'true' : undefined}
+              className={styles.lane}
+              aria-expanded={isDrilled}
+              title={`${l.label} — 클릭하여 펼치기`}
+              onClick={() => toggleDrill(l.id)}
+            >
+              <span className={styles.laneLabel}>{l.label}</span>
+              <div className={styles.track}>
+                <div className={styles.bar}
+                     style={{ left: `${pct(l.startMs)}%`, width: `${Math.max(1.5, pct(l.durMs))}%`, background: l.color }}>
+                  <span className={styles.barLabel}>{formatDuration(l.durMs)}</span>
+                </div>
               </div>
-            </div>
-          </div>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
-      {expanded && (
+      {(expanded ? group.agentGroups : group.agentGroups.filter((g) => drilled.has(g.id))).length > 0 && (
         <div className={styles.body}>
-          {group.agentGroups.map((g) => (
+          {(expanded ? group.agentGroups : group.agentGroups.filter((g) => drilled.has(g.id))).map((g) => (
             <SubagentGroup key={g.id} group={g} selectedEventId={selectedEventId} onSelect={onSelect} findingEventIds={findingEventIds} />
           ))}
         </div>
