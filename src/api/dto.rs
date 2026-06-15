@@ -74,6 +74,17 @@ pub struct SessionListItem {
     /// transcript-only vs OTel-only sessions in the list view.
     #[serde(default)]
     pub by_kind: std::collections::BTreeMap<String, i64>,
+    /// S6 (UX 재설계) — identifiability facets, all nullable. The WebUI shows
+    /// the slug (falling back to the UUID), a project pill, a dominant-model
+    /// tag, and a one-line first-message preview.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_user_message_preview: Option<String>,
 }
 
 /// Slice-9 — `events` field removed. Use `GET /v1/sessions/:id/events?...`

@@ -8,6 +8,13 @@ export type SessionListItem = {
   source_uris: string[];
   /** slice-7 — per-kind row counts. May be absent on older servers. */
   by_kind?: Record<string, number>;
+  /** S6 (UX 재설계) — identifiability facets. All optional: absent on older
+   * servers, and individually null when the session lacks the source data
+   * (no hook slug, no text assistant turn, no cwd, no user prompt). */
+  project?: string;
+  model?: string;
+  slug?: string;
+  first_user_message_preview?: string;
 };
 
 /** The telemetry facet, extracted from an OTel span at ingest (`TelemetryFacet`

@@ -67,3 +67,40 @@ export function formatBytes(bytes: number | null | undefined): string {
   if (v < 1_073_741_824) return `${(v / 1_048_576).toFixed(1)} MiB`;
   return `${(v / 1_073_741_824).toFixed(1)} GiB`;
 }
+
+/**
+ * S6 (UX 재설계) — Korean relative time for the session list. "방금" under a
+ * minute, then `N분/시간/일 전`, falling back to a `YYYY-MM-DD` date past 30
+ * days so old rows read as a date, not "812일 전". Returns "—" for unparseable
+ * input. `nowMs` is injected so the formatter stays pure and testable.
+ */
+export function relativeTime(iso: string | null | undefined, nowMs: number): string {
+  if (!iso) return PLACEHOLDER;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return PLACEHOLDER;
+  const diffMs = nowMs - t;
+  if (diffMs < 0) return '방금';
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return '방금';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  const day = Math.floor(hr / 24);
+  if (day <= 30) return `${day}일 전`;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/**
+ * S6 — humanise a raw Claude model id (`claude-opus-4-8` → "Opus 4.8"). Drops
+ * a trailing date stamp (`-20251001`) and a `[1m]` context suffix. Falls back
+ * to the raw id when the shape is unknown, "—" for empty/nullish.
+ */
+export function formatModel(id: string | null | undefined): string {
+  if (!id) return PLACEHOLDER;
+  const cleaned = id.replace(/\[[^\]]*\]$/, '');
+  const m = cleaned.match(/^claude-(opus|sonnet|haiku|fable)-(\d+)-(\d+)/);
+  if (!m) return id;
+  const family = m[1].charAt(0).toUpperCase() + m[1].slice(1);
+  return `${family} ${m[2]}.${m[3]}`;
+}

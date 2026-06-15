@@ -160,6 +160,17 @@ pub struct SessionRow {
     /// slice-7 — per-source row counts so the WebUI can show transcript-only
     /// vs OTel-only sessions at a glance without a second round trip.
     pub by_kind: std::collections::BTreeMap<String, i64>,
+    /// S6 (UX 재설계) — identifiability facets. All optional: a session may
+    /// lack a hook-collected `slug`, a text assistant turn (→ no `model`), a
+    /// `cwd`, or a non-empty first user message.
+    /// `project` = the session's most recent non-empty `cwd`.
+    pub project: Option<String>,
+    /// Dominant assistant model (`message.model`); ties broken by name.
+    pub model: Option<String>,
+    /// Stable per-session slug from the transcript's `system` summary payload.
+    pub slug: Option<String>,
+    /// First non-empty user-message content, truncated server-side.
+    pub first_user_message_preview: Option<String>,
 }
 
 pub async fn list_sessions(pool: &SqlitePool, limit: i64) -> Result<Vec<SessionRow>> {
@@ -243,20 +254,157 @@ pub async fn list_sessions_filtered(
         let n: i64 = r.get("n");
         by_kind_map.entry(sid).or_default().insert(kind, n);
     }
+
+    // S6 — identifiability facets, one grouped pass each over the returned ids.
+    let mut facets = session_facets(pool, &ids, &placeholders).await?;
+
     Ok(totals
         .into_iter()
         .map(|r| {
             let sid: String = r.get("session_id");
             let by_kind = by_kind_map.remove(&sid).unwrap_or_default();
+            let f = facets.remove(&sid).unwrap_or_default();
             SessionRow {
                 session_id: sid,
                 first_observed_at: r.get("first_observed_at"),
                 last_observed_at: r.get("last_observed_at"),
                 event_count: r.get("event_count"),
                 by_kind,
+                project: f.project,
+                model: f.model,
+                slug: f.slug,
+                first_user_message_preview: f.preview,
             }
         })
         .collect())
+}
+
+/// S6 — per-session identity facets, collected for an already-resolved id set.
+#[derive(Default)]
+struct SessionFacets {
+    project: Option<String>,
+    model: Option<String>,
+    slug: Option<String>,
+    preview: Option<String>,
+}
+
+/// First user-message preview is truncated to this many characters
+/// (char-safe, server-side) so the list payload stays small. The WebUI
+/// renders a single ellipsised line on top of this.
+const PREVIEW_MAX_CHARS: usize = 140;
+
+async fn session_facets(
+    pool: &SqlitePool,
+    ids: &[String],
+    placeholders: &str,
+) -> Result<std::collections::HashMap<String, SessionFacets>> {
+    use sqlx::Row as _Row;
+    let mut out: std::collections::HashMap<String, SessionFacets> =
+        std::collections::HashMap::new();
+
+    // project = most recent non-empty cwd. SQLite's bare-column rule returns
+    // `cwd` from the row holding MAX(observed_at) within each group.
+    let cwd_sql = format!(
+        "SELECT session_id, cwd, MAX(observed_at) AS _t
+           FROM observed_event
+          WHERE session_id IN ({placeholders}) AND cwd IS NOT NULL AND cwd != ''
+          GROUP BY session_id"
+    );
+    let mut q = sqlx::query(&cwd_sql);
+    for id in ids {
+        q = q.bind(id);
+    }
+    for r in q.fetch_all(pool).await? {
+        let sid: String = r.get("session_id");
+        out.entry(sid).or_default().project = r.try_get::<Option<String>, _>("cwd").ok().flatten();
+    }
+
+    // slug = stable per-session slug from the `system_summary` payload.
+    let slug_sql = format!(
+        "SELECT session_id, MAX(json_extract(payload,'$.slug')) AS slug
+           FROM observed_event
+          WHERE session_id IN ({placeholders}) AND kind = 'system_summary'
+            AND json_extract(payload,'$.slug') IS NOT NULL
+          GROUP BY session_id"
+    );
+    let mut q = sqlx::query(&slug_sql);
+    for id in ids {
+        q = q.bind(id);
+    }
+    for r in q.fetch_all(pool).await? {
+        let sid: String = r.get("session_id");
+        out.entry(sid).or_default().slug = r.try_get::<Option<String>, _>("slug").ok().flatten();
+    }
+
+    // model = dominant assistant model; tie-break by name DESC for determinism.
+    let model_sql = format!(
+        "SELECT session_id, json_extract(payload,'$.model') AS model, COUNT(*) AS n
+           FROM observed_event
+          WHERE session_id IN ({placeholders}) AND kind = 'assistant_message'
+            AND json_extract(payload,'$.model') IS NOT NULL
+          GROUP BY session_id, model"
+    );
+    let mut q = sqlx::query(&model_sql);
+    for id in ids {
+        q = q.bind(id);
+    }
+    // (count, model) per session — pick max count, tie-break by model name DESC.
+    let mut best: std::collections::HashMap<String, (i64, String)> =
+        std::collections::HashMap::new();
+    for r in q.fetch_all(pool).await? {
+        let sid: String = r.get("session_id");
+        let model: String = r.get("model");
+        let n: i64 = r.get("n");
+        let take = match best.get(&sid) {
+            None => true,
+            Some((bn, bm)) => n > *bn || (n == *bn && model > *bm),
+        };
+        if take {
+            best.insert(sid, (n, model));
+        }
+    }
+    for (sid, (_, model)) in best {
+        out.entry(sid).or_default().model = Some(model);
+    }
+
+    // preview = earliest non-empty, non-meta user message content, skipping
+    // slash-command stdin wrappers (`<command-name>…`, `<local-command-…>`)
+    // which are noise for identification, not real prompts.
+    let preview_sql = format!(
+        "SELECT session_id, json_extract(payload,'$.content') AS content, MIN(observed_at) AS _t
+           FROM observed_event
+          WHERE session_id IN ({placeholders}) AND kind = 'user_message' AND is_meta = 0
+            AND trim(coalesce(json_extract(payload,'$.content'),'')) != ''
+            AND trim(coalesce(json_extract(payload,'$.content'),'')) NOT LIKE '<command-%'
+            AND trim(coalesce(json_extract(payload,'$.content'),'')) NOT LIKE '<local-command-%'
+          GROUP BY session_id"
+    );
+    let mut q = sqlx::query(&preview_sql);
+    for id in ids {
+        q = q.bind(id);
+    }
+    for r in q.fetch_all(pool).await? {
+        let sid: String = r.get("session_id");
+        let content: Option<String> = r.try_get::<Option<String>, _>("content").ok().flatten();
+        out.entry(sid).or_default().preview = content.map(|c| truncate_preview(&c));
+    }
+
+    Ok(out)
+}
+
+/// Char-safe single-line preview: collapse whitespace runs, trim, and cap at
+/// `PREVIEW_MAX_CHARS` characters (never split a UTF-8 char).
+fn truncate_preview(s: &str) -> String {
+    let collapsed = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.chars().count() <= PREVIEW_MAX_CHARS {
+        collapsed
+    } else {
+        collapsed
+            .chars()
+            .take(PREVIEW_MAX_CHARS)
+            .collect::<String>()
+            + "…"
+    }
 }
 
 /// Distinct `turn_id` count for a session = number of user turns (prompts).

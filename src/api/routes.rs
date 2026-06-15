@@ -155,6 +155,10 @@ pub async fn list_sessions(
             event_count: r.event_count,
             source_uris: vec![],
             by_kind: r.by_kind,
+            project: r.project,
+            model: r.model,
+            slug: r.slug,
+            first_user_message_preview: r.first_user_message_preview,
         })
         .collect();
     let mut meta = ResponseMeta::now();

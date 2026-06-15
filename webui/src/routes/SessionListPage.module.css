@@ -1,36 +1,122 @@
-/* PR-9 — design token application. Behaviour unchanged. */
+/* S6 (UX 재설계) — A+B editorial tone for the session list. Slug-first rows,
+ * project/model pills, first-message preview, relative "last seen", search. */
 
-.page { padding: 24px; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.hint { color: var(--wimcc-fg-muted); font-size: 12px; margin: 0 0 8px; }
+.page { padding: 24px; max-width: 1180px; margin: 0 auto; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.header h1 { font-size: 16px; font-weight: 650; letter-spacing: 0.01em; margin: 0; }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.hint { color: var(--wimcc-fg-muted); font-size: 12px; margin: 0; }
+.hint strong { color: var(--wimcc-fg); font-weight: 600; }
+
+.search {
+  min-width: 220px;
+  flex: 0 1 280px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: var(--wimcc-fg);
+  background: var(--wimcc-surface-2);
+  border: 1px solid var(--wimcc-border);
+  border-radius: var(--wimcc-radius-sm);
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.search::placeholder { color: var(--wimcc-fg-subtle); }
+.search:focus { border-color: var(--wimcc-accent); box-shadow: 0 0 0 3px var(--wimcc-accent-soft); }
 
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td {
-  padding: 8px;
-  border-bottom: 1px solid var(--wimcc-border);
+  padding: 11px 10px;
   text-align: left;
   vertical-align: top;
 }
 .table th {
   color: var(--wimcc-fg-muted);
-  font-size: 12px;
+  font-size: 10.5px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--wimcc-border-strong);
 }
+.table tbody tr { border-bottom: 1px solid var(--wimcc-border); }
+.table tbody tr:hover { background: var(--wimcc-surface-2); }
+.numHead { text-align: right; }
 
 .empty {
   padding: 32px;
   background: var(--wimcc-surface-2);
   border: 1px dashed var(--wimcc-border-strong);
-  border-radius: 8px;
+  border-radius: var(--wimcc-radius-md);
   color: var(--wimcc-fg-muted);
 }
 
 .sortable { cursor: pointer; user-select: none; }
-.sortable:hover { background: var(--wimcc-surface-2); }
+.sortable:hover { color: var(--wimcc-fg); }
 .sortInactive { color: var(--wimcc-fg-subtle); }
 .sortActive { color: var(--wimcc-accent); }
+
+/* --- rich session cell --- */
+.sessionCell { min-width: 0; }
+.top {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.slug {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--wimcc-fg);
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+.slug:hover { color: var(--wimcc-accent); text-decoration: underline; }
+
+.proj {
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--wimcc-fg-muted);
+  background: var(--wimcc-surface-3);
+  border: 1px solid var(--wimcc-border);
+  border-radius: 999px;
+}
+.model {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--wimcc-lane-context);
+  letter-spacing: 0.01em;
+}
+.prev {
+  margin-top: 4px;
+  color: var(--wimcc-fg-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  max-width: 56ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relCell {
+  color: var(--wimcc-fg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.eventsCell {
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--wimcc-fg);
+  white-space: nowrap;
+}
 
 .mix { display: flex; flex-wrap: wrap; gap: 4px; }
 .tag {
@@ -43,46 +129,21 @@
   background: var(--wimcc-surface-3);
   color: var(--wimcc-fg-muted);
 }
+.tagTranscript { color: var(--wimcc-lane-quality); border-color: var(--wimcc-border-strong); }
+.tagOtel { color: var(--wimcc-lane-otel); border-color: var(--wimcc-border-strong); }
+.tagHook { color: var(--wimcc-lane-hook); border-color: var(--wimcc-border-strong); }
+.tagDim { color: var(--wimcc-fg-subtle); font-size: 11px; }
 
-.tagTranscript {
-  background: var(--wimcc-surface-3);
-  color: var(--wimcc-lane-quality);
-  border-color: var(--wimcc-border-strong);
-}
-.tagOtel {
-  background: var(--wimcc-surface-3);
-  color: var(--wimcc-lane-otel);
-  border-color: var(--wimcc-border-strong);
-}
-.tagHook {
-  background: var(--wimcc-surface-3);
-  color: var(--wimcc-lane-hook);
-  border-color: var(--wimcc-border-strong);
-}
-.tagFile {
-  background: var(--wimcc-surface-3);
-  color: var(--wimcc-lane-files);
-  border-color: var(--wimcc-border-strong);
-}
-.tagDim {
-  color: var(--wimcc-fg-subtle);
-  font-size: 11px;
-}
-
-/* Sessions for which only OTel events landed (see PR-9 retains the slice-7
- * comment for context). */
 .liveBadge {
   display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
+  padding: 1px 7px;
   font-size: 10px;
   font-weight: 700;
-  font-family: ui-monospace, SFMono-Regular, monospace;
-  letter-spacing: 0.05em;
-  color: var(--wimcc-fg-on-accent);
-  background: var(--wimcc-success);
-  border-radius: 4px;
-  vertical-align: middle;
+  letter-spacing: 0.04em;
+  color: var(--wimcc-success);
+  background: color-mix(in srgb, var(--wimcc-success) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wimcc-success) 38%, transparent);
+  border-radius: 999px;
   animation: livePulse 1.5s ease-in-out infinite;
 }
 @keyframes livePulse {
@@ -95,4 +156,17 @@
 
 .otelOnly { background: var(--wimcc-surface-2); }
 .otelOnly td { color: var(--wimcc-fg-muted); }
-.otelOnly td a { color: var(--wimcc-lane-otel); }
+.otelOnly .slug { color: var(--wimcc-lane-otel); }
+
+/* --- S6 base responsive: narrow → card stack (S10 normalises 800px) --- */
+@media (max-width: 800px) {
+  .table, .table tbody, .table tr, .table td { display: block; width: 100%; }
+  .table thead { display: none; }
+  .table tbody tr {
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--wimcc-border);
+  }
+  .table td { padding: 2px 4px; border: none; }
+  .eventsCell, .relCell { text-align: left; display: inline-block; margin-right: 14px; }
+  .prev { max-width: 100%; white-space: normal; }
+}
