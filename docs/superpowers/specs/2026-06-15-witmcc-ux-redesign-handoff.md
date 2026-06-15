@@ -43,6 +43,10 @@
   streamModel `rowTimeMs` export. **B 트레이스 타임라인 완성** ✓ 스모크.
 - `f029e45` fix: 단일 에이전트 워크플로우 평탄화(WorkflowGroup, 모델 불변·렌더링만).
 - `3ee9667` feat: 병렬 배치 상시 미니 간트(WorkflowGroup 간트 재사용, `batch-lane`).
+- `2191544` feat: 분석 토글 아이콘(BarChart3) + analysis 패널 max-height 400px→60vh.
+
+**CI 그린 확인**: c1352ed에서 WebUI(vitest+build)·Rust(fmt+clippy+test) 모두 `success`
+(프론트 변경이 양쪽 체크 통과). 총 11커밋 ahead of main. webui 447 테스트 green.
 
 **발견(중요)**: 좌상단 `◐`은 테마 토글이 아니라 **nav rail의 Sessions 링크**(AppShell). 라이트모드는
 UI 토글 없이 **`prefers-color-scheme`** 기반 — S10 라이트 검증은 브라우저 emulate 필요. 또
