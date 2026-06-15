@@ -9,6 +9,8 @@
  * theme without touching component CSS. */
 
 :root {
+  color-scheme: dark;
+
   /* Layout */
   --wimcc-nav-rail-w: 56px;
   --wimcc-right-slot-w: 380px;
@@ -75,6 +77,52 @@
    * as floating on the bg without a drawn border. elev-2 for grouped panels. */
   --wimcc-elev-1: 0 1px 0 rgba(255, 255, 255, 0.025), 0 8px 24px -20px rgba(0, 0, 0, 0.85);
   --wimcc-elev-2: 0 1px 0 rgba(255, 255, 255, 0.03), 0 14px 36px -22px rgba(0, 0, 0, 0.9);
+}
+
+/* S10 (UX 재설계 §7.3) — light mode by a single token override. Same roles,
+ * light values; semantic + lane hues darkened just enough to keep their meaning
+ * legible on a light surface (fact-only colour discipline preserved). Toggle in
+ * the browser via prefers-color-scheme (no in-UI switch). */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --wimcc-bg: #f6f7f9;
+    --wimcc-surface-1: #ffffff;
+    --wimcc-surface-2: #f1f3f7;
+    --wimcc-surface-3: #e8ebf1;
+
+    --wimcc-border: #e3e6ec;
+    --wimcc-border-strong: #ccd1db;
+
+    --wimcc-fg: #1a1d24;
+    --wimcc-fg-muted: #515967;
+    --wimcc-fg-subtle: #858d9b;
+    --wimcc-fg-on-accent: #ffffff;
+
+    --wimcc-accent: #2f6fe0;
+    --wimcc-accent-soft: #d6e4ff;
+    --wimcc-success: #15915a;
+    --wimcc-warning: #b07a00;
+    --wimcc-danger: #d23b3b;
+    --wimcc-info: #2f6fe0;
+
+    --wimcc-scaffold: #8b4ddb;
+    --wimcc-scaffold-tint: rgba(139, 77, 219, 0.07);
+
+    --wimcc-lane-intent: #2f6fe0;
+    --wimcc-lane-context: #8b4ddb;
+    --wimcc-lane-action: #15915a;
+    --wimcc-lane-state: #b07a00;
+    --wimcc-lane-files: #d23b3b;
+    --wimcc-lane-hook: #0e9b9b;
+    --wimcc-lane-otel: #b14de0;
+    --wimcc-lane-quality: #d9742a;
+
+    /* lighter, shallower lift on a light surface */
+    --wimcc-elev-1: 0 1px 0 rgba(0, 0, 0, 0.02), 0 8px 24px -20px rgba(0, 0, 0, 0.22);
+    --wimcc-elev-2: 0 1px 0 rgba(0, 0, 0, 0.03), 0 14px 36px -22px rgba(0, 0, 0, 0.26);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,0 +1,62 @@
+/* S10 — dismissible stream legend. Quiet by default; sits above the stream. */
+.legend {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 30px 6px 12px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--wimcc-fg-muted);
+  background: var(--wimcc-surface-2);
+  border: 1px solid var(--wimcc-border);
+  border-radius: var(--wimcc-radius-sm, 7px);
+}
+.group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.heatWarn { background: var(--wimcc-warning); }
+.heatHot { background: var(--wimcc-danger); }
+.keys {
+  color: var(--wimcc-fg-subtle);
+}
+.keys kbd {
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 10px;
+  padding: 0 4px;
+  border: 1px solid var(--wimcc-border-strong);
+  border-radius: 3px;
+  background: var(--wimcc-surface-3);
+  color: var(--wimcc-fg-muted);
+}
+.close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  color: var(--wimcc-fg-subtle);
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.close:hover { color: var(--wimcc-fg); background: var(--wimcc-surface-3); }

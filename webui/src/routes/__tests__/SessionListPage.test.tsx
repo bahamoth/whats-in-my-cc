@@ -226,6 +226,16 @@ describe('SessionListPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('focuses the search box when "/" is pressed (S10 keyboard)', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(envelope([richRow()]));
+    render(withRouter(<SessionListPage />));
+    await screen.findByText('resilient-jingling-lark');
+    const search = screen.getByPlaceholderText(/검색|search/i);
+    expect(search).not.toHaveFocus();
+    fireEvent.keyDown(window, { key: '/' });
+    expect(search).toHaveFocus();
+  });
+
   it('filters rows by slug / project substring via the search box', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(envelope([
       richRow(),

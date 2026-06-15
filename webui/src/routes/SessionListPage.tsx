@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { listSessions, ApiError } from '../api/client';
 import type { SessionListItem } from '../api/types';
@@ -110,6 +110,21 @@ export default function SessionListPage() {
   const [sortKey, setSortKey] = useState<SortKey>('last_observed_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // S10 (§7.4) — "/" focuses the search box (unless already typing in a field).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   // ticks every 5s so the live badge re-evaluates the 60s window and the
   // relative-time column re-renders even when no envelope arrives.
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
@@ -224,11 +239,12 @@ export default function SessionListPage() {
               {sortDir === 'desc' ? '↓' : '↑'}
             </p>
             <input
+              ref={searchRef}
               className={styles.search}
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="⌕ 프로젝트·슬러그 검색…"
+              placeholder="⌕ 프로젝트·슬러그 검색… ( / )"
               aria-label="세션 검색"
             />
           </div>
