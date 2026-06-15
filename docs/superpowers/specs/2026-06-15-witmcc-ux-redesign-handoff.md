@@ -38,12 +38,22 @@
 | `af8731c` fix | correlation ID 칩 클릭 시 전체 ID 복사(InsightTab `CopyChip`) |
 | `f029e45` fix | 단일 에이전트 워크플로우 평탄화(WorkflowGroup, N=1 시 래퍼·간트·이중 chevron 제거 — **모델 불변, 렌더링만**) |
 
+## 추가 완료 (2026-06-15 이어받기, +3커밋 push됨)
+- `afb13fd` feat: **spine 좌측 시간축 라벨**(HH:MM ruler) — 셀 30→58px, format.ts `clockLabel`,
+  streamModel `rowTimeMs` export. **B 트레이스 타임라인 완성** ✓ 스모크.
+- `f029e45` fix: 단일 에이전트 워크플로우 평탄화(WorkflowGroup, 모델 불변·렌더링만).
+- `3ee9667` feat: 병렬 배치 상시 미니 간트(WorkflowGroup 간트 재사용, `batch-lane`).
+
+**발견(중요)**: 좌상단 `◐`은 테마 토글이 아니라 **nav rail의 Sessions 링크**(AppShell). 라이트모드는
+UI 토글 없이 **`prefers-color-scheme`** 기반 — S10 라이트 검증은 브라우저 emulate 필요. 또
+`fb6b8e3a`의 21:33 "Agent…" 행들은 **BatchGroup으로 미검출**(standalone SubagentGroup) — 실제
+"병렬 배치" 스모크 세션을 따로 찾아야 함(653ea169도 workflow-fanout 위주라 batch 적을 수 있음).
+
 ## 남은 일 (PR #62 체크리스트, 우선순위·의존성)
-- **S5 FanPanel 전체 재설계** (가장 큰 시각 가치, 사용자가 명시 질문):
-  BatchGroup·WorkflowGroup·SubagentGroup 렌더링을 "요약 상시(간트 레인+종합) + 레인 클릭 시
-  **인라인 sub-timeline 드릴**" 모델로. 단일 에이전트 평탄화는 WorkflowGroup만 완료 — Batch는
-  이미 모델에서 N=1 언랩. 목업 `webui/public/batch-states.html`이 상태①②③ 정의.
-  **스모크엔 서브에이전트 세션 필요**: `653ea169`(57 agents)·`fb6b8e3a`(7 agents, 깔끔한 병렬 배치).
+- **S5 FanPanel 잔여**: 현재 BatchGroup/WorkflowGroup은 요약(간트+종합) 상시 + 펼치면 자식
+  SubagentGroup(각자 드릴) — 기능적으로 근접. 미완: 레인 클릭 시 **그 에이전트만 인라인 드릴**
+  (현재는 그룹 전체 펼침). 큰 reorg + 디자인 민감 → 사용자 눈 + 실제 배치 세션 필요.
+  목업 `webui/public/batch-states.html` 상태①②③ 참고.
 - **S6 세션 목록** (풀스택): `/v1/sessions` 응답에 `slug`·첫 사용자메시지 미리보기·`model`(dominant)
   ·`project` 추가(Rust) + SessionListPage 재설계(슬러그·미리보기·상대시간·검색·반응형).
   `slug`는 transcript payload에 존재(Raw에서 실측). real-fixture로 잠그고 재ingest.
@@ -52,11 +62,9 @@
 - **S8 KPI 스파크라인·베이스라인** (풀스택): intra-session 추이=`/v1/sessions/:id/turns` 집계,
   베이스라인=`/v1/sessions/:id/fingerprint` 코호트. **비용 카드는 추정 유지**(측정-비용 swap 보류, 메모리).
 - **S9 Analysis 재설계**: 토글 아이콘화, detector 분포, 단일 signal 인라인, max-height 400px 제거.
-- **S10**: 반응형(800px 정규화·레일/우측슬롯 내로우·세션테이블 카드스택)·라이트모드(토큰 override)
-  ·a11y(아이콘 aria-label·범례)·키보드(j/k·z·e·/).
-- **spine 시간 라벨** (S4 잔여, 다음 작업 예정이었음): 셀을 ~56px로 넓혀 행별 시간(HH:MM) 라벨.
-  타임스탬프는 streamModel `streamItemTime()`(streamModel.ts:~718)·MessageItem.timestamp 등에서 추출.
-  **진행 중단 지점** — 이 작업을 막 시작하려던 참이었음.
+- **S10**: 반응형(800px 정규화·레일/우측슬롯 내로우·세션테이블 카드스택)·라이트모드(토큰 override
+  검증)·a11y(아이콘 aria-label·범례)·키보드(j/k·z·e·/).
+- ~~spine 시간 라벨~~ ✓ 완료(`afb13fd`).
 
 ## 작업 방식 (반드시 지킬 것)
 - **TDD red 우선** (superpowers:test-driven-development) → **브라우저 스모크 후 commit** (CLAUDE.md).
