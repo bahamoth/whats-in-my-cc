@@ -65,7 +65,12 @@
 /* Signals section */
 .signalsSection { border-top: 1px solid var(--wimcc-border, #1d212c); padding-top: 10px; }
 .list { list-style: none; margin: 0; padding: 0; }
-.item { border: 1px solid var(--wimcc-border, #1d212c); border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; }
+.item { border: 1px solid var(--wimcc-border, #1d212c); border-radius: var(--wimcc-radius-sm, 7px); padding: 8px 10px; margin-bottom: 8px; }
+/* S7 — a Signal whose evidence is reachable jumps the stream on click. */
+.item[data-jumpable='true'] { cursor: pointer; transition: border-color 0.12s ease, background 0.12s ease; }
+.item[data-jumpable='true']:hover { border-color: var(--wimcc-accent, #4f8cff); background: var(--wimcc-surface-2, #161a23); }
+.item[data-jumpable='true']:focus-visible { outline: 2px solid var(--wimcc-accent, #4f8cff); outline-offset: 1px; }
+.jumpHint { margin-left: auto; color: var(--wimcc-accent, #4f8cff); font-size: 10px; }
 .head { display: flex; align-items: center; gap: 8px; font-size: 11px; }
 /* detector chip — reuses the same look as the old .category */
 .detector { color: var(--wimcc-fg-muted, #aab0bd); font-family: var(--wimcc-mono, ui-monospace, monospace); }

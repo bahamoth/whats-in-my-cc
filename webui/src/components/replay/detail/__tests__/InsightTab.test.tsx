@@ -43,6 +43,21 @@ describe('InsightTab', () => {
     expect(screen.queryByText(/%/)).toBeNull();
   });
 
+  it('jumps to the first evidence event when a signal is clicked', () => {
+    const onSelectEvent = vi.fn();
+    render(
+      <InsightTab
+        signals={[signal({ evidence_refs: ['01EVIDENCE1', { kind: 'event', event_id: '01EVIDENCE2' }] })]}
+        event={toolEvent}
+        toolMetrics={toolMetrics}
+        llmMetrics={null}
+        onSelectEvent={onSelectEvent}
+      />,
+    );
+    fireEvent.click(screen.getByText('command exited with code 1'));
+    expect(onSelectEvent).toHaveBeenCalledWith('01EVIDENCE1');
+  });
+
   it('renders optional subkind when present', () => {
     render(
       <InsightTab

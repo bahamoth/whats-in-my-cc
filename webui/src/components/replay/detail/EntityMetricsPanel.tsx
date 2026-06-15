@@ -17,8 +17,7 @@ import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import { formatDuration } from '../stream/llmRequestMetrics';
 import { hookFacet } from '../stream/hookFacet';
 import type { ToolMetrics } from './toolMetrics';
-import { Row, ResponseMetricsRows, responseWarns, formatBytes } from './metricsRows';
-import rows from './metricsRows.module.css';
+import { Row, MetricGroup, ResponseMetricsRows, responseWarns, formatBytes } from './metricsRows';
 import styles from './EntityMetricsPanel.module.css';
 
 interface EntityMetricsPanelProps {
@@ -56,7 +55,7 @@ function ToolMetricsRows({ m }: { m: ToolMetrics }) {
       : `${formatBytes(m.inputBytes)} → ${formatBytes(m.resultBytes)}`;
 
   return (
-    <div className={rows.grid}>
+    <MetricGroup title="도구 실행" provenance="measured">
       <Row label="소요 시간" value={formatDuration(m.durationMs) ?? '—'} />
       <Row
         label="결과"
@@ -66,7 +65,7 @@ function ToolMetricsRows({ m }: { m: ToolMetrics }) {
       <Row label="결정 출처" value={decisionValue} />
       <Row label="입력/결과 크기" value={sizeValue} />
       <Row label="순서" value={m.sequence != null ? `#${m.sequence}` : '—'} />
-    </div>
+    </MetricGroup>
   );
 }
 
@@ -77,7 +76,7 @@ function HookMetricsRows({ payload }: { payload: unknown }) {
   if (allNull) return <Uncollected />;
 
   return (
-    <div className={rows.grid}>
+    <MetricGroup title="hook 실행" provenance="measured">
       <Row label="hook 이벤트" value={h.hookEvent ?? '—'} />
       <Row label="소요 시간" value={formatDuration(h.durationMs) ?? '—'} />
       <Row
@@ -86,7 +85,7 @@ function HookMetricsRows({ payload }: { payload: unknown }) {
         warn={h.success === false}
       />
       <Row label="명령" value={h.command ?? '—'} />
-    </div>
+    </MetricGroup>
   );
 }
 

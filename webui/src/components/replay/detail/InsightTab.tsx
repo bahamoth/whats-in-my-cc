@@ -5,7 +5,7 @@
 // plain-language ⓘ tooltips) + that event's Signals. The full raw payload
 // lives in the Raw tab.
 import { useState } from 'react';
-import type { SignalDto, ObservedEventDto } from '../../../api/types';
+import type { SignalDto, ObservedEventDto, EvidenceRef } from '../../../api/types';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import { nodeLabel } from '../stream/nodeLabel';
 import type { ToolMetrics } from './toolMetrics';
@@ -21,6 +21,16 @@ interface InsightTabProps {
   llmMetrics: LlmRequestMetrics | null;
   /** The matching tool_result event when the selected event is a tool_call. */
   matchedResult?: ObservedEventDto | null;
+  /** S7 — jump the stream + detail to an evidence event id (clicking a Signal).
+   *  Reuses the page's selection mechanism (loadAround handles out-of-window). */
+  onSelectEvent?: (eventId: string) => void;
+}
+
+/** S7 — resolve an evidence ref to a jumpable event id (refs are either a bare
+ *  ULID string or an `{ kind, event_id }` object). */
+function evidenceEventId(ref: EvidenceRef): string | null {
+  if (typeof ref === 'string') return ref;
+  return typeof ref.event_id === 'string' ? ref.event_id : null;
 }
 
 const KIND_ICON: Record<string, string> = {
@@ -58,23 +68,52 @@ function CopyChip({ field, label, value }: { field: string; label: string; value
   );
 }
 
-function SignalsList({ signals }: { signals: SignalDto[] }) {
+function SignalsList({
+  signals,
+  onSelectEvent,
+}: {
+  signals: SignalDto[];
+  onSelectEvent?: (eventId: string) => void;
+}) {
   return (
     <ul className={styles.list}>
-      {signals.map((s) => (
-        <li key={s.signal_id} className={styles.item}>
-          <div className={styles.head}>
-            <span className={styles.detector}>{s.detector}</span>
-            {s.subkind && <span className={styles.subkind}>{s.subkind}</span>}
-          </div>
-          <p className={styles.summary}>{s.summary}</p>
-        </li>
-      ))}
+      {signals.map((s) => {
+        const target = s.evidence_refs.map(evidenceEventId).find((id): id is string => !!id);
+        const jumpable = Boolean(target && onSelectEvent);
+        return (
+          <li
+            key={s.signal_id}
+            className={styles.item}
+            data-jumpable={jumpable ? 'true' : undefined}
+            role={jumpable ? 'button' : undefined}
+            tabIndex={jumpable ? 0 : undefined}
+            title={jumpable ? '증거 이벤트로 이동' : undefined}
+            onClick={jumpable ? () => onSelectEvent!(target!) : undefined}
+            onKeyDown={
+              jumpable
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelectEvent!(target!);
+                    }
+                  }
+                : undefined
+            }
+          >
+            <div className={styles.head}>
+              <span className={styles.detector}>{s.detector}</span>
+              {s.subkind && <span className={styles.subkind}>{s.subkind}</span>}
+              {jumpable && <span className={styles.jumpHint} aria-hidden>↳ 증거</span>}
+            </div>
+            <p className={styles.summary}>{s.summary}</p>
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
-export function InsightTab({ signals, event, toolMetrics, llmMetrics, matchedResult }: InsightTabProps) {
+export function InsightTab({ signals, event, toolMetrics, llmMetrics, matchedResult, onSelectEvent }: InsightTabProps) {
   if (!event && signals.length === 0) {
     return (
       <div className={styles.root}>
@@ -139,7 +178,7 @@ export function InsightTab({ signals, event, toolMetrics, llmMetrics, matchedRes
       {signals.length > 0 && (
         <div className={styles.signalsSection}>
           <div className={styles.sectionTitle}>Signals</div>
-          <SignalsList signals={signals} />
+          <SignalsList signals={signals} onSelectEvent={onSelectEvent} />
         </div>
       )}
     </div>
