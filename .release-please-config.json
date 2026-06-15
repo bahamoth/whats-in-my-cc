@@ -10,6 +10,16 @@
           "type": "json",
           "path": "webui/package.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "webui/package-lock.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "webui/package-lock.json",
+          "jsonpath": "$.packages[''].version"
         }
       ]
     }
