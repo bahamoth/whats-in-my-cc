@@ -47,6 +47,9 @@
 /* Analysis toggle button — small, neutral, floats at the end of the kpi strip */
 .analysisToggle {
   align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 4px 12px;
   border-radius: 4px;
   border: 1px solid var(--wimcc-border-strong, #2a3040);
@@ -71,7 +74,9 @@
   border-radius: 6px;
   background: var(--wimcc-surface-1, #0f1219);
   overflow: auto;
-  max-height: 400px;
+  /* viewport-relative cap (was a hard 400px) so a session with many detectors
+     can use more height on tall screens; internal overflow:auto still scrolls. */
+  max-height: 60vh;
 }
 /* min-height:0 lets this grid child shrink below its content so its CHILD (the
    virtualizer `.scroll`) owns the overflow. The slot itself must NOT scroll —
