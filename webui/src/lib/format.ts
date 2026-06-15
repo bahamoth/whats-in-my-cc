@@ -9,6 +9,16 @@ function bad(n: number | null | undefined): boolean {
   return n === null || n === undefined || Number.isNaN(n) || n < 0;
 }
 
+/** Wall-clock HH:MM on the viewer's LOCAL clock — the left time-spine ruler in
+ *  the conversation stream. Empty string for null/NaN so the spine just omits
+ *  the label (it never shows "—" as a time). */
+export function clockLabel(ms: number | null | undefined): string {
+  if (bad(ms)) return '';
+  const d = new Date(ms as number);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function formatMs(ms: number | null | undefined): string {
   if (bad(ms)) return PLACEHOLDER;
   const v = ms as number;
