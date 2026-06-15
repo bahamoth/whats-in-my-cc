@@ -13,6 +13,7 @@
 // computeBgGutter): a 'start' rail runs from the node DOWN, an 'end' rail from
 // the top UP to the node, 'mid' rows draw full height.
 import type { GutterRow } from './streamModel';
+import { clockLabel } from '../../../lib/format';
 import styles from './BgGutter.module.css';
 
 /** A row's primary event kind — drives the spine node color. */
@@ -26,11 +27,23 @@ export type SpineKind =
   | 'scaffold';
 
 const PITCH = 4; // px between background-subagent lane rails
-const LANE_X0 = 13; // px inset of lane 0 from the LEFT edge (just right of the spine)
+const LANE_X0 = 46; // px inset of lane 0 from the LEFT edge (just right of the spine at 40px)
 
-export function BgGutter({ row, kind }: { row: GutterRow | undefined; kind?: SpineKind | null }) {
+export function BgGutter({
+  row,
+  kind,
+  timeMs,
+}: {
+  row: GutterRow | undefined;
+  kind?: SpineKind | null;
+  timeMs?: number | null;
+}) {
+  const clock = clockLabel(timeMs);
   return (
     <div data-testid="gutter" className={styles.gutter} aria-hidden>
+      {/* left time ruler: the row's wall-clock HH:MM, so the spine reads as a
+          time axis (not just a node chain). Omitted when no time is known. */}
+      {clock && <div data-testid="spine-time" className={styles.time}>{clock}</div>}
       {/* main time-spine: a continuous hairline every row → one vertical axis */}
       <div data-testid="spine-line" className={styles.spine} />
       {/* the row's node on the spine, colored by primary kind */}

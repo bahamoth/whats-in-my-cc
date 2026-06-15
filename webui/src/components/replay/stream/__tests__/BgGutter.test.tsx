@@ -59,4 +59,16 @@ describe('BgGutter', () => {
     render(<BgGutter row={undefined} kind={null} />);
     expect(screen.queryByTestId('spine-node')).toBeNull();
   });
+
+  it('renders the row clock time (HH:MM) on the spine when given timeMs', () => {
+    render(<BgGutter row={undefined} kind="user" timeMs={new Date('2026-06-14T09:06:09Z').getTime()} />);
+    const t = screen.getByTestId('spine-time');
+    // local timezone-independent: just assert it's a HH:MM label
+    expect(t.textContent ?? '').toMatch(/^\d{1,2}:\d{2}$/);
+  });
+
+  it('omits the clock time when timeMs is missing', () => {
+    render(<BgGutter row={undefined} kind="user" />);
+    expect(screen.queryByTestId('spine-time')).toBeNull();
+  });
 });

@@ -8,8 +8,21 @@
 .gutter {
   position: relative;
   flex: none;
-  width: 30px;
+  width: 58px;
   align-self: stretch;
+}
+
+/* left time ruler — the row's HH:MM, right-aligned just left of the spine. */
+.time {
+  position: absolute;
+  left: 0;
+  right: 22px; /* ends ~4px before the spine at left:40px */
+  top: 11px;
+  text-align: right;
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--wimcc-fg-subtle, #6a7180);
 }
 
 /* main time-spine — a continuous hairline at a fixed x on EVERY row. */
@@ -17,7 +30,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 7px;
+  left: 40px;
   width: 1px;
   background: linear-gradient(
     180deg,
@@ -32,11 +45,11 @@
    reads as a clean dot punched through the axis. */
 .spineNode {
   position: absolute;
-  left: 7px;
+  left: 40px;
   top: 13px;
   width: 8px;
   height: 8px;
-  margin-left: -3.5px; /* center the 8px node on the 1px line at left:7px */
+  margin-left: -3.5px; /* center the 8px node on the 1px line at left:40px */
   border-radius: 50%;
   box-shadow: 0 0 0 2px var(--wimcc-bg, #0b0d12);
   background: var(--wimcc-fg-subtle, #6a7180);
@@ -103,7 +116,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 13px;
+  left: 46px;
   width: 1px;
   border-radius: 1px;
   background: var(--wimcc-fg-subtle, #6a7180);

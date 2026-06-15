@@ -14,7 +14,7 @@ import { BgGutter } from './BgGutter';
 import type { SpineKind } from './BgGutter';
 import { SubagentEndCard } from './SubagentEndCard';
 import { WorkflowEndCard } from './WorkflowEndCard';
-import { computeBgGutter } from './streamModel';
+import { computeBgGutter, rowTimeMs } from './streamModel';
 import type { StreamItem } from './streamModel';
 import { shouldLoadOlder, shouldLoadNewer, shouldAdjustOnItemResize, LOAD_OLDER_TOP_PX, LOAD_NEWER_BOTTOM_PX } from './scrollAnchor';
 import { useAutoscroll } from '../../../hooks/useAutoscroll';
@@ -546,7 +546,7 @@ export function ConversationStream({
                   style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start - scrollMargin}px)` }}
                 >
                   <div className={styles.row}>
-                    <BgGutter row={gutterByRow.get(item.id)} kind={rowKind(item)} />
+                    <BgGutter row={gutterByRow.get(item.id)} kind={rowKind(item)} timeMs={rowTimeMs(item)} />
                     <div className={styles.rowBody}>{renderItem(item)}</div>
                   </div>
                 </div>
@@ -557,7 +557,7 @@ export function ConversationStream({
           fallbackItems.map((item) => (
             <div key={item.id} {...(rowEventId(item) ? { 'data-event-id': rowEventId(item) } : {})}>
               <div className={styles.row}>
-                <BgGutter row={gutterByRow.get(item.id)} kind={rowKind(item)} />
+                <BgGutter row={gutterByRow.get(item.id)} kind={rowKind(item)} timeMs={rowTimeMs(item)} />
                 <div className={styles.rowBody}>{renderItem(item)}</div>
               </div>
             </div>

@@ -709,8 +709,9 @@ export function syncTaskNotifications(
   return out;
 }
 
-/** Representative wall-clock (ms) of a top-level row for gutter coverage tests. */
-function rowTimeMs(it: StreamItem): number | null {
+/** Representative wall-clock (ms) of a top-level row — gutter coverage tests +
+ *  the timeline spine's left time ruler (clockLabel). */
+export function rowTimeMs(it: StreamItem): number | null {
   const t = (iso: string) => {
     const n = new Date(iso).getTime();
     return Number.isNaN(n) ? null : n;
