@@ -116,6 +116,17 @@
   min-width: 0;
 }
 
+/* always-visible mini-gantt — one lane per agent (start offset + duration).
+   padding-right reserves room for the outside-right duration label. */
+.gantt { margin: 2px 0 4px 19px; padding-right: 46px; }
+.lane { display: flex; align-items: center; height: 15px; margin: 2px 0; }
+.laneLabel { flex: none; width: 120px; padding-right: 8px; text-align: right; color: var(--wimcc-fg-muted, #aab0bd); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track { position: relative; flex: 1 1 auto; height: 100%; }
+.bar { position: absolute; top: 50%; transform: translateY(-50%); height: 7px; border-radius: 3px; background: var(--wimcc-lane-hook, #2bd0d0); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25); }
+.bar[data-heat='warn'] { background: var(--wimcc-warning, #f0b429); }
+.bar[data-heat='hot'] { background: var(--wimcc-danger, #ef4747); }
+.barLabel { position: absolute; left: calc(100% + 5px); top: 50%; transform: translateY(-50%); font-size: 9px; color: var(--wimcc-fg-subtle, #6a7180); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
 /* flex column so child SubagentGroups stack and their alignment works */
 .body {
   display: flex;
