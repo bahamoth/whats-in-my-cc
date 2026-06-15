@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.8.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.7.0...v0.8.0) (2026-06-15)
+
+
+### Features
+
+* **webui:** S10 마감 — 라이트모드·키보드 nav·범례·반응형 정규화 ([4ec64b4](https://github.com/bahamoth/whats-in-my-cc/commit/4ec64b497cd06d6542d0767fab2f403aeeacb0ac))
+* **webui:** S5 FanPanel 인라인 SubTimeline 드릴 — 레인 클릭 시 그 에이전트만 ([531b360](https://github.com/bahamoth/whats-in-my-cc/commit/531b3603b9efbd67ba692abaf0aab41c9c1d282d))
+* **webui:** S6 세션 목록 — 슬러그·프로젝트·모델·미리보기·상대시간·검색 (풀스택) ([a423f88](https://github.com/bahamoth/whats-in-my-cc/commit/a423f88ef75926e4063805c588031e59a09eee3f))
+* **webui:** S7 Detail 패널 — HOW 소제목(LLM 동작·토큰·비용)·provenance pill·Signal evidence 점프 ([1b5aee5](https://github.com/bahamoth/whats-in-my-cc/commit/1b5aee5ea9168fda5f62af276d0847fa225f311e))
+* **webui:** S8 KPI 스파크라인·베이스라인 (풀스택) ([1d1ebf1](https://github.com/bahamoth/whats-in-my-cc/commit/1d1ebf12af1fd0aae714701b4355ff70084c7383))
+* **webui:** spine 좌측 시간축 라벨 (HH:MM ruler) ([a364a5c](https://github.com/bahamoth/whats-in-my-cc/commit/a364a5cb82a642fb4aa6c5d1b0ec49a121ffc556))
+* **webui:** 디자인 토큰 확장(elevation·radius) + 스트림 카드 A 톤 ([6565df3](https://github.com/bahamoth/whats-in-my-cc/commit/6565df33251b81edc790849b7102add5543e73cc))
+* **webui:** 병렬 배치에 상시 미니 간트 (워크플로우와 대칭) ([a4f8915](https://github.com/bahamoth/whats-in-my-cc/commit/a4f89155852c6dc52bfd432eb30777e697e6e9e2))
+* **webui:** 분석 토글 아이콘 + analysis 패널 가변 높이 ([84e7aa8](https://github.com/bahamoth/whats-in-my-cc/commit/84e7aa85d9fe8aaba942f8fb1826b4697ff7147b))
+* **webui:** 통합 시간축 spine — BgGutter가 gutter를 흡수 ([ac379ce](https://github.com/bahamoth/whats-in-my-cc/commit/ac379ce7343a5e22e99c9970bad56d99dd96963a))
+
+
+### Bug Fixes
+
+* **webui:** correlation ID 칩 클릭 시 전체 ID 복사 ([cca26f2](https://github.com/bahamoth/whats-in-my-cc/commit/cca26f209bc03579d93b60320ef99e7b9e19b027))
+* **webui:** 단일 에이전트 워크플로우 평탄화 ([dc5d710](https://github.com/bahamoth/whats-in-my-cc/commit/dc5d710a93af2ae9138b78cb28705a4abfd768ee))
+* **webui:** 단일 이벤트 ActivityStack을 토글 없이 인라인 렌더 ([7fcc140](https://github.com/bahamoth/whats-in-my-cc/commit/7fcc1403cfb1e973dea41db717733d1fc5e6e832))
+* **webui:** 스트림 범례에서 '/ 검색' 힌트 제거 — 상세엔 검색 없음 ([ad6c9ef](https://github.com/bahamoth/whats-in-my-cc/commit/ad6c9ef39e1c0da1b211aad3045f6fd1bec0b6d8))
+
 ## [0.7.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.6.0...v0.7.0) (2026-06-14)
 
 
