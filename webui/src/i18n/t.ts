@@ -5,7 +5,12 @@
 // languages.
 
 export type MessageArg = number | string | Record<string, string | number>;
-export type MessageValue = string | ((arg?: MessageArg) => string);
+// The function form accepts a loose `arg` so catalog entries can declare a
+// narrow param shape (e.g. `(n: number)` or `(a: { model: string }) `) without
+// tripping strictFunctionTypes when assigned to Catalog. Key typing is the
+// safety net we care about; per-arg typing is intentionally not enforced.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type MessageValue = string | ((arg?: any) => string);
 export type Catalog = Record<string, MessageValue>;
 
 function interpolate(template: string, params: Record<string, string | number>): string {

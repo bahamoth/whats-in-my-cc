@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { buildInsightCards, type InsightInputs } from '../insightCards';
+import { translate } from '../../../../i18n/t';
+import { en } from '../../../../i18n/catalog/en';
+import { ko } from '../../../../i18n/catalog/ko';
+import type { TFunction } from '../../../../i18n';
 import type {
   SessionUsageDto,
   VerificationRunDto,
   SignalDto,
 } from '../../../../api/types';
+
+// Assert against the Korean (source) strings: build a t bound to the ko
+// catalog and inject it, exactly as the running app does via the provider.
+const koT: TFunction = (key, arg) => translate(ko, en, key, arg);
 
 // Real SessionUsageDto shape (slice-5 added estimated_cost_usd / cost_basis /
 // pricing_version / models_without_pricing; ModelUsageDto carries the full
@@ -97,12 +105,12 @@ const EMPTY: InsightInputs = {
 };
 
 function byId(inputs: InsightInputs) {
-  return new Map(buildInsightCards(inputs).map((c) => [c.id, c]));
+  return new Map(buildInsightCards(inputs, koT).map((c) => [c.id, c]));
 }
 
 describe('buildInsightCards — card set', () => {
   it('emits exactly the five redesigned cards in order, dropping the old tiles', () => {
-    const ids = buildInsightCards(EMPTY).map((c) => c.id);
+    const ids = buildInsightCards(EMPTY, koT).map((c) => c.id);
     expect(ids).toEqual(['context', 'tokens', 'verification', 'tool_failure', 'cost']);
     // The removed tiles never appear (spec §1/§5/§11 P1).
     expect(ids).not.toContain('outcome');

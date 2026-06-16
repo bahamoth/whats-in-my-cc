@@ -21,6 +21,7 @@ import type {
   TurnRollupDto,
 } from '../../../api/types';
 import { formatPct, formatTokens, formatUsd } from '../../../lib/format';
+import type { TFunction } from '../../../i18n';
 import type { Provenance } from './provenance';
 
 /** Optional cross-session baseline (slice 6 + S8). Absent fields → no delta. */
@@ -51,7 +52,7 @@ export type InsightCardId =
 
 export interface InsightCardModel {
   id: InsightCardId;
-  /** Korean card title shown in the strip. */
+  /** Localized card title shown in the strip. */
   title: string;
   /** Headline value, already formatted; `—` when uncollected. */
   value: string;
@@ -117,37 +118,34 @@ const GUARD_KIND: Record<string, 'test' | 'build' | 'lint' | 'format'> = {
   format_check: 'format',
 };
 
-function contextCard(inputs: InsightInputs): InsightCardModel {
-  const tip =
-    '캐시 적중률 = cache_read / (cache_read + cache_creation + input). 측정값(usage facet). ' +
-    '고정 캐시 컨텍스트 크기·증가·캐시 미스는 펼쳐서 확인. 시스템 프롬프트/스킬/메모리 단위 분해와 ' +
-    '"오염" 판정은 데이터에 없어 제공하지 않습니다(설계 §8 한계).';
+function contextCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
+  const tip = t('insight.context.tip');
   if (!inputs.usage) {
     return {
-      id: 'context', title: '컨텍스트 효율', value: '—',
-      detail: 'usage facet 재수집 필요', provenance: 'uncollected', tooltip: tip,
+      id: 'context', title: t('insight.context.title'), value: '—',
+      detail: t('insight.recollectUsage'), provenance: 'uncollected', tooltip: tip,
     };
   }
   const u = inputs.usage;
   const ratio = cacheHitRatio(u);
   const card: InsightCardModel = {
-    id: 'context', title: '컨텍스트 효율',
+    id: 'context', title: t('insight.context.title'),
     value: formatPct(ratio),
-    detail: `캐시 읽기 ${formatTokens(u.cache_read_input_tokens)}`,
+    detail: t('insight.context.detailCacheRead', formatTokens(u.cache_read_input_tokens)),
     provenance: 'measured', tooltip: tip,
     drill: {
       lines: [
-        `캐시 적중률 ${formatPct(ratio)}`,
-        `캐시 읽기(무료) ${formatTokens(u.cache_read_input_tokens)}`,
-        `캐시 생성 ${formatTokens(u.cache_creation_input_tokens)}`,
-        `사용자 턴 ${u.user_turns}`,
+        t('insight.context.drillHitRate', formatPct(ratio)),
+        t('insight.context.drillCacheReadFree', formatTokens(u.cache_read_input_tokens)),
+        t('insight.context.drillCacheCreation', formatTokens(u.cache_creation_input_tokens)),
+        t('insight.context.drillUserTurns', u.user_turns),
       ],
     },
   };
   const base = inputs.baseline?.cache_hit_ratio;
   if (typeof base === 'number' && typeof ratio === 'number') {
     const d = Math.round((ratio - base) * 100);
-    card.baselineDelta = `${d >= 0 ? '+' : ''}${d}%p vs 중앙값`;
+    card.baselineDelta = t('insight.baselineDeltaPp', `${d >= 0 ? '+' : ''}${d}`);
   }
   if (inputs.turns) {
     const spark = perTurnCacheHit(inputs.turns);
@@ -159,35 +157,39 @@ function contextCard(inputs: InsightInputs): InsightCardModel {
   return card;
 }
 
-function tokensCard(inputs: InsightInputs): InsightCardModel {
-  const tip =
-    '청구 토큰(input + cache_creation + output)과 캐시 읽기(무료)는 의미가 달라 절대 합산하지 않습니다 ' +
-    '(설계 §3 Q2). 측정값(usage facet).';
+function tokensCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
+  const tip = t('insight.tokens.tip');
   if (!inputs.usage) {
     return {
-      id: 'tokens', title: '토큰', value: '—',
-      detail: 'usage facet 재수집 필요', provenance: 'uncollected', tooltip: tip,
+      id: 'tokens', title: t('insight.tokens.title'), value: '—',
+      detail: t('insight.recollectUsage'), provenance: 'uncollected', tooltip: tip,
     };
   }
   const u = inputs.usage;
   const card: InsightCardModel = {
-    id: 'tokens', title: '토큰',
-    value: `청구 ${formatTokens(u.billed_tokens)}`,
-    detail: `캐시 읽기 ${formatTokens(u.cache_read_input_tokens)} (무료)`,
+    id: 'tokens', title: t('insight.tokens.title'),
+    value: t('insight.tokens.valueBilled', formatTokens(u.billed_tokens)),
+    detail: t('insight.tokens.detailCacheReadFree', formatTokens(u.cache_read_input_tokens)),
     provenance: 'measured', tooltip: tip,
     drill: {
       lines: [
         `input ${formatTokens(u.input_tokens)}`,
         `cache_creation ${formatTokens(u.cache_creation_input_tokens)}`,
         `output ${formatTokens(u.output_tokens)}`,
-        ...u.by_model.map((m) => `${m.model}: ${m.assistant_events} 산출 · 출력 ${formatTokens(m.output_tokens)}`),
+        ...u.by_model.map((m) =>
+          t('insight.tokens.drillByModel', {
+            model: m.model,
+            events: m.assistant_events,
+            out: formatTokens(m.output_tokens),
+          }),
+        ),
       ],
     },
   };
   const baseMedian = inputs.baseline?.billed_tokens;
   if (typeof baseMedian === 'number' && baseMedian > 0) {
     const d = Math.round((u.billed_tokens / baseMedian - 1) * 100);
-    card.baselineDelta = `${d >= 0 ? '+' : ''}${d}% vs 중앙값`;
+    card.baselineDelta = t('insight.baselineDeltaPct', `${d >= 0 ? '+' : ''}${d}`);
   }
   if (inputs.turns) {
     const spark = perTurnBilled(inputs.turns);
@@ -199,17 +201,13 @@ function tokensCard(inputs: InsightInputs): InsightCardModel {
   return card;
 }
 
-function verificationCard(inputs: InsightInputs): InsightCardModel {
-  const tip =
-    '가드 = 실행된 테스트/빌드/린트/포맷 검사. 알려진 도구 매칭(known_tool) + 종료코드(exit) 기반이면 측정, ' +
-    '파이프(piped)로 가려진 종료코드가 섞이면 혼합으로 표시(슬라이스 2 detection_basis/status_basis). ' +
-    '키워드 추정(test_keyword)은 더 이상 생성되지 않으며(F2), 과거 ingest된 older 데이터에만 나타날 수 있습니다. ' +
-    '브라우저 스모크/서브에이전트 테스트는 감지하지 않습니다(설계 §3 Q4 한계).';
+function verificationCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
+  const tip = t('insight.verification.tip');
   const runs = inputs.verificationRuns;
   if (!runs || runs.length === 0) {
     return {
-      id: 'verification', title: '검증', value: '—',
-      detail: runs ? '감지된 가드 없음' : '로딩 중',
+      id: 'verification', title: t('insight.verification.title'), value: '—',
+      detail: runs ? t('insight.verification.noGuards') : t('insight.loading'),
       provenance: 'uncollected', tooltip: tip,
     };
   }
@@ -235,10 +233,13 @@ function verificationCard(inputs: InsightInputs): InsightCardModel {
   // count so "통과 N" can't be misread against the total (dogfooding 2026-06-11).
   const measured = passed + failed;
   const detailParts = Object.entries(byKind).map(([k, n]) => `${k} ${n}`);
-  if (unknown > 0) detailParts.push(`미측정 ${unknown}`);
+  if (unknown > 0) detailParts.push(t('insight.verification.unmeasured', unknown));
   return {
-    id: 'verification', title: '검증',
-    value: measured > 0 ? `가드 ${runs.length} · 통과 ${passed}/${measured}` : `가드 ${runs.length} · 측정 없음`,
+    id: 'verification', title: t('insight.verification.title'),
+    value:
+      measured > 0
+        ? t('insight.verification.valuePassed', { total: runs.length, passed, measured })
+        : t('insight.verification.valueNoMeasure', runs.length),
     detail: detailParts.join(' · '),
     provenance: allMeasured ? 'measured' : 'mixed', tooltip: tip,
     drill: {
@@ -250,51 +251,49 @@ function verificationCard(inputs: InsightInputs): InsightCardModel {
       // calling out only the degraded case.
       lines: runs.map(
         (r) =>
-          `${r.command_kind} → ${r.status}${r.status_provenance === 'estimated' ? ' (추정)' : ''}`,
+          `${r.command_kind} → ${r.status}${r.status_provenance === 'estimated' ? t('insight.verification.estimatedSuffix') : ''}`,
       ),
       byKind,
     },
   };
 }
 
-function toolFailureCard(inputs: InsightInputs): InsightCardModel {
-  const tip = '도구 실패 signal 수(detector=tool_failure). 결정적 카운트이며 심각도 판단은 포함하지 않습니다.';
+function toolFailureCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
+  const tip = t('insight.toolFailure.tip');
   const sigs = inputs.signals;
   if (!sigs) {
-    return { id: 'tool_failure', title: '도구 실패', value: '—', detail: '로딩 중', provenance: 'uncollected', tooltip: tip };
+    return { id: 'tool_failure', title: t('insight.toolFailure.title'), value: '—', detail: t('insight.loading'), provenance: 'uncollected', tooltip: tip };
   }
   const failures = sigs.filter((s) => s.detector === 'tool_failure');
   return {
-    id: 'tool_failure', title: '도구 실패',
+    id: 'tool_failure', title: t('insight.toolFailure.title'),
     value: `${failures.length}`,
-    detail: failures.length === 0 ? '도구 실패 없음' : '펼쳐서 확인',
+    detail: failures.length === 0 ? t('insight.toolFailure.none') : t('insight.toolFailure.expand'),
     provenance: 'measured', tooltip: tip,
     drill: { lines: failures.map((s) => `${s.subkind ?? s.detector} · ${s.summary}`) },
   };
 }
 
-function costCard(inputs: InsightInputs): InsightCardModel {
-  const tip =
-    '공개 가격표 × usage 토큰으로 계산한 추정치이며 실제 청구액이 아닙니다(설계 §6.5/§11.3). ' +
-    'OTel claude_code.cost.usage 메트릭이 들어오면 대체됩니다. cache_read(무료)는 비용에서 제외.';
+function costCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
+  const tip = t('insight.cost.tip');
   if (!inputs.usage) {
     return {
-      id: 'cost', title: '비용', value: '—',
-      detail: 'usage facet 재수집 필요', provenance: 'uncollected', tooltip: tip,
+      id: 'cost', title: t('insight.cost.title'), value: '—',
+      detail: t('insight.recollectUsage'), provenance: 'uncollected', tooltip: tip,
     };
   }
   const u = inputs.usage;
   const unpriced = u.models_without_pricing.length > 0;
   const card: InsightCardModel = {
-    id: 'cost', title: '비용',
+    id: 'cost', title: t('insight.cost.title'),
     value: formatUsd(u.estimated_cost_usd),
     detail: unpriced
-      ? `공개 가격표 추정 (≈) · 미가격 ${u.models_without_pricing.length}`
-      : '공개 가격표 추정 (≈)',
+      ? t('insight.cost.detailEstimateUnpriced', u.models_without_pricing.length)
+      : t('insight.cost.detailEstimate'),
     provenance: 'estimated', tooltip: tip,
     drill: {
       lines: u.by_model.map(
-        (m) => `${m.model}: ${m.priced ? formatUsd(m.estimated_cost_usd) : '가격표 없음'}`,
+        (m) => `${m.model}: ${m.priced ? formatUsd(m.estimated_cost_usd) : t('insight.cost.noPricing')}`,
       ),
     },
   };
@@ -310,12 +309,12 @@ function costCard(inputs: InsightInputs): InsightCardModel {
   return card;
 }
 
-export function buildInsightCards(inputs: InsightInputs): InsightCardModel[] {
+export function buildInsightCards(inputs: InsightInputs, t: TFunction): InsightCardModel[] {
   return [
-    contextCard(inputs),
-    tokensCard(inputs),
-    verificationCard(inputs),
-    toolFailureCard(inputs),
-    costCard(inputs),
+    contextCard(inputs, t),
+    tokensCard(inputs, t),
+    verificationCard(inputs, t),
+    toolFailureCard(inputs, t),
+    costCard(inputs, t),
   ];
 }

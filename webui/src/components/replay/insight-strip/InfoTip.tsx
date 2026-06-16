@@ -12,6 +12,7 @@
  * the decision uses the bubble's real height.
  */
 import { useLayoutEffect, useRef, useState } from 'react';
+import { useT } from '../../../i18n';
 import styles from './InfoTip.module.css';
 
 type Placement = 'below' | 'above';
@@ -56,6 +57,7 @@ interface InfoTipProps {
 }
 
 export function InfoTip({ label, text }: InfoTipProps) {
+  const t = useT();
   const [hovered, setHovered] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [placement, setPlacement] = useState<Placement>('below');
@@ -90,7 +92,7 @@ export function InfoTip({ label, text }: InfoTipProps) {
         type="button"
         data-testid="infotip-trigger"
         className={styles.trigger}
-        aria-label={`${label} 설명`}
+        aria-label={t('insight.infoTipAria', { label })}
         aria-expanded={open}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}

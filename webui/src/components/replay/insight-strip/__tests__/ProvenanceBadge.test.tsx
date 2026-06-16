@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+import { renderWithI18n as render } from '../../../../test/i18nRender';
 import { ProvenanceBadge } from '../ProvenanceBadge';
 
 describe('ProvenanceBadge', () => {
