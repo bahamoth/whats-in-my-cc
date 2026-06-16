@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.8.0...v0.9.0) (2026-06-16)
+
+
+### Features
+
+* **insight:** 태깅 루프 — pnpm vitest·printf·nohup·vue·diff/patch·diff cmd 분류 규칙 추가 ([5116d08](https://github.com/bahamoth/whats-in-my-cc/commit/5116d086ff0678b3f2b6a91cb428c6c4c0cba898))
+* **webui:** analysis 패널 + detail(metricsRows/InsightTab/WhatSection/Response/EntityMetrics/eventProvenance) 현지화 ([7f4243d](https://github.com/bahamoth/whats-in-my-cc/commit/7f4243dffd372b8cbdc323c918b2487014787f42))
+* **webui:** insight-strip 현지화 (insightCards t 주입, provenance/InfoTip/badge) + i18n 테스트 헬퍼 ([98db48d](https://github.com/bahamoth/whats-in-my-cc/commit/98db48d80babcc545fbcdf28f67522efd27c1fdb))
+* **webui:** l10n 코어 — I18nProvider/catalog/detect/translate (ko·en, 영어 폴백) ([15f4496](https://github.com/bahamoth/whats-in-my-cc/commit/15f4496e0c7140ac35a73b5bf2a296556e7d9a0a))
+* **webui:** navRail 언어 토글 + AppShell 문자열 현지화 ([631e9a2](https://github.com/bahamoth/whats-in-my-cc/commit/631e9a2e43cc56fa8fc3dce559fb8f2288854278))
+* **webui:** relativeTime locale 대응 (en/ko) + SessionListPage 주입 ([a299963](https://github.com/bahamoth/whats-in-my-cc/commit/a29996395fb7d63fe6bb78e510ef440f0f7b6fa9))
+* **webui:** replay stream 전체 현지화 (메시지/그룹/마커/범례/카드 + nodeLabel·querySource·workflowTimeline t 주입) ([78ccbb0](https://github.com/bahamoth/whats-in-my-cc/commit/78ccbb0f10872f94bb53f89fee3da0b40c281095))
+* **webui:** routes(SessionList/Detail) 한국어 문자열 현지화 ([d73117d](https://github.com/bahamoth/whats-in-my-cc/commit/d73117dd3ad5c28cea4717437414a7f222c18d4e))
+
 ## [0.8.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.7.0...v0.8.0) (2026-06-15)
 
 
