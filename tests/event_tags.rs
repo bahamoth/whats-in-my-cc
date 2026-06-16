@@ -310,12 +310,37 @@ fn token_comment_and_assignment_noise_stripped() {
 
 #[test]
 fn token_for_read_is_extension_or_basename() {
+    // 2026-06-16 tagging loop: .diff/.patch are saved diff/patch output text
+    // Claude reads back as input → data object (was Unmatched).
     let diff = read("/tmp/pr41.diff");
-    assert_eq!(diff.disposition, TagDisposition::Unmatched);
+    assert_eq!(diff.disposition, TagDisposition::Tagged);
+    assert_eq!(tag(&diff), Some("read.data"));
     assert_eq!(diff.token.as_deref(), Some("diff"));
     let dotfile = read("/repo/.gitignore");
     assert_eq!(dotfile.disposition, TagDisposition::Unmatched);
     assert_eq!(dotfile.token.as_deref(), Some(".gitignore"));
+}
+
+// 2026-06-16 tagging hygiene loop — rules added from surfaced untagged tokens.
+#[test]
+fn tagging_loop_2026_06_16_additions() {
+    // pnpm vitest — vitest as a pnpm subcommand (first-token vitest already maps).
+    assert_eq!(tag(&bash("pnpm vitest run src")), Some("test.code"));
+    // printf — a shell builtin emit, like echo → Control (not a meaningful verb).
+    assert_eq!(bash("printf 'x %s' y").disposition, TagDisposition::Control);
+    // nohup — a transparent wrapper like timeout; tag the inner command.
+    assert_eq!(tag(&bash("nohup cargo build")), Some("build.code"));
+    assert_eq!(tag(&bash("nohup npm run dev")), Some("run.code"));
+    // .vue — Vue single-file component is code.
+    assert_eq!(tag(&read("src/App.vue")), Some("read.code"));
+    assert_eq!(tag(&write_t("src/App.vue")), Some("write.code"));
+    // .diff/.patch — saved diff/patch output text. NOT read-only: Claude both
+    // writes them (saving output) and reads them back as input → data both ways.
+    assert_eq!(tag(&read("/tmp/fix.patch")), Some("read.data"));
+    assert_eq!(tag(&write_t("/tmp/out.diff")), Some("write.data"));
+    assert_eq!(tag(&write_t("/tmp/fix.patch")), Some("write.data"));
+    // `diff` the COMMAND (distinct from the .diff extension) compares files → read.file.
+    assert_eq!(tag(&bash("diff a.txt b.txt")), Some("read.file"));
 }
 
 #[test]

@@ -25,6 +25,7 @@ pub static EXT_OBJECT: &[(&str, &str)] = &[
     ("jsx", "code"),
     ("css", "code"),
     ("py", "code"),
+    ("vue", "code"),
     ("md", "docs"),
     ("html", "docs"),
     ("txt", "docs"),
@@ -38,6 +39,9 @@ pub static EXT_OBJECT: &[(&str, &str)] = &[
     ("log", "data"),
     ("csv", "data"),
     ("output", "data"),
+    // saved diff/patch output text — written (saving) and read back as input.
+    ("diff", "data"),
+    ("patch", "data"),
 ];
 
 fn read_tag_for_object(object: &str) -> Option<&'static str> {
@@ -84,6 +88,7 @@ pub static BASH_FIRST_TOKEN_TAGS: &[(&str, &str)] = &[
     ("awk", "read.file"),
     ("pwd", "read.file"),
     ("realpath", "read.file"),
+    ("diff", "read.file"),
     // read.proc — 프로세스/포트/시스템 상태
     ("ps", "read.proc"),
     ("lsof", "read.proc"),
@@ -204,6 +209,7 @@ static PNPM_SUBS: &[(&str, &str)] = &[
     ("i", "write.deps"),
     ("add", "write.deps"),
     ("test", "test.code"),
+    ("vitest", "test.code"),
     ("start", "run.code"),
     ("run", "run.code"),
 ];
@@ -238,9 +244,9 @@ pub static TOOL_SUBCOMMAND_TAGS: &[(&str, &[(&str, &str)])] = &[
 static SUBCOMMAND_ARG_FLAGS: &[(&str, &[&str])] = &[("git", &["-C", "-c"])];
 
 static CONTROL_TOKENS: &[&str] = &[
-    "cd", "echo", "sleep", "for", "export", "source", "set", "pgrep", "kill", "pkill", "wait",
-    "true", ":", "while", "until", "if", "case", "esac", "done", "fi", "[", "[[", "test", "break",
-    "continue",
+    "cd", "echo", "printf", "sleep", "for", "export", "source", "set", "pgrep", "kill", "pkill",
+    "wait", "true", ":", "while", "until", "if", "case", "esac", "done", "fi", "[", "[[", "test",
+    "break", "continue",
 ];
 static PREFIX_KEYWORDS: &[&str] = &["do", "then", "else", "elif"];
 /// `timeout`의 값-소비 플래그 (공백 분리형 — `--signal=KILL`은 해당 없음).
@@ -440,6 +446,15 @@ fn command_of(segment: &str) -> String {
                     continue;
                 }
             }
+        }
+        if ft == "nohup" {
+            // transparent wrapper (`nohup <cmd>`) — re-tag the inner command.
+            let rest = s["nohup".len()..].trim().to_string();
+            if rest.is_empty() {
+                return String::new();
+            }
+            s = rest;
+            continue;
         }
         if ft == "timeout" {
             let mut rest = s["timeout".len()..].trim().to_string();
