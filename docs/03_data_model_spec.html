@@ -35,10 +35,10 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <a href="#observed">ObservedEvent</a>
 <a href="#lineage">Lineage</a>
 <a href="#insight">Signal</a>
-<a href="#metrics">Metrics & Usage</a>
+<a href="#metrics">Metrics, Usage & Fingerprint</a>
 <a href="#indexes">Indexes</a>
 <a href="#migration">Migration</a>
-<a href="#questions">Feedback</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set</div><h1>Data Model Spec</h1><p>RawEvent, ObservedEvent(telemetry facet 포함), file lineage(DiffHunk), VerificationRun, Signal, SessionMetrics/usage schema를 정의한다. 뷰와 insight는 ObservedEvent + correlation 키로 직접 동작한다(event-first).</p><div class="badges"><span class="badge">Schemas</span><span class="badge">Event-first</span><span class="badge">Evidence</span></div></header>
+<a href="#questions">Feedback</a></nav><p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p></aside><main class="main"><header class="hero"><div class="kicker">What's in My Claude Code · HTML Spec Set</div><h1>Data Model Spec</h1><p>RawEvent, ObservedEvent(telemetry facet 포함), file lineage(DiffHunk), VerificationRun, Signal, SessionMetrics/usage, SessionFingerprint schema를 정의한다. 뷰와 insight는 ObservedEvent + correlation 키로 직접 동작한다(event-first).</p><div class="badges"><span class="badge">Schemas</span><span class="badge">Event-first</span><span class="badge">Evidence</span></div></header>
 <section id="principles"><h2><span class="num">01</span>Data Model Principles</h2>
 <ol><li><strong>OTel-first:</strong> trace_id/span_id/metric/log reference는 나중에 붙이는 optional metadata가 아니라 ObservedEvent의 1급 correlation 컬럼·telemetry facet의 핵심 field다.</li><li><strong>Source-preserving:</strong> normalized object는 항상 raw source reference(<code>raw_event_id</code>)를 갖는다. unknown field는 <code>payload</code> JSON에 보존된다.</li><li><strong>Evidence-linked:</strong> 모든 detector는 비어 있지 않은 <code>evidence_refs</code>를 넣도록 detector별 테스트로 잠겨 있다 (AC-4). DB CHECK 제약이나 runtime guard는 아니다 — 컬럼은 <code>NOT NULL</code> TEXT(JSON 배열)일 뿐이다.</li><li><strong>No annotation model:</strong> 사용자/외부 서비스가 signal에 correction, label, status를 쓰는 domain object는 정의하지 않는다.</li><li><strong>Schema versioning:</strong> 모든 top-level object는 schema_version과 provenance를 가진다.</li><li><strong>Deterministic L1:</strong> 모든 detector는 결정론 규칙이다. severity/confidence 같은 판단(judgment) 필드는 저장하지 않는다 — facts만 저장한다.</li><li><strong>합성 가능한 count만:</strong> window-고정 rate scalar는 저장·반환하지 않는다. rate = count / window이고 window는 분석마다 다르므로 소비자가 계산한다.</li></ol>
 <p class="muted">Non-features: export bundle은 제공하지 않는다.</p>
@@ -98,6 +98,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "request_id": "...", "message_id": "...", "turn_id": "...",
   "source_tool_assistant_uuid": null, "source_tool_use_id": null,
   "is_sidechain": false, "is_meta": false,
+  "agent_id": null,              // subagent 귀속 (transcript agentId, sidechain 파일에만 존재) — migration 0023
+  "workflow_run_id": null,       // Workflow 팬아웃 그룹 키 (파일 경로 …/subagents/workflows/&lt;runId&gt;/) — migration 0024
   "cwd": "...", "git_branch": "...",
   "user_type": "...", "entrypoint": "...", "cc_version": "...",
   "trace_id": null, "span_id": null, "parent_span_id": null, "latency_ms": null,
@@ -122,6 +124,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <li><strong>tool_call ↔ tool_result 페어링:</strong> <code>tool_use_id</code> 컬럼.</li>
 <li><strong>API 요청 단위 묶음:</strong> <code>request_id</code> 컬럼.</li>
 <li><strong>턴/메세지 묶음:</strong> <code>turn_id</code> / <code>message_id</code> 컬럼.</li>
+<li><strong>서브에이전트 귀속·워크플로우 그룹:</strong> <code>agent_id</code> 컬럼(sidechain 이벤트의 개별 subagent 구분 — migration 0023) / <code>workflow_run_id</code> 컬럼(Workflow 팬아웃 run 단위 묶음 — migration 0024). <code>turn_id</code>는 run 진행 중 표류하므로 workflow 묶음의 결정론 키는 <code>workflow_run_id</code>다.</li>
 <li><strong>transcript 연쇄:</strong> <code>event_uuid</code> / <code>parent_uuid</code>.</li>
 <li><strong>OTel 상관:</strong> <code>trace_id</code> / <code>span_id</code> / <code>parent_span_id</code> 컬럼.</li>
 </ul>
@@ -194,7 +197,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <table><thead><tr><th>detector</th><th>Evidence requirement</th></tr></thead><tbody><tr><td><code>tool_failure</code></td><td>failed tool result or OTel error event</td></tr><tr><td><code>risky_action</code></td><td>destructive command, sensitive file/path, <code>user_modified</code> hunk 등 관측 사실</td></tr><tr><td><code>context_bloat</code></td><td>대형/반복 출력 등 이벤트 기반 결정론 규칙</td></tr><tr><td><code>final_state_mismatch</code></td><td>final answer claim conflicts with file/verification state</td></tr><tr><td><code>re_read</code></td><td>동일 대상 반복 read 관측</td></tr></tbody></table>
 <p class="muted">detector manifest는 <code>/v1/detectors</code>와 MCP <code>whats_in_my_cc.list_detectors</code>로 노출된다.</p>
 </section>
-<section id="metrics"><h2><span class="num">07</span>SessionMetrics & Usage</h2>
+<section id="metrics"><h2><span class="num">07</span>SessionMetrics, Usage & Fingerprint</h2>
 <h3>SessionMetrics — on-demand (저장 테이블 없음)</h3>
 <p><code>GET /v1/sessions/:id/metrics</code> 호출 시 side-table에서 매번 재계산한다. <strong>합성 가능한 count만</strong> 반환한다 — window-고정 rate scalar는 반환하지 않으며, rate는 소비자가 자기 window로 계산한다. severity/판단/threshold 플래그 없음.</p>
 <pre><code>{
@@ -231,6 +234,17 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 </ul>
 <h3>Usage baseline — <code>/v1/usage/baseline</code></h3>
 <p>usage_facet가 있는 모든 세션 횡단 quantile(p25/median/p75): <code>cache_hit_ratio</code> · <code>billed_tokens</code> · <code>assistant_events</code> · <code>output_tokens</code> + <code>session_count</code>. cache_hit_ratio <em>분포</em>는 baseline에만 존재한다 — 세션 횡단 quantile 분포는 유효한 비교다.</p>
+<h3>SessionFingerprint — <code>GET /v1/sessions/:id/fingerprint</code> (on-demand, 저장 테이블 없음)</h3>
+<p>"이 세션은 어떤 구성 아래에서 돌았는가"의 결정론 관측. 자기개선 루프의 <strong>독립변수</strong> — 개입(CLAUDE.md/스킬/모델 변경)의 효과를 세션 코호트로 귀속한다. SessionMetrics와 동일한 on-demand 무저장 패턴이며 판단 필드 없음. 구현: <code>src/insight/fingerprint.rs</code>의 <code>SessionFingerprint</code>.</p>
+<pre><code>{
+  "session_id": "sess_…",
+  "models": ["claude-…"],                 // assistant_message payload `$.model` distinct (payload 필드 → 과거 세션은 재ingest 필요)
+  "cc_versions": ["…"], "git_branches": ["…"],
+  "cwds": ["…"], "entrypoints": ["…"],    // observed_event 컬럼 distinct
+  "claude_md": [{ "path": "…", "sha256": "…", "bytes": 0 }],  // session_start hook /captured/claude_md union (path 정렬)
+  "instruction_sha256": null              // 정렬 (path,sha) 결합 sha256 — 코호트 group key. 스냅샷 없으면 None(결측 ≠ 빈 instruction)
+}</code></pre>
+<p class="muted"><code>claude_md</code>는 session_start hook 스냅샷(<code>ingest::instruction_snapshot</code>)에서만 채워진다 — transcript에는 CLAUDE.md가 기록되지 않으므로(2026-06-12 실측) hook 미수집 세션은 <code>claude_md</code>가 비고 <code>instruction_sha256</code>은 None. 결측은 결측으로 노출한다.</p>
 </section>
 <section id="indexes"><h2><span class="num">08</span>Indexes and Query Keys</h2>
 <p class="muted">migration 파일 기준 현행 인덱스.</p>
@@ -240,6 +254,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <tr><td>idx_obs_tool_use_id</td><td>tool_use_id (partial, NOT NULL)</td><td>tool_call ↔ tool_result 페어링</td></tr>
 <tr><td>idx_obs_request_id</td><td>request_id (partial, NOT NULL)</td><td>API 요청 단위 correlated telemetry lookup</td></tr>
 <tr><td>idx_obs_turn_id</td><td>session_id, turn_id</td><td>user_turns 집계, 턴 묶음</td></tr>
+<tr><td>idx_obs_workflow_run</td><td>session_id, workflow_run_id (partial, NOT NULL)</td><td>Workflow 팬아웃 run 단위 묶음 (migration 0024)</td></tr>
 <tr><td>idx_obs_event_uuid / idx_obs_parent_uuid</td><td>event_uuid / parent_uuid (partial)</td><td>transcript 연쇄</td></tr>
 <tr><td>idx_obs_metric_instrument</td><td><code>json_extract(payload,'$.instrument_name')</code> (partial, kind='metric_sample')</td><td>OTel metric instrument별 조회 (payload-expression)</td></tr>
 <tr><td>idx_obs_log_event_name</td><td><code>json_extract(payload,'$.event_name')</code> (partial, kind='log_record')</td><td>OTel log event_name별 조회 (payload-expression)</td></tr>

@@ -13,12 +13,10 @@ transcript가 아닌 **execution replay**로 "무엇이, 왜 그렇게 됐는가
 
 ## Status
 
-- **남은 계획:** UX 재설계 epic (`docs/superpowers/specs/2026-05-27-witmcc-ux-redesign-epic.md` — §3 계약은 2026-06-12 Revision note 기준으로 읽을 것) + 자기개선 지표 트랙 후속(태그 사전 core 이전, in-flight 자기조절 affordance). 구현 상세·이력은 `docs/implementation-notes.html`와 git history.
-- **자기개선 루프 기반 (2026-06-12):** 세션 환경 fingerprint(`/v1/sessions/:id/fingerprint` — models·cc_versions·git_branches·claude_md sha·`instruction_sha256` 코호트 키; SessionStart hook 수신 시각에 서버가 cwd 조상+`~/.claude`의 CLAUDE.md를 해시 capture, 내용 미저장) · 세션 횡단 series(`/v1/metrics`, MCP `get_project_metrics` — 개입 전후 비교의 측정면, `matched_count`로 절단 노출) · detector manifest `metric_class`(process|outcome — Goodhart 가드) · retrospect 스킬 가설 원장(제안 `R-YYYYMMDD-n` + 예측 의무, Step 1.5 이전 원장 로드·Step 5 전후 비교, dogfood 저장 기본). 주의: CLAUDE.md는 transcript에 기록되지 않음(실측 12 transcript 음성) — instruction 관측은 hook 수집 이후 세션만, `models`는 payload 필드라 기존 세션 재ingest 필요. **태그 어휘도 core로 이전**(events `tag`·turns `tag_histogram` — 규칙·테스트는 `src/insight/event_tags.rs`·`tests/event_tags.rs`, webui는 서버 값 소비). 상세 `docs/implementation-notes.html#self-improvement-loop-2026-06-12`.
-- **개밥먹기 회고 표면 (2026-06-12):** events `?kind=` 필터(미지원 파라미터는 400)·`/v1/sessions?project=`·`/v1/sessions/:id/turns`(턴별 tool histogram·file_churn) + MCP `get_session_turns`/`search_sessions.project`. 리포가 plugin 마켓플레이스 겸업 — `skills/session-retrospect/`(SSOT)를 `plugins/session-retrospect/`가 심링크로 패키징, `.mcp.json`로 wimcc MCP 자동 등록. 원칙: **측정은 wimcc(결정론), 판별은 LLM(온디맨드)** — "교정성 메시지" 류 의미 판별을 lexical 휴리스틱으로 detector에 넣지 말 것. Signal 규칙 `re_edit_churn`·`duplicate_edit_stream`은 표본 1이라 보류 (`docs/implementation-notes.html#dogfood-retrospect-2026-06-12`).
-- **CI/CD (2026-06-11):** 모든 PR에서 GitHub Actions CI — vitest+SPA build 후 그 dist로 `cargo fmt --check`·`clippy -- -D warnings`·`cargo test`. 릴리스는 release-please: main의 conventional commit이 릴리스 PR로 누적되고, 머지 시 `vX.Y.Z` 태그·CHANGELOG·바이너리(linux x86_64 · macOS arm64) 업로드. `Cargo.toml`·`webui/package.json` 버전은 자동 bump — **손으로 수정 금지**. commit type이 버전을 결정하므로 conventional commit 규칙 준수.
-- **인증 default = `--auth off`** (단일 사용자 dev, DEV-S19-08) — 브라우저로 그대로 접속. 켜려면 `wimcc serve --auth on`: `/v1/*` + `/mcp` 요청에 `Authorization: Bearer <token>` 필요(`/v1/stream`·collectors·SPA는 인증 예외). Token 위치 macOS `~/Library/Application Support/wimcc/token` · Linux `~/.config/wimcc/token` (0600). retention sweep는 `wimcc serve --retention-profile default`.
-- **dev DB 재생성 규칙:** migration 변경(현재 최신 `0023` — 0020 `request_id` 인덱스 · 0021 signal · 0022 verification_run status_provenance · 0023 observed_event `agent_id`, startup backfill이라 init-db 불필요) 시 `wimcc init-db` + 재ingest 필요. payload 필드(`tool_call.tool_name`, `assistant_message.model` 등)도 JSON BLOB이라 schema migration 없이 추가되므로 기존 이벤트엔 없음 — 재ingest해야 채워진다.
+> 진행 중인 작업만 적는다. 완료 즉시 삭제하고, 항구 규칙은 `Operations`·`Working Principles`로 이전한다.
+> 이 섹션이 길어지면 분류가 잘못됐다는 신호다 — 완료분이 안 지워졌거나, 항구 규칙이 잘못 들어왔다.
+
+- **In-flight:** 자기개선 지표 트랙 — in-flight 자기조절 affordance. 상세·이력은 `docs/implementation-notes.html` + git history.
 
 ## Document Map
 
@@ -37,16 +35,16 @@ transcript가 아닌 **execution replay**로 "무엇이, 왜 그렇게 됐는가
 
 ## Working Principles (반드시 지킬 것)
 
-- **OTel-first**: `trace_id` / `span_id`는 optional metadata가 아니라
-  correlation_keys·telemetry facet의 1급 키. 나중에 붙이는 식으로 schema 변경 금지.
-- **Source-preserving**: normalized object는 항상 raw source reference를 가진다.
-  unknown field는 raw payload에 보존.
-- **Evidence-linked**: `Signal`(구 Finding 계열 대체)은 `evidence_refs` 없이
-  만들지 않는다.
-- **No annotation model**: 외부에서 finding/resource에 correction·label·status를
-  쓰는 API는 정의·구현하지 않는다.
+데이터 모델 설계 원칙(OTel-first · source-preserving · evidence-linked · no-annotation-model ·
+schema-versioning · deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html` §01이다 —
+여기서 재진술하지 않는다. 중복은 곧 드리프트다(실제로 이 문서의 OTel-first 문구가 스펙과 어긋나 있었다).
+스키마/데이터 모델 작업 전 그 문서를 읽는다(Document Map).
+
+아래는 스펙에 없는, 매 세션 지켜야 할 *작업* 규칙이다.
+
+- **측정과 판별 분리**: 측정·집계·결정론 detector는 wimcc가 한다. "교정성 메시지" 류 *의미 판별*은
+  lexical 휴리스틱으로 detector에 넣지 말고 LLM 온디맨드(retrospect 스킬)에 맡긴다.
 - **Local-first**: 기본 bind `127.0.0.1`. `0.0.0.0`은 explicit setting일 때만.
-- **Schema versioning**: 모든 top-level object는 `schema_version` + provenance.
 - **TDD red 우선**: 어떤 모듈/함수/UI 변경이든 *실패하는* 테스트를 먼저 작성하고
   그 테스트가 빨강을 보이는 것을 확인한 다음에 구현으로 넘어간다.
   test가 후행이거나 omit된 commit은 만들지 않는다. 단순 doc 변경은 예외.
@@ -59,6 +57,25 @@ transcript가 아닌 **execution replay**로 "무엇이, 왜 그렇게 됐는가
   완료가 아니다. 사용자 환경에서 `wimcc serve` + 브라우저 navigation (claude-in-chrome
   도구) + 시각 검증까지 끝낸 뒤 commit. 가능한 한 매 incremental 변경마다 smoke.
 
+## Operations
+
+- **CI/CD·릴리스:** 모든 PR에서 GitHub Actions CI — vitest+SPA build 후 그 dist로
+  `cargo fmt --check`·`clippy -- -D warnings`·`cargo test`. 릴리스는 release-please:
+  main의 conventional commit이 릴리스 PR로 누적되고, 머지 시 `vX.Y.Z` 태그·CHANGELOG·
+  바이너리(linux x86_64 · macOS arm64) 업로드. `Cargo.toml`·`webui/package.json`·
+  `package-lock.json` 버전은 자동 bump — **손으로 수정 금지**. commit type이 버전을
+  결정하므로 conventional commit 준수.
+- **인증:** default `--auth off`(단일 사용자 dev) — 브라우저로 그대로 접속. 켜려면
+  `wimcc serve --auth on`: `/v1/*`+`/mcp`에 `Authorization: Bearer <token>` 필요
+  (`/v1/stream`·collectors·SPA는 예외). Token 위치 macOS `~/Library/Application Support/wimcc/token`
+  · Linux `~/.config/wimcc/token` (0600, `dirs::config_dir()` 기준).
+  retention sweep는 `wimcc serve --retention-profile default`.
+- **dev DB 재생성:** migration 추가 시 원칙적으로 `wimcc init-db` + 재ingest. 단 컬럼 추가 후
+  serve/ingest startup에서 backfill하는 migration(예: 0023 `agent_id`, 0024 `workflow_run_id`)은
+  init-db·재ingest 불필요 — backfill 여부는 각 migration 파일 주석이 명시한다(현행 목록은 `migrations/`).
+  payload 필드(`tool_call.tool_name`·`assistant_message.model` 등)는 JSON BLOB이라 migration 없이
+  추가되므로 기존 이벤트엔 없음 — 재ingest해야 채워진다.
+
 ## Self-check before every commit (의무 체크리스트)
 
 1. 이 변경을 잠그는 새 test가 있는가? 없다면 doc-only 변경인가?
@@ -66,12 +83,17 @@ transcript가 아닌 **execution replay**로 "무엇이, 왜 그렇게 됐는가
 3. UI 변경이 포함된다면 브라우저 smoke를 끝냈는가?
 4. 단일 사례 관찰을 일반화한 statement는 없는가? ("대부분", "항상", "모두" 류는 표본 수 명시.)
 5. 이전 commit log / 주석 / spec 중 위 검증으로 잘못 판명된 부분이 있다면 같은 commit에서 정정했는가?
+6. `## Status`에 완료된 항목이 남아 있거나 항구 규칙(운영·설계)이 섞여 있지 않은가? 완료분은 삭제,
+   항구 규칙은 `Operations`/`Working Principles`로 이전한다 — Status는 in-flight만.
+7. PR을 올리기 직전인가? 그렇다면 `Tagging loop`·`Verification unknown loop`을 실행해
+   untagged/unknown을 해소하거나 명시적 보류 사유를 남겼는가? (미실행 상태로 PR 금지.)
 
-## Tagging loop — 구현 완료 시 (Bash/Read 분류 강화 제안)
+## Tagging loop — PR 전 필수 (Bash/Read 분류 강화)
 
-작업(기능/슬라이스/요청)이 **완료된 시점**에, 그 실행에서 아직 분류되지 않은 Bash 명령을
-확인하고 태깅 규칙을 어떻게 강화할지 **제안**한다(자율 태깅 개선 루프를 닫는다). 규칙 추가는
-소스 편집이라 read-only API 원칙과 충돌하지 않는다.
+**PR을 올리기 전 반드시 실행한다.** 이 세션 실행에서 아직 분류되지 않은 Bash 명령을 surface하고,
+타당한 것은 태깅 규칙으로 추가(아래 3번 — 승인+TDD), 나머지는 명시적 보류 사유를 남긴다. 미실행
+상태로 PR을 올리지 않는다 — 매 세션 태깅 개선 루프를 닫는 것이 목적이다. 규칙 추가는 소스 편집이라
+read-only API 원칙과 충돌하지 않는다.
 
 1. `cd webui && node scripts/untagged-bash.ts --all` 실행(특정 세션만 보려면 끝에 `<sessionId>`).
    stdout이 **깨끗한 JSON**(npm 배너 없음 — `npm run`은 stdout에 배너를 찍으므로 node 직접 실행).
@@ -90,11 +112,12 @@ transcript가 아닌 **execution replay**로 "무엇이, 왜 그렇게 됐는가
 
 상세·설계 근거: `docs/implementation-notes.html#untagged-bash-loop`.
 
-## Verification unknown loop — 파서 강화 제안 (untagged-bash의 형제)
+## Verification unknown loop — PR 전 필수 (파서 강화, untagged-bash의 형제)
 
-검증 가드(test/build/lint/format)의 outcome이 `unknown`으로 남은 run을 모아 파서를
-어떻게 강화할지 **제안**한다(자율 파서 개선 루프를 닫는다). tier-4 휴리스틱 추가는
-소스 편집이라 read-only API 원칙과 충돌하지 않는다.
+**PR을 올리기 전 반드시 실행한다.** 검증 가드(test/build/lint/format)의 outcome이 `unknown`으로
+남은 run을 모아 파서를 어떻게 강화할지 검토하고, 타당한 패턴은 추가(아래 — 승인+TDD), 나머지는
+명시적 보류 사유를 남긴다. 미실행 상태로 PR을 올리지 않는다. tier-4 휴리스틱 추가는 소스 편집이라
+read-only API 원칙과 충돌하지 않는다.
 
 1. `cd webui && node scripts/unknown-verification.ts --all`(특정 세션만 보려면 끝에 `<sessionId>`).
    stdout이 **깨끗한 JSON**(npm 배너 없음 — node 직접 실행). read-only Pull API
