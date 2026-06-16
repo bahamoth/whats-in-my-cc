@@ -11,6 +11,7 @@ import { CheckCircle2, Clock, MessageSquare, Wrench, Bell } from 'lucide-react';
 import type { SubagentEndCard as EndCard } from './streamModel';
 import { formatDuration, durationHeat } from './duration';
 import { endStatusLabel } from './endStatus';
+import { useT } from '../../../i18n';
 import styles from './SubagentEndCard.module.css';
 
 function timeLabel(iso: string): string {
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export function SubagentEndCard({ card, onSelect, selected = false }: Props) {
+  const t = useT();
   const status = card.status ? endStatusLabel(card.status) : null;
   const selectable = !!(card.notificationEventId && onSelect);
   return (
@@ -52,7 +54,7 @@ export function SubagentEndCard({ card, onSelect, selected = false }: Props) {
     >
       <div className={styles.head}>
         <CheckCircle2 size={13} aria-hidden className={styles.check} />
-        <span className={styles.label}>종료</span>
+        <span className={styles.label}>{t('stream.endCard.label')}</span>
         <span className={styles.time}>{timeLabel(card.endTimestamp)}</span>
         {status && (
           <span data-testid="subagent-end-status" className={styles.statusPill}>
@@ -73,19 +75,19 @@ export function SubagentEndCard({ card, onSelect, selected = false }: Props) {
             <button
               data-testid="subagent-end-jump"
               className={styles.jump}
-              title="종료 알림 원문으로 이동"
+              title={t('stream.endCard.jumpToNotification')}
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect(card.notificationEventId!);
               }}
             >
-              <Bell size={10} aria-hidden /> 알림
+              <Bell size={10} aria-hidden /> {t('stream.notification')}
             </button>
           )}
         </span>
       </div>
       <div className={styles.concl}>
-        <span className={styles.conclLabel}>결론</span>
+        <span className={styles.conclLabel}>{t('stream.conclusion')}</span>
         {card.conclusion}
       </div>
     </div>

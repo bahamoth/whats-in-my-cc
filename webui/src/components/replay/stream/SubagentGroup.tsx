@@ -12,6 +12,7 @@ import { ThinkingMarker } from './ThinkingMarker';
 import { formatDuration, durationHeat } from './duration';
 import type { SidechainGroup, StreamItem } from './streamModel';
 import { agentColor } from '../../../lib/colorHash';
+import { useT } from '../../../i18n';
 import styles from './SubagentGroup.module.css';
 
 interface SubagentGroupProps {
@@ -86,6 +87,7 @@ export function SubagentGroup({
   // Same fold policy as ActivityStack: `null` = no explicit user choice yet →
   // follow `containsSelected` (auto-open when a selection lands inside so the
   // host can scroll it into view); an explicit toggle then wins either way.
+  const t = useT();
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const summary = useMemo(() => summarizeGroup(group), [group]);
   const containsSelected =
@@ -133,20 +135,20 @@ export function SubagentGroup({
             </span>
           )}
           <span data-testid="subagent-meta" className={styles.meta}>
-            <span>메시지 {summary.messageCount}</span>
-            <span>도구 {summary.toolCount}</span>
+            <span>{t('stream.subagent.messages', summary.messageCount)}</span>
+            <span>{t('stream.subagent.tools', summary.toolCount)}</span>
             {summary.durationMs > 0 && (
               <span className={styles.duration} data-heat={durationHeat(summary.durationMs)}>
                 {formatDuration(summary.durationMs)}
               </span>
             )}
             {group.concurrentMainCount ? (
-              <span data-testid="subagent-concurrent" className={styles.concurrent}>⟂ main {group.concurrentMainCount}건 동시</span>
+              <span data-testid="subagent-concurrent" className={styles.concurrent}>{t('stream.concurrentMain', group.concurrentMainCount)}</span>
             ) : null}
             {group.conclusion ? (
-              <span data-testid="subagent-status" className={styles.statusDone}>✓ 완료</span>
+              <span data-testid="subagent-status" className={styles.statusDone}>{t('stream.subagent.done')}</span>
             ) : (
-              <span data-testid="subagent-status" className={styles.statusRun}>● 실행 중</span>
+              <span data-testid="subagent-status" className={styles.statusRun}>{t('stream.subagent.running')}</span>
             )}
           </span>
         </button>
@@ -154,8 +156,8 @@ export function SubagentGroup({
           <button
             data-testid="subagent-jump"
             className={styles.jump}
-            title="호출한 Task로 이동"
-            aria-label="호출한 Task로 이동"
+            title={t('stream.subagent.jumpToTask')}
+            aria-label={t('stream.subagent.jumpToTask')}
             onClick={() => onSelect(group.taskEventId!)}
           >
             <CornerUpLeft size={12} aria-hidden />
@@ -168,7 +170,7 @@ export function SubagentGroup({
           단, 끝 카드(hasEndCard)가 결론을 담당하면 여기선 숨긴다(요청→결과 분리). */}
       {group.conclusion && !group.hasEndCard && (
         <div data-testid="subagent-conclusion" className={styles.conclusion}>
-          <span className={styles.conclusionLabel}>결론</span>
+          <span className={styles.conclusionLabel}>{t('stream.conclusion')}</span>
           <span className={styles.conclusionText}>{group.conclusion}</span>
         </div>
       )}

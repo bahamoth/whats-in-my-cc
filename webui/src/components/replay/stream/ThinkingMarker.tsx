@@ -2,6 +2,7 @@
 import { BrainCog, AlertTriangle } from 'lucide-react';
 import type { ThinkingMarker as ThinkingMarkerData } from './streamModel';
 import { formatDuration, formatTokens } from './llmRequestMetrics';
+import { useT } from '../../../i18n';
 import styles from './ThinkingMarker.module.css';
 
 interface ThinkingMarkerProps {
@@ -11,6 +12,7 @@ interface ThinkingMarkerProps {
 }
 
 export function ThinkingMarker({ marker, selectedEventId, onSelect }: ThinkingMarkerProps) {
+  const t = useT();
   // One redacted thinking event == one LLM response (no merging).
   const entry = marker.events[0];
   const m = entry.metrics;
@@ -34,11 +36,11 @@ export function ThinkingMarker({ marker, selectedEventId, onSelect }: ThinkingMa
         type="button"
         className={styles.line}
         onClick={() => onSelect(entry.eventId)}
-        aria-label="추론 — 클릭하면 응답 지표 표시 (내용은 transcript에 미수록)"
-        title="추론 내용은 transcript에 기록되지 않습니다 (signature만 존재). 클릭하면 응답 지표를 봅니다."
+        aria-label={t('stream.thinking.aria')}
+        title={t('stream.thinking.title')}
       >
         <BrainCog size={13} aria-hidden className={styles.icon} />
-        <span className={styles.label}>추론</span>
+        <span className={styles.label}>{t('stream.reasoning')}</span>
         {tokens && (
           <>
             <span className={styles.sep} aria-hidden>·</span>
@@ -46,7 +48,7 @@ export function ThinkingMarker({ marker, selectedEventId, onSelect }: ThinkingMa
           </>
         )}
         {warn && (
-          <AlertTriangle size={12} aria-label="이상 응답" className={styles.warn} />
+          <AlertTriangle size={12} aria-label={t('stream.thinking.warnAria')} className={styles.warn} />
         )}
         {/* Far right = elapsed time (duration), consistent with action rows. */}
         <span className={styles.duration}>{duration ?? '—'}</span>

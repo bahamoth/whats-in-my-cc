@@ -4,6 +4,7 @@ import { SubagentGroup } from './SubagentGroup';
 import { formatDuration } from './duration';
 import { workflowStats, workflowTimeline, agentDurationHeat } from './workflowStats';
 import type { WorkflowGroup as WorkflowGroupModel, StreamItem } from './streamModel';
+import { useT } from '../../../i18n';
 import styles from './WorkflowGroup.module.css';
 
 interface Props { group: WorkflowGroupModel; selectedEventId: string | null; onSelect: (id: string) => void; findingEventIds: Set<string>; }
@@ -18,6 +19,7 @@ function itemEventIds(it: StreamItem): string[] {
 }
 
 export function WorkflowGroup({ group, selectedEventId, onSelect, findingEventIds }: Props) {
+  const t = useT();
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   // S5 — per-lane inline drill (independent of the full "전체 펼치기" toggle).
   const [drilled, setDrilled] = useState<Set<string>>(() => new Set());
@@ -31,7 +33,7 @@ export function WorkflowGroup({ group, selectedEventId, onSelect, findingEventId
   const containsSelected = selectedEventId != null && group.agentGroups.some((g) => itemEventIds(g).includes(selectedEventId));
   const expanded = userOverride ?? (containsSelected || !group.settled);
   const stats = useMemo(() => workflowStats(group.agentGroups), [group.agentGroups]);
-  const tl = useMemo(() => workflowTimeline(group.agentGroups), [group.agentGroups]);
+  const tl = useMemo(() => workflowTimeline(group.agentGroups, t), [group.agentGroups, t]);
   const pct = (n: number) => (tl.spanMs > 0 ? (n / tl.spanMs) * 100 : 0);
 
   // Single-agent workflow: a 1-bar gantt, "최대 병렬 1" stats, and a wrapper
@@ -44,20 +46,20 @@ export function WorkflowGroup({ group, selectedEventId, onSelect, findingEventId
       <section data-testid="workflow-group" data-flattened="true" className={styles.group}>
         <div className={styles.flatLabel}>
           <WorkflowIcon size={12} className={styles.icon} aria-hidden />
-          <span className={styles.chip}>워크플로우</span>
-          <span className={styles.name}>{group.name ?? '워크플로우'}</span>
+          <span className={styles.chip}>{t('stream.workflow.chip')}</span>
+          <span className={styles.name}>{group.name ?? t('stream.workflow.chip')}</span>
           <span className={styles.status}>{group.settled ? '✓' : '⏳'}</span>
           {group.synthesis && <span className={styles.flatSynth}>· {group.synthesis}</span>}
           {group.taskEventId && (
             <button
               data-testid="wf-jump"
               className={styles.jump}
-              title="이 워크플로우를 띄운 Workflow 호출로 이동"
-              aria-label="Workflow 호출로 이동"
+              title={t('stream.workflow.jumpTitle')}
+              aria-label={t('stream.workflow.jumpAria')}
               onClick={() => onSelect(group.taskEventId!)}
             >
               <CornerUpLeft size={12} aria-hidden />
-              호출
+              {t('stream.workflow.call')}
             </button>
           )}
         </div>
@@ -72,14 +74,14 @@ export function WorkflowGroup({ group, selectedEventId, onSelect, findingEventId
         <button data-testid="wf-toggle" className={styles.header} onClick={() => setUserOverride(!expanded)} aria-expanded={expanded}>
           {expanded ? <ChevronDown size={13} className={styles.chevron} /> : <ChevronRight size={13} className={styles.chevron} />}
           <WorkflowIcon size={13} className={styles.icon} aria-hidden />
-          <span className={styles.chip}>워크플로우</span>
-          <span className={styles.name}>{group.name ?? '워크플로우'}</span>
+          <span className={styles.chip}>{t('stream.workflow.chip')}</span>
+          <span className={styles.name}>{group.name ?? t('stream.workflow.chip')}</span>
           <span className={styles.meta}>
             <span>{stats.agentCount} agents</span>
             <span className={styles.status}>{group.settled ? `✓ ${stats.agentCount}/${stats.agentCount}` : '⏳'}</span>
             {tl.spanMs > 0 && <span className={styles.duration} data-heat={agentDurationHeat(stats.longestMs)}>{formatDuration(tl.spanMs)}</span>}
             {group.concurrentMainCount ? (
-              <span data-testid="wf-concurrent" className={styles.concurrent}>⟂ main {group.concurrentMainCount}건 동시</span>
+              <span data-testid="wf-concurrent" className={styles.concurrent}>{t('stream.concurrentMain', group.concurrentMainCount)}</span>
             ) : null}
           </span>
         </button>
@@ -87,26 +89,26 @@ export function WorkflowGroup({ group, selectedEventId, onSelect, findingEventId
           <button
             data-testid="wf-jump"
             className={styles.jump}
-            title="이 워크플로우를 띄운 Workflow 호출로 이동"
-            aria-label="Workflow 호출로 이동"
+            title={t('stream.workflow.jumpTitle')}
+            aria-label={t('stream.workflow.jumpAria')}
             onClick={() => onSelect(group.taskEventId!)}
           >
             <CornerUpLeft size={12} aria-hidden />
-            호출
+            {t('stream.workflow.call')}
           </button>
         )}
       </div>
 
       <div data-testid="wf-synthesis" className={styles.synthesis}>
-        <span className={styles.synthesisLabel}>종합</span>
-        <span>{group.synthesis || '진행 중'}</span>
+        <span className={styles.synthesisLabel}>{t('stream.synthesisLabel')}</span>
+        <span>{group.synthesis || t('stream.inProgress')}</span>
       </div>
 
       <div data-testid="wf-stats" className={styles.stats}>
-        <span className={styles.stat}>최대 병렬 <b>{stats.maxConcurrency}</b></span>
-        <span className={styles.stat} data-heat={agentDurationHeat(stats.longestMs)}>최장 <b>{formatDuration(stats.longestMs)}</b></span>
-        <span className={styles.stat}>중앙값 <b>{formatDuration(stats.medianMs)}</b></span>
-        {stats.incomplete > 0 && <span className={styles.stat}>미완 <b>{stats.incomplete}</b></span>}
+        <span className={styles.stat}>{t('stream.workflow.maxConcurrency')} <b>{stats.maxConcurrency}</b></span>
+        <span className={styles.stat} data-heat={agentDurationHeat(stats.longestMs)}>{t('stream.workflow.longest')} <b>{formatDuration(stats.longestMs)}</b></span>
+        <span className={styles.stat}>{t('stream.workflow.median')} <b>{formatDuration(stats.medianMs)}</b></span>
+        {stats.incomplete > 0 && <span className={styles.stat}>{t('stream.workflow.incomplete')} <b>{stats.incomplete}</b></span>}
       </div>
 
       {/* 항상 보이는 컴팩트 미니 간트 — S5: 레인 클릭 시 그 에이전트만 인라인 드릴 */}
@@ -121,7 +123,7 @@ export function WorkflowGroup({ group, selectedEventId, onSelect, findingEventId
               data-drilled={isDrilled ? 'true' : undefined}
               className={styles.lane}
               aria-expanded={isDrilled}
-              title={`${l.label} — 클릭하여 펼치기`}
+              title={t('stream.laneExpandTitle', l.label)}
               onClick={() => toggleDrill(l.id)}
             >
               <span className={styles.laneLabel}>{l.label}</span>

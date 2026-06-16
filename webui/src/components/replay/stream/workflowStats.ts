@@ -1,5 +1,6 @@
 import type { SidechainGroup } from './streamModel';
 import { agentColor } from '../../../lib/colorHash';
+import type { TFunction } from '../../../i18n';
 
 /** 한 에이전트 그룹의 [최초, 최후] 관측 타임스탬프 폭(ms). */
 export function groupSpanMs(group: SidechainGroup): number {
@@ -48,8 +49,10 @@ export function workflowStats(groups: SidechainGroup[]): WorkflowStat {
 export interface GanttLane { id: string; label: string; startMs: number; durMs: number; color: string; }
 export interface WorkflowTimeline { spanMs: number; lanes: GanttLane[]; }
 
-/** 첫 시작을 0으로 한 상대 타임라인. 라벨 = description ?? prompt 첫 줄 ?? agentType ?? id. */
-export function workflowTimeline(groups: SidechainGroup[]): WorkflowTimeline {
+/** 첫 시작을 0으로 한 상대 타임라인. 라벨 = description ?? prompt 첫 줄 ?? agentType ?? id.
+ *  l10n — the structural fallback label (`Agent N`) comes from the catalog; the
+ *  caller injects t(). */
+export function workflowTimeline(groups: SidechainGroup[], t: TFunction): WorkflowTimeline {
   const bnds = groups.map((g) => ({ g, ...bounds(g) }));
   const origin = Math.min(...bnds.map((b) => b.start).filter((n) => n > 0), Infinity);
   const base = Number.isFinite(origin) ? origin : 0;
@@ -61,7 +64,7 @@ export function workflowTimeline(groups: SidechainGroup[]): WorkflowTimeline {
     // 언어중립 구조 라벨: Workflow 에이전트 프롬프트는 영어 템플릿 prefix를 공유해
     // 판단 라벨로 쓸 수 없다. agentType(예: Explore)이 있으면 `타입 N`, 없으면
     // `에이전트 N`. 영어 원문(프롬프트·결론)은 펼침 상세에만 둔다(원본 보존).
-    const label = g.agentType ? `${g.agentType} ${i + 1}` : `에이전트 ${i + 1}`;
+    const label = g.agentType ? `${g.agentType} ${i + 1}` : t('stream.workflow.agentN', i + 1);
     // per-agent color (hash) so the mini-gantt matches the stream block + gutter
     // rail for the same agent (was a uniform violet).
     return { id: g.id, label, startMs, durMs, color: agentColor(g.agentId) };

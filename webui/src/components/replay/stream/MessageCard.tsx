@@ -7,6 +7,7 @@ import type { MessageItem } from './streamModel';
 import { userDisplayText } from './messageOrigin';
 import { formatModel } from './nodeLabel';
 import { endStatusLabel } from './endStatus';
+import { useT } from '../../../i18n';
 import styles from './MessageCard.module.css';
 
 function timeLabel(iso: string): string {
@@ -39,6 +40,7 @@ interface MessageCardProps {
 }
 
 export function MessageCard({ item, selected, onSelect, hasFinding = false }: MessageCardProps) {
+  const t = useT();
   // A sidechain user_message is the orchestrator's prompt to a Task subagent —
   // not human input. It renders left, labelled "Prompt", inside a SubagentGroup.
   const isSubagentPrompt = item.role === 'user' && item.sidechain;
@@ -118,7 +120,7 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
         : userOrigin === 'command-output'
         ? 'Command output'
         : userOrigin === 'notification'
-        ? '알림'
+        ? t('stream.notification')
         : 'System';
     bubbleClass = styles.metaBubble;
   } else if (item.role === 'user') {
@@ -132,12 +134,12 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
   } else if (item.role === 'system') {
     // system_summary — a CC work recap (away_summary) or a thinner status beat.
     Icon = Info;
-    label = '요약';
+    label = t('stream.msg.summary');
     bubbleClass = styles.systemBubble;
   } else {
     // thinking
     Icon = BrainCog;
-    label = '추론';
+    label = t('stream.reasoning');
     bubbleClass = styles.thinkingBubble;
   }
 
@@ -167,9 +169,9 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
           <span
             data-testid="bg-marker"
             className={styles.bgMarker}
-            title={`이 메시지가 진행되는 동안 백그라운드 서브에이전트 ${item.concurrentBackground}개가 실행 중이었음 (이 메시지가 백그라운드라는 뜻이 아님)`}
+            title={t('stream.msg.bgTitle', item.concurrentBackground)}
           >
-            ⟂ 백그라운드 {item.concurrentBackground}개 실행 중
+            {t('stream.msg.bgRunning', item.concurrentBackground)}
           </span>
         ) : null}
         {hasFinding && (
@@ -182,8 +184,8 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
         <button
           data-testid="md-toggle"
           className={styles.mdToggle}
-          aria-label={styled ? '원본 보기' : '마크다운 보기'}
-          title={styled ? '원본 보기' : '마크다운 보기'}
+          aria-label={styled ? t('stream.msg.viewRaw') : t('stream.msg.viewMarkdown')}
+          title={styled ? t('stream.msg.viewRaw') : t('stream.msg.viewMarkdown')}
           onClick={(e) => {
             e.stopPropagation();
             setStyledOverride(!styled);
@@ -206,7 +208,7 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
             data-status={item.notification.status ? endStatusLabel(item.notification.status).kind : 'other'}
           >
             <span className={styles.notiStatus}>
-              {item.notification.status ? endStatusLabel(item.notification.status).text : '완료'}
+              {item.notification.status ? endStatusLabel(item.notification.status).text : t('stream.msg.done')}
             </span>
             {item.notification.toolLabel && <span className={styles.notiTool}>{item.notification.toolLabel}</span>}
             {item.notification.summary && <span className={styles.notiSummary}>{item.notification.summary}</span>}
@@ -214,13 +216,13 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
               <button
                 data-testid="noti-jump"
                 className={styles.notiJump}
-                title="원래 명령으로 이동"
+                title={t('stream.msg.jumpToCommand')}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelect(item.notification!.callEventId!);
                 }}
               >
-                ↳ 명령
+                {t('stream.msg.commandJump')}
               </button>
             )}
           </span>
@@ -239,7 +241,7 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
             setClampOpen(!clampOpen);
           }}
         >
-          {clamped ? '더 보기' : '접기'}
+          {clamped ? t('stream.msg.showMore') : t('stream.msg.collapse')}
         </button>
       )}
     </div>

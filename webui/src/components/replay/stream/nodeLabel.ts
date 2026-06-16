@@ -1,4 +1,5 @@
 import { messageOrigin } from './messageOrigin';
+import type { TFunction } from '../../../i18n';
 
 export interface NodeLabel {
   kind: 'user' | 'assistant' | 'thinking' | 'tool' | 'hook' | 'span' | 'verify' | 'diff' | 'other';
@@ -63,17 +64,22 @@ function toolArg(input: unknown, commandDisplay?: string): string {
   return '';
 }
 
-export function nodeLabel(node: {
-  node_kind: string;
-  payload: unknown;
-  // C4 (Tier 3-1): span name lives in the telemetry facet (a sibling of
-  // payload), no longer re-embedded under payload.raw_span.
-  telemetry?: unknown;
-  /** 서버 분류 태그 (tool_call 한정) — display가 명령 표시에 쓰인다. */
-  tag?: { display?: string | null } | null;
-  /** transcript isMeta → caller classification of user_message scaffolding. */
-  is_meta?: boolean | number | null;
-}): NodeLabel {
+export function nodeLabel(
+  node: {
+    node_kind: string;
+    payload: unknown;
+    // C4 (Tier 3-1): span name lives in the telemetry facet (a sibling of
+    // payload), no longer re-embedded under payload.raw_span.
+    telemetry?: unknown;
+    /** 서버 분류 태그 (tool_call 한정) — display가 명령 표시에 쓰인다. */
+    tag?: { display?: string | null } | null;
+    /** transcript isMeta → caller classification of user_message scaffolding. */
+    is_meta?: boolean | number | null;
+  },
+  // l10n — the three localized display labels (thinking / command-output /
+  // notification) come from the catalog; the caller injects t().
+  t: TFunction,
+): NodeLabel {
   const p = asObj(node.payload);
   switch (node.node_kind) {
     case 'tool_call':
@@ -94,7 +100,7 @@ export function nodeLabel(node: {
     case 'thinking':
       return {
         kind: 'thinking',
-        primary: '추론',
+        primary: t('stream.reasoning'),
         secondary: ((p.thinking as string) ?? '').trim(),
       };
     case 'user_message': {
@@ -109,7 +115,7 @@ export function nodeLabel(node: {
         case 'command':
           return { kind: 'user', primary: 'command', secondary: commandName ?? 'scaffolding' };
         case 'command-output':
-          return { kind: 'user', primary: 'command', secondary: '출력' };
+          return { kind: 'user', primary: 'command', secondary: t('stream.output') };
         case 'system':
           return { kind: 'user', primary: 'system', secondary: 'interrupted' };
         case 'skill':
@@ -119,7 +125,7 @@ export function nodeLabel(node: {
           // (anchored: 전 DB 55건 <task-notification> 선행, isMeta 없음). Label
           // "알림" to match the MessageCard, so the detail panel/activity stack
           // never read it as the user's own "You" input.
-          return { kind: 'user', primary: '알림', secondary: txt.trim() };
+          return { kind: 'user', primary: t('stream.notification'), secondary: txt.trim() };
         default:
           return { kind: 'user', primary: 'You', secondary: txt.trim() };
       }

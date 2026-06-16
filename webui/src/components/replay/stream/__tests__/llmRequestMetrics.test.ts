@@ -8,7 +8,14 @@ import {
   formatUsd,
   parseApiRequestLog,
 } from '../llmRequestMetrics';
+import { translate } from '../../../../i18n/t';
+import { en } from '../../../../i18n/catalog/en';
+import { ko } from '../../../../i18n/catalog/ko';
+import type { TFunction } from '../../../../i18n';
 import type { ObservedEventDto } from '../../../../api/types';
+
+// Assert against the Korean (source) labels by binding t to the ko catalog.
+const koT: TFunction = (key, arg) => translate(ko, en, key, arg);
 
 // C4 (Tier 3-1): the otel_span event no longer re-embeds `payload.raw_span`.
 // Span name + metrics now come from the telemetry facet (sibling field), whose
@@ -103,12 +110,12 @@ describe('formatUsd', () => {
 
 describe('formatQuerySource', () => {
   it('labels the main thread and subagents (builtin + custom)', () => {
-    expect(formatQuerySource('repl_main_thread')).toBe('메인 스레드');
-    expect(formatQuerySource('agent:builtin:general-purpose')).toBe('서브에이전트 · general-purpose');
-    expect(formatQuerySource('agent:builtin:Explore')).toBe('서브에이전트 · Explore');
-    expect(formatQuerySource('agent:custom')).toBe('서브에이전트 · custom');
-    expect(formatQuerySource(null)).toBeNull();
-    expect(formatQuerySource(undefined)).toBeNull();
+    expect(formatQuerySource('repl_main_thread', koT)).toBe('메인 스레드');
+    expect(formatQuerySource('agent:builtin:general-purpose', koT)).toBe('서브에이전트 · general-purpose');
+    expect(formatQuerySource('agent:builtin:Explore', koT)).toBe('서브에이전트 · Explore');
+    expect(formatQuerySource('agent:custom', koT)).toBe('서브에이전트 · custom');
+    expect(formatQuerySource(null, koT)).toBeNull();
+    expect(formatQuerySource(undefined, koT)).toBeNull();
   });
 });
 

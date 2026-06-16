@@ -4,6 +4,7 @@
 //   ON  : "자동 스크롤" + switch on   (following the live tip; click to stop)
 //   OFF : "자동 스크롤" + switch off + "N ↓"  (detached; click to jump + follow)
 import type { ReactNode } from 'react';
+import { useT } from '../../../i18n';
 import styles from './AutoscrollToggle.module.css';
 
 interface AutoscrollToggleProps {
@@ -19,6 +20,7 @@ interface AutoscrollToggleProps {
 }
 
 export function AutoscrollToggle({ autoscroll, newCount, onEnable, onDisable, leftSlot }: AutoscrollToggleProps) {
+  const t = useT();
   const showCount = !autoscroll && newCount > 0;
   return (
     <div className={styles.footer} role="status" aria-live="off">
@@ -28,10 +30,10 @@ export function AutoscrollToggle({ autoscroll, newCount, onEnable, onDisable, le
         className={styles.toggle}
         data-on={autoscroll ? 'true' : 'false'}
         aria-pressed={autoscroll}
-        aria-label={autoscroll ? '자동 스크롤 끄기' : '자동 스크롤 켜고 최신으로 이동'}
+        aria-label={autoscroll ? t('stream.autoscroll.disableAria') : t('stream.autoscroll.enableAria')}
         onClick={autoscroll ? onDisable : onEnable}
       >
-        <span className={styles.label}>자동 스크롤</span>
+        <span className={styles.label}>{t('stream.autoscroll.label')}</span>
         <span className={styles.switch} data-on={autoscroll ? 'true' : 'false'} aria-hidden>
           <span className={styles.knob} />
         </span>

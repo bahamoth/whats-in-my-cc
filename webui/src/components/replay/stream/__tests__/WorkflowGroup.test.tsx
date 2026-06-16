@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithI18n as render } from '../../../../test/i18nRender';
 import { WorkflowGroup } from '../WorkflowGroup';
 import type { WorkflowGroup as WG, SidechainGroup } from '../streamModel';
 

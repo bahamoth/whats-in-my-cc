@@ -173,6 +173,92 @@ export const en = {
     'How this tool execution was allowed. config = auto-allowed by settings, user = approved by the user, etc. — the source of the permission decision.',
   'metric.tip.ioSize':
     'The size (bytes) of the input sent to the tool and the result it returned. A larger result takes up more context.',
+
+  // Stream — shared
+  'stream.reasoning': 'Reasoning',
+  'stream.notification': 'Notification',
+  'stream.output': 'Output',
+  'stream.conclusion': 'Conclusion',
+  'stream.synthesisLabel': 'Synthesis',
+  'stream.inProgress': 'In progress',
+  'stream.concurrentMain': (n: number) => `⟂ ${n} concurrent on main`,
+  'stream.laneExpandTitle': (label: string) => `${label} — click to expand`,
+  'stream.conversationStart': 'Conversation start',
+  'stream.workflow.agentN': (n: number) => `Agent ${n}`,
+
+  // Stream — autoscroll
+  'stream.autoscroll.label': 'Auto-scroll',
+  'stream.autoscroll.disableAria': 'Turn off auto-scroll',
+  'stream.autoscroll.enableAria': 'Turn on auto-scroll and jump to latest',
+
+  // Stream — scaffold group
+  'stream.scaffold.chip': 'Commands · skills',
+  'stream.scaffold.sourcePlus': (n: number) => `+${n} sources`,
+
+  // Stream — thinking marker
+  'stream.thinking.aria': 'Reasoning — click to show response metrics (content not in transcript)',
+  'stream.thinking.title':
+    'The reasoning content is not recorded in the transcript (only a signature). Click to see response metrics.',
+  'stream.thinking.warnAria': 'Abnormal response',
+
+  // Stream — end cards
+  'stream.endCard.label': 'End',
+  'stream.endCard.jumpToNotification': 'Jump to the end-notification source',
+  'stream.workflowEndCard.label': 'Workflow end',
+  'stream.workflowEndCard.result': 'Result',
+
+  // Stream — untagged Bash panel
+  'stream.untagged.jumpTitle': "Jump to this command's card",
+  'stream.untagged.jumpLabel': 'To card ↗',
+
+  // Stream — legend
+  'stream.lane.user': 'User',
+  'stream.lane.scaffold': 'Scaffold',
+  'stream.lane.tool': 'Tool',
+  'stream.lane.thinking': 'Reasoning',
+  'stream.lane.batch': 'Batch',
+  'stream.lane.workflow': 'Workflow',
+  'stream.legend.aria': 'Stream legend',
+  'stream.legend.move': 'move',
+  'stream.legend.nextError': 'next error',
+  'stream.legend.close': 'Close legend',
+
+  // Stream — message card
+  'stream.msg.summary': 'Summary',
+  'stream.msg.viewRaw': 'View raw',
+  'stream.msg.viewMarkdown': 'View markdown',
+  'stream.msg.bgTitle': (n: number) =>
+    `${n} background subagent(s) were running while this message progressed (this message itself is not background)`,
+  'stream.msg.bgRunning': (n: number) => `⟂ ${n} background running`,
+  'stream.msg.done': 'Done',
+  'stream.msg.jumpToCommand': 'Jump to the original command',
+  'stream.msg.commandJump': '↳ command',
+  'stream.msg.showMore': 'Show more',
+  'stream.msg.collapse': 'Collapse',
+
+  // Stream — batch group
+  'stream.batch.chip': 'Parallel batch',
+
+  // Stream — subagent group
+  'stream.subagent.messages': (n: number) => `${n} messages`,
+  'stream.subagent.tools': (n: number) => `${n} tools`,
+  'stream.subagent.done': '✓ done',
+  'stream.subagent.running': '● running',
+  'stream.subagent.jumpToTask': 'Jump to the calling Task',
+
+  // Stream — workflow group
+  'stream.workflow.chip': 'Workflow',
+  'stream.workflow.jumpTitle': 'Jump to the Workflow call that spawned this workflow',
+  'stream.workflow.jumpAria': 'Jump to the Workflow call',
+  'stream.workflow.call': 'Call',
+  'stream.workflow.maxConcurrency': 'Max parallel',
+  'stream.workflow.longest': 'Longest',
+  'stream.workflow.median': 'Median',
+  'stream.workflow.incomplete': 'Incomplete',
+
+  // Stream — query source (who issued the LLM request)
+  'stream.querySource.mainThread': 'Main thread',
+  'stream.querySource.subagent': (name: string) => `Subagent · ${name}`,
 };
 
 export type Messages = typeof en;

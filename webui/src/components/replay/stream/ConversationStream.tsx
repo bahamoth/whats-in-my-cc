@@ -18,6 +18,7 @@ import { computeBgGutter, rowTimeMs } from './streamModel';
 import type { StreamItem } from './streamModel';
 import { shouldLoadOlder, shouldLoadNewer, shouldAdjustOnItemResize, LOAD_OLDER_TOP_PX, LOAD_NEWER_BOTTOM_PX } from './scrollAnchor';
 import { useAutoscroll } from '../../../hooks/useAutoscroll';
+import { useT } from '../../../i18n';
 import styles from './ConversationStream.module.css';
 
 const FALLBACK_CAP = 200;
@@ -90,6 +91,7 @@ export function ConversationStream({
   footerExtra,
   initialFollow = true,
 }: ConversationStreamProps) {
+  const t = useT();
   const parentRef = useRef<HTMLDivElement | null>(null);
 
   // Deep-link scroll-to-index coordination. While we scroll the virtualizer to a
@@ -527,7 +529,7 @@ export function ConversationStream({
       >
         {showStartMarker && (
           <div className={styles.startMarker} style={{ height: START_MARKER_PX }}>
-            대화 시작
+            {t('stream.conversationStart')}
           </div>
         )}
         {useVirtual ? (
