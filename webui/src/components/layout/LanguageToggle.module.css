@@ -1,0 +1,39 @@
+/* l10n — navRail language switcher. Pinned to the bottom of the 56px rail
+ * (margin-top:auto) as a tiny vertical EN/KO segmented control. Tokens mirror
+ * the navLink styles in AppShell.module.css. */
+
+.toggle {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--wimcc-border, #1d212c);
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--wimcc-fg-muted, #aab0bd);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 5px 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--wimcc-surface-2, #161a23);
+  color: var(--wimcc-fg, #e6e8ee);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--wimcc-accent, #4f8cff);
+  outline-offset: 2px;
+}
+
+.active {
+  background: var(--wimcc-surface-2, #161a23);
+  color: var(--wimcc-fg, #e6e8ee);
+  border-color: var(--wimcc-accent, #4f8cff);
+}

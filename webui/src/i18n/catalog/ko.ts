@@ -10,6 +10,7 @@ export const ko: Messages = {
   'a11y.sidePanel': '사이드 패널',
 
   // Language switcher
+  'lang.group': '언어',
   'lang.switchToEnglish': 'Switch to English',
   'lang.switchToKorean': '한국어로 전환',
 };

@@ -8,12 +8,15 @@ import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AppShell } from '../AppShell';
+import { I18nProvider, type Locale } from '../../../i18n';
 
-function renderShell(children: React.ReactNode = <p>child</p>) {
+function renderShell(children: React.ReactNode = <p>child</p>, locale: Locale = 'en') {
   return render(
-    <MemoryRouter>
-      <AppShell>{children}</AppShell>
-    </MemoryRouter>,
+    <I18nProvider initialLocale={locale}>
+      <MemoryRouter>
+        <AppShell>{children}</AppShell>
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 
@@ -54,6 +57,21 @@ describe('AppShell', () => {
     // so feature code (PR-6 WhyPanel, PR-5 BottomDrawer) can portal into it.
     const slot = screen.getByRole('complementary', { name: /side panel/i });
     expect(slot).toBeInTheDocument();
+  });
+
+  it('localizes the rail labels when the locale is Korean', () => {
+    renderShell(<p>child</p>, 'ko');
+    // The nav landmark's accessible name must come from the catalog, not a
+    // hardcoded English string, so a Korean user sees Korean labels.
+    expect(screen.getByRole('navigation', { name: '주 메뉴' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '세션' })).toBeInTheDocument();
+  });
+
+  it('renders the language switcher inside the rail', () => {
+    renderShell();
+    const nav = screen.getByRole('navigation', { name: /primary/i });
+    expect(within(nav).getByTestId('lang-toggle-en')).toBeInTheDocument();
+    expect(within(nav).getByTestId('lang-toggle-ko')).toBeInTheDocument();
   });
 
   it('top-level shell element uses CSS grid layout', () => {
