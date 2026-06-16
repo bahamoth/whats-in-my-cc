@@ -11,6 +11,7 @@
 import { BrainCog, AlertTriangle } from 'lucide-react';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import { ResponseMetricsRows, responseWarns } from './metricsRows';
+import { useT } from '../../../i18n';
 import styles from './ResponseMetricsPanel.module.css';
 
 interface ResponseMetricsPanelProps {
@@ -18,27 +19,25 @@ interface ResponseMetricsPanelProps {
 }
 
 export function ResponseMetricsPanel({ metrics }: ResponseMetricsPanelProps) {
+  const t = useT();
   return (
     <aside className={styles.panel} data-testid="response-metrics">
       <div className={styles.head}>
         <BrainCog size={14} aria-hidden className={styles.icon} />
-        <span className={styles.title}>추론 · 응답 지표</span>
+        <span className={styles.title}>{t('detail.response.title')}</span>
       </div>
 
-      <p className={styles.note}>
-        추론 내용은 transcript에 기록되지 않습니다(암호화된 signature만 존재).
-        아래는 이 응답(LLM request)의 실측 지표입니다.
-      </p>
+      <p className={styles.note}>{t('detail.response.note')}</p>
 
       {!metrics ? (
-        <p className={styles.empty}>이 응답의 지표를 현재 윈도우에서 찾지 못했습니다.</p>
+        <p className={styles.empty}>{t('detail.response.empty')}</p>
       ) : (
         <ResponseMetricsRows metrics={metrics} />
       )}
 
       {metrics && responseWarns(metrics) && (
         <p className={styles.warnNote}>
-          <AlertTriangle size={12} aria-hidden /> 이 응답은 잘림/재시도/실패 신호가 있습니다.
+          <AlertTriangle size={12} aria-hidden /> {t('detail.response.warn')}
         </p>
       )}
     </aside>

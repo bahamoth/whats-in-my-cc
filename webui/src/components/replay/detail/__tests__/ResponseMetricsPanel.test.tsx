@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+import { renderWithI18n as render } from '../../../../test/i18nRender';
 import '@testing-library/jest-dom/vitest';
 import { ResponseMetricsPanel } from '../ResponseMetricsPanel';
 import type { LlmRequestMetrics } from '../../stream/llmRequestMetrics';

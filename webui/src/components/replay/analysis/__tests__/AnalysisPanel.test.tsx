@@ -1,4 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithI18n as render } from '../../../../test/i18nRender';
 import '@testing-library/jest-dom/vitest';
 import { describe, expect, test, vi } from 'vitest';
 import { AnalysisPanel } from '../AnalysisPanel';

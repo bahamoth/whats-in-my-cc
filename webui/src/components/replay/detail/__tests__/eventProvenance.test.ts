@@ -13,13 +13,9 @@ describe('eventProvenance', () => {
     expect(eventProvenance('signal').kind).toBe('derived');
   });
 
-  test('returns Korean label for native', () => {
-    expect(eventProvenance('tool_call').label).toBe('원본');
-  });
-
-  test('returns Korean label for derived', () => {
-    expect(eventProvenance('diff_hunk').label).toBe('가공');
-  });
+  // l10n — the badge label moved to the catalog (detail.provenance.*); this
+  // module now only decides native vs derived. The localized label text is
+  // asserted in the InsightTab component test instead.
 
   test('user_message is native', () => {
     expect(eventProvenance('user_message').kind).toBe('native');

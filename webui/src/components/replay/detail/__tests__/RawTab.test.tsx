@@ -3,7 +3,8 @@
  * R3 RED — RawTab persists JsonTree expansion per node across re-renders /
  * data refreshes (the #2 regression lock). Plan R3 Task 2 / spec §4.
  */
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithI18n as render } from '../../../../test/i18nRender';
 import { describe, expect, it } from 'vitest';
 import { RawTab } from '../RawTab';
 
