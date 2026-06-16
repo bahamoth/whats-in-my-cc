@@ -5155,6 +5155,52 @@ vitest: 69 passed
     </p>
   </section>
 
+  <section>
+    <h2 id="webui-l10n-2026-06-16">WebUI l10n — ko/en (영어 폴백, 경량 타입드 카탈로그, 2026-06-16)</h2>
+    <p>
+      설계 스펙: <code>docs/superpowers/specs/2026-06-16-webui-l10n-design.md</code>. WebUI SPA만 대상이고
+      API·CLI는 영어 단일 유지. 외부 i18n 라이브러리(react-i18next 등) 없이 <code>webui/src/i18n/</code>의
+      경량 코어로 구현: <code>detect.ts</code>(navigator.language 우선순위 해석, 순수 <code>resolveLocale</code>) ·
+      <code>t.ts</code>(<code>translate</code> 룩업+보간) · <code>catalog/en.ts</code>(정본 — <code>typeof en</code>이
+      <code>Messages</code> 타입을 정의, ko.ts는 <code>: Messages</code>로 키 패리티를 컴파일타임 강제) ·
+      <code>index.tsx</code>(<code>I18nProvider</code>/<code>useT</code>/<code>useLocale</code>). 감지=navigator + 토글
+      수동전환, <code>localStorage['wimcc.lang']</code> 지속, <code>&lt;html lang&gt;</code> 동기화. 토글은 navRail 하단.
+    </p>
+    <h3>설계 결정 / 편차</h3>
+    <ul>
+      <li><strong>함수형 메시지</strong>: 카운트·복수형·보간이 필요한 항목은 카탈로그 값을 함수로 둬
+        (<code>(n) =&gt; …</code>) ICU 파서 없이 처리. 키 타입은 안전(<code>MessageKey</code>)하되 arg 타입은
+        의도적으로 느슨(<code>MessageValue</code>의 함수 param=<code>any</code>) — strictFunctionTypes 충돌 회피,
+        per-arg 타입은 YAGNI.</li>
+      <li><strong>순수 함수 threading</strong>: 컴포넌트가 아닌 로직 모듈(<code>relativeTime</code>·
+        <code>nodeLabel</code>·<code>formatQuerySource</code>·<code>workflowTimeline</code>·<code>insightCards</code>·
+        <code>metricsRows.Row</code>)은 <code>t</code>(또는 locale)를 인자로 받고 호출부(컴포넌트)에서 주입. 단위
+        테스트는 ko 카탈로그 바인딩 <code>koT</code>를 주입해 기존 한국어 단언을 보존.</li>
+      <li><strong>relativeTime</strong>만 format.ts에서 단어를 인라인 보유(임계값 결합·format↔i18n 순환 회피).
+        나머지 숫자/바이트/duration/USD 포맷터는 언어중립이라 미변경.</li>
+      <li><strong>스코프(option a)</strong>: 현재 하드코딩된 한국어를 전부 카탈로그화하고 영어 번역을 추가 —
+        EN 사용자는 완전한 영어 UI. 기존 영문 chrome(컬럼 헤더·refresh 등)의 한국어 번역은 이 PR 범위 밖
+        (후속). 따라서 ko에서 일부 영문 chrome은 그대로.</li>
+      <li><strong>테스트 헬퍼</strong>: <code>webui/src/test/i18nRender.tsx</code>의 <code>renderWithI18n</code>
+        (RTL <code>wrapper</code> 옵션 사용 → rerender도 provider 유지, 기본 ko)로 컴포넌트 테스트를 래핑.</li>
+      <li><strong>provenance/eventProvenance</strong>: <code>eventProvenance</code>는 라벨을 떼고 <code>kind</code>만
+        반환, 배지 텍스트는 카탈로그(<code>detail.provenance.*</code>)에서 t로 렌더.</li>
+    </ul>
+    <h3>알려진 한계 (미번역, dev-tooling)</h3>
+    <p>
+      <code>lib/unknownVerification.ts</code>와 <code>stream/eventTags.ts</code>의 <code>hint</code> 문자열은
+      개발 스크립트(untagged-bash / unknown-verification 루프)와 공유되는 개발자 대상 텍스트라 한국어로 남김
+      (UntaggedBashPanel은 dev affordance). 본문 메시지(transcript 원본)는 번역 대상 아님.
+    </p>
+    <h3>검증</h3>
+    <p>
+      vitest 650 통과 · <code>tsc -b</code> 클린 · <code>vite build</code> 성공. 브라우저 스모크: navigator
+      <code>ko-KR</code> 자동감지 → ko, 토글로 en 전환 시 insight strip·StreamLegend·activity·detail 패널
+      (metric 라벨·tooltip·provenance)·relativeTime이 실시간 전환되고 <code>localStorage</code>·<code>&lt;html lang&gt;</code>
+      반영 확인.
+    </p>
+  </section>
+
 </main>
 </div>
 </body></html>
