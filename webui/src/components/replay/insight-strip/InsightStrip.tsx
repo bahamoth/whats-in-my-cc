@@ -23,6 +23,7 @@ import {
 } from './insightCards';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import { InfoTip } from './InfoTip';
+import { useT } from '../../../i18n';
 import styles from './InsightStrip.module.css';
 
 interface InsightStripProps {
@@ -49,17 +50,21 @@ function Sparkline({ values, tint }: { values: number[]; tint?: SparklineTint })
 }
 
 export function InsightStrip(props: InsightStripProps) {
-  const cards = buildInsightCards({
-    usage: props.usage,
-    verificationRuns: props.verificationRuns,
-    signals: props.signals,
-    baseline: props.baseline,
-    turns: props.turns,
-  });
+  const t = useT();
+  const cards = buildInsightCards(
+    {
+      usage: props.usage,
+      verificationRuns: props.verificationRuns,
+      signals: props.signals,
+      baseline: props.baseline,
+      turns: props.turns,
+    },
+    t,
+  );
   const [openId, setOpenId] = useState<InsightCardId | null>(null);
 
   return (
-    <section className={styles.strip} aria-label="세션 인사이트">
+    <section className={styles.strip} aria-label={t('insight.stripAria')}>
       <div className={styles.row}>
         {cards.map((card) => {
           const open = openId === card.id;
