@@ -60,6 +60,16 @@ hook event를 wimcc로 내보내게 하려면 `~/.claude/settings.json`을 한 �
 `wimcc ingest --all`은 백필(기존 transcript JSONL을 cold-start로 한 번 훑기)용으로
 여전히 쓸 수 있지만, live 운용에는 필요하지 않다.
 
+### 개발 환경
+
+핫 리로드로 개발할 때는 `just dev`가 백엔드와 vite dev 서버를 함께 띄운다:
+
+```bash
+just dev   # 백엔드 :7878 + vite :5173 (HMR); Ctrl-C로 둘 다 종료
+```
+
+브라우저는 `http://127.0.0.1:5173`. 테스트·빌드 등 전체 recipe는 아래 **빌드 · 테스트 · 개발** 절 참고.
+
 ## CLI
 
 ```
@@ -273,6 +283,7 @@ curl -X POST http://127.0.0.1:7878/hooks/v1/events \
 | `just webui-test` | 프론트엔드 단위 테스트 (`vitest run`) |
 | `just webui-dev` | vite dev 서버 (`127.0.0.1:5173`, `/v1` → `7878` 프록시) |
 | `just serve-dev` | 백엔드 dev 실행 (`cargo run -- serve --auto-migrate`) |
+| `just dev` | dev 환경 일괄 구동 — 백엔드 + vite(HMR) 동시; Ctrl-C로 둘 다 종료 |
 | `just build-release` | `webui-build` 후 `cargo build --release` → `target/release/wimcc` |
 
 **릴리스 빌드** — WebUI가 임베드된 단일 바이너리:
@@ -293,13 +304,15 @@ cargo test
 **프론트엔드 테스트** — `just webui-test` (`vitest run`). watch 모드는
 `cd webui && npm run test:watch`.
 
-**프론트엔드 개발 루프** — 두 프로세스를 함께 띄운다: `just serve-dev`(백엔드)와
-`just webui-dev`(vite, HMR). 브라우저는 `http://127.0.0.1:5173`.
+**개발 환경** — `just dev` 한 번으로 백엔드(`:7878`)와 vite dev 서버(`:5173`, HMR)를
+함께 띄운다; Ctrl-C로 둘 다 종료된다. 브라우저는 `http://127.0.0.1:5173`(vite가 `/v1`을
+— `/v1/stream` SSE 포함 — 백엔드로 프록시; `WIMCC_PROXY_TARGET`로 다른 serve 인스턴스 지정 가능).
+따로 띄우려면 `just serve-dev`(백엔드)와 `just webui-dev`(프론트엔드).
 
 **Node 버전** — 빌드는 Node 20 (`webui/.nvmrc`). untagged-Bash 도구 스크립트
 (`webui/scripts/untagged-bash.ts`)는 네이티브 타입 스트리핑을 위해 Node 22+가 필요하다.
 
-**dev DB 재생성** — 마이그레이션 변경(최신 `0023`) 후에는 `wimcc init-db` + 재ingest가
+**dev DB 재생성** — 마이그레이션 변경(현재 head는 `migrations/` 참조) 후에는 `wimcc init-db` + 재ingest가
 필요하다. JSON BLOB으로 저장되는 payload 필드(`tool_call.tool_name`,
 `assistant_message.model` 등)는 schema migration 없이 추가되므로, 기존 event는
 재ingest해야 채워진다.

@@ -63,6 +63,18 @@ transcripts. For Claude Code to emit OTel + hook events into wimcc you set up
 `wimcc ingest --all` is still available for backfill (a cold-start sweep of
 existing transcript JSONLs) but is not required for live operation.
 
+### Dev environment
+
+For development with hot reload, `just dev` runs the backend and the vite dev
+server together:
+
+```bash
+just dev   # backend :7878 + vite :5173 (HMR); Ctrl-C stops both
+```
+
+Open `http://127.0.0.1:5173`. Full recipe list — tests, builds, single-process
+runs — in [Build, test, develop](#build-test-develop).
+
 ## CLI
 
 ```
@@ -283,6 +295,7 @@ build or test the backend.**
 | `just webui-test` | frontend unit tests (`vitest run`) |
 | `just webui-dev` | vite dev server (`127.0.0.1:5173`, proxies `/v1` → `7878`) |
 | `just serve-dev` | run the backend in dev (`cargo run -- serve --auto-migrate`) |
+| `just dev` | bring up the full dev environment — backend + vite (HMR) together; Ctrl-C stops both |
 | `just build-release` | `webui-build`, then `cargo build --release` → `target/release/wimcc` |
 
 **Release build** — a single binary with the WebUI embedded:
@@ -303,14 +316,17 @@ cargo test
 **Frontend tests** — `just webui-test` (`vitest run`). Watch mode:
 `cd webui && npm run test:watch`.
 
-**Frontend dev loop** — run both processes: `just serve-dev` (backend) and
-`just webui-dev` (vite with HMR), then open `http://127.0.0.1:5173`.
+**Dev environment** — `just dev` brings up both the backend (`:7878`) and the vite
+dev server (`:5173`, HMR) in one command; Ctrl-C stops both. Then open
+`http://127.0.0.1:5173` (vite proxies `/v1` — including the `/v1/stream` SSE feed —
+to the backend; set `WIMCC_PROXY_TARGET` to point at another serve instance). To run them in separate terminals instead:
+`just serve-dev` (backend) and `just webui-dev` (frontend).
 
 **Node version** — Node 20 for the build (`webui/.nvmrc`). The untagged-Bash
 tooling script (`webui/scripts/untagged-bash.ts`) needs Node 22+ for native type
 stripping.
 
-**dev DB regeneration** — after a migration change (latest `0023`), run
+**dev DB regeneration** — after a migration change (current head in `migrations/`), run
 `wimcc init-db` and re-ingest. Payload fields stored as JSON BLOBs
 (`tool_call.tool_name`, `assistant_message.model`, …) are added without a schema
 migration, so existing events won't have them until re-ingested.
