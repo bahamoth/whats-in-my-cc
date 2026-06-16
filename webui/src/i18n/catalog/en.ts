@@ -15,6 +15,16 @@ export const en = {
   'lang.group': 'Language',
   'lang.switchToEnglish': 'Switch to English',
   'lang.switchToKorean': 'Switch to Korean',
+
+  // Common
+  'common.loadingEarlier': 'Loading earlier messages…',
+
+  // Session list
+  'sessions.searchPlaceholder': '⌕ Search projects · slugs… ( / )',
+  'sessions.searchAria': 'Search sessions',
+
+  // Session detail
+  'detail.analysisToggle': 'Analysis',
 };
 
 export type Messages = typeof en;
