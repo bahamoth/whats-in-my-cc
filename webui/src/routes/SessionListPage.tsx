@@ -4,6 +4,7 @@ import { listSessions, ApiError } from '../api/client';
 import type { SessionListItem } from '../api/types';
 import { useLiveStream, type LiveEnvelope } from '../hooks/useLiveStream';
 import { relativeTime, formatModel } from '../lib/format';
+import { useLocale } from '../i18n';
 import styles from './SessionListPage.module.css';
 
 type SortKey = 'last_observed_at' | 'event_count' | 'session_id';
@@ -106,6 +107,7 @@ function matchesQuery(r: SessionListItem, q: string): boolean {
 }
 
 export default function SessionListPage() {
+  const { locale } = useLocale();
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [sortKey, setSortKey] = useState<SortKey>('last_observed_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -296,7 +298,7 @@ export default function SessionListPage() {
                       )}
                     </td>
                     <td className={styles.relCell} title={r.last_observed_at}>
-                      {relativeTime(r.last_observed_at, nowMs)}
+                      {relativeTime(r.last_observed_at, nowMs, locale)}
                     </td>
                     <td className={styles.eventsCell}>{r.event_count.toLocaleString()}</td>
                     <td className={styles.mix}>

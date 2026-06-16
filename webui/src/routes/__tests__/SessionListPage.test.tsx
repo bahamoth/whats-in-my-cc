@@ -4,9 +4,14 @@ import { render, screen, waitFor, fireEvent, within, cleanup } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import '@testing-library/jest-dom/vitest';
 import SessionListPage from '../SessionListPage';
+import { I18nProvider } from '../../i18n';
 
 function withRouter(node: React.ReactNode) {
-  return <MemoryRouter>{node}</MemoryRouter>;
+  return (
+    <I18nProvider initialLocale="en">
+      <MemoryRouter>{node}</MemoryRouter>
+    </I18nProvider>
+  );
 }
 
 describe('SessionListPage', () => {
