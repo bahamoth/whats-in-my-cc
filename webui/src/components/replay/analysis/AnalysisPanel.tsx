@@ -7,6 +7,7 @@
  */
 import { useMemo, useState } from 'react';
 import type { SessionMetricsDto, SignalDto, EvidenceRef } from '../../../api/types';
+import { useT, type TFunction } from '../../../i18n';
 import styles from './AnalysisPanel.module.css';
 
 interface AnalysisPanelProps {
@@ -35,11 +36,13 @@ function firstEvidenceEventId(s: SignalDto): string | null {
 }
 
 /** One-line, fact-only label for a drilled signal (no judgment words). */
-function signalLabel(s: SignalDto): string {
+function signalLabel(s: SignalDto, t: TFunction): string {
   if (s.detector === 're_read') {
     const fp = s.facts.file_path;
     const rc = s.facts.read_count;
-    if (typeof fp === 'string') return `${fp} · ${rc ?? '?'}회`;
+    if (typeof fp === 'string') {
+      return t('analysis.reReadLabel', { file: fp, count: String(rc ?? '?') });
+    }
   }
   if (s.detector === 'tool_failure') {
     const tool = s.facts.tool_name;
@@ -57,6 +60,7 @@ export function AnalysisPanel({
   onSelectEvent,
   'data-testid': testId,
 }: AnalysisPanelProps) {
+  const t = useT();
   const [expanded, setExpanded] = useState<string | null>(null);
 
   // Group signals by detector for the drill-down under each bar.
@@ -69,7 +73,7 @@ export function AnalysisPanel({
   if (!metrics) {
     return (
       <div className={styles.root} data-testid={testId}>
-        <p className={styles.empty}>분석할 지표가 없습니다.</p>
+        <p className={styles.empty}>{t('analysis.empty')}</p>
       </div>
     );
   }
@@ -86,11 +90,11 @@ export function AnalysisPanel({
     <div className={styles.root} data-testid={testId}>
       {/* --- Core metrics table --- */}
       <div>
-        <div className={styles.sectionTitle}>세션 지표</div>
+        <div className={styles.sectionTitle}>{t('analysis.sessionMetrics')}</div>
         <div className={styles.metricsTable}>
           {/* 도구 실패: rate는 count에서 계산 */}
           <div className={styles.metricRow}>
-            <span className={styles.metricLabel}>도구 실패</span>
+            <span className={styles.metricLabel}>{t('analysis.toolFailures')}</span>
             <span className={styles.metricCount}>
               {metrics.tool_failure_count}/{metrics.tool_call_total}
             </span>
@@ -102,20 +106,22 @@ export function AnalysisPanel({
           </div>
           {/* 검증: 분모는 measured(passed+failed), unknown 별도 노출 */}
           <div className={styles.metricRow}>
-            <span className={styles.metricLabel}>검증 통과 (측정분)</span>
+            <span className={styles.metricLabel}>{t('analysis.verificationPassed')}</span>
             <span className={styles.metricCount}>
               {metrics.verification_passed}/{metrics.verification_passed + metrics.verification_failed}
-              {metrics.verification_unknown > 0 ? ` · 미측정 ${metrics.verification_unknown}` : ''}
+              {metrics.verification_unknown > 0
+                ? t('analysis.unmeasuredInline', metrics.verification_unknown)
+                : ''}
             </span>
             <span className={styles.metricRate}>
               {metrics.verification_passed + metrics.verification_failed > 0
                 ? pct(metrics.verification_passed / (metrics.verification_passed + metrics.verification_failed))
-                : '측정 없음'}
+                : t('analysis.noMeasurement')}
             </span>
           </div>
           {/* context bloat */}
           <div className={styles.metricRow}>
-            <span className={styles.metricLabel}>Context bloat 횟수</span>
+            <span className={styles.metricLabel}>{t('analysis.contextBloatCount')}</span>
             <span className={styles.metricCount}>{metrics.context_bloat_count}</span>
             <span className={styles.metricRate} />
           </div>
@@ -124,9 +130,9 @@ export function AnalysisPanel({
 
       {/* --- Detector signal distribution --- */}
       <div className={styles.detectorSection}>
-        <div className={styles.sectionTitle}>Detector 신호 분포</div>
+        <div className={styles.sectionTitle}>{t('analysis.detectorDistribution')}</div>
         {detectorEntries.length === 0 ? (
-          <p className={styles.noDetectors}>감지된 신호 없음</p>
+          <p className={styles.noDetectors}>{t('analysis.noSignals')}</p>
         ) : (
           <div className={styles.detectorList}>
             {detectorEntries.map(([detector, count]) => {
@@ -164,7 +170,7 @@ export function AnalysisPanel({
                               disabled={!eid || !onSelectEvent}
                               onClick={() => eid && onSelectEvent?.(eid)}
                             >
-                              {signalLabel(s)}
+                              {signalLabel(s, t)}
                             </button>
                           </li>
                         );

@@ -18,6 +18,7 @@ import { formatDuration } from '../stream/llmRequestMetrics';
 import { hookFacet } from '../stream/hookFacet';
 import type { ToolMetrics } from './toolMetrics';
 import { Row, MetricGroup, ResponseMetricsRows, responseWarns, formatBytes } from './metricsRows';
+import { useT } from '../../../i18n';
 import styles from './EntityMetricsPanel.module.css';
 
 interface EntityMetricsPanelProps {
@@ -30,10 +31,12 @@ interface EntityMetricsPanelProps {
 }
 
 function Uncollected() {
-  return <span className={styles.uncollected}>지표 미수집</span>;
+  const t = useT();
+  return <span className={styles.uncollected}>{t('metric.uncollected')}</span>;
 }
 
 function ToolMetricsRows({ m }: { m: ToolMetrics }) {
+  const t = useT();
   const allNull =
     m.durationMs == null &&
     m.success == null &&
@@ -55,41 +58,43 @@ function ToolMetricsRows({ m }: { m: ToolMetrics }) {
       : `${formatBytes(m.inputBytes)} → ${formatBytes(m.resultBytes)}`;
 
   return (
-    <MetricGroup title="도구 실행" provenance="measured">
-      <Row label="소요 시간" value={formatDuration(m.durationMs) ?? '—'} />
+    <MetricGroup title={t('metric.group.toolExec')} provenance="measured">
+      <Row labelKey="metric.label.duration" value={formatDuration(m.durationMs) ?? '—'} />
       <Row
-        label="결과"
+        labelKey="metric.label.result"
         value={m.success == null ? '—' : m.success ? 'ok' : 'error'}
         warn={m.success === false}
       />
-      <Row label="결정 출처" value={decisionValue} />
-      <Row label="입력/결과 크기" value={sizeValue} />
-      <Row label="순서" value={m.sequence != null ? `#${m.sequence}` : '—'} />
+      <Row labelKey="metric.label.decisionSource" tipKey="metric.tip.decisionSource" value={decisionValue} />
+      <Row labelKey="metric.label.ioSize" tipKey="metric.tip.ioSize" value={sizeValue} />
+      <Row labelKey="metric.label.sequence" value={m.sequence != null ? `#${m.sequence}` : '—'} />
     </MetricGroup>
   );
 }
 
 function HookMetricsRows({ payload }: { payload: unknown }) {
+  const t = useT();
   const h = hookFacet(payload);
   const allNull =
     h.durationMs == null && h.success == null && h.command == null && h.hookEvent == null;
   if (allNull) return <Uncollected />;
 
   return (
-    <MetricGroup title="hook 실행" provenance="measured">
-      <Row label="hook 이벤트" value={h.hookEvent ?? '—'} />
-      <Row label="소요 시간" value={formatDuration(h.durationMs) ?? '—'} />
+    <MetricGroup title={t('metric.group.hookExec')} provenance="measured">
+      <Row labelKey="metric.label.hookEvent" value={h.hookEvent ?? '—'} />
+      <Row labelKey="metric.label.duration" value={formatDuration(h.durationMs) ?? '—'} />
       <Row
-        label="결과"
+        labelKey="metric.label.result"
         value={h.success == null ? '—' : h.success ? 'ok' : `error (exit ${h.exitCode})`}
         warn={h.success === false}
       />
-      <Row label="명령" value={h.command ?? '—'} />
+      <Row labelKey="metric.label.command" value={h.command ?? '—'} />
     </MetricGroup>
   );
 }
 
 export function EntityMetricsPanel({ kind, toolMetrics, llmMetrics, payload }: EntityMetricsPanelProps) {
+  const t = useT();
   if (kind === 'hook_event') {
     return (
       <div className={styles.wrap} data-testid="entity-metrics" data-kind={kind}>
@@ -113,7 +118,7 @@ export function EntityMetricsPanel({ kind, toolMetrics, llmMetrics, payload }: E
         {llmMetrics ? <ResponseMetricsRows metrics={llmMetrics} /> : <Uncollected />}
         {llmMetrics && responseWarns(llmMetrics) && (
           <p className={styles.warnNote}>
-            <AlertTriangle size={12} aria-hidden /> 이 응답은 잘림/재시도/실패 신호가 있습니다.
+            <AlertTriangle size={12} aria-hidden /> {t('detail.response.warn')}
           </p>
         )}
       </div>

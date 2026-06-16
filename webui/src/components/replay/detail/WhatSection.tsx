@@ -4,6 +4,7 @@
 // Shows full command input + matched tool_result output for tool_call;
 // full text for user/assistant; per-type fields for other kinds.
 import type { ObservedEventDto } from '../../../api/types';
+import { useT } from '../../../i18n';
 import styles from './WhatSection.module.css';
 
 // Max chars to show for long outputs before truncating
@@ -25,6 +26,7 @@ interface WhatSectionProps {
 
 // Bash/tool_call body
 function ToolCallBody({ event, matchedResult }: WhatSectionProps) {
+  const t = useT();
   const p = asObj(event.payload);
   const input = asObj(p.input);
 
@@ -79,11 +81,13 @@ function ToolCallBody({ event, matchedResult }: WhatSectionProps) {
       {resultContent !== null && (
         <>
           <div className={`${isError ? styles.err : styles.out} ${result?.truncated ? styles.truncated : ''}`}>
-            {isError && <span className={styles.errBadge}>오류</span>}
+            {isError && <span className={styles.errBadge}>{t('detail.what.errorBadge')}</span>}
             <span>{result?.text}</span>
           </div>
           {result?.truncated && (
-            <span className={styles.truncNote}>… {OUTPUT_TRUNCATE.toLocaleString()}자 이후 잘림 — Raw 탭에서 전문</span>
+            <span className={styles.truncNote}>
+              {t('detail.what.truncNote', OUTPUT_TRUNCATE.toLocaleString())}
+            </span>
           )}
         </>
       )}
@@ -92,6 +96,7 @@ function ToolCallBody({ event, matchedResult }: WhatSectionProps) {
 }
 
 export function WhatSection({ event, matchedResult }: WhatSectionProps) {
+  const t = useT();
   const p = asObj(event.payload);
 
   switch (event.kind) {
@@ -105,7 +110,7 @@ export function WhatSection({ event, matchedResult }: WhatSectionProps) {
         <div className={styles.what}>
           <div className={`${styles.prose} ${truncated ? styles.truncated : ''}`}>{text}</div>
           {truncated && (
-            <span className={styles.truncNote}>… {OUTPUT_TRUNCATE.toLocaleString()}자 이후 잘림 — Raw 탭에서 전문</span>
+            <span className={styles.truncNote}>{t('detail.what.truncNote', OUTPUT_TRUNCATE.toLocaleString())}</span>
           )}
         </div>
       );
@@ -118,7 +123,7 @@ export function WhatSection({ event, matchedResult }: WhatSectionProps) {
         <div className={styles.what}>
           <div className={`${styles.prose} ${truncated ? styles.truncated : ''}`}>{text}</div>
           {truncated && (
-            <span className={styles.truncNote}>… {OUTPUT_TRUNCATE.toLocaleString()}자 이후 잘림 — Raw 탭에서 전문</span>
+            <span className={styles.truncNote}>{t('detail.what.truncNote', OUTPUT_TRUNCATE.toLocaleString())}</span>
           )}
         </div>
       );
@@ -127,7 +132,7 @@ export function WhatSection({ event, matchedResult }: WhatSectionProps) {
     case 'thinking':
       return (
         <div className={styles.what}>
-          <div className={styles.notice}>추론 본문은 기록되지 않음 (signature only)</div>
+          <div className={styles.notice}>{t('detail.what.thinkingNotRecorded')}</div>
         </div>
       );
 
@@ -192,7 +197,7 @@ export function WhatSection({ event, matchedResult }: WhatSectionProps) {
       }
       return (
         <div className={styles.what}>
-          <div className={styles.notice}>원본은 Raw 탭 참조</div>
+          <div className={styles.notice}>{t('detail.what.rawFallback')}</div>
         </div>
       );
     }

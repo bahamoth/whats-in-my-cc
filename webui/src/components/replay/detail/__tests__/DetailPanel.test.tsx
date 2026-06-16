@@ -4,7 +4,8 @@
  * any ObservedEvent (incl. thinking) drives the panel; the Insight tab hosts a
  * header + EntityMetricsPanel + Signals, the Raw tab the source record/blocks.
  */
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithI18n as render } from '../../../../test/i18nRender';
 import { describe, expect, it } from 'vitest';
 import { DetailPanel } from '../DetailPanel';
 import type { SignalDto, ObservedEventDto } from '../../../../api/types';

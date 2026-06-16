@@ -3,7 +3,8 @@
  * InsightTab 5-layer skeleton: H(header+badge+chips) → ①WHAT → ②HOW(metrics)
  * → ③SIGNALS. Fully event-driven (no graph node).
  */
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithI18n as render } from '../../../../test/i18nRender';
 import { describe, expect, it, vi } from 'vitest';
 import { InsightTab } from '../InsightTab';
 import type { SignalDto, ObservedEventDto } from '../../../../api/types';

@@ -12,6 +12,7 @@ import type { ToolMetrics } from './toolMetrics';
 import { EntityMetricsPanel } from './EntityMetricsPanel';
 import { eventProvenance } from './eventProvenance';
 import { WhatSection } from './WhatSection';
+import { useT } from '../../../i18n';
 import styles from './InsightTab.module.css';
 
 interface InsightTabProps {
@@ -49,12 +50,13 @@ const KIND_ICON: Record<string, string> = {
  *  copies the FULL id — an observability tool must never hide the identifier a
  *  user needs to grep. Full value also lives in the title (hover reveals it). */
 function CopyChip({ field, label, value }: { field: string; label: string; value: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
       className={styles.corrChip}
-      title={`${field}: ${value} — 클릭하여 복사`}
+      title={t('detail.insightTab.copyTitle', { field, value })}
       aria-label={`${field} ${value}`}
       onClick={() => {
         navigator.clipboard?.writeText(value);
@@ -75,6 +77,7 @@ function SignalsList({
   signals: SignalDto[];
   onSelectEvent?: (eventId: string) => void;
 }) {
+  const t = useT();
   return (
     <ul className={styles.list}>
       {signals.map((s) => {
@@ -87,7 +90,7 @@ function SignalsList({
             data-jumpable={jumpable ? 'true' : undefined}
             role={jumpable ? 'button' : undefined}
             tabIndex={jumpable ? 0 : undefined}
-            title={jumpable ? '증거 이벤트로 이동' : undefined}
+            title={jumpable ? t('detail.insightTab.jumpToEvidence') : undefined}
             onClick={jumpable ? () => onSelectEvent!(target!) : undefined}
             onKeyDown={
               jumpable
@@ -103,7 +106,7 @@ function SignalsList({
             <div className={styles.head}>
               <span className={styles.detector}>{s.detector}</span>
               {s.subkind && <span className={styles.subkind}>{s.subkind}</span>}
-              {jumpable && <span className={styles.jumpHint} aria-hidden>↳ 증거</span>}
+              {jumpable && <span className={styles.jumpHint} aria-hidden>{t('detail.insightTab.evidenceHint')}</span>}
             </div>
             <p className={styles.summary}>{s.summary}</p>
           </li>
@@ -114,6 +117,7 @@ function SignalsList({
 }
 
 export function InsightTab({ signals, event, toolMetrics, llmMetrics, matchedResult, onSelectEvent }: InsightTabProps) {
+  const t = useT();
   if (!event && signals.length === 0) {
     return (
       <div className={styles.root}>
@@ -137,9 +141,9 @@ export function InsightTab({ signals, event, toolMetrics, llmMetrics, matchedRes
             {prov && (
               <span
                 className={prov.kind === 'native' ? styles.badgeNative : styles.badgeDerived}
-                title={prov.kind === 'native' ? 'Claude Code 원본 관측' : 'wimcc 파생 데이터'}
+                title={prov.kind === 'native' ? t('detail.insightTab.nativeTitle') : t('detail.insightTab.derivedTitle')}
               >
-                {prov.label}
+                {t(prov.kind === 'native' ? 'detail.provenance.native' : 'detail.provenance.derived')}
               </span>
             )}
             <span className={styles.nodeId}>{event.event_id}</span>
@@ -157,13 +161,13 @@ export function InsightTab({ signals, event, toolMetrics, llmMetrics, matchedRes
 
           {/* ① WHAT: what this event did */}
           <div className={styles.section}>
-            <div className={styles.sectionTitle}>What — 한 일</div>
+            <div className={styles.sectionTitle}>{t('detail.insightTab.whatTitle')}</div>
             <WhatSection event={event} matchedResult={matchedResult ?? null} />
           </div>
 
           {/* ② HOW: execution metrics */}
           <div className={styles.section}>
-            <div className={styles.sectionTitle}>How — 지표</div>
+            <div className={styles.sectionTitle}>{t('detail.insightTab.howTitle')}</div>
             <EntityMetricsPanel
               kind={event.kind}
               toolMetrics={toolMetrics}
