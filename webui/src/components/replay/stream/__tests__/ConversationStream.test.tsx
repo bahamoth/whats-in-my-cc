@@ -8,7 +8,8 @@
  * removed (verified by the options-contract test below + browser smoke, since
  * real anchoring needs layout). Spec §3.
  */
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithI18n as render } from '../../../../test/i18nRender';
 import { describe, expect, it, vi } from 'vitest';
 import { ConversationStream } from '../ConversationStream';
 import type {

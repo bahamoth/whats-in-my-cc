@@ -4,7 +4,8 @@
 //    span) + the synthesis line, children hidden.
 //  - L1 (expanded): each child SubagentGroup + a bottom outcome (synthesis) line.
 // Same prop signature as SubagentGroup; uses the de-interleaved agentGroups.
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithI18n as render } from '../../../../test/i18nRender';
 import { describe, it, expect, vi } from 'vitest';
 import { BatchGroup } from '../BatchGroup';
 import type { BatchGroup as BatchGroupModel, SidechainGroup } from '../streamModel';

@@ -12,6 +12,7 @@
 // double-store was removed; span name + attributes now come from the telemetry
 // facet, whose `attributes` is a FLAT key→value object (backend `flatten_kv`).
 import type { ObservedEventDto, TelemetryFacetDto } from '../../../api/types';
+import type { TFunction } from '../../../i18n';
 
 export interface LlmRequestMetrics {
   requestId: string;
@@ -136,12 +137,13 @@ export function formatUsd(n: number | null): string | null {
   return `$${n.toFixed(n < 1 ? 4 : 2)}`;
 }
 
-/** Human label for the request's query_source (who issued it). */
-export function formatQuerySource(qs: string | null | undefined): string | null {
+/** Human label for the request's query_source (who issued it). l10n — the
+ *  caller injects t() for the localized "main thread" / "subagent" wording. */
+export function formatQuerySource(qs: string | null | undefined, t: TFunction): string | null {
   if (!qs) return null;
-  if (qs === 'repl_main_thread') return '메인 스레드';
-  if (qs.startsWith('agent:builtin:')) return `서브에이전트 · ${qs.slice('agent:builtin:'.length)}`;
-  if (qs.startsWith('agent:')) return `서브에이전트 · ${qs.slice('agent:'.length)}`;
+  if (qs === 'repl_main_thread') return t('stream.querySource.mainThread');
+  if (qs.startsWith('agent:builtin:')) return t('stream.querySource.subagent', qs.slice('agent:builtin:'.length));
+  if (qs.startsWith('agent:')) return t('stream.querySource.subagent', qs.slice('agent:'.length));
   return qs;
 }
 

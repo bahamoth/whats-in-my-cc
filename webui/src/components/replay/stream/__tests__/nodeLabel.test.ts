@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { nodeLabel, formatModel } from '../nodeLabel';
+import { translate } from '../../../../i18n/t';
+import { en } from '../../../../i18n/catalog/en';
+import { ko } from '../../../../i18n/catalog/ko';
+import type { TFunction } from '../../../../i18n';
+
+// Assert against the Korean (source) labels by binding t to the ko catalog.
+const koT: TFunction = (key, arg) => translate(ko, en, key, arg);
 
 const L = (
   node_kind: string,
@@ -7,7 +14,7 @@ const L = (
   telemetry?: unknown,
   tag?: { display?: string | null } | null,
   is_meta?: boolean,
-) => nodeLabel({ node_kind, payload, telemetry, tag, is_meta });
+) => nodeLabel({ node_kind, payload, telemetry, tag, is_meta }, koT);
 
 describe('formatModel', () => {
   it('shortens known model ids', () => {

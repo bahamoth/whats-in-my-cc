@@ -1,4 +1,5 @@
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { screen, fireEvent, within } from '@testing-library/react';
+import { renderWithI18n as render } from '../../../../test/i18nRender';
 import { describe, it, expect, vi } from 'vitest';
 import { ActivityStack } from '../ActivityStack';
 import type { ActivityStackData } from '../activityGroup';

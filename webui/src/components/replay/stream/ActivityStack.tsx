@@ -7,6 +7,7 @@ import { nodeLabel } from './nodeLabel';
 import { tagVerb, type Tag } from './eventTags';
 import { hookFacet } from './hookFacet';
 import { formatDuration, durationHeat } from './duration';
+import { useT } from '../../../i18n';
 import styles from './ActivityStack.module.css';
 
 interface ActivityStackProps {
@@ -16,6 +17,7 @@ interface ActivityStackProps {
 }
 
 export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStackProps) {
+  const t = useT();
   // `null` = no explicit user choice yet → follow `containsSelected` (auto-open
   // when a selection lands inside this run so the host can scroll it into view).
   // Once the user toggles, their explicit true/false wins — so they CAN COLLAPSE
@@ -29,7 +31,7 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
   const expanded = userOverride ?? containsSelected;
 
   const renderItem = (ae: ActivityStackData['events'][number]) => {
-    const label = nodeLabel({ node_kind: ae.event.kind, payload: ae.event.payload, telemetry: ae.event.telemetry, tag: ae.event.tag, is_meta: ae.event.is_meta });
+    const label = nodeLabel({ node_kind: ae.event.kind, payload: ae.event.payload, telemetry: ae.event.telemetry, tag: ae.event.tag, is_meta: ae.event.is_meta }, t);
     const isSelected = selectedEventId === ae.event.event_id;
     // hook_event carries its own success/duration in its payload (not a
     // matched tool_result), so derive the badge + duration from there.

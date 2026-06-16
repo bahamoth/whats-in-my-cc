@@ -8,6 +8,7 @@ import type { KeyboardEvent } from 'react';
 import { CheckCircle2, Bell } from 'lucide-react';
 import type { WorkflowEndCard as EndCard } from './streamModel';
 import { endStatusLabel } from './endStatus';
+import { useT } from '../../../i18n';
 import styles from './WorkflowEndCard.module.css';
 
 function timeLabel(iso: string): string {
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export function WorkflowEndCard({ card, onSelect, selected = false }: Props) {
+  const t = useT();
   const status = endStatusLabel(card.status);
   const selectable = !!onSelect;
   return (
@@ -48,7 +50,7 @@ export function WorkflowEndCard({ card, onSelect, selected = false }: Props) {
     >
       <div className={styles.head}>
         <CheckCircle2 size={13} aria-hidden className={styles.check} />
-        <span className={styles.label}>워크플로우 종료</span>
+        <span className={styles.label}>{t('stream.workflowEndCard.label')}</span>
         {card.name && <span className={styles.name}>{card.name}</span>}
         <span className={styles.time}>{timeLabel(card.endTimestamp)}</span>
         <span className={styles.stats}>
@@ -60,20 +62,20 @@ export function WorkflowEndCard({ card, onSelect, selected = false }: Props) {
             <button
               data-testid="workflow-end-jump"
               className={styles.jump}
-              title="종료 알림 원문으로 이동"
+              title={t('stream.endCard.jumpToNotification')}
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect(card.notificationEventId);
               }}
             >
-              <Bell size={10} aria-hidden /> 알림
+              <Bell size={10} aria-hidden /> {t('stream.notification')}
             </button>
           )}
         </span>
       </div>
       {card.summary && (
         <div className={styles.summary}>
-          <span className={styles.summaryLabel}>결과</span>
+          <span className={styles.summaryLabel}>{t('stream.workflowEndCard.result')}</span>
           {card.summary}
         </div>
       )}

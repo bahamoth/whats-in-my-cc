@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { screen, fireEvent, cleanup } from '@testing-library/react';
+import { renderWithI18n as render } from '../../../../test/i18nRender';
 import '@testing-library/jest-dom/vitest';
 import { StreamLegend } from '../StreamLegend';
 

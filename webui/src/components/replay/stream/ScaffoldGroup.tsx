@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, Terminal } from 'lucide-react';
 import { MessageCard } from './MessageCard';
 import type { ScaffoldGroup as ScaffoldGroupModel } from './streamModel';
+import { useT } from '../../../i18n';
 import styles from './ScaffoldGroup.module.css';
 
 interface ScaffoldGroupProps {
@@ -30,6 +31,7 @@ export function ScaffoldGroup({
   onSelect,
   findingEventIds,
 }: ScaffoldGroupProps) {
+  const t = useT();
   // Fold policy mirrors SubagentGroup: null = no explicit choice yet → follow
   // containsSelected (auto-open when a selection lands inside so the host can
   // scroll it into view); an explicit toggle then wins. Scaffold is reference,
@@ -67,7 +69,7 @@ export function ScaffoldGroup({
           )}
           <Terminal size={13} aria-hidden className={styles.icon} />
           <span data-testid="scaffold-chip" className={styles.chip}>
-            커맨드·스킬
+            {t('stream.scaffold.chip')}
           </span>
           <span data-testid="scaffold-count" className={styles.count}>
             {count}
@@ -77,7 +79,7 @@ export function ScaffoldGroup({
             {remainder > 0 && (
               <span className={styles.hint}>
                 {namedCommands ? ' ' : ''}
-                +출처 {remainder}
+                {t('stream.scaffold.sourcePlus', remainder)}
               </span>
             )}
           </span>

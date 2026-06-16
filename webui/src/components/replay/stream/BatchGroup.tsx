@@ -19,6 +19,7 @@ import { SubagentGroup } from './SubagentGroup';
 import { formatDuration, durationHeat } from './duration';
 import { workflowTimeline, agentDurationHeat } from './workflowStats';
 import type { BatchGroup as BatchGroupModel, SidechainGroup, StreamItem } from './streamModel';
+import { useT } from '../../../i18n';
 import styles from './BatchGroup.module.css';
 
 interface BatchGroupProps {
@@ -71,6 +72,7 @@ export function BatchGroup({
   onSelect,
   findingEventIds,
 }: BatchGroupProps) {
+  const t = useT();
   // Fold policy mirrors SubagentGroup (null = no explicit choice → follow
   // containsSelected), with one addition: a STILL-RUNNING batch (settled ===
   // false) defaults to EXPANDED so progress is visible without a click. An
@@ -104,7 +106,7 @@ export function BatchGroup({
   // Always-visible mini-gantt: one lane per agent (start offset + duration) so a
   // batch shows its concurrency at a glance, symmetric with WorkflowGroup (the
   // FanPanel "요약 상시" model — spec §6.5).
-  const tl = useMemo(() => workflowTimeline(group.agentGroups), [group.agentGroups]);
+  const tl = useMemo(() => workflowTimeline(group.agentGroups, t), [group.agentGroups, t]);
   const pct = (ms: number) => (tl.spanMs > 0 ? (ms / tl.spanMs) * 100 : 0);
 
   const synthesis = group.synthesis;
@@ -122,7 +124,7 @@ export function BatchGroup({
             ? <ChevronDown size={13} aria-hidden className={styles.chevron} />
             : <ChevronRight size={13} aria-hidden className={styles.chevron} />}
           <GitFork size={13} aria-hidden className={styles.icon} />
-          <span data-testid="batch-chip" className={styles.chip}>병렬 배치</span>
+          <span data-testid="batch-chip" className={styles.chip}>{t('stream.batch.chip')}</span>
           <span data-testid="batch-meta" className={styles.meta}>
             <span>{n} agents</span>
             <span data-testid="batch-status" className={styles.status}>
@@ -134,7 +136,7 @@ export function BatchGroup({
               </span>
             )}
             {group.concurrentMainCount ? (
-              <span data-testid="batch-concurrent" className={styles.concurrent}>⟂ main {group.concurrentMainCount}건 동시</span>
+              <span data-testid="batch-concurrent" className={styles.concurrent}>{t('stream.concurrentMain', group.concurrentMainCount)}</span>
             ) : null}
           </span>
         </button>
@@ -143,8 +145,8 @@ export function BatchGroup({
           batch's outcome is always one glance away. While running it reads
           "진행 중" until the main thread's synthesis message lands. */}
       <div data-testid="batch-synthesis" className={styles.synthesis}>
-        <span className={styles.synthesisLabel}>종합</span>
-        <span className={styles.synthesisText}>{synthesis || '진행 중'}</span>
+        <span className={styles.synthesisLabel}>{t('stream.synthesisLabel')}</span>
+        <span className={styles.synthesisText}>{synthesis || t('stream.inProgress')}</span>
       </div>
       {/* always-visible mini-gantt — concurrency at a glance, even collapsed.
           S5: each lane is a button that drills JUST that agent in place. */}
@@ -159,7 +161,7 @@ export function BatchGroup({
               data-drilled={isDrilled ? 'true' : undefined}
               className={styles.lane}
               aria-expanded={isDrilled}
-              title={`${l.label} — 클릭하여 펼치기`}
+              title={t('stream.laneExpandTitle', l.label)}
               onClick={() => toggleDrill(l.id)}
             >
               <span className={styles.laneLabel}>{l.label}</span>

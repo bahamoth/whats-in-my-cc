@@ -161,4 +161,89 @@ export const ko: Messages = {
   'metric.tip.querySource': '이 요청을 보낸 주체입니다. 메인 스레드(사용자 대화) 또는 서브에이전트(general-purpose·Explore 등) — 누가 호출했는지.',
   'metric.tip.decisionSource': '이 도구 실행이 허용된 경위입니다. config = 설정에 의해 자동 허용, user = 사용자가 직접 승인 등 — 권한 결정의 출처.',
   'metric.tip.ioSize': '도구에 전달한 입력과 도구가 반환한 결과의 크기(바이트)입니다. 결과가 클수록 컨텍스트를 많이 차지합니다.',
+
+  // Stream — shared
+  'stream.reasoning': '추론',
+  'stream.notification': '알림',
+  'stream.output': '출력',
+  'stream.conclusion': '결론',
+  'stream.synthesisLabel': '종합',
+  'stream.inProgress': '진행 중',
+  'stream.concurrentMain': (n: number) => `⟂ main ${n}건 동시`,
+  'stream.laneExpandTitle': (label: string) => `${label} — 클릭하여 펼치기`,
+  'stream.conversationStart': '대화 시작',
+  'stream.workflow.agentN': (n: number) => `에이전트 ${n}`,
+
+  // Stream — autoscroll
+  'stream.autoscroll.label': '자동 스크롤',
+  'stream.autoscroll.disableAria': '자동 스크롤 끄기',
+  'stream.autoscroll.enableAria': '자동 스크롤 켜고 최신으로 이동',
+
+  // Stream — scaffold group
+  'stream.scaffold.chip': '커맨드·스킬',
+  'stream.scaffold.sourcePlus': (n: number) => `+출처 ${n}`,
+
+  // Stream — thinking marker
+  'stream.thinking.aria': '추론 — 클릭하면 응답 지표 표시 (내용은 transcript에 미수록)',
+  'stream.thinking.title': '추론 내용은 transcript에 기록되지 않습니다 (signature만 존재). 클릭하면 응답 지표를 봅니다.',
+  'stream.thinking.warnAria': '이상 응답',
+
+  // Stream — end cards
+  'stream.endCard.label': '종료',
+  'stream.endCard.jumpToNotification': '종료 알림 원문으로 이동',
+  'stream.workflowEndCard.label': '워크플로우 종료',
+  'stream.workflowEndCard.result': '결과',
+
+  // Stream — untagged Bash panel
+  'stream.untagged.jumpTitle': '이 명령의 카드로 이동',
+  'stream.untagged.jumpLabel': '카드로 ↗',
+
+  // Stream — legend
+  'stream.lane.user': '사용자',
+  'stream.lane.scaffold': '스캐폴드',
+  'stream.lane.tool': '도구',
+  'stream.lane.thinking': '추론',
+  'stream.lane.batch': '배치',
+  'stream.lane.workflow': '워크플로우',
+  'stream.legend.aria': '스트림 범례',
+  'stream.legend.move': '이동',
+  'stream.legend.nextError': '다음 오류',
+  'stream.legend.close': '범례 닫기',
+
+  // Stream — message card
+  'stream.msg.summary': '요약',
+  'stream.msg.viewRaw': '원본 보기',
+  'stream.msg.viewMarkdown': '마크다운 보기',
+  'stream.msg.bgTitle': (n: number) =>
+    `이 메시지가 진행되는 동안 백그라운드 서브에이전트 ${n}개가 실행 중이었음 (이 메시지가 백그라운드라는 뜻이 아님)`,
+  'stream.msg.bgRunning': (n: number) => `⟂ 백그라운드 ${n}개 실행 중`,
+  'stream.msg.done': '완료',
+  'stream.msg.jumpToCommand': '원래 명령으로 이동',
+  'stream.msg.commandJump': '↳ 명령',
+  'stream.msg.showMore': '더 보기',
+  'stream.msg.collapse': '접기',
+
+  // Stream — batch group
+  'stream.batch.chip': '병렬 배치',
+
+  // Stream — subagent group
+  'stream.subagent.messages': (n: number) => `메시지 ${n}`,
+  'stream.subagent.tools': (n: number) => `도구 ${n}`,
+  'stream.subagent.done': '✓ 완료',
+  'stream.subagent.running': '● 실행 중',
+  'stream.subagent.jumpToTask': '호출한 Task로 이동',
+
+  // Stream — workflow group
+  'stream.workflow.chip': '워크플로우',
+  'stream.workflow.jumpTitle': '이 워크플로우를 띄운 Workflow 호출로 이동',
+  'stream.workflow.jumpAria': 'Workflow 호출로 이동',
+  'stream.workflow.call': '호출',
+  'stream.workflow.maxConcurrency': '최대 병렬',
+  'stream.workflow.longest': '최장',
+  'stream.workflow.median': '중앙값',
+  'stream.workflow.incomplete': '미완',
+
+  // Stream — query source (who issued the LLM request)
+  'stream.querySource.mainThread': '메인 스레드',
+  'stream.querySource.subagent': (name: string) => `서브에이전트 · ${name}`,
 };

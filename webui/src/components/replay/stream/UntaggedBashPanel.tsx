@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import type { ObservedEventDto } from '../../../api/types';
 import { collectUntagged } from './eventTags';
+import { useT } from '../../../i18n';
 import styles from './UntaggedBashPanel.module.css';
 
 interface UntaggedBashPanelProps {
@@ -12,6 +13,7 @@ interface UntaggedBashPanelProps {
 }
 
 export function UntaggedBashPanel({ events, onJump }: UntaggedBashPanelProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const rows = useMemo(() => collectUntagged(events), [events]);
   return (
@@ -33,13 +35,13 @@ export function UntaggedBashPanel({ events, onJump }: UntaggedBashPanelProps) {
                     type="button"
                     data-testid={`untagged-jump-${r.token}`}
                     className={styles.jump}
-                    title="이 명령의 카드로 이동"
+                    title={t('stream.untagged.jumpTitle')}
                     onClick={() => {
                       onJump(r.eventId);
                       setOpen(false);
                     }}
                   >
-                    카드로 ↗
+                    {t('stream.untagged.jumpLabel')}
                   </button>
                 )}
               </div>

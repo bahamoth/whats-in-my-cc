@@ -117,11 +117,11 @@ export function ResponseMetricsRows({ metrics }: { metrics: LlmRequestMetrics })
           warn={metrics.success === false}
         />
         <Row labelKey="metric.label.model" value={metrics.model ?? '—'} />
-        {formatQuerySource(metrics.querySource) && (
+        {formatQuerySource(metrics.querySource, t) && (
           <Row
             labelKey="metric.label.querySource"
             tipKey="metric.tip.querySource"
-            value={formatQuerySource(metrics.querySource)!}
+            value={formatQuerySource(metrics.querySource, t)!}
           />
         )}
       </MetricGroup>

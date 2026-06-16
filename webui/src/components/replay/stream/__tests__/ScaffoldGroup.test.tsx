@@ -7,7 +7,8 @@
 //  - Expanded: each MessageCard renders.
 //  - Selection inside the group auto-expands it.
 // Anchored to session 5bde98d8's 6-card scaffold run (design 2026-06-14 §1).
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithI18n as render } from '../../../../test/i18nRender';
 import { describe, it, expect, vi } from 'vitest';
 import { ScaffoldGroup } from '../ScaffoldGroup';
 import type { MessageItem, ScaffoldGroup as ScaffoldGroupModel } from '../streamModel';
