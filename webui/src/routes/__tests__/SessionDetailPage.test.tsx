@@ -6,17 +6,20 @@ import '@testing-library/jest-dom/vitest';
 import SessionDetailPage from '../SessionDetailPage';
 import { MockEventSource } from '../../test/MockEventSource';
 import { createQueryClient } from '../../lib/queryClient';
+import { I18nProvider } from '../../i18n';
 
 function rendered(sessionId: string, search = '') {
   const qc = createQueryClient();
   return render(
-    <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[`/sessions/${sessionId}${search}`]}>
-        <Routes>
-          <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>,
+    <I18nProvider initialLocale="ko">
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[`/sessions/${sessionId}${search}`]}>
+          <Routes>
+            <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </I18nProvider>,
   );
 }
 

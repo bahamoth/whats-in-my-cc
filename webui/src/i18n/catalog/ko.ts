@@ -13,4 +13,14 @@ export const ko: Messages = {
   'lang.group': '언어',
   'lang.switchToEnglish': 'Switch to English',
   'lang.switchToKorean': '한국어로 전환',
+
+  // Common
+  'common.loadingEarlier': '이전 메시지 불러오는 중…',
+
+  // Session list
+  'sessions.searchPlaceholder': '⌕ 프로젝트·슬러그 검색… ( / )',
+  'sessions.searchAria': '세션 검색',
+
+  // Session detail
+  'detail.analysisToggle': '분석',
 };

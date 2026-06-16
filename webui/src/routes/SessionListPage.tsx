@@ -4,7 +4,7 @@ import { listSessions, ApiError } from '../api/client';
 import type { SessionListItem } from '../api/types';
 import { useLiveStream, type LiveEnvelope } from '../hooks/useLiveStream';
 import { relativeTime, formatModel } from '../lib/format';
-import { useLocale } from '../i18n';
+import { useLocale, useT } from '../i18n';
 import styles from './SessionListPage.module.css';
 
 type SortKey = 'last_observed_at' | 'event_count' | 'session_id';
@@ -108,6 +108,7 @@ function matchesQuery(r: SessionListItem, q: string): boolean {
 
 export default function SessionListPage() {
   const { locale } = useLocale();
+  const t = useT();
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [sortKey, setSortKey] = useState<SortKey>('last_observed_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -246,8 +247,8 @@ export default function SessionListPage() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="⌕ 프로젝트·슬러그 검색… ( / )"
-              aria-label="세션 검색"
+              placeholder={t('sessions.searchPlaceholder')}
+              aria-label={t('sessions.searchAria')}
             />
           </div>
           <table className={styles.table}>

@@ -36,6 +36,7 @@ import {
   buildToolMetricsFromEvents,
   buildLlmMetricsFromEvents,
 } from '../components/replay/detail/eventMetrics';
+import { useT } from '../i18n';
 import styles from './SessionDetailPage.module.css';
 
 // Debounce window for SSE-driven backfill: an envelope burst collapses to one
@@ -43,6 +44,7 @@ import styles from './SessionDetailPage.module.css';
 const BACKFILL_DEBOUNCE_MS = 600;
 
 function SessionDetailInner({ sessionId }: { sessionId: string }) {
+  const t = useT();
   const sel = useReplaySelection();
 
   const detail = useSessionDetailQuery(sessionId);
@@ -340,7 +342,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               onClick={() => setAnalysisOpen((v) => !v)}
             >
               <BarChart3 size={13} aria-hidden />
-              분석
+              {t('detail.analysisToggle')}
             </button>
           </div>
 
@@ -360,7 +362,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
             {window_.loading === 'older' && (
               <div className={styles.loadingOlder} role="status" aria-live="polite">
                 <span className={styles.spinner} aria-hidden />
-                이전 메시지 불러오는 중…
+                {t('common.loadingEarlier')}
               </div>
             )}
             <ConversationStream
