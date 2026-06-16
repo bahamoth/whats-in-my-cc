@@ -2,6 +2,7 @@
  * PR-3 — display formatters. Always return "—" for null / undefined /
  * NaN / negative values so the UI never shows raw `NaN` or `undefined`.
  */
+import type { Locale } from '../i18n/detect';
 
 const PLACEHOLDER = '—';
 
@@ -69,25 +70,33 @@ export function formatBytes(bytes: number | null | undefined): string {
 }
 
 /**
- * S6 (UX 재설계) — Korean relative time for the session list. "방금" under a
- * minute, then `N분/시간/일 전`, falling back to a `YYYY-MM-DD` date past 30
- * days so old rows read as a date, not "812일 전". Returns "—" for unparseable
- * input. `nowMs` is injected so the formatter stays pure and testable.
+ * S6 (UX 재설계) — relative time for the session list. "just now" / "방금"
+ * under a minute, then minutes / hours / days, falling back to a `YYYY-MM-DD`
+ * date past 30 days so old rows read as a date, not "812 days ago". Returns "—"
+ * for unparseable input. `nowMs` is injected so the formatter stays pure and
+ * testable. l10n — the wording is keyed off `locale` (English by default, the
+ * source language); the unit words live here rather than in the catalog to keep
+ * format.ts a pure function with no i18n-Provider coupling. The caller injects
+ * the active locale via useLocale().
  */
-export function relativeTime(iso: string | null | undefined, nowMs: number): string {
+export function relativeTime(
+  iso: string | null | undefined,
+  nowMs: number,
+  locale: Locale = 'en',
+): string {
   if (!iso) return PLACEHOLDER;
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return PLACEHOLDER;
+  const ko = locale === 'ko';
   const diffMs = nowMs - t;
-  if (diffMs < 0) return '방금';
-  const sec = Math.floor(diffMs / 1000);
-  if (sec < 60) return '방금';
+  const sec = Math.floor(Math.max(diffMs, 0) / 1000);
+  if (sec < 60) return ko ? '방금' : 'just now';
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}분 전`;
+  if (min < 60) return ko ? `${min}분 전` : `${min} min ago`;
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}시간 전`;
+  if (hr < 24) return ko ? `${hr}시간 전` : `${hr} hr ago`;
   const day = Math.floor(hr / 24);
-  if (day <= 30) return `${day}일 전`;
+  if (day <= 30) return ko ? `${day}일 전` : `${day} day${day === 1 ? '' : 's'} ago`;
   return new Date(t).toISOString().slice(0, 10);
 }
 

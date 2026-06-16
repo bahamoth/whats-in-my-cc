@@ -110,28 +110,55 @@ describe('formatBytes', () => {
   });
 });
 
-// S6 (UX 재설계) — Korean relative time for the session list "last seen" column.
+// S6 (UX 재설계) — relative time for the session list "last seen" column.
+// l10n — the wording is locale-aware; the caller injects the active locale.
 describe('relativeTime', () => {
   const now = Date.parse('2026-06-15T12:00:00Z');
-  it('renders just-now under a minute as 방금', () => {
-    expect(relativeTime('2026-06-15T11:59:40Z', now)).toBe('방금');
+
+  describe('Korean (ko)', () => {
+    it('renders just-now under a minute as 방금', () => {
+      expect(relativeTime('2026-06-15T11:59:40Z', now, 'ko')).toBe('방금');
+    });
+    it('renders minutes', () => {
+      expect(relativeTime('2026-06-15T11:57:00Z', now, 'ko')).toBe('3분 전');
+    });
+    it('renders hours', () => {
+      expect(relativeTime('2026-06-15T10:00:00Z', now, 'ko')).toBe('2시간 전');
+    });
+    it('renders days', () => {
+      expect(relativeTime('2026-06-13T12:00:00Z', now, 'ko')).toBe('2일 전');
+    });
+    it('falls back to a date for older timestamps', () => {
+      expect(relativeTime('2026-04-01T12:00:00Z', now, 'ko')).toBe('2026-04-01');
+    });
   });
-  it('renders minutes', () => {
-    expect(relativeTime('2026-06-15T11:57:00Z', now)).toBe('3분 전');
+
+  describe('English (en)', () => {
+    it('renders just-now under a minute', () => {
+      expect(relativeTime('2026-06-15T11:59:40Z', now, 'en')).toBe('just now');
+    });
+    it('renders minutes', () => {
+      expect(relativeTime('2026-06-15T11:57:00Z', now, 'en')).toBe('3 min ago');
+    });
+    it('renders hours', () => {
+      expect(relativeTime('2026-06-15T10:00:00Z', now, 'en')).toBe('2 hr ago');
+    });
+    it('renders days, pluralizing past one', () => {
+      expect(relativeTime('2026-06-14T12:00:00Z', now, 'en')).toBe('1 day ago');
+      expect(relativeTime('2026-06-13T12:00:00Z', now, 'en')).toBe('2 days ago');
+    });
+    it('falls back to a date for older timestamps', () => {
+      expect(relativeTime('2026-04-01T12:00:00Z', now, 'en')).toBe('2026-04-01');
+    });
   });
-  it('renders hours', () => {
-    expect(relativeTime('2026-06-15T10:00:00Z', now)).toBe('2시간 전');
+
+  it('defaults to English when no locale is given', () => {
+    expect(relativeTime('2026-06-15T11:57:00Z', now)).toBe('3 min ago');
   });
-  it('renders days', () => {
-    expect(relativeTime('2026-06-13T12:00:00Z', now)).toBe('2일 전');
-  });
-  it('falls back to a date for older timestamps', () => {
-    // > 30 days → ISO date prefix, not a relative phrase
-    expect(relativeTime('2026-04-01T12:00:00Z', now)).toBe('2026-04-01');
-  });
+
   it('returns placeholder for invalid input', () => {
-    expect(relativeTime('not-a-date', now)).toBe('—');
-    expect(relativeTime('', now)).toBe('—');
+    expect(relativeTime('not-a-date', now, 'en')).toBe('—');
+    expect(relativeTime('', now, 'ko')).toBe('—');
   });
 });
 
