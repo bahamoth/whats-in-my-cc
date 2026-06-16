@@ -12,6 +12,7 @@ export const en = {
   'a11y.sidePanel': 'Side panel',
 
   // Language switcher
+  'lang.group': 'Language',
   'lang.switchToEnglish': 'Switch to English',
   'lang.switchToKorean': 'Switch to Korean',
 };
