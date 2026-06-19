@@ -207,7 +207,9 @@ traces는 beta다 — `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`이 없으면 SDK�
 
 > Hook lifecycle event는 transcript live tail에서 수집된다(hook 실행 결과가
 > transcript에 남는다). 따라서 forward 스크립트 연동이 필요 없다. `/hooks/v1/events`
-> collector는 2026-06에 제거됐다 — `docs/implementation-notes.html` 참고.
+> collector는 2026-06에 제거됐다 — `docs/implementation-notes.html` 참고. 기본(`7878`)과
+> 다른 포트로 띄우면 `WIMCC_PORT`로 지정 — `session-retrospect` 플러그인의 MCP 연결이
+> 따라간다(예: `WIMCC_PORT=9000`).
 
 ### Smoke test
 
