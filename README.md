@@ -219,32 +219,20 @@ emits spans. Records without `session.id` are stored but excluded from
 
 ### Hooks
 
-Register a forward script for the lifecycle events you care about
-(`PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStop`,
-`Notification`, `PreCompact`, `SessionStart`, `SessionEnd`):
+Install the `session-retrospect` plugin and a **SessionStart hook is registered
+automatically** — it forwards the session-start CLAUDE.md snapshot
+(`instruction_snapshot`) to wimcc, which is the independent variable
+(`claude_md`/`instruction_sha256`) for self-improvement cohort analysis
+(`fingerprint`). CLAUDE.md is never recorded in the transcript, so this hook is
+the only way to observe it. **No `settings.json` editing required.**
 
-```jsonc
-{
-  "hooks": {
-    "PreToolUse":  [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/wimcc-forward.sh" }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/wimcc-forward.sh" }] }]
-    // … repeat for the other events
-  }
-}
-```
+If you run wimcc on a non-default port, set `WIMCC_PORT` — both the hook and the
+MCP connection follow it (e.g. `WIMCC_PORT=9000`).
 
-`/usr/local/bin/wimcc-forward.sh`:
-
-```bash
-#!/bin/bash
-exec curl -sS -m 2 -X POST \
-  -H 'content-type: application/json' \
-  --data-binary @- \
-  http://127.0.0.1:7878/hooks/v1/events > /dev/null 2>&1 || true
-```
-
-`-m 2` + `|| true` gives **fail-soft degrade semantics** (PRD OBS-3): if wimcc
-is down or slow, your Claude Code session is never blocked.
+The forward is fail-soft (`-m 2` + `|| true`, PRD OBS-3): if wimcc is down or
+slow your session is never blocked. Other lifecycle events (PreToolUse,
+PostToolUse, …) are already captured via transcript live tail, so manual forward
+registration is unnecessary (duplicate).
 
 ### Smoke tests
 
