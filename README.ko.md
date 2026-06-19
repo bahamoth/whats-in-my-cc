@@ -209,32 +209,18 @@ traces는 beta다 — `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`이 없으면 SDK�
 
 ### Hooks
 
-관심 있는 lifecycle event(`PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`,
-`SubagentStop`, `Notification`, `PreCompact`, `SessionStart`, `SessionEnd`)에 forward
-스크립트를 등록한다:
+`session-retrospect` 플러그인을 설치하면 **SessionStart hook이 자동 등록**되어, 세션
+시작 시점의 CLAUDE.md 스냅샷(`instruction_snapshot`)을 wimcc로 forward한다 — 자기개선
+코호트 분석(`fingerprint`)의 독립변수(`claude_md`/`instruction_sha256`)다. transcript에는
+CLAUDE.md가 남지 않으므로 이 경로가 유일한 관측 수단이다. **별도 `settings.json` 편집은
+필요 없다.**
 
-```jsonc
-{
-  "hooks": {
-    "PreToolUse":  [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/wimcc-forward.sh" }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/wimcc-forward.sh" }] }]
-    // … 나머지 event도 동일하게 반복
-  }
-}
-```
+wimcc를 기본(`7878`)과 다른 포트로 띄우면 `WIMCC_PORT` 환경변수로 지정한다 — hook과 MCP
+연결이 함께 그 포트를 따라간다(예: `WIMCC_PORT=9000`).
 
-`/usr/local/bin/wimcc-forward.sh`:
-
-```bash
-#!/bin/bash
-exec curl -sS -m 2 -X POST \
-  -H 'content-type: application/json' \
-  --data-binary @- \
-  http://127.0.0.1:7878/hooks/v1/events > /dev/null 2>&1 || true
-```
-
-`-m 2` + `|| true`는 **fail-soft degrade 시맨틱**(PRD OBS-3)을 구현한다: wimcc가
-죽었거나 느려도 Claude Code 세션은 절대 막히지 않는다.
+forward는 fail-soft다(`-m 2` + `|| true`, PRD OBS-3) — wimcc가 죽었거나 느려도 세션은
+막히지 않는다. PreToolUse/PostToolUse 등 다른 lifecycle은 transcript live tail로 이미
+수집되므로 수동 forward 등록은 불필요하다(중복).
 
 ### Smoke test
 
