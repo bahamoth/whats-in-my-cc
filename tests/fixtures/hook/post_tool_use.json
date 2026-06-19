@@ -1,8 +1,0 @@
-{
-  "session_id": "sess_fix_A",
-  "hook_event_name": "PostToolUse",
-  "tool_name": "Bash",
-  "tool_input": {"command": "ls -la"},
-  "tool_response": {"stdout": "total 0\n", "stderr": "", "exit_code": 0},
-  "tool_use_id": "toolu_pre_01"
-}

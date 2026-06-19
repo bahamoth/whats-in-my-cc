@@ -68,8 +68,6 @@ async fn fingerprint_endpoint_returns_envelope_with_models() {
     assert_eq!(data["session_id"], "sess_fp_api");
     assert_eq!(data["models"][0], "claude-opus-4-7");
     assert_eq!(data["cc_versions"][0], "2.1.0");
-    assert!(data["claude_md"].as_array().unwrap().is_empty());
-    assert!(data["instruction_sha256"].is_null());
 }
 
 #[tokio::test]

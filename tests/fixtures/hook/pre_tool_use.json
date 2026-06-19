@@ -1,7 +1,0 @@
-{
-  "session_id": "sess_fix_A",
-  "hook_event_name": "PreToolUse",
-  "tool_name": "Bash",
-  "tool_input": {"command": "ls -la"},
-  "tool_use_id": "toolu_pre_01"
-}

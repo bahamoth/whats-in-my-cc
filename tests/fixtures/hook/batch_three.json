@@ -1,5 +1,0 @@
-[
-  {"session_id": "sess_fix_B", "hook_event_name": "PreToolUse",  "tool_name": "Bash", "tool_use_id": "toolu_b_01"},
-  {"session_id": "sess_fix_B", "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "toolu_b_01", "tool_response": {"exit_code": 0}},
-  {"session_id": "sess_fix_B", "hook_event_name": "Stop"}
-]

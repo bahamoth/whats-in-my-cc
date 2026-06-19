@@ -5202,44 +5202,25 @@ vitest: 69 passed
   </section>
 
   <section>
-    <h2 id="sessionstart-hook-plugin-2026-06-19">SessionStart forward hook 검토 → 미채택 (2026-06-19)</h2>
-    <p><strong>결론: 미채택.</strong> 아래 설계대로 구현하고 smoke까지 했으나(instruction_snapshot 0→1 생성 확인),
-    순증분이 단일 사용자 환경에서 (a) <strong>git 이력으로 대체 가능</strong>하고(세션이 본 CLAUDE.md가 git에 커밋된 단일
-    프로젝트 파일·working tree clean·유저전역/조상 CLAUDE.md 부재 — 실측), (b) 자기개선 코호트 분석이 표본·교란 변수로
-    신뢰성이 약해, 효용이 비용을 정당화하지 못한다고 판단해 되돌렸다. <code>.mcp.json</code> 포트 동적화
-    (<code>${WIMCC_PORT:-7878}</code>)만 채택. 아래는 검토 기록(미래에 같은 검토를 반복하지 않기 위해 보존).</p>
-    <p>collector forward를 <code>session-retrospect</code> 플러그인이 <code>hooks/hooks.json</code>으로
-    번들한다. 사용자가 <code>settings.json</code>을 직접 편집하지 않고 플러그인 설치만으로 SessionStart
-    forward가 활성화된다. <strong>SessionStart만</strong> 등록 — PreToolUse/PostToolUse 등 다른
-    lifecycle은 transcript live tail로 이미 수집되므로 중복이라 제외한다.</p>
-    <h3>왜 SessionStart만인가</h3>
-    <p>SessionStart 수신 시 <code>src/ingest/hook.rs</code>가 그 시점의 CLAUDE.md를
-    <code>instruction_snapshot</code>으로 캡처(<code>payload.captured.claude_md</code>)하고,
-    <code>src/insight/fingerprint.rs</code>가 이를 자기개선 코호트의 독립변수
-    (<code>claude_md</code> / group key <code>instruction_sha256</code>)로 소비한다. transcript에는
-    CLAUDE.md가 기록되지 않으므로(2026-06-12 실측) 이 hook 경로가 유일한 관측 수단이다. 다른 collector
-    신호(tool_input·prompt·last_assistant_message 등)는 transcript/OTel과 중복이라 추가 가치가 없다.</p>
-    <h3>포트 동적화</h3>
-    <p>hook command와 <code>.mcp.json</code> url 모두 <code>${WIMCC_PORT:-7878}</code>를 쓴다 —
-    한 환경변수로 hook과 MCP가 같은 포트를 따라간다(스모크 테스트 중 포트 변경 대응).
-    <code>.mcp.json</code>은 url 필드 환경변수 치환을 지원하며(code.claude.com/docs/mcp), default 없는
-    미설정 var는 파싱 실패하므로 <code>:-7878</code> 기본값이 필수다.</p>
-    <h3>Non-goals 정합성</h3>
-    <p>CLAUDE.md Non-goals("Claude Code hook 변경 금지")와 README("wimcc는 settings.json을 자동
-    수정하지 않는다")는 여전히 유효하다. 플러그인이 자기 hook을 번들하는 것은 wimcc가 사용자 settings를
-    변경하는 것이 아니라, 사용자의 <em>설치 선택</em>으로 활성화되는 표준 플러그인 메커니즘이다 —
-    "몰래 환경을 바꾸지 않는다"는 정신과 충돌하지 않는다.</p>
-    <h3>검증 (smoke, 2026-06-19)</h3>
-    <p>다른 프로젝트(lhh-liveops)에서 띄운 새 세션으로 end-to-end 확인 — <strong>wimcc 재빌드 없이</strong>
-    기존 <code>serve</code> 바이너리가 수신(수신·instruction_snapshot·fingerprint는 기존 기능):</p>
+    <h2 id="hook-collector-removed-2026-06-19">hook collector 전면 제거 (2026-06-19)</h2>
+    <p>collector forward 경로(<code>POST /hooks/v1/events</code>)를 코드·테스트·문서에서 제거했다.
+    동기: 단일 사용자 MVP 범위에서 collector hook이 transcript live tail과 대부분 중복이고, 유일한
+    비중복 신호였던 SessionStart <code>instruction_snapshot</code>(CLAUDE.md 지문)조차 git 이력으로
+    대체 가능 + 자기개선 코호트 분석이 표본·교란으로 신뢰성이 약해 효용이 비용을 정당화하지 못한다고
+    판단. 검토·미채택 경위는 <code>docs/superpowers/</code>의 2026-06-19 spec/plan 참고.</p>
+    <h3>제거 대상</h3>
     <ul>
-      <li>collector SessionStart 1건 수신 → matcher 파이프(<code>startup|resume|clear|compact</code>) <strong>지원 확인</strong>.</li>
-      <li><code>captured.claude_md</code> 0→1 (instruction_snapshot 최초 생성). SessionStart payload에 <code>cwd</code> 포함 <strong>확인</strong>(없으면 미생성됨).</li>
-      <li>새 세션은 <code>session_start</code>만 수신(타 lifecycle 0건) → 플러그인이 SessionStart만 forward함을 실증.</li>
-      <li>플러그인이 유저 전역 enabled라 <strong>프로젝트 무관</strong> 동작 — 다른 프로젝트 세션의 CLAUDE.md도 캡처된다.</li>
+      <li>코드: <code>src/api/hook.rs</code>, <code>src/ingest/hook.rs</code>, <code>src/ingest/instruction_snapshot.rs</code>, route <code>/hooks/v1/events</code>, <code>pub mod hook</code> ×2.</li>
+      <li><code>src/insight/fingerprint.rs</code>: <code>claude_md</code>/<code>instruction_sha256</code> 필드(collector SessionStart 의존). 나머지(models·cc_versions·git_branches·cwds·entrypoints)는 transcript/observed 기반이라 유지.</li>
+      <li><code>src/doctor/</code>: hook forward 진단(<code>HookEntry</code>·<code>forwards_to_wimcc</code>·"Hook forwarding" 섹션·managed hook policy). env/scope/server 진단은 유지.</li>
+      <li><code>/v1/health/sources</code> taxonomy에서 <code>hook</code> 라벨 제거 → transcript + OTel 3종 = 4개.</li>
+      <li>테스트/fixture: <code>tests/hook_ingest.rs</code>, <code>tests/hook_session_start_snapshot.rs</code>, <code>tests/fixtures/hook/</code>. SSE·events 통합 테스트의 hook burst는 otel/DB-insert로 교체(invariant 보존).</li>
+      <li>README ×2: 관측 표 Hook lifecycle 행·엔드포인트·연동 절·smoke·serve/doctor 문구.</li>
     </ul>
-    <p>설계·계획: <code>docs/superpowers/specs/2026-06-19-session-retrospect-sessionstart-hook-design.md</code>,
-    <code>docs/superpowers/plans/2026-06-19-sessionstart-forward-hook.md</code>.</p>
+    <h3>유지</h3>
+    <p>transcript live tail이 수집하는 <code>hook_event</code>(subkind <code>hook_success</code>/<code>hook_additional_context</code>/…)는 그대로다. "hook이 무엇을 했는가"는 transcript에 남으므로 collector 없이도 관측된다. <code>EventKind::HookEvent</code>·WebUI hookFacet·event_tags 모두 유지.</p>
+    <h3>spec 동기화 (진행/후속)</h3>
+    <p>docs/02·03·04·05의 "현행 동작" 기술(OTel/hook collector, <code>/hooks/v1/events</code>, source_type <code>hook</code> 등)은 코드에 맞춰 정리한다. <strong>PRD OBS-3</strong>(<code>docs/00</code> "Hook Lifecycle Capture")는 제품 요구사항이라, collector 폐지에 맞춰 "hook lifecycle을 transcript에서 관측"으로 재정의할지 폐기할지는 제품 결정 — 임의 수정하지 않는다(CLAUDE.md).</p>
   </section>
 
 </main>

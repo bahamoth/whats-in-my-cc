@@ -133,10 +133,9 @@ fn doctor_json_mode_emits_parseable_report() {
     assert!(v["envs"].is_array());
     assert!(v["server"]["reachable"].as_bool().unwrap());
     let sources = v["server"]["sources"].as_array().unwrap();
-    // Slice-10a — taxonomy shrank from 6 to 5: file-git removed (filesystem
-    // watcher + git poller are gone). File lineage now derives from
-    // transcript structuredPatch, surfaced under the "transcript" source.
-    assert_eq!(sources.len(), 5, "fixed taxonomy of 5 sources");
+    // Slice-10a — file-git removed. 2026-06-19 — hook removed with the hook
+    // collector. Remaining taxonomy: transcript + 3 OTel signals.
+    assert_eq!(sources.len(), 4, "fixed taxonomy of 4 sources");
     // --json always exits 0
     assert_eq!(out.status.code(), Some(0));
 }
@@ -233,54 +232,6 @@ fn doctor_v02_local_overrides_project_scope() {
     let entry = &v["effective_env"]["OTEL_EXPORTER_OTLP_ENDPOINT"];
     assert_eq!(entry["value"], "http://local:7878/otel");
     assert_eq!(entry["scope"], "local");
-}
-
-#[test]
-fn doctor_v02_plugin_manifest_hook_picked_up() {
-    let (mut child, url, _db, _cfg) = spawn_server(&[]);
-    let tmp = tempfile::tempdir().unwrap();
-    let plugins_root = tmp.path().join("plugins");
-    let plugin_dir = plugins_root.join("my-plugin");
-    std::fs::create_dir_all(&plugin_dir).unwrap();
-    write_json(
-        &plugin_dir.join("plugin.json"),
-        &serde_json::json!({
-            "hooks": {
-                "PostToolUse": [{
-                    "hooks": [{ "type": "command", "command": "curl -d @- http://127.0.0.1:7878/hooks/v1/events" }]
-                }]
-            }
-        }),
-    );
-    let project = tempfile::tempdir().unwrap();
-    std::fs::create_dir_all(project.path().join(".git")).unwrap();
-    let out = AssertCmd::cargo_bin("wimcc")
-        .unwrap()
-        .args([
-            "doctor",
-            "--json",
-            "--server",
-            &url,
-            "--project",
-            project.path().to_str().unwrap(),
-        ])
-        .env("WIMCC_DOCTOR_PLUGINS_ROOT", &plugins_root)
-        .output()
-        .expect("doctor");
-    let _ = child.kill();
-    let v: serde_json::Value =
-        serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).expect("json");
-    let plugin_hooks = v["plugin_hooks"].as_array().expect("plugin_hooks array");
-    let any_wimcc = plugin_hooks
-        .iter()
-        .any(|h| h["forwards_to_wimcc"].as_bool().unwrap_or(false));
-    assert!(
-        any_wimcc,
-        "plugin hook forwarding to /hooks/v1/events should be flagged"
-    );
-    assert!(plugin_hooks
-        .iter()
-        .any(|h| h["scope"].as_str().unwrap_or("").starts_with("plugin:")));
 }
 
 #[test]
