@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.9.0...v1.0.0) (2026-06-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* POST /hooks/v1/events 엔드포인트 제거. hook 정보는 transcript에서 수집된다.
+
+### Features
+
+* remove hook collector (POST /hooks/v1/events) ([8e29ecf](https://github.com/bahamoth/whats-in-my-cc/commit/8e29ecf28b78467ea2450e8eb74923cf494f05b1))
+* **session-retrospect:** MCP url 포트를 WIMCC_PORT로 동적화 ([7aa820e](https://github.com/bahamoth/whats-in-my-cc/commit/7aa820e94a38de96304ab10d25987b09d5bc3d1e))
+* **session-retrospect:** SessionStart forward hook 번들 ([ce3e2e0](https://github.com/bahamoth/whats-in-my-cc/commit/ce3e2e0a2ac9c60adf68aa1dc16eb991f08c8356))
+
 ## [0.9.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.8.0...v0.9.0) (2026-06-16)
 
 
