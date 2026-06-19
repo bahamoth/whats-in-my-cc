@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** ❌ 미채택 — 구현·smoke까지 마쳤으나 효용 검증 실패로 되돌림(`.mcp.json` 포트 동적화만 채택). 근거는 design doc·implementation-notes.
+
 **Goal:** `session-retrospect` 플러그인을 설치하면 별도 settings 편집 없이 SessionStart hook이 wimcc로 forward되어, fingerprint 자기개선 독립변수(`claude_md`/`instruction_sha256`)의 유일 소스인 instruction_snapshot을 수집한다.
 
 **Architecture:** 플러그인 루트에 `hooks/hooks.json`을 추가해 SessionStart에 인라인 `command` curl forward를 건다. 같은 플러그인의 `.mcp.json` url과 함께 `${WIMCC_PORT:-7878}`로 포트를 동적화한다. wimcc 백엔드(`/hooks/v1/events` 수신, `instruction_snapshot` 캡처, `fingerprint` 소비)는 이미 구현돼 있어 Rust 변경은 없다.
