@@ -86,7 +86,6 @@ pub async fn health_sources(State(pool): State<SqlitePool>) -> impl IntoResponse
         ("otel", "otel-traces"),
         ("otel-metrics", "otel-metrics"),
         ("otel-logs", "otel-logs"),
-        ("hook", "hook"),
     ];
     let rows = sqlx::query(
         "SELECT source_type,

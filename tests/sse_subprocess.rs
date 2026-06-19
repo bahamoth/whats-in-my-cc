@@ -6,6 +6,9 @@
 //!
 //! Uses raw `std::net::TcpStream` HTTP to avoid pulling reqwest's blocking
 //! feature into dev-deps just for these tests.
+//!
+//! (Hook-driven SSE tests removed 2026-06-19 with the hook collector; OTLP
+//! metrics is now the cheapest ingest path to drive these subprocess tests.)
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -150,6 +153,34 @@ fn http_post_json(host: &str, path: &str, body: &str) {
     let _ = s.read_to_end(&mut sink);
 }
 
+/// OTLP/JSON metrics body with a single data point tagged with `session_id`.
+/// The cheapest ingest path to drive these subprocess SSE tests now that the
+/// hook collector is gone.
+fn otel_metric_body(session_id: &str) -> String {
+    serde_json::json!({
+        "resourceMetrics": [{
+            "resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "claude-code"}}]},
+            "scopeMetrics": [{
+                "metrics": [{
+                    "name": "claude_code.cost.usage",
+                    "sum": {
+                        "dataPoints": [{
+                            "asDouble": 0.01,
+                            "timeUnixNano": "1716200000000000000",
+                            "attributes": [
+                                {"key": "session.id", "value": {"stringValue": session_id}}
+                            ]
+                        }],
+                        "aggregationTemporality": 2,
+                        "isMonotonic": true
+                    }
+                }]
+            }]
+        }]
+    })
+    .to_string()
+}
+
 /// Spec §5 row 1 regression — connecting without a cursor must NOT receive
 /// any backfill frames. Earlier impl flooded clients with the oldest 10k
 /// rows, burying any recent envelope behind weeks of old data and breaking
@@ -158,16 +189,12 @@ fn http_post_json(host: &str, path: &str, body: &str) {
 fn no_cursor_means_no_backfill() {
     let (mut child, host, _db, _token, _cfg) = spawn_serve_with(&[]);
 
-    // Seed the DB with one hook BEFORE the SSE client connects.
-    let body = serde_json::json!({
-        "session_id":      "seeded_session",
-        "hook_event_name": "PreToolUse",
-        "tool_name":       "Bash",
-        "tool_input":      {"command": "x"},
-        "tool_use_id":     "toolu_seed"
-    })
-    .to_string();
-    http_post_json(&host, "/hooks/v1/events", &body);
+    // Seed the DB with one row BEFORE the SSE client connects.
+    http_post_json(
+        &host,
+        "/otel/v1/metrics",
+        &otel_metric_body("seeded_session"),
+    );
     std::thread::sleep(Duration::from_millis(200));
 
     // Connect SSE without cursor. Expect zero `data:` frames within a short
@@ -192,49 +219,7 @@ fn no_cursor_means_no_backfill() {
     );
 }
 
-/// E-5 — hook POST emits SSE frame. Hooks are the cheapest ingest path to
-/// drive in a subprocess test: synchronous POST, immediate response, single
-/// row inserted.
-#[test]
-fn binary_emits_sse_for_hooks() {
-    let (mut child, host, _db, _token, _cfg) = spawn_serve_with(&[]);
-
-    // Open SSE listener in a worker thread; we read while the main thread
-    // triggers the hook POST.
-    let host_for_sse = host.clone();
-    let reader = std::thread::spawn(move || {
-        let s = open_sse(&host_for_sse, "");
-        read_until_data_frame(s, Duration::from_secs(5))
-    });
-
-    // Tiny pause so the SSE handshake reaches subscribe-before-INSERT.
-    std::thread::sleep(Duration::from_millis(250));
-
-    let body = serde_json::json!({
-        "session_id":      "sess_subproc_hook",
-        "hook_event_name": "PreToolUse",
-        "tool_name":       "Bash",
-        "tool_input":      {"command": "ls"},
-        "tool_use_id":     "toolu_subproc"
-    })
-    .to_string();
-    http_post_json(&host, "/hooks/v1/events", &body);
-
-    let body = reader.join().expect("reader thread");
-    let _ = child.kill();
-
-    assert!(
-        body.contains("data:"),
-        "expected SSE data frame in body, got: {body:?}"
-    );
-    assert!(
-        body.contains("\"source_type\":\"hook\""),
-        "expected hook source_type in envelope, got: {body:?}"
-    );
-}
-
 /// E-3 — OTLP/JSON metrics POST emits SSE frames (one per data point).
-/// Anchored on the real slice-6 v01 fixture.
 #[test]
 fn binary_emits_sse_for_otel_metrics() {
     let (mut child, host, _db, _token, _cfg) = spawn_serve_with(&[]);
@@ -247,30 +232,11 @@ fn binary_emits_sse_for_otel_metrics() {
 
     std::thread::sleep(Duration::from_millis(250));
 
-    // Tiny synthetic metrics body; real fixture is large and slow.
-    let body = serde_json::json!({
-        "resourceMetrics": [{
-            "resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "claude-code"}}]},
-            "scopeMetrics": [{
-                "metrics": [{
-                    "name": "claude_code.cost.usage",
-                    "sum": {
-                        "dataPoints": [{
-                            "asDouble": 0.01,
-                            "timeUnixNano": "1716200000000000000",
-                            "attributes": [
-                                {"key": "session.id", "value": {"stringValue": "sess_subproc_metrics"}}
-                            ]
-                        }],
-                        "aggregationTemporality": 2,
-                        "isMonotonic": true
-                    }
-                }]
-            }]
-        }]
-    })
-    .to_string();
-    http_post_json(&host, "/otel/v1/metrics", &body);
+    http_post_json(
+        &host,
+        "/otel/v1/metrics",
+        &otel_metric_body("sess_subproc_metrics"),
+    );
 
     let body = reader.join().expect("reader thread");
     let _ = child.kill();
@@ -291,7 +257,7 @@ fn binary_emits_sse_for_otel_metrics() {
 fn sse_session_filter_does_not_leak_other_sessions() {
     let (mut child, host, _db, _token, _cfg) = spawn_serve_with(&[]);
 
-    // Subscribe with a session filter that won't match the hook we'll POST.
+    // Subscribe with a session filter that won't match the row we'll POST.
     let host_for_sse = host.clone();
     let reader = std::thread::spawn(move || {
         let s = open_sse(&host_for_sse, "?session=NEVER_MATCHED");
@@ -312,21 +278,17 @@ fn sse_session_filter_does_not_leak_other_sessions() {
 
     std::thread::sleep(Duration::from_millis(250));
 
-    let body = serde_json::json!({
-        "session_id":      "sess_subproc_other",
-        "hook_event_name": "PreToolUse",
-        "tool_name":       "Bash",
-        "tool_input":      {"command": "ls"},
-        "tool_use_id":     "toolu_other"
-    })
-    .to_string();
-    http_post_json(&host, "/hooks/v1/events", &body);
+    http_post_json(
+        &host,
+        "/otel/v1/metrics",
+        &otel_metric_body("sess_subproc_other"),
+    );
 
     let body = reader.join().expect("reader thread");
     let _ = child.kill();
 
     // We may see HTTP headers and possibly `:keepalive` comments, but never a
-    // `data:` line with the other session's hook envelope.
+    // `data:` line with the other session's envelope.
     assert!(
         !body.contains("\"session_id\":\"sess_subproc_other\""),
         "envelope leaked through session filter: {body:?}"

@@ -1,9 +1,11 @@
-//! `wimcc doctor` — read-only diagnostic for collector wiring.
+//! `wimcc doctor` — read-only diagnostic for OTel collector wiring.
 //!
 //! Slice-6 v0.1: process env + single user settings.json.
 //! Slice-7 v0.2: full Claude Code settings hierarchy walk (managed > local >
-//! project > user) + plugin manifests + managed policy detection + scope
-//! attribution per env/hook value. Still never mutates anything.
+//! project > user) + scope attribution per env value. Still never mutates
+//! anything.
+//!
+//! (Hook-forward diagnostics removed 2026-06-19 with the hook collector.)
 
 pub mod settings;
 
@@ -13,7 +15,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use self::settings::{EnvSource, HookEntry, ManagedPolicy, SettingsScope};
+use self::settings::{EnvSource, SettingsScope};
 
 const EXPECTED_ENDPOINT_SUFFIX: &str = "/otel";
 
@@ -43,15 +45,6 @@ struct EnvCheck {
     note: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-struct HookSettingsCheck {
-    settings_path: String,
-    settings_present: bool,
-    wired_for_wimcc: bool,
-    wired_hook_events: Vec<String>,
-    note: Option<String>,
-}
-
 #[derive(Debug, Serialize, Default)]
 struct ServerProbe {
     reachable: bool,
@@ -72,20 +65,15 @@ struct SourceFreshness {
 
 #[derive(Debug, Serialize)]
 struct DoctorReport {
-    // v0.1 (kept for backwards-compat with existing JSON consumers)
     envs: Vec<EnvCheck>,
     endpoint: EnvCheck,
-    hook_settings: HookSettingsCheck,
     server: ServerProbe,
     recommendations: Vec<String>,
     exit_code: i32,
-    // v0.2 — slice-7 additions
+    // slice-7 settings hierarchy
     settings_scopes: Vec<SettingsScope>,
     effective_env: BTreeMap<String, EnvSource>,
     env_divergence: Vec<EnvDivergence>,
-    hook_entries: Vec<HookEntry>,
-    plugin_hooks: Vec<HookEntry>,
-    managed_policy: ManagedPolicy,
 }
 
 #[derive(Debug, Serialize)]
@@ -148,80 +136,6 @@ fn check_endpoint() -> EnvCheck {
         expected: Some(format!("…{EXPECTED_ENDPOINT_SUFFIX}")),
         status,
         note,
-    }
-}
-
-fn read_hook_settings() -> HookSettingsCheck {
-    let path = match dirs::home_dir() {
-        Some(h) => h.join(".claude").join("settings.json"),
-        None => {
-            return HookSettingsCheck {
-                settings_path: "~/.claude/settings.json".into(),
-                settings_present: false,
-                wired_for_wimcc: false,
-                wired_hook_events: vec![],
-                note: Some("HOME not set".into()),
-            }
-        }
-    };
-    let raw = match std::fs::read_to_string(&path) {
-        Ok(s) => s,
-        Err(_) => {
-            return HookSettingsCheck {
-                settings_path: path.display().to_string(),
-                settings_present: false,
-                wired_for_wimcc: false,
-                wired_hook_events: vec![],
-                note: Some("file missing — hook collector will receive nothing".into()),
-            }
-        }
-    };
-    let parsed: serde_json::Value = match serde_json::from_str(&raw) {
-        Ok(v) => v,
-        Err(e) => {
-            return HookSettingsCheck {
-                settings_path: path.display().to_string(),
-                settings_present: true,
-                wired_for_wimcc: false,
-                wired_hook_events: vec![],
-                note: Some(format!("settings.json parse error: {e}")),
-            }
-        }
-    };
-    let mut wired_events = Vec::new();
-    if let Some(hooks) = parsed.get("hooks").and_then(|v| v.as_object()) {
-        for (event_name, entries) in hooks {
-            let mut event_wired = false;
-            if let Some(arr) = entries.as_array() {
-                for entry in arr {
-                    if let Some(inner) = entry.get("hooks").and_then(|v| v.as_array()) {
-                        for h in inner {
-                            if let Some(cmd) = h.get("command").and_then(|v| v.as_str()) {
-                                if cmd.contains("hooks/v1/events") {
-                                    event_wired = true;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if event_wired {
-                wired_events.push(event_name.clone());
-            }
-        }
-    }
-    let wired = !wired_events.is_empty();
-    wired_events.sort();
-    HookSettingsCheck {
-        settings_path: path.display().to_string(),
-        settings_present: true,
-        wired_for_wimcc: wired,
-        wired_hook_events: wired_events,
-        note: if wired {
-            None
-        } else {
-            Some("no hook entries forward to wimcc — see README".into())
-        },
     }
 }
 
@@ -343,9 +257,7 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
     let mut out = Vec::new();
 
     // Use the file-effective env (settings hierarchy) as the source of truth
-    // for what `claude` will actually see, not process env. v0.1 was wrong
-    // here — it printed "Set the following…" even when the user already had
-    // the keys in ~/.claude/settings.json.
+    // for what `claude` will actually see, not process env.
     let mut missing_env: BTreeMap<&str, String> = BTreeMap::new();
     for (k, expected) in OTEL_ENVS.iter() {
         let present_in_file = report
@@ -388,37 +300,9 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
         out.push(block.trim_end().to_string());
     }
 
-    // Hooks intentionally NOT in the recommendation block.
-    //
-    // The substring match on `hooks/v1/events` is a heuristic that produces
-    // false negatives whenever the user runs a wrapper script, pipes through
-    // jq, or targets a non-default endpoint. doctor cannot tell from settings
-    // alone whether a hook command will reach wimcc. Whether hook events
-    // actually arrived is observable in /v1/health/sources (informational
-    // table), which is the source of truth for "is data flowing".
-    //
-    // Managed policy is still surfaced because those flags really do block
-    // hook execution regardless of user intent, but only when present.
-    if report.managed_policy.disable_all_hooks {
-        out.push(
-            "Managed policy `disableAllHooks = true` is set — no hooks will ever fire. \
-             Hook collector will receive 0 events regardless of user/project entries."
-                .into(),
-        );
-    } else if report.managed_policy.allow_managed_hooks_only {
-        out.push(
-            "Managed policy `allowManagedHooksOnly = true` is set — user/project hooks are ignored. \
-             Only managed / SDK / force-enabled-plugin hooks load."
-                .into(),
-        );
-    }
-
     if !report.server.reachable {
         out.push("wimcc server unreachable. Start it with: `wimcc serve --auto-migrate`.".into());
     } else {
-        // Hook is user-configured and intentionally excluded from the
-        // "no data, do X" recommendation — doctor doesn't know X.
-        // Surface only sources whose absence really is actionable.
         const ACTIONABLE: &[&str] = &["transcript", "otel-traces", "otel-metrics", "otel-logs"];
         let no_data: Vec<&str> = report
             .server
@@ -441,10 +325,6 @@ fn compute_exit_code(report: &DoctorReport) -> i32 {
     if !report.server.reachable {
         return 1;
     }
-    // Only "actionable" sources affect exit code. hook is a user-configured
-    // external (forward script) — its absence is not a failure doctor can
-    // diagnose. See the matching block in build_recommendations() for the
-    // same rationale.
     const ACTIONABLE: &[&str] = &["transcript", "otel-traces", "otel-metrics", "otel-logs"];
     let any_actionable_source_has_data = report
         .server
@@ -489,25 +369,6 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
     }
     writeln!(w)?;
 
-    writeln!(w, "{}", dim("# Hook settings (~/.claude/settings.json)"))?;
-    let hs = &report.hook_settings;
-    let marker = if hs.wired_for_wimcc {
-        green("✓")
-    } else {
-        yellow("∅")
-    };
-    writeln!(w, "  {marker} {}", hs.settings_path)?;
-    if hs.wired_for_wimcc {
-        writeln!(
-            w,
-            "      wired hook events: {}",
-            hs.wired_hook_events.join(", ")
-        )?;
-    } else if let Some(n) = &hs.note {
-        writeln!(w, "      {}", dim(n))?;
-    }
-    writeln!(w)?;
-
     writeln!(w, "{}", dim("# Server (loopback Pull API)"))?;
     let sp = &report.server;
     if sp.reachable {
@@ -523,42 +384,19 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
             "  {:<14} {:<28} {:>9} {:>8}",
             "source", "last_ingested_at", "rows/24h", "total"
         )?;
-        // hook is user-configured (forward script). doctor cannot diagnose
-        // how it should be wired, so it surfaces as informational only — no
-        // red ✗ marker that suggests action.
-        const INFO_SOURCES: &[&str] = &["hook"];
         for s in &sp.sources {
-            let info = INFO_SOURCES.contains(&s.label.as_str());
-            let marker = if info {
-                if s.status == "no_data" {
-                    dim("ℹ")
-                } else {
-                    green("✓")
-                }
-            } else {
-                match s.status {
-                    "recent" => green("✓"),
-                    "stale" => yellow("~"),
-                    _ => red("✗"),
-                }
+            let marker = match s.status {
+                "recent" => green("✓"),
+                "stale" => yellow("~"),
+                _ => red("✗"),
             };
             let last = s.last_ingested_at.as_deref().unwrap_or("—");
-            let suffix = if info {
-                dim("  (info-only)")
-            } else {
-                String::new()
-            };
             writeln!(
                 w,
-                "  {marker} {:<12} {:<28} {:>9} {:>8}{}",
-                s.label, last, s.row_count_24h, s.total_rows, suffix
+                "  {marker} {:<12} {:<28} {:>9} {:>8}",
+                s.label, last, s.row_count_24h, s.total_rows
             )?;
         }
-        writeln!(
-            w,
-            "      {}",
-            dim("ℹ info-only = depends on external wiring; absence is not a failure")
-        )?;
     } else {
         writeln!(w, "  {} unreachable", red("✗"))?;
         if let Some(e) = &sp.error {
@@ -628,68 +466,6 @@ fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<(
     }
     writeln!(w)?;
 
-    writeln!(w, "{}", dim("# Hook forwarding to wimcc"))?;
-    let mut all_hooks = report.hook_entries.clone();
-    all_hooks.extend(report.plugin_hooks.iter().cloned());
-    let wimcc_hooks: Vec<&HookEntry> = all_hooks.iter().filter(|h| h.forwards_to_wimcc).collect();
-    if wimcc_hooks.is_empty() {
-        writeln!(
-            w,
-            "  {} no hook entry forwards to /hooks/v1/events in any scope",
-            yellow("∅"),
-        )?;
-    } else {
-        for h in &wimcc_hooks {
-            writeln!(
-                w,
-                "  {} {:<14} → {} ({})",
-                green("✓"),
-                h.event,
-                h.command,
-                h.scope
-            )?;
-        }
-    }
-    // surface non-wimcc hooks too if present
-    let other_hooks: Vec<&HookEntry> = all_hooks.iter().filter(|h| !h.forwards_to_wimcc).collect();
-    if !other_hooks.is_empty() {
-        writeln!(
-            w,
-            "  {}",
-            dim("(other hooks observed; not relevant to wimcc):")
-        )?;
-        for h in other_hooks.iter().take(5) {
-            writeln!(w, "    {:<14} {} ({})", h.event, h.command, h.scope)?;
-        }
-        if other_hooks.len() > 5 {
-            writeln!(w, "    ... +{} more", other_hooks.len() - 5)?;
-        }
-    }
-    writeln!(w)?;
-
-    if report.managed_policy.allow_managed_hooks_only || report.managed_policy.disable_all_hooks {
-        writeln!(
-            w,
-            "{}",
-            dim("# Managed policy (may silence user/project hooks)")
-        )?;
-        if report.managed_policy.disable_all_hooks {
-            writeln!(
-                w,
-                "  {} disableAllHooks = true — no hooks will fire",
-                red("✗")
-            )?;
-        }
-        if report.managed_policy.allow_managed_hooks_only {
-            writeln!(
-                w,
-                "  {} allowManagedHooksOnly = true — only managed/SDK/force-enabled plugin hooks load",
-                yellow("!"),
-            )?;
-        }
-        writeln!(w)?;
-    }
-
     if !report.recommendations.is_empty() {
         writeln!(
             w,
@@ -713,7 +489,6 @@ pub async fn run(opts: DoctorOpts) -> std::io::Result<i32> {
         .map(|(k, expected)| check_env(k, Some(*expected)))
         .collect();
     let endpoint = check_endpoint();
-    let hook_settings = read_hook_settings();
     let server = probe_server(&opts.server).await;
 
     // ---- slice-7 v0.2: settings hierarchy walk ----
@@ -724,15 +499,6 @@ pub async fn run(opts: DoctorOpts) -> std::io::Result<i32> {
         .unwrap_or_else(|| PathBuf::from("."));
     let settings_scopes = settings::scopes(&project_start);
     let effective_env_map = settings::effective_env(&settings_scopes);
-    let plugins_root_override = std::env::var_os("WIMCC_DOCTOR_PLUGINS_ROOT").map(PathBuf::from);
-    let plugins_root = plugins_root_override
-        .or_else(settings::default_plugins_root)
-        .unwrap_or_else(|| PathBuf::from("/nonexistent"));
-    let all_hooks = settings::hook_entries(&settings_scopes, &plugins_root);
-    let (plugin_hooks, hook_entries): (Vec<HookEntry>, Vec<HookEntry>) = all_hooks
-        .into_iter()
-        .partition(|h| h.scope.starts_with("plugin:"));
-    let managed_policy = settings::managed_policy(&settings_scopes);
 
     // env divergence: file-effective vs process env, for keys relevant to OTel.
     let mut env_divergence: Vec<EnvDivergence> = Vec::new();
@@ -760,16 +526,12 @@ pub async fn run(opts: DoctorOpts) -> std::io::Result<i32> {
     let mut report = DoctorReport {
         envs,
         endpoint,
-        hook_settings,
         server,
         recommendations: vec![],
         exit_code: 0,
         settings_scopes,
         effective_env: effective_env_map,
         env_divergence,
-        hook_entries,
-        plugin_hooks,
-        managed_policy,
     };
     report.recommendations = build_recommendations(&report);
     report.exit_code = compute_exit_code(&report);

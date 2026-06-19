@@ -123,7 +123,7 @@ pub fn tools_list_response() -> Value {
             },
             {
                 "name": "whats_in_my_cc.get_project_metrics",
-                "description": "Cross-session deterministic metrics series: per-session behavioral counts (SessionMetrics) plus environment fingerprint (models, cc_versions, git_branches, claude_md instruction hashes, instruction_sha256). Group sessions by fingerprint to compare before/after a harness or prompt change. Counts and observations only — rates and judgments are the caller's.",
+                "description": "Cross-session deterministic metrics series: per-session behavioral counts (SessionMetrics) plus environment fingerprint (models, cc_versions, git_branches, cwds, entrypoints). Counts and observations only — rates and judgments are the caller's.",
                 "inputSchema": get_project_metrics_schema()
             },
             {

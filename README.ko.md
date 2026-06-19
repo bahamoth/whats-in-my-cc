@@ -51,9 +51,9 @@ just build-release                            # WebUI 빌드 + 릴리스 바이�
 ./target/release/wimcc doctor                 # collector 연동 점검
 ```
 
-`serve`는 한 프로세스에서 전부 실행한다: read-only Pull API, 임베디드 WebUI, OTel +
-hook 수신기, 그리고 `~/.claude/projects` transcript live tail. Claude Code가 OTel +
-hook event를 wimcc로 내보내게 하려면 `~/.claude/settings.json`을 한 번 연동한다 —
+`serve`는 한 프로세스에서 전부 실행한다: read-only Pull API, 임베디드 WebUI, OTel
+수신기, 그리고 `~/.claude/projects` transcript live tail. Claude Code가 OTel
+event를 wimcc로 내보내게 하려면 `~/.claude/settings.json`을 한 번 연동한다 —
 [Claude Code 연동](#claude-code-연동) 참고. `wimcc doctor`가 무엇이 연동됐고 무엇이
 빠졌는지 알려준다.
 
@@ -83,8 +83,8 @@ wimcc [--db-path <PATH>] [--log-format pretty|json] [--verbose] <command>
 | --- | --- |
 | `init-db` | 마이그레이션 적용 및 DB 준비. |
 | `ingest --all` / `ingest --path <P>` | 백필: transcript JSONL을 raw + observed event로 스캔(idempotent). |
-| `doctor [--json] [--server <URL>] [--project <DIR>]` | collector 연동 상태의 read-only 진단(설정 계층, hook, 서버 probe). 어떤 것도 변경하지 않음. |
-| `serve` | 로컬 서비스 시작: Pull API + WebUI + OTel/hook 수신기 + transcript live tail. |
+| `doctor [--json] [--server <URL>] [--project <DIR>]` | collector 연동 상태의 read-only 진단(설정 계층, OTel env, 서버 probe). 어떤 것도 변경하지 않음. |
+| `serve` | 로컬 서비스 시작: Pull API + WebUI + OTel 수신기 + transcript live tail. |
 
 ### `wimcc serve` 옵션
 
@@ -105,9 +105,8 @@ wimcc serve [--bind 127.0.0.1] [--port 7878]
 
 | 소스 | 도달 방식 | 비고 |
 | --- | --- | --- |
-| **Transcript** | `~/.claude/projects/**/*.jsonl` live tail (또는 `ingest` 백필) | user/assistant 메시지, tool call + result, thinking, attachment |
+| **Transcript** | `~/.claude/projects/**/*.jsonl` live tail (또는 `ingest` 백필) | user/assistant 메시지, tool call + result, thinking, attachment, hook 실행 결과 |
 | **OTel traces / metrics / logs** | Claude Code OTLP exporter의 `POST /otel/v1/*` | traces는 beta (`CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`) |
-| **Hook lifecycle** | forward 스크립트의 `POST /hooks/v1/events` | 9개 `hook_event_name` 인식, unknown은 `subkind="unknown"`로 ingest |
 | **Edit diffs** | 각 transcript tool-result의 `toolUseResult.structuredPatch`에서 추출 | `Edit`만 hunk 생성, `Write`는 빈 patch. `/v1/sessions/:id/diff-hunks`와 `get_file_lineage` MCP tool을 구동 |
 | **Verification run / 토큰 usage** | transcript + telemetry facet에서 도출 | verification-run·usage 엔드포인트로 노출 |
 
@@ -117,7 +116,7 @@ wimcc serve [--bind 127.0.0.1] [--port 7878]
 redaction_policy, …}, data}`로 감싼다 — 예외: `/v1/health`는 bare JSON,
 metrics·signals·detectors·audit 엔드포인트는 `{data}`만, MCP tool 결과는
 JSON-RPC content다. `--auth on`이면 모든 `/v1/*`·`/mcp` 요청에
-`Authorization: Bearer <token>`이 필요하다. OTel/hook collector와 SSE 스트림은 항상
+`Authorization: Bearer <token>`이 필요하다. OTel collector와 SSE 스트림은 항상
 인증 없는 loopback 엔드포인트다.
 
 ### Read-only Pull API (`GET`)
@@ -149,7 +148,6 @@ JSON-RPC content다. `--auth on`이면 모든 `/v1/*`·`/mcp` 요청에
 | `/otel/v1/traces` | OTel traces (beta) |
 | `/otel/v1/metrics` | OTel metrics |
 | `/otel/v1/logs` | OTel logs |
-| `/hooks/v1/events` | hook lifecycle event (단일 객체 또는 배열, ≤ 1 MB) |
 
 OTLP body는 OTLP/JSON, gzip 선택, ≤ 4 MB. `/otel` prefix는 **필수**다 — 없으면 OTel
 SDK가 `…/v1/metrics`로 POST해서 wimcc가 404를 반환한다.
@@ -207,15 +205,9 @@ traces는 beta다 — `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`이 없으면 SDK�
 전혀 내보내지 않는다. `session.id`가 없는 레코드는 저장되지만 `/v1/sessions`에서는
 제외된다.
 
-### Hooks
-
-collector hook 엔드포인트(`POST /hooks/v1/events`)는 존재하지만, lifecycle event는 대부분
-transcript live tail로 이미 수집되므로 **일반적으로 forward 등록은 불필요하다**(중복).
-SessionStart 시점의 instruction(CLAUDE.md) 스냅샷도 자기개선 fingerprint 용도로 검토했으나,
-단일 사용자 환경에서는 git 이력으로 대체 가능해 **채택하지 않았다**(근거: implementation-notes).
-
-wimcc를 기본(`7878`)과 다른 포트로 띄우면 `WIMCC_PORT` 환경변수로 지정한다 —
-`session-retrospect` 플러그인의 MCP 연결이 그 포트를 따라간다(예: `WIMCC_PORT=9000`).
+> Hook lifecycle event는 transcript live tail에서 수집된다(hook 실행 결과가
+> transcript에 남는다). 따라서 forward 스크립트 연동이 필요 없다. `/hooks/v1/events`
+> collector는 2026-06에 제거됐다 — `docs/implementation-notes.html` 참고.
 
 ### Smoke test
 
@@ -223,10 +215,6 @@ wimcc를 기본(`7878`)과 다른 포트로 띄우면 `WIMCC_PORT` 환경변수�
 curl -X POST http://127.0.0.1:7878/otel/v1/metrics \
   -H 'Content-Type: application/json' \
   --data-binary @tests/fixtures/otel/real/metrics_v01.json
-
-curl -X POST http://127.0.0.1:7878/hooks/v1/events \
-  -H 'content-type: application/json' \
-  --data-binary @tests/fixtures/hook/pre_tool_use.json
 ```
 
 ## 인증 & retention
