@@ -218,7 +218,8 @@ emits spans. Records without `session.id` are stored but excluded from
 > Hook lifecycle events are captured from the transcript live tail (hook
 > results land in the transcript), so no forward-script wiring is needed. The
 > `/hooks/v1/events` collector was removed in 2026-06 — see
-> `docs/implementation-notes.html`.
+> `docs/implementation-notes.html`. On a non-default port, set `WIMCC_PORT` —
+> the `session-retrospect` plugin's MCP connection follows it (e.g. `WIMCC_PORT=9000`).
 
 ### Smoke test
 
