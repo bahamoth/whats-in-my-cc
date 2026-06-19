@@ -1,5 +1,4 @@
 pub mod dto;
-pub mod hook;
 pub mod mcp;
 pub mod middleware;
 pub mod otel;
@@ -133,7 +132,6 @@ pub fn router(state: AppState) -> Router {
         .route("/otel/v1/traces", post(otel::ingest_traces))
         .route("/otel/v1/metrics", post(otel::ingest_metrics))
         .route("/otel/v1/logs", post(otel::ingest_logs))
-        .route("/hooks/v1/events", post(hook::ingest_events))
         .route("/v1/stream", get(sse::stream_handler))
         .fallback(static_assets::spa_handler)
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY))

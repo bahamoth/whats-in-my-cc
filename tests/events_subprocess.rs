@@ -276,24 +276,6 @@ async fn paginate_backwards_reconstructs_full_session() {
     let _ = child.wait();
 }
 
-fn http_post_json(host: &str, path: &str, body: &str) -> String {
-    let addr: std::net::SocketAddr = host.parse().expect("host:port");
-    let mut s = TcpStream::connect_timeout(&addr, Duration::from_secs(1)).expect("connect");
-    s.set_read_timeout(Some(Duration::from_secs(5))).ok();
-    let req = format!(
-        "POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\n\
-         Content-Length: {len}\r\nConnection: close\r\n\r\n{body}",
-        path = path,
-        host = host,
-        len = body.len(),
-        body = body,
-    );
-    s.write_all(req.as_bytes()).expect("write");
-    let mut buf = Vec::new();
-    s.read_to_end(&mut buf).ok();
-    String::from_utf8_lossy(&buf).into_owned()
-}
-
 /// Slice-9 — live activity + paging coexistence. Verifies that after
 /// fetching page-1 (which captures `initial_newest` cursor), a burst of
 /// new events landing into the same session is fully recovered by
@@ -337,21 +319,56 @@ async fn paging_remains_consistent_through_live_activity() {
         })
         .expect("initial newest");
 
-    // 2. Burst of live activity — 50 hook POSTs against the same session.
-    //    Hook ingest stamps `captured_at = now()`, which is later than any
-    //    seed row (base 2026-05-21T00:00:00Z + ≤1199s). Hooks land at the
-    //    live tip and only the live tip.
+    // 2. Burst of live activity — 50 new observed events inserted directly
+    //    into the same DB while the server runs. `observed_at = now()` is
+    //    later than any seed row (base 2026-05-21T00:00:00Z + ≤1199s), so they
+    //    land at the live tip and only the live tip. (Previously a burst of
+    //    hook POSTs; the hook collector was removed 2026-06-19, so we seed the
+    //    live tip directly — the invariant under test is cursor paging during
+    //    live inserts, independent of which collector produced them.)
     const BURST: usize = 50;
-    for i in 0..BURST {
-        let body = format!(
-            r#"{{"session_id":"{SESS}","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"echo {i}"}},"tool_use_id":"tu_burst_{i}"}}"#
-        );
-        let resp = http_post_json(&host, "/hooks/v1/events", &body);
-        assert!(
-            resp.starts_with("HTTP/1.1 200"),
-            "hook POST {i} did not 200: {}",
-            &resp[..80.min(resp.len())]
-        );
+    {
+        let url = format!("sqlite://{}", db.path().display());
+        let pool = connect(&url).await.unwrap();
+        let run_id = repo_runs::start(&pool).await.unwrap();
+        let now = chrono::Utc::now();
+        for i in 0..BURST {
+            let event_id = format!("01K{i:023}");
+            let raw_id = format!("raw_burst_{i:06}");
+            repo_raw::insert_dedup(
+                &pool,
+                &repo_raw::NewRaw {
+                    raw_event_id: raw_id.clone(),
+                    ingest_run_id: run_id.clone(),
+                    source_type: "test".into(),
+                    source_uri: format!("test://burst/{i}"),
+                    source_line_no: i as i64,
+                    source_byte_offset: 0,
+                    payload_sha256: format!("sha_burst_{i:06}"),
+                    payload: b"{}".to_vec(),
+                    parse_error: None,
+                    captured_at: now,
+                    redaction_state: "not_applicable".into(),
+                    redaction_manifest: None,
+                },
+            )
+            .await
+            .unwrap();
+            let ev = ObservedEvent {
+                event_id,
+                raw_event_id: raw_id,
+                schema_version: "0.5.0".into(),
+                session_id: SESS.into(),
+                event_uuid: Some(format!("uuid-burst-{i:06}")),
+                observed_at: now + chrono::Duration::milliseconds(i as i64),
+                actor: Actor::User,
+                kind: EventKind::UserMessage,
+                parser_version: "test".into(),
+                ..Default::default()
+            };
+            repo_observed::insert(&pool, &ev).await.unwrap();
+        }
+        pool.close().await;
     }
 
     // 3. ?after=initial_newest must surface exactly the BURST new rows.
@@ -371,12 +388,12 @@ async fn paging_remains_consistent_through_live_activity() {
         "after-cursor should surface exactly {BURST} new hook rows; got {}",
         after_events.len()
     );
-    // All BURST events must be kind=hook_event.
+    // All BURST events must be the freshly-inserted live-tip rows.
     for e in after_events {
         assert_eq!(
             e["kind"].as_str().unwrap(),
-            "hook_event",
-            "after-window must be hook-only — leak from seed?"
+            "user_message",
+            "after-window must be burst-only — leak from seed?"
         );
     }
 
@@ -403,7 +420,7 @@ async fn paging_remains_consistent_through_live_activity() {
         "older window must contain only ULID seed ids, not hook ids; got {before_last_id}"
     );
 
-    // 5. A fresh page-1 fetch now ends at the latest hook row.
+    // 5. A fresh page-1 fetch now ends at the latest burst row.
     let r_p1_after = http_get(
         &host,
         &format!("/v1/sessions/{SESS}/events?limit={PAGE_LIMIT}"),
@@ -413,8 +430,8 @@ async fn paging_remains_consistent_through_live_activity() {
     let new_p1 = v_p1_after["data"]["events"].as_array().unwrap();
     let new_p1_last_kind = new_p1.last().unwrap()["kind"].as_str().unwrap();
     assert_eq!(
-        new_p1_last_kind, "hook_event",
-        "after burst, page-1's newest row should be a hook_event"
+        new_p1_last_kind, "user_message",
+        "after burst, page-1's newest row should be a burst row"
     );
     // next_cursor stays null (we're at the live tip).
     assert!(v_p1_after["data"]["next_cursor"].is_null());

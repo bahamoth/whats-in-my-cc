@@ -55,8 +55,8 @@ just build-release                            # build the SPA + release binary (
 ```
 
 `serve` runs everything in one process: the read-only Pull API, the embedded
-WebUI, the OTel + hook receivers, and a live tail of `~/.claude/projects`
-transcripts. For Claude Code to emit OTel + hook events into wimcc you set up
+WebUI, the OTel receiver, and a live tail of `~/.claude/projects`
+transcripts. For Claude Code to emit OTel events into wimcc you set up
 `~/.claude/settings.json` once — see [Connecting Claude Code](#connecting-claude-code).
 `wimcc doctor` tells you what's connected and what's missing.
 
@@ -88,8 +88,8 @@ Global flags apply to every subcommand. `--db-path` defaults to
 | --- | --- |
 | `init-db` | Apply migrations and prepare the database. |
 | `ingest --all` / `ingest --path <P>` | Backfill: scan transcript JSONL files into raw + observed events (idempotent). |
-| `doctor [--json] [--server <URL>] [--project <DIR>]` | Read-only diagnosis of collector wiring (settings hierarchy, hooks, server probe). Never mutates anything. |
-| `serve` | Start the local service: Pull API + WebUI + OTel/hook receivers + transcript live tail. |
+| `doctor [--json] [--server <URL>] [--project <DIR>]` | Read-only diagnosis of collector wiring (settings hierarchy, OTel env, server probe). Never mutates anything. |
+| `serve` | Start the local service: Pull API + WebUI + OTel receiver + transcript live tail. |
 
 ### `wimcc serve` flags
 
@@ -110,9 +110,8 @@ wimcc serve [--bind 127.0.0.1] [--port 7878]
 
 | Source | How it arrives | Notes |
 | --- | --- | --- |
-| **Transcript** | live tail of `~/.claude/projects/**/*.jsonl` (or `ingest` backfill) | user/assistant messages, tool calls + results, thinking, attachments |
+| **Transcript** | live tail of `~/.claude/projects/**/*.jsonl` (or `ingest` backfill) | user/assistant messages, tool calls + results, thinking, attachments, hook results |
 | **OTel traces / metrics / logs** | `POST /otel/v1/*` from Claude Code's OTLP exporter | traces are beta (`CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`) |
-| **Hook lifecycle** | `POST /hooks/v1/events` from a forward script | nine `hook_event_name`s recognised; unknown names ingest as `subkind="unknown"` |
 | **Edit diffs** | extracted from each transcript tool-result's `toolUseResult.structuredPatch` | only `Edit` produces hunks; `Write` emits an empty patch. Powers `/v1/sessions/:id/diff-hunks` and the `get_file_lineage` MCP tool |
 | **Verification runs / token usage** | derived from transcript + telemetry facets | surface via the verification-run and usage endpoints |
 
@@ -124,7 +123,7 @@ with exceptions: `/v1/health` returns bare JSON; the metrics, signals,
 detectors, and audit endpoints return `{data}` only; MCP tool results are
 JSON-RPC content.
 When `--auth on`, every `/v1/*` and `/mcp` request needs
-`Authorization: Bearer <token>`; the OTel/hook collectors and the SSE stream are
+`Authorization: Bearer <token>`; the OTel collectors and the SSE stream are
 always unauthenticated loopback endpoints.
 
 ### Read-only Pull API (`GET`)
@@ -156,7 +155,6 @@ always unauthenticated loopback endpoints.
 | `/otel/v1/traces` | OTel traces (beta) |
 | `/otel/v1/metrics` | OTel metrics |
 | `/otel/v1/logs` | OTel logs |
-| `/hooks/v1/events` | hook lifecycle events (single object or array, ≤ 1 MB) |
 
 OTLP bodies are OTLP/JSON, gzip optional, ≤ 4 MB. The `/otel` prefix is
 **required** — without it the OTel SDK posts to `…/v1/metrics` and wimcc
@@ -217,28 +215,17 @@ Traces are beta — without `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` the SDK neve
 emits spans. Records without `session.id` are stored but excluded from
 `/v1/sessions`.
 
-### Hooks
+> Hook lifecycle events are captured from the transcript live tail (hook
+> results land in the transcript), so no forward-script wiring is needed. The
+> `/hooks/v1/events` collector was removed in 2026-06 — see
+> `docs/implementation-notes.html`.
 
-The collector endpoint (`POST /hooks/v1/events`) exists, but lifecycle events are
-mostly already captured via transcript live tail, so **forwarding is generally
-unnecessary** (duplicate). A SessionStart instruction (CLAUDE.md) snapshot was
-also evaluated for the self-improvement fingerprint, but in a single-user setup
-it is recoverable from git history, so it was **not adopted** (see
-implementation-notes).
-
-If you run wimcc on a non-default port, set `WIMCC_PORT` — the
-`session-retrospect` plugin's MCP connection follows it (e.g. `WIMCC_PORT=9000`).
-
-### Smoke tests
+### Smoke test
 
 ```bash
 curl -X POST http://127.0.0.1:7878/otel/v1/metrics \
   -H 'Content-Type: application/json' \
   --data-binary @tests/fixtures/otel/real/metrics_v01.json
-
-curl -X POST http://127.0.0.1:7878/hooks/v1/events \
-  -H 'content-type: application/json' \
-  --data-binary @tests/fixtures/hook/pre_tool_use.json
 ```
 
 ## Auth & retention

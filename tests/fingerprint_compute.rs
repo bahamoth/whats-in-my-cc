@@ -2,9 +2,9 @@
 //!
 //! SessionMetrics와 같은 on-demand 무저장 패턴. 모든 Vec은 정렬·distinct.
 //! 판단 필드 없음 — 관측 값만.
+//! (claude_md/instruction_sha256 필드는 hook collector 폐지로 2026-06-19 제거.)
 
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::db::{migrate, repo_observed, repo_raw, repo_runs};
 use wimcc::insight::fingerprint::compute_session_fingerprint;
@@ -134,59 +134,6 @@ async fn fingerprint_collects_distinct_sorted_env_and_models() {
     assert_eq!(fp.git_branches, vec!["feat/x", "main"]);
     assert_eq!(fp.cwds, vec!["/proj/x"]);
     assert_eq!(fp.entrypoints, vec!["cli"]);
-    assert!(fp.claude_md.is_empty());
-    assert!(fp.instruction_sha256.is_none());
-}
-
-#[tokio::test]
-async fn fingerprint_reads_session_start_snapshot_union() {
-    let pool = test_pool().await;
-    let run = repo_runs::start(&pool).await.unwrap();
-    let sid = "sess_fp_2";
-    let snap = |sha: &str| {
-        json!({
-            "hook": {"hook_event_name": "SessionStart"},
-            "captured": {
-                "claude_md": [
-                    {"path": "/p/CLAUDE.md", "sha256": sha, "bytes": 10}
-                ],
-                "captured_at": "2026-06-12T00:00:00Z"
-            }
-        })
-    };
-    seed(
-        &pool,
-        &run,
-        sid,
-        "h1",
-        EventKind::HookEvent,
-        Some("session_start"),
-        snap("aaaa"),
-        None,
-        None,
-    )
-    .await;
-    // 같은 (path,sha) 재수신(세션 재개 등) — union dedup 되어야 한다.
-    seed(
-        &pool,
-        &run,
-        sid,
-        "h2",
-        EventKind::HookEvent,
-        Some("session_start"),
-        snap("aaaa"),
-        None,
-        None,
-    )
-    .await;
-
-    let fp = compute_session_fingerprint(&pool, sid).await.unwrap();
-    assert_eq!(fp.claude_md.len(), 1);
-    assert_eq!(fp.claude_md[0].path, "/p/CLAUDE.md");
-    assert_eq!(fp.claude_md[0].sha256, "aaaa");
-    assert_eq!(fp.claude_md[0].bytes, 10);
-    let expected = hex::encode(Sha256::digest(b"/p/CLAUDE.md\naaaa\n"));
-    assert_eq!(fp.instruction_sha256.as_deref(), Some(expected.as_str()));
 }
 
 #[tokio::test]
@@ -200,6 +147,4 @@ async fn fingerprint_empty_session_is_all_empty() {
     assert!(fp.git_branches.is_empty());
     assert!(fp.cwds.is_empty());
     assert!(fp.entrypoints.is_empty());
-    assert!(fp.claude_md.is_empty());
-    assert!(fp.instruction_sha256.is_none());
 }
