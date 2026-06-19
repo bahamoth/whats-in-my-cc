@@ -1,7 +1,7 @@
 # session-retrospect 플러그인 SessionStart forward hook — 설계
 
 - 날짜: 2026-06-19
-- 상태: 설계 승인 → 구현 계획 대기
+- 상태: **미채택** — 구현·smoke 완료 후 되돌림. instruction_snapshot 순증분이 단일 사용자 환경에서 git 이력으로 대체 가능 + 코호트 분석이 표본·교란으로 신뢰성 약함. `.mcp.json` 포트 동적화(`${WIMCC_PORT:-7878}`)만 채택. 상세 근거는 implementation-notes.
 - 영역: `plugins/session-retrospect`, hook collector(`/hooks/v1/events`), `src/insight/fingerprint.rs`, README
 
 ## 배경 / 문제

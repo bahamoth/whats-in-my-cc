@@ -209,18 +209,13 @@ traces는 beta다 — `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`이 없으면 SDK�
 
 ### Hooks
 
-`session-retrospect` 플러그인을 설치하면 **SessionStart hook이 자동 등록**되어, 세션
-시작 시점의 CLAUDE.md 스냅샷(`instruction_snapshot`)을 wimcc로 forward한다 — 자기개선
-코호트 분석(`fingerprint`)의 독립변수(`claude_md`/`instruction_sha256`)다. transcript에는
-CLAUDE.md가 남지 않으므로 이 경로가 유일한 관측 수단이다. **별도 `settings.json` 편집은
-필요 없다.**
+collector hook 엔드포인트(`POST /hooks/v1/events`)는 존재하지만, lifecycle event는 대부분
+transcript live tail로 이미 수집되므로 **일반적으로 forward 등록은 불필요하다**(중복).
+SessionStart 시점의 instruction(CLAUDE.md) 스냅샷도 자기개선 fingerprint 용도로 검토했으나,
+단일 사용자 환경에서는 git 이력으로 대체 가능해 **채택하지 않았다**(근거: implementation-notes).
 
-wimcc를 기본(`7878`)과 다른 포트로 띄우면 `WIMCC_PORT` 환경변수로 지정한다 — hook과 MCP
-연결이 함께 그 포트를 따라간다(예: `WIMCC_PORT=9000`).
-
-forward는 fail-soft다(`-m 2` + `|| true`, PRD OBS-3) — wimcc가 죽었거나 느려도 세션은
-막히지 않는다. PreToolUse/PostToolUse 등 다른 lifecycle은 transcript live tail로 이미
-수집되므로 수동 forward 등록은 불필요하다(중복).
+wimcc를 기본(`7878`)과 다른 포트로 띄우면 `WIMCC_PORT` 환경변수로 지정한다 —
+`session-retrospect` 플러그인의 MCP 연결이 그 포트를 따라간다(예: `WIMCC_PORT=9000`).
 
 ### Smoke test
 

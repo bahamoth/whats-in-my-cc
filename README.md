@@ -219,20 +219,15 @@ emits spans. Records without `session.id` are stored but excluded from
 
 ### Hooks
 
-Install the `session-retrospect` plugin and a **SessionStart hook is registered
-automatically** — it forwards the session-start CLAUDE.md snapshot
-(`instruction_snapshot`) to wimcc, which is the independent variable
-(`claude_md`/`instruction_sha256`) for self-improvement cohort analysis
-(`fingerprint`). CLAUDE.md is never recorded in the transcript, so this hook is
-the only way to observe it. **No `settings.json` editing required.**
+The collector endpoint (`POST /hooks/v1/events`) exists, but lifecycle events are
+mostly already captured via transcript live tail, so **forwarding is generally
+unnecessary** (duplicate). A SessionStart instruction (CLAUDE.md) snapshot was
+also evaluated for the self-improvement fingerprint, but in a single-user setup
+it is recoverable from git history, so it was **not adopted** (see
+implementation-notes).
 
-If you run wimcc on a non-default port, set `WIMCC_PORT` — both the hook and the
-MCP connection follow it (e.g. `WIMCC_PORT=9000`).
-
-The forward is fail-soft (`-m 2` + `|| true`, PRD OBS-3): if wimcc is down or
-slow your session is never blocked. Other lifecycle events (PreToolUse,
-PostToolUse, …) are already captured via transcript live tail, so manual forward
-registration is unnecessary (duplicate).
+If you run wimcc on a non-default port, set `WIMCC_PORT` — the
+`session-retrospect` plugin's MCP connection follows it (e.g. `WIMCC_PORT=9000`).
 
 ### Smoke tests
 

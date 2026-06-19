@@ -5202,7 +5202,12 @@ vitest: 69 passed
   </section>
 
   <section>
-    <h2 id="sessionstart-hook-plugin-2026-06-19">SessionStart forward hook을 플러그인에 번들 (2026-06-19)</h2>
+    <h2 id="sessionstart-hook-plugin-2026-06-19">SessionStart forward hook 검토 → 미채택 (2026-06-19)</h2>
+    <p><strong>결론: 미채택.</strong> 아래 설계대로 구현하고 smoke까지 했으나(instruction_snapshot 0→1 생성 확인),
+    순증분이 단일 사용자 환경에서 (a) <strong>git 이력으로 대체 가능</strong>하고(세션이 본 CLAUDE.md가 git에 커밋된 단일
+    프로젝트 파일·working tree clean·유저전역/조상 CLAUDE.md 부재 — 실측), (b) 자기개선 코호트 분석이 표본·교란 변수로
+    신뢰성이 약해, 효용이 비용을 정당화하지 못한다고 판단해 되돌렸다. <code>.mcp.json</code> 포트 동적화
+    (<code>${WIMCC_PORT:-7878}</code>)만 채택. 아래는 검토 기록(미래에 같은 검토를 반복하지 않기 위해 보존).</p>
     <p>collector forward를 <code>session-retrospect</code> 플러그인이 <code>hooks/hooks.json</code>으로
     번들한다. 사용자가 <code>settings.json</code>을 직접 편집하지 않고 플러그인 설치만으로 SessionStart
     forward가 활성화된다. <strong>SessionStart만</strong> 등록 — PreToolUse/PostToolUse 등 다른
