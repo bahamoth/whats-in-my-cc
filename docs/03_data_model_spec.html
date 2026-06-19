@@ -61,7 +61,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <path d="M520 367 L620 363" class="edge" marker-end="url(#arrd)"/>
 <path d="M700 252 C730 280 750 300 757 330" class="edge" marker-end="url(#arrd)"/>
 </svg></div>
-<p class="muted">transcript live tail + ingest backfill + OTel/hook collector → <code>raw_event</code>(원본 보존) → <code>observed_event</code> → side-table(usage_facet · diff_hunk · verification_run) → ingest가 insight 파이프라인(detector 5종)을 직접 호출 → <code>signal</code> → 조회 시 on-demand SessionMetrics.</p>
+<p class="muted">transcript live tail + ingest backfill + OTel collector → <code>raw_event</code>(원본 보존) → <code>observed_event</code> → side-table(usage_facet · diff_hunk · verification_run) → ingest가 insight 파이프라인(detector 5종)을 직접 호출 → <code>signal</code> → 조회 시 on-demand SessionMetrics.</p>
 </section>
 <section id="raw"><h2><span class="num">03</span>RawEvent</h2>
 <p>원본 보존 레이어. 구현은 별도 payload store 없이 <code>raw_event</code> 행에 payload bytes를 직접 보존한다 (<code>src/db/repo_raw.rs</code> 기준).</p>
@@ -79,7 +79,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "redaction_state": "not_redacted",
   "redaction_manifest": null
 }</code></pre>
-<table><thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead><tbody><tr><td>source_type</td><td>yes</td><td><code>claude_transcript</code> · <code>otel</code>(traces) · <code>otel-metrics</code> · <code>otel-logs</code> · <code>hook</code> · <code>unparseable</code>(파싱 실패 라인도 원본 보존). file lineage는 transcript <code>toolUseResult.structuredPatch</code>에서 나온다.</td></tr><tr><td>payload / payload_sha256</td><td>yes</td><td>payload bytes 그대로 보존. <code>payload_sha256</code>는 dedup 키 — hook collector 경로에서는 마스킹 적용 <em>전</em> canonical payload 기준으로 계산된다.</td></tr><tr><td>redaction_state</td><td>yes</td><td><code>redacted</code> | <code>not_redacted</code> | <code>not_applicable</code>. <code>redaction_manifest</code>는 적용 규칙의 JSON 직렬화.</td></tr></tbody></table>
+<table><thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead><tbody><tr><td>source_type</td><td>yes</td><td><code>claude_transcript</code> · <code>otel</code>(traces) · <code>otel-metrics</code> · <code>otel-logs</code> · <code>unparseable</code>(파싱 실패 라인도 원본 보존). file lineage는 transcript <code>toolUseResult.structuredPatch</code>에서 나온다.</td></tr><tr><td>payload / payload_sha256</td><td>yes</td><td>payload bytes 그대로 보존. <code>payload_sha256</code>는 dedup 키(마스킹 적용 <em>전</em> canonical payload 기준).</td></tr><tr><td>redaction_state</td><td>yes</td><td><code>redacted</code> | <code>not_redacted</code> | <code>not_applicable</code>. <code>redaction_manifest</code>는 적용 규칙의 JSON 직렬화.</td></tr></tbody></table>
 </section>
 <section id="observed"><h2><span class="num">04</span>ObservedEvent</h2>
 <div class="callout"><strong>Event-first:</strong> 메세지·디테일·raw 뷰와 모든 detector는 <code>ObservedEvent</code> + correlation 키(<code>tool_use_id</code>/<code>request_id</code>/<code>turn_id</code>/<code>message_id</code>)로 직접 동작한다. correlation 키는 nested object가 아니라 <strong>1급 컬럼</strong>이다. 상세: <a href="implementation-notes.html#event-first-redesign"><code>implementation-notes.html#event-first-redesign</code></a>.</div>
@@ -112,7 +112,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <table><thead><tr><th>kind</th><th>Notes</th></tr></thead><tbody>
 <tr><td><code>user_message</code> / <code>assistant_message</code> / <code>thinking</code></td><td>transcript 대화 라인. <code>assistant_message</code> payload에 <code>model</code> 등 JSON 필드가 보존된다.</td></tr>
 <tr><td><code>tool_call</code> / <code>tool_result</code></td><td><code>tool_use_id</code>로 페어링. <code>tool_call.tool_name</code>은 컬럼이자 payload 필드.</td></tr>
-<tr><td><code>hook_event</code></td><td>subkind 두 계열 — <strong>hook collector</strong>(<code>POST /hooks/v1/events</code>): <code>pre_tool_use</code>, <code>post_tool_use</code>, <code>user_prompt_submit</code>, <code>stop</code>, <code>subagent_stop</code>, <code>notification</code>, <code>pre_compact</code>, <code>session_start</code>, <code>session_end</code>, <code>unknown</code>. <strong>transcript attachment 승격</strong>: <code>hook_success</code>, <code>hook_additional_context</code>, <code>hook_system_message</code>, <code>hook_cancelled</code> (real fixture: <code>disposition_v01.jsonl</code>).</td></tr>
+<tr><td><code>hook_event</code></td><td>transcript live tail이 hook 결과 attachment를 승격: <code>hook_success</code>, <code>hook_additional_context</code>, <code>hook_system_message</code>, <code>hook_cancelled</code> (real fixture: <code>disposition_v01.jsonl</code>). 전용 <code>/hooks/v1/events</code> collector(subkind <code>pre_tool_use</code> 등)는 2026-06 제거.</td></tr>
 <tr><td><code>system_summary</code></td><td>transcript system 라인. subkind = 원본 subtype.</td></tr>
 <tr><td><code>session_state</code></td><td>세션 상태성 레코드 (예: subkind <code>file_history_snapshot</code>).</td></tr>
 <tr><td><code>attachment_meta</code></td><td>hook으로 승격되지 않은 attachment.</td></tr>
@@ -235,16 +235,14 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <h3>Usage baseline — <code>/v1/usage/baseline</code></h3>
 <p>usage_facet가 있는 모든 세션 횡단 quantile(p25/median/p75): <code>cache_hit_ratio</code> · <code>billed_tokens</code> · <code>assistant_events</code> · <code>output_tokens</code> + <code>session_count</code>. cache_hit_ratio <em>분포</em>는 baseline에만 존재한다 — 세션 횡단 quantile 분포는 유효한 비교다.</p>
 <h3>SessionFingerprint — <code>GET /v1/sessions/:id/fingerprint</code> (on-demand, 저장 테이블 없음)</h3>
-<p>"이 세션은 어떤 구성 아래에서 돌았는가"의 결정론 관측. 자기개선 루프의 <strong>독립변수</strong> — 개입(CLAUDE.md/스킬/모델 변경)의 효과를 세션 코호트로 귀속한다. SessionMetrics와 동일한 on-demand 무저장 패턴이며 판단 필드 없음. 구현: <code>src/insight/fingerprint.rs</code>의 <code>SessionFingerprint</code>.</p>
+<p>"이 세션은 어떤 구성 아래에서 돌았는가"의 결정론 관측. 자기개선 루프의 <strong>독립변수</strong> — 개입(스킬/모델/CC 버전 등 구성 변경)의 효과를 세션 코호트로 귀속한다. SessionMetrics와 동일한 on-demand 무저장 패턴이며 판단 필드 없음. 구현: <code>src/insight/fingerprint.rs</code>의 <code>SessionFingerprint</code>.</p>
 <pre><code>{
   "session_id": "sess_…",
   "models": ["claude-…"],                 // assistant_message payload `$.model` distinct (payload 필드 → 과거 세션은 재ingest 필요)
   "cc_versions": ["…"], "git_branches": ["…"],
-  "cwds": ["…"], "entrypoints": ["…"],    // observed_event 컬럼 distinct
-  "claude_md": [{ "path": "…", "sha256": "…", "bytes": 0 }],  // session_start hook /captured/claude_md union (path 정렬)
-  "instruction_sha256": null              // 정렬 (path,sha) 결합 sha256 — 코호트 group key. 스냅샷 없으면 None(결측 ≠ 빈 instruction)
+  "cwds": ["…"], "entrypoints": ["…"]    // observed_event 컬럼 distinct
 }</code></pre>
-<p class="muted"><code>claude_md</code>는 session_start hook 스냅샷(<code>ingest::instruction_snapshot</code>)에서만 채워진다 — transcript에는 CLAUDE.md가 기록되지 않으므로(2026-06-12 실측) hook 미수집 세션은 <code>claude_md</code>가 비고 <code>instruction_sha256</code>은 None. 결측은 결측으로 노출한다.</p>
+<p class="muted">fingerprint 필드는 모두 transcript/observed_event에서 도출된다. (CLAUDE.md instruction 스냅샷 필드 <code>claude_md</code>/<code>instruction_sha256</code>은 hook collector 폐지로 2026-06 제거 — <code>implementation-notes.html</code> 참고.)</p>
 </section>
 <section id="indexes"><h2><span class="num">08</span>Indexes and Query Keys</h2>
 <p class="muted">migration 파일 기준 현행 인덱스.</p>
@@ -271,7 +269,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <section id="migration"><h2><span class="num">09</span>Schema Migration Policy</h2>
 <ul><li>Minor schema changes must preserve existing fields or provide derived compatibility view.</li><li>Parser version changes must be recorded on every ObservedEvent.</li><li>OTel schema drift must not break raw event preservation; unknown telemetry fields는 facet의 <code>attributes</code> JSON에 보존된다.</li><li>현행 migration head는 <strong>0022</strong>.</li><li>payload 필드(<code>tool_call.tool_name</code>, <code>assistant_message.model</code> 등)는 JSON BLOB이라 schema migration 없이 추가된다 — 기존 이벤트에 채우려면 재ingest 필요.</li></ul>
 </section>
-<section id="questions"><h2><span class="num">10</span>피드백 필요 사항</h2><ol><li>raw payload hash 기준 — 현행 구현(hook collector 경로 실측)은 redaction <em>전</em> canonical payload 기준으로 sha256을 계산한다. 다른 source 경로 전반의 기준 통일 여부는 검토 항목.</li></ol></section>
+<section id="questions"><h2><span class="num">10</span>피드백 필요 사항</h2><ol><li>raw payload hash 기준 — redaction <em>전</em> canonical payload 기준으로 sha256을 계산하는 source 경로가 있다. 다른 source 경로 전반의 기준 통일 여부는 검토 항목.</li></ol></section>
 <div class="footer">What's in My Claude Code HTML Documentation Set · local-first · evidence-linked · OTel-first</div></main></div>
 <script>
 const bar=document.querySelector('.scrollbar');
