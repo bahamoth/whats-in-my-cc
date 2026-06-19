@@ -11,6 +11,16 @@ transcript가 아닌 **execution replay**로 "무엇이, 왜 그렇게 됐는가
 - 기본 네트워크: `127.0.0.1` binding
 - 설계 변경 이력의 SSOT는 git history + `docs/implementation-notes.html`
 
+## Serena usage
+
+When working on this repository, prefer Serena's symbol-level tools before broad file reads.
+
+- Use Serena for symbol lookup, reference search, and targeted edits.
+- Before modifying code, inspect relevant symbols and references.
+- Avoid reading entire files unless symbol-level context is insufficient.
+- For refactoring, prefer semantic rename/edit operations over raw text replacement.
+- After changes, show the diff and run the relevant tests when feasible.
+
 ## 모델 오케스트레이션
 
 작업을 하위 작업으로 분해해 적절한 모델에 위임한다. 라우팅은 아래 다섯 축 중
