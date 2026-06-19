@@ -2,7 +2,7 @@
   "mcpServers": {
     "wimcc": {
       "type": "http",
-      "url": "http://127.0.0.1:7878/mcp"
+      "url": "http://127.0.0.1:${WIMCC_PORT:-7878}/mcp"
     }
   }
 }
