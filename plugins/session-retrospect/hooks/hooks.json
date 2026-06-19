@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -sS -m 2 -X POST -H 'content-type: application/json' --data-binary @- \"http://127.0.0.1:${WIMCC_PORT:-7878}/hooks/v1/events\" >/dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ]
+  }
+}
