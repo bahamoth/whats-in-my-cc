@@ -42,7 +42,21 @@ pub static EXT_OBJECT: &[(&str, &str)] = &[
     // saved diff/patch output text — written (saving) and read back as input.
     ("diff", "data"),
     ("patch", "data"),
+    // image assets (2026-06-23 tagging loop) — read/written via Read/Edit.
+    ("jpg", "image"),
+    ("jpeg", "image"),
+    ("png", "image"),
+    ("gif", "image"),
+    ("svg", "image"),
+    ("webp", "image"),
+    // shell script content is code (distinct from the `sh` COMMAND below).
+    ("sh", "code"),
 ];
+
+/// 확장자 없는 알려진 파일명 → object. `ext_of`가 빈 문자열을 주는 dotfile·
+/// 무확장 파일(`.gitignore`/`justfile` 등)을 basename으로 조회한다
+/// (2026-06-23 tagging loop). EXT_OBJECT(확장자) 미스 시에만 참조된다.
+pub static FILENAME_OBJECT: &[(&str, &str)] = &[(".gitignore", "config"), ("justfile", "code")];
 
 fn read_tag_for_object(object: &str) -> Option<&'static str> {
     match object {
@@ -50,6 +64,7 @@ fn read_tag_for_object(object: &str) -> Option<&'static str> {
         "docs" => Some("read.docs"),
         "config" => Some("read.config"),
         "data" => Some("read.data"),
+        "image" => Some("read.image"),
         _ => None,
     }
 }
@@ -59,6 +74,7 @@ fn write_tag_for_object(object: &str) -> Option<&'static str> {
         "docs" => Some("write.docs"),
         "config" => Some("write.config"),
         "data" => Some("write.data"),
+        "image" => Some("write.image"),
         _ => None,
     }
 }
@@ -140,6 +156,9 @@ pub static BASH_FIRST_TOKEN_TAGS: &[(&str, &str)] = &[
     ("eslint", "lint.code"),
     ("ruff", "lint.code"),
     ("prettier", "lint.code"),
+    // misc single-purpose tools (2026-06-23 tagging loop)
+    ("pdftotext", "read.docs"), // extract text from a PDF document
+    ("serena", "run.code"),     // serena CLI (e.g. `serena project index`)
     // vcs (git 외)
     ("gh", "write.vcs"),
 ];
@@ -157,6 +176,7 @@ static GIT_SUBS: &[(&str, &str)] = &[
     ("remote", "read.vcs"),
     ("config", "read.vcs"),
     ("ls-files", "read.vcs"),
+    ("check-ignore", "read.vcs"),
     ("shortlog", "read.vcs"),
     ("add", "write.vcs"),
     ("commit", "write.vcs"),
@@ -302,6 +322,21 @@ fn first_token(cmd: &str) -> String {
     let t = cmd.trim();
     let end = t.find(' ').filter(|&sp| sp > 0).unwrap_or(t.len());
     t[..end].to_lowercase()
+}
+
+/// Resolve the content object for a file path: extension first (EXT_OBJECT),
+/// then a basename fallback for known no-extension files (FILENAME_OBJECT).
+/// Returns "" when neither matches (caller maps that to Unmatched).
+fn object_for_path(fp: &str, ext: &str) -> &'static str {
+    if let Some((_, o)) = EXT_OBJECT.iter().find(|(k, _)| *k == ext) {
+        return o;
+    }
+    let base = fp.rsplit('/').next().unwrap_or("");
+    FILENAME_OBJECT
+        .iter()
+        .find(|(k, _)| *k == base)
+        .map(|(_, o)| *o)
+        .unwrap_or("")
 }
 
 fn ext_of(path: &str) -> String {
@@ -683,25 +718,13 @@ pub fn classify_tool_call(tool_name: Option<&str>, payload: &serde_json::Value) 
         Some("Read") => {
             let fp = str_field("file_path");
             let e = ext_of(&fp);
-            let value = read_tag_for_object(
-                EXT_OBJECT
-                    .iter()
-                    .find(|(k, _)| *k == e)
-                    .map(|(_, o)| *o)
-                    .unwrap_or(""),
-            );
+            let value = read_tag_for_object(object_for_path(&fp, &e));
             file_outcome(value, &fp, &e)
         }
         Some("Edit") | Some("Write") | Some("MultiEdit") => {
             let fp = str_field("file_path");
             let e = ext_of(&fp);
-            let value = write_tag_for_object(
-                EXT_OBJECT
-                    .iter()
-                    .find(|(k, _)| *k == e)
-                    .map(|(_, o)| *o)
-                    .unwrap_or(""),
-            );
+            let value = write_tag_for_object(object_for_path(&fp, &e));
             file_outcome(value, &fp, &e)
         }
         Some("Bash") | Some("bash") => {

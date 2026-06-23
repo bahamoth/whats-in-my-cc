@@ -265,13 +265,20 @@ async fn metrics_separates_verification_unknown_from_measured() {
     repo_verification_run::insert(&pool, &make_vrun(sid, "vrs_u3", "unknown"))
         .await
         .unwrap();
+    // not_executed: disposition(거부/차단/취소/백그라운드) — 명령 미실행. unknown과
+    // 별개 축이라 unknown 카운트를 부풀리지 않는다 (2026-06-23 review).
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vrs_ne1", "not_executed"))
+        .await
+        .unwrap();
 
     let m = compute_session_metrics(&pool, sid).await.unwrap();
-    assert_eq!(m.verification_total, 6);
+    assert_eq!(m.verification_total, 7);
     assert_eq!(m.verification_passed, 1);
     assert_eq!(m.verification_failed, 2);
     assert_eq!(m.verification_unknown, 3);
-    // measured = passed + failed = 3; unknown은 분모에서 분리되어 별도 노출.
+    assert_eq!(m.verification_not_executed, 1);
+    // measured = passed + failed = 3; unknown(실행됐으나 결과 미상)과
+    // not_executed(미실행)는 각각 별도 축으로 분리 노출.
 }
 
 /// payload를 지정해 tool_result 이벤트를 시드한다 (disposition 카운트용).

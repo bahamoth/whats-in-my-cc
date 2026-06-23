@@ -120,6 +120,7 @@ describe('getSessionMetrics', () => {
       verification_passed: 3,
       verification_failed: 1,
       verification_unknown: 0,
+      verification_not_executed: 0,
       context_bloat_count: 1,
   tool_user_rejected: 0,
   tool_policy_denied: 0,

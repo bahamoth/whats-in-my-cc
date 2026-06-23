@@ -15,13 +15,13 @@ import type { ObservedEventDto } from '../../../api/types';
 
 // ── Taxonomy: every tag is `verb.object` ──────────────────────────────────
 //   verbs   : read · write · delete · build · test · run · lint
-//   objects : code · docs · config · data · file · proc · vcs · db · web · deps
+//   objects : code · docs · config · data · image · file · proc · vcs · db · web · deps
 // The chip is coloured by the VERB (the part before the dot).
 export type Tag =
-  | 'read.code' | 'read.docs' | 'read.config' | 'read.data'
+  | 'read.code' | 'read.docs' | 'read.config' | 'read.data' | 'read.image'
   | 'read.file' | 'read.proc' | 'read.vcs' | 'read.db' | 'read.web'
   | 'write.file' | 'write.vcs' | 'write.deps'
-  | 'write.code' | 'write.docs' | 'write.config' | 'write.data'
+  | 'write.code' | 'write.docs' | 'write.config' | 'write.data' | 'write.image'
   | 'delete.file'
   | 'build.code' | 'test.code' | 'run.code' | 'lint.code';
 

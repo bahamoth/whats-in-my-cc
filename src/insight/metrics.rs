@@ -40,9 +40,16 @@ pub struct SessionMetrics {
     pub verification_passed: i64,
     /// Verification runs whose `status == "failed"`.
     pub verification_failed: i64,
-    /// Verification runs whose `status == "unknown"` — measurement failed,
-    /// NOT a failure. Exclude from pass/fail denominators.
+    /// Verification runs whose `status == "unknown"` — the command RAN but its
+    /// result was unreadable (exit code masked by a pipe, or no parseable
+    /// summary survived). NOT a failure. Exclude from pass/fail denominators.
     pub verification_unknown: i64,
+    /// Verification runs whose `status == "not_executed"` — the command did NOT
+    /// run (disposition: user_rejected / policy_denied / cancelled / background).
+    /// A separate axis from `unknown`: not a verification outcome at all, so it
+    /// must not inflate the unknown bucket (2026-06-23 review). status_basis
+    /// carries the disposition reason.
+    pub verification_not_executed: i64,
     /// Number of `context_bloat` detector signals fired in the session.
     pub context_bloat_count: i64,
     /// `tool_result`가 사용자 거부 마커로 시작한 호출 수 (실행되지 않음 —
@@ -206,6 +213,8 @@ pub async fn compute_session_metrics(
     let verification_passed = vruns.iter().filter(|v| v.status == "passed").count() as i64;
     let verification_failed = vruns.iter().filter(|v| v.status == "failed").count() as i64;
     let verification_unknown = vruns.iter().filter(|v| v.status == "unknown").count() as i64;
+    let verification_not_executed =
+        vruns.iter().filter(|v| v.status == "not_executed").count() as i64;
 
     Ok(SessionMetrics {
         session_id: session_id.to_string(),
@@ -215,6 +224,7 @@ pub async fn compute_session_metrics(
         verification_passed,
         verification_failed,
         verification_unknown,
+        verification_not_executed,
         context_bloat_count,
         tool_user_rejected,
         tool_policy_denied,
