@@ -204,8 +204,11 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
         };
         let (status, status_provenance) = if result_disposition.is_some() {
             // Disposition (rejected/denied/cancelled/background): the tool didn't
-            // run, or the content isn't real output → genuinely unknown.
-            ("unknown", "unknown".to_string())
+            // run → NOT a verification outcome. Distinct from "unknown" (executed
+            // but result unreadable, e.g. piped/no-summary) so the unknown bucket
+            // doesn't monotonically grow with non-executions (2026-06-23 review).
+            // status_basis keeps the disposition name as the reason.
+            ("not_executed", "unknown".to_string())
         } else if m.status_basis == "piped" {
             // piped masks the shell exit code (no measured-from-exit), BUT the
             // command's own deterministic summary may survive the pipe (tier-4
@@ -748,6 +751,43 @@ mod tests {
         assert_eq!(runs[0].status_provenance.as_deref(), Some("estimated"));
     }
 
+    /// 2026-06-23: disposition(거부/차단/취소/백그라운드)은 명령이 실제로 실행되지
+    /// 않았으므로 status="not_executed" — "실행됐으나 결과 못 읽음"(unknown)과 구분한다.
+    /// 종전엔 둘 다 unknown으로 뭉쳐, 비실행분이 unknown을 단조 증가시켰다(사용자 리뷰).
+    /// status_basis에는 disposition 이름을 그대로 남겨 사유를 보존한다.
+    #[test]
+    fn disposition_yields_not_executed_not_unknown() {
+        let cases = [
+            (
+                "The user doesn't want to proceed with this tool use. The tool use was rejected.",
+                "user_rejected",
+            ),
+            ("Hook PreToolUse:Bash denied this tool", "policy_denied"),
+            (
+                "<tool_use_error>Cancelled: parallel tool call cancelled.</tool_use_error>",
+                "cancelled",
+            ),
+            (
+                "Command running in background with ID: abc123",
+                "background",
+            ),
+        ];
+        for (i, (content, basis)) in cases.iter().enumerate() {
+            let tid = format!("toolu_disp_{i}");
+            let runs = extract_verification_runs(&make_bash_run(&tid, "cargo test", content));
+            assert_eq!(runs.len(), 1, "case {basis}");
+            assert_eq!(
+                runs[0].status, "not_executed",
+                "disposition {basis} must yield not_executed (was unknown); got {:?}",
+                runs[0].status
+            );
+            assert_eq!(
+                runs[0].status_basis, *basis,
+                "status_basis preserves the reason"
+            );
+        }
+    }
+
     /// piped helper: a Bash run whose command is piped to a non-pager (so the
     /// matched segment's status_basis = "piped") with the given result content.
     fn make_piped_run(tid: &str, cmd: &str, result_content: &str) -> Vec<ObservedEvent> {
@@ -822,7 +862,7 @@ mod tests {
         );
         let runs = extract_verification_runs(&evs);
         assert_eq!(runs.len(), 1);
-        assert_eq!(runs[0].status, "unknown");
+        assert_eq!(runs[0].status, "not_executed");
         assert_eq!(runs[0].status_basis, "user_rejected");
         assert_eq!(runs[0].status_provenance.as_deref(), Some("unknown"));
     }
@@ -839,12 +879,12 @@ mod tests {
         );
         let runs = extract_verification_runs(&evs);
         assert_eq!(runs.len(), 1);
-        assert_eq!(runs[0].status, "unknown");
+        assert_eq!(runs[0].status, "not_executed");
         assert_eq!(runs[0].status_basis, "background");
     }
 
     #[test]
-    fn backgrounded_run_is_unknown_with_background_basis() {
+    fn backgrounded_run_is_not_executed_with_background_basis() {
         // 백그라운드 전환 시 tool_result content는 실제 출력이 아니라 하니스 안내문
         // (실 payload: disposition_v01.jsonl session 5864d6c7, 코퍼스 74건).
         // Tier-4 텍스트 추정을 적용하면 안 되고, basis로 측정 불가 사유를 남긴다.
@@ -855,7 +895,7 @@ mod tests {
         );
         let runs = extract_verification_runs(&evs);
         assert_eq!(runs.len(), 1);
-        assert_eq!(runs[0].status, "unknown");
+        assert_eq!(runs[0].status, "not_executed");
         assert_eq!(runs[0].status_basis, "background");
         assert_eq!(runs[0].status_provenance.as_deref(), Some("unknown"));
     }

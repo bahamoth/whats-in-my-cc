@@ -607,6 +607,7 @@ describe('Analysis surface', () => {
     verification_passed: 3,
     verification_failed: 1,
     verification_unknown: 0,
+    verification_not_executed: 0,
     context_bloat_count: 1,
     detector_firing: { tool_failure: 2, context_bloat: 1 },
   };

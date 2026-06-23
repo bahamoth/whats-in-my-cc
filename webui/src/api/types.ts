@@ -259,11 +259,15 @@ export type SessionMetricsDto = {
   session_id: string;
   tool_call_total: number;
   tool_failure_count: number;
-  /** passed + failed + unknown. 측정 비율은 passed/(passed+failed)를 쓴다(분모로 total 사용 금지). */
+  /** passed + failed + unknown + not_executed. 측정 비율은 passed/(passed+failed)를 쓴다(분모로 total 사용 금지). */
   verification_total: number;
   verification_passed: number;
   verification_failed: number;
+  /** 실행됐으나 결과를 읽을 수 없음(piped/요약없음). 실패 아님 — 분모 제외. */
   verification_unknown: number;
+  /** 실행 자체가 안 됨(disposition: 거부/차단/취소/백그라운드). unknown과 별개 축
+   *  — 비실행분이 unknown을 부풀리지 않도록 분리(2026-06-23). */
+  verification_not_executed: number;
   context_bloat_count: number;
   /** 사용자가 permission 프롬프트에서 거부한 호출 수 — 실행 안 됨(실패 아님). */
   tool_user_rejected: number;

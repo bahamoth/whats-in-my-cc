@@ -316,9 +316,11 @@ fn token_for_read_is_extension_or_basename() {
     assert_eq!(diff.disposition, TagDisposition::Tagged);
     assert_eq!(tag(&diff), Some("read.data"));
     assert_eq!(diff.token.as_deref(), Some("diff"));
-    let dotfile = read("/repo/.gitignore");
-    assert_eq!(dotfile.disposition, TagDisposition::Unmatched);
-    assert_eq!(dotfile.token.as_deref(), Some(".gitignore"));
+    // A no-extension file NOT in FILENAME_OBJECT stays Unmatched, token=basename.
+    // (`.gitignore`/`justfile` now tag via FILENAME_OBJECT — see the 2026-06-23 block.)
+    let unknown = read("/repo/Makefile");
+    assert_eq!(unknown.disposition, TagDisposition::Unmatched);
+    assert_eq!(unknown.token.as_deref(), Some("Makefile"));
 }
 
 // 2026-06-16 tagging hygiene loop — rules added from surfaced untagged tokens.
@@ -341,6 +343,41 @@ fn tagging_loop_2026_06_16_additions() {
     assert_eq!(tag(&write_t("/tmp/fix.patch")), Some("write.data"));
     // `diff` the COMMAND (distinct from the .diff extension) compares files → read.file.
     assert_eq!(tag(&bash("diff a.txt b.txt")), Some("read.file"));
+}
+
+// 2026-06-23 tagging hygiene loop — rules added from surfaced untagged tokens
+// (untagged-bash.ts --all). Evidenced counts in parens.
+#[test]
+fn tagging_loop_2026_06_23_additions() {
+    // Image assets (jpg 29, png 26) — new `image` object. jpeg/gif/svg/webp are
+    // the same closed category (read/written via Read/Edit), not a speculative
+    // generalization. Read → read.image, Write/Edit → write.image.
+    assert_eq!(tag(&read("assets/slide_qa-01.jpg")), Some("read.image"));
+    assert_eq!(tag(&read("/tmp/nc-logo-white.png")), Some("read.image"));
+    assert_eq!(tag(&read("icon.svg")), Some("read.image"));
+    assert_eq!(tag(&write_t("out/diagram.png")), Some("write.image"));
+    // Shell script extension — `.sh` file content is code (distinct from the
+    // `sh` COMMAND, which is run.code via BASH_FIRST_TOKEN_TAGS).
+    assert_eq!(tag(&read("hooks/wimcc-forward.sh")), Some("read.code"));
+    assert_eq!(tag(&edit("scripts/build.sh")), Some("write.code"));
+    // No-extension filenames (.gitignore 31, justfile 7) → FILENAME_OBJECT
+    // fallback (ext_of yields "" so EXT_OBJECT can't catch them).
+    assert_eq!(tag(&read("/repo/.gitignore")), Some("read.config"));
+    assert_eq!(tag(&edit("/repo/.gitignore")), Some("write.config"));
+    assert_eq!(tag(&read("/repo/justfile")), Some("read.code"));
+    assert_eq!(tag(&edit("/repo/justfile")), Some("write.code"));
+    // First-token commands: pdftotext (9) reads/extracts a PDF → read.docs;
+    // serena (4) runs the serena CLI tool → run.code.
+    assert_eq!(
+        tag(&bash("pdftotext -layout in.pdf out.txt")),
+        Some("read.docs")
+    );
+    assert_eq!(
+        tag(&bash("serena project index --language rust")),
+        Some("run.code")
+    );
+    // git check-ignore (5) queries ignore status → read.vcs.
+    assert_eq!(tag(&bash("git check-ignore -v .claude")), Some("read.vcs"));
 }
 
 #[test]

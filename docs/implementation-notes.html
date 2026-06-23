@@ -4343,6 +4343,22 @@ vitest: 69 passed
         <code>init-db</code> 전체 재생성은 observed 레벨 파싱(payload 필드 추출 등)이 바뀔 때만 필요하다.</li>
     </ul>
 
+    <p><strong>3차 라운드(2026-06-23 리뷰 — 적용): unknown이 두 사유를 뭉쳐 단조 증가</strong></p>
+    <ul>
+      <li><strong>문제</strong>: <code>status="unknown"</code>이 ① 실행됐으나 결과를 읽지 못함(exit/piped basis)과
+        ② disposition으로 실행 자체가 안 됨(user_rejected/policy_denied/cancelled/background basis)을
+        구분 없이 뭉쳤다. 후자는 검증 시도가 아닌데도 unknown을 끝없이 부풀려 "측정 한계" 신호를 흐렸다(사용자 리뷰).</li>
+      <li><strong>해결</strong>: disposition basis run의 <code>status</code>를 <code>not_executed</code>로 분리
+        (<code>extract_verification_runs</code>). <code>status_basis</code>는 disposition 이름 그대로 유지(사유 보존).
+        <code>status</code>에 DB CHECK 제약이 없어 migration 불필요 — 단 ingest 시점 산출물이라 재분류엔 <code>wimcc ingest --all</code>(가벼움) 필요.</li>
+      <li><strong>전파</strong>: SessionMetrics에 <code>verification_not_executed</code> 추가(unknown은 이제 "실행-결과미상"만 셈).
+        <code>SessionMetricsDto</code>·spec(03 status enum / 04 metrics·status / 01 렌더 정책)·테스트 동기화.
+        분석 패널은 렌더하지 않음 — disposition count와 동일하게 API 전용(스펙 01 일관).</li>
+      <li><strong>루프 효과</strong>: <code>collectUnknownVerification</code>은 <code>status==="unknown"</code>만 surface하므로
+        재ingest 후 disposition run은 자동으로 unknown 목록에서 빠진다 — 루프가 진짜 "복구 가능한 파싱 갭"만 남긴다.
+        남은 unknown(piped/요약 소실)은 2차 라운드의 구조적 바닥.</li>
+    </ul>
+
     <h2 id="dogfooding-deferred-2026-06-11">개밥먹기 분석 — 이번 범위 외(deferred)</h2>
     <ul>
       <li><strong>비용 미가격·Opus 과대 — 2026-06-11 적용</strong>: 6a254a2a 지배 모델
