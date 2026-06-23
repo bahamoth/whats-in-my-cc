@@ -128,14 +128,17 @@ JSON-RPC content다. `--auth on`이면 모든 `/v1/*`·`/mcp` 요청에
 | `/v1/sessions` | 세션 목록 (최신순) |
 | `/v1/sessions/{id}` | `{session_id, summary}` (event는 `/v1/sessions/{id}/events`로 조회) |
 | `/v1/sessions/{id}/events` | 페이지된 observed event |
+| `/v1/sessions/{id}/turns` | 턴별 롤업 (tool histogram, 편집 파일, 턴 간 file churn, 턴별 토큰) |
 | `/v1/sessions/{id}/diff-hunks` | 세션의 edit hunk |
 | `/v1/sessions/{id}/usage` | 토큰 usage 롤업 (`assistant_events`, `user_turns`, 토큰, 추정 비용) |
 | `/v1/sessions/{id}/metrics` | 온디맨드 세션 행동 지표 — 합성 가능한 count만 (rate 없음) |
+| `/v1/sessions/{id}/fingerprint` | 세션 환경 fingerprint (모델, CC 버전, git branch, cwd, entrypoint, CLAUDE.md 해시) |
 | `/v1/sessions/{id}/signals` | 결정론 detector signal (evidence-linked) |
 | `/v1/signals/{id}` | 단일 signal |
 | `/v1/sessions/{id}/verification-runs` | 세션 내 verification run |
 | `/v1/verification-runs/{id}` | 단일 verification run |
 | `/v1/usage/baseline` | 세션 간 usage baseline (p25/median/p75) |
+| `/v1/metrics` | 세션 횡단 metrics + fingerprint series (`project`/`from`/`to`/`limit` 필터) — 전후 비교 측정면 |
 | `/v1/detectors` | detector manifest (deterministic L1 detector 5종) |
 | `/v1/events/{event_id}/raw` | 한 event의 source-preserving raw payload |
 | `/v1/audit` | audit 로그 |
@@ -159,6 +162,8 @@ SDK가 `…/v1/metrics`로 POST해서 wimcc가 404를 반환한다.
 - `whats_in_my_cc.search_sessions`
 - `whats_in_my_cc.get_file_lineage`
 - `whats_in_my_cc.get_otel_trace`
+- `whats_in_my_cc.get_session_turns`
+- `whats_in_my_cc.get_project_metrics`
 - `whats_in_my_cc.list_detectors`
 
 MCP resource도 제공한다: 세션별 summary, 그리고 file-lineage·OTel-trace
