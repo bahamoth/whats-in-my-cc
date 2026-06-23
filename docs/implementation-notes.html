@@ -2301,7 +2301,10 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
       <dd><code>NoopTestExtractor</code>는 <code>cfg(test)</code>가 아니라 <code>feature = "test-helpers"</code>로 guard.
           이유: integration test binary는 lib을 test 모드로 컴파일하지 않아 <code>cfg(test)</code>가
           lib code에서 inactive됨. <code>[[test]] required-features = ["test-helpers"]</code>로
-          해당 통합테스트만 opt-in.</dd>
+          해당 통합테스트만 opt-in.
+          <em>(현행: 2026-06-23 제거 — <code>NoopTestExtractor</code>가 <code>all_detectors()</code>에
+          등록된 적이 없고 이를 opt-in하는 <code>[[test]]</code> 타깃도 없어 죽은 코드였다.
+          모듈·feature 모두 삭제.)</em></dd>
 
       <dt>/v1/health insight block</dt>
       <dd><code>judge_kind</code>, <code>judge_calls_24h</code>, <code>judge_pending_count</code>,

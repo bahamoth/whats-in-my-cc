@@ -43,7 +43,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <div class="callout"><strong>용어:</strong> MCP 공식 명칭은 <em>Streamable HTTP transport</em>다. 본 문서에서는 사용자의 표현인 “MCP streaming http”를 이 transport로 해석한다.</div>
 </section>
 <section id="surface"><h2><span class="num">02</span>Serving Surface</h2>
-<div class="grid three"><div class="card"><h4>Local WebUI</h4><p>브라우저 기반 React SPA (rust-embed로 서버에 내장). 같은 Pull API + SSE를 소비해 event-first replay와 insight strip을 렌더링한다.</p></div><div class="card"><h4>Pull API</h4><p>HTTP JSON API. <strong>전부 GET</strong> read-only. write endpoint 없음.</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p><code>/mcp</code> 단일 endpoint. AI client가 resources와 read-only tools 5종으로 insight를 조회한다.</p></div></div>
+<div class="grid three"><div class="card"><h4>Local WebUI</h4><p>브라우저 기반 React SPA (rust-embed로 서버에 내장). 같은 Pull API + SSE를 소비해 event-first replay와 insight strip을 렌더링한다.</p></div><div class="card"><h4>Pull API</h4><p>HTTP JSON API. <strong>전부 GET</strong> read-only. write endpoint 없음.</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p><code>/mcp</code> 단일 endpoint. AI client가 resources와 read-only tools 6종으로 insight를 조회한다.</p></div></div>
 <div class="callout"><strong>Collectors (입력면):</strong> 같은 서버가 OTLP/HTTP receiver(<code>POST /otel/v1/traces|metrics|logs</code>)를 연다. 이는 telemetry <em>수집</em>이며 read-only 원칙의 예외가 아니다 — domain resource를 외부에서 수정하는 경로가 아니다. (hook receiver <code>/hooks/v1/events</code>는 2026-06 제거 — hook은 transcript에서 관측한다.)</div>
 </section>
 <section id="api"><h2><span class="num">03</span>Pull API Contract</h2>
@@ -165,7 +165,7 @@ data: {
 <ul>
 <li><strong>기본 bind:</strong> <code>127.0.0.1</code> (<code>--bind</code>로 변경 시 explicit opt-in). 기본 port <code>7878</code>.</li>
 <li><strong>auth 기본 = off</strong> (단일 사용자 dev). <code>wimcc serve --auth on</code>으로 켜면 bearer token 검증이 활성화된다.</li>
-<li><strong>auth 적용 범위 (on일 때):</strong> 모든 <code>/v1/*</code> GET endpoint + <code>/mcp</code>에 <code>Authorization: Bearer &lt;token&gt;</code> 필요. <strong>예외(항상 열림):</strong> <code>/otel/*</code>·<code>/hooks/*</code> collectors, <code>/v1/stream</code>(SSE), static SPA. 토큰 비교는 constant-time(<code>subtle</code>).</li>
+<li><strong>auth 적용 범위 (on일 때):</strong> 모든 <code>/v1/*</code> GET endpoint + <code>/mcp</code>에 <code>Authorization: Bearer &lt;token&gt;</code> 필요. <strong>예외(항상 열림):</strong> <code>/otel/*</code> collectors, <code>/v1/stream</code>(SSE), static SPA. 토큰 비교는 constant-time(<code>subtle</code>).</li>
 <li><strong>token 위치:</strong> macOS <code>~/Library/Application Support/wimcc/token</code> · Linux <code>~/.config/wimcc/token</code>, mode 0600 (과잉 권한이면 기동 거부). CLI: <code>--print-token</code>, <code>--rotate-token</code>.</li>
 <li><strong>Host allowlist:</strong> 전 route에 host allowlist middleware가 적용된다 (DNS rebinding 방어).</li>
 <li><strong>redaction:</strong> ingest 시점에 rule pack v1(11규칙)으로 마스킹된 payload가 저장된다 — API가 반환하는 raw payload는 마스킹된 텍스트다 (<a href="#api">§03</a> redaction callout, Security Spec 05 §04).</li>

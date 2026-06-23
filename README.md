@@ -135,14 +135,17 @@ always unauthenticated loopback endpoints.
 | `/v1/sessions` | session list (newest first) |
 | `/v1/sessions/{id}` | `{session_id, summary}` (events come from `/v1/sessions/{id}/events`) |
 | `/v1/sessions/{id}/events` | paged observed events |
+| `/v1/sessions/{id}/turns` | per-user-turn rollup (tool histogram, edited files, cross-turn file churn, per-turn tokens) |
 | `/v1/sessions/{id}/diff-hunks` | edit hunks for the session |
 | `/v1/sessions/{id}/usage` | token-usage rollup (`assistant_events`, `user_turns`, tokens, estimated cost) |
 | `/v1/sessions/{id}/metrics` | on-demand session behavioral metrics — composable counts only (no rates) |
+| `/v1/sessions/{id}/fingerprint` | session environment fingerprint (models, CC versions, git branches, cwd, entrypoint, CLAUDE.md hash) |
 | `/v1/sessions/{id}/signals` | deterministic detector signals (evidence-linked) |
 | `/v1/signals/{id}` | a single signal |
 | `/v1/sessions/{id}/verification-runs` | verification runs in the session |
 | `/v1/verification-runs/{id}` | a single verification run |
 | `/v1/usage/baseline` | cross-session usage baseline (p25/median/p75) |
+| `/v1/metrics` | cross-session metrics + fingerprint series (`project`/`from`/`to`/`limit` filters) — before/after comparison surface |
 | `/v1/detectors` | detector manifest (5 deterministic L1 detectors) |
 | `/v1/events/{event_id}/raw` | source-preserving raw payload of one event |
 | `/v1/audit` | audit log |
@@ -167,6 +170,8 @@ returns 404.
 - `whats_in_my_cc.search_sessions`
 - `whats_in_my_cc.get_file_lineage`
 - `whats_in_my_cc.get_otel_trace`
+- `whats_in_my_cc.get_session_turns`
+- `whats_in_my_cc.get_project_metrics`
 - `whats_in_my_cc.list_detectors`
 
 It also serves MCP resources: a per-session summary plus file-lineage and
