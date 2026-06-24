@@ -298,3 +298,20 @@ pub struct UsageBaselineDto {
     pub assistant_events: BaselineStat,
     pub output_tokens: BaselineStat,
 }
+
+/// `GET /v1/plugins` — one marketplace-installed plugin, resolved from the
+/// `claude` CLI (see `crate::plugins`). The webui matches an MCP tool call's
+/// server name against `mcp_servers` to enrich the detail view.
+#[derive(Serialize)]
+pub struct PluginDto {
+    /// `plugin@marketplace`.
+    pub id: String,
+    pub plugin: String,
+    pub marketplace: String,
+    /// `official` | `public` | `personal` | `unknown`.
+    pub provenance: String,
+    pub scope: String,
+    pub enabled: bool,
+    pub mcp_servers: Vec<String>,
+    pub description: Option<String>,
+}

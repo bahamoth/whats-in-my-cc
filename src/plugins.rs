@@ -66,6 +66,9 @@ pub struct PluginEntry {
     /// `mcp__plugin_<plugin>_<server>__<tool>` resolves to the plugin owning `<server>`.
     pub mcp_servers: Vec<String>,
     pub install_path: Option<String>,
+    /// From `<installPath>/.claude-plugin/plugin.json` — filled by the loader, not
+    /// `build_registry` (which is pure / filesystem-free). None until enriched.
+    pub description: Option<String>,
 }
 
 /// Build the registry by joining `claude plugins list --json` with
@@ -126,7 +129,56 @@ pub fn build_registry(list: &Value, marketplaces: &Value) -> Vec<PluginEntry> {
             enabled,
             mcp_servers,
             install_path,
+            description: None,
         });
     }
     out
+}
+
+/// Read a plugin's description from `<install_path>/.claude-plugin/plugin.json`.
+/// Small per-plugin file (not the catalog). None if absent/unreadable.
+pub fn read_plugin_description(install_path: &str) -> Option<String> {
+    let path = std::path::Path::new(install_path)
+        .join(".claude-plugin")
+        .join("plugin.json");
+    let txt = std::fs::read_to_string(path).ok()?;
+    let v: Value = serde_json::from_str(&txt).ok()?;
+    v.get("description")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+/// Run `claude <args> --json` and parse stdout. None on any failure (binary
+/// missing, non-zero exit, bad JSON) — the registry degrades to empty, never panics.
+fn run_claude_json(args: &[&str]) -> Option<Value> {
+    let out = std::process::Command::new("claude")
+        .args(args)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    serde_json::from_slice(&out.stdout).ok()
+}
+
+/// Load the full registry from the `claude` CLI, enriching each entry with its
+/// description. Best-effort: a missing/failing CLI yields an empty registry.
+pub fn load_registry() -> Vec<PluginEntry> {
+    let list = run_claude_json(&["plugins", "list", "--json"]).unwrap_or(Value::Array(vec![]));
+    let markets = run_claude_json(&["plugins", "marketplace", "list", "--json"])
+        .unwrap_or(Value::Array(vec![]));
+    let mut reg = build_registry(&list, &markets);
+    for e in &mut reg {
+        if let Some(ip) = e.install_path.as_deref() {
+            e.description = read_plugin_description(ip);
+        }
+    }
+    reg
+}
+
+/// Process-wide cached registry — loaded once (the `claude` subprocess runs on
+/// first access only). Plugins rarely change mid-serve; a restart refreshes.
+pub fn cached_registry() -> &'static [PluginEntry] {
+    static CACHE: std::sync::OnceLock<Vec<PluginEntry>> = std::sync::OnceLock::new();
+    CACHE.get_or_init(load_registry)
 }

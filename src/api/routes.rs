@@ -124,6 +124,28 @@ pub async fn health_sources(State(pool): State<SqlitePool>) -> impl IntoResponse
     })
 }
 
+/// `GET /v1/plugins` — marketplace-installed plugins + provenance, resolved from
+/// the `claude` CLI (cached once per process). Read-only; no DB state needed.
+pub async fn list_plugins() -> impl IntoResponse {
+    let data: Vec<PluginDto> = crate::plugins::cached_registry()
+        .iter()
+        .map(|e| PluginDto {
+            id: e.id.clone(),
+            plugin: e.plugin.clone(),
+            marketplace: e.marketplace.clone(),
+            provenance: e.provenance.as_str().to_string(),
+            scope: e.scope.clone(),
+            enabled: e.enabled,
+            mcp_servers: e.mcp_servers.clone(),
+            description: e.description.clone(),
+        })
+        .collect();
+    Json(Envelope {
+        meta: ResponseMeta::now(),
+        data,
+    })
+}
+
 pub async fn list_sessions(
     State(pool): State<SqlitePool>,
     Query(q): Query<ListQuery>,

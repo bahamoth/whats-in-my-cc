@@ -59,6 +59,20 @@ fn registry_resolves_id_scope_provenance_and_mcp_servers() {
 }
 
 #[test]
+fn reads_plugin_description_from_install_path() {
+    // description comes from <installPath>/.claude-plugin/plugin.json (small file),
+    // not the giant catalog — frozen from the real serena install.
+    let desc =
+        wimcc::plugins::read_plugin_description("tests/fixtures/plugins/real/serena_installpath")
+            .expect("description");
+    assert!(desc.starts_with("Semantic code analysis MCP server"));
+    assert!(
+        wimcc::plugins::read_plugin_description("tests/fixtures/plugins/real/does_not_exist")
+            .is_none()
+    );
+}
+
+#[test]
 fn mcp_server_name_resolves_to_its_plugin() {
     // A tool call mcp__plugin_serena_serena__X → server "serena" → serena plugin.
     // The CLI's mcpServers field gives this mapping directly (no name-splitting).
