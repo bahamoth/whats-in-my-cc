@@ -5240,6 +5240,39 @@ vitest: 69 passed
     <p>transcript live tail이 수집하는 <code>hook_event</code>(subkind <code>hook_success</code>/<code>hook_additional_context</code>/…)는 그대로다. "hook이 무엇을 했는가"는 transcript에 남으므로 collector 없이도 관측된다. <code>EventKind::HookEvent</code>·WebUI hookFacet·event_tags 모두 유지.</p>
     <h3>spec 동기화 (진행/후속)</h3>
     <p>docs/02·03·04·05의 "현행 동작" 기술(OTel/hook collector, <code>/hooks/v1/events</code>, source_type <code>hook</code> 등)은 코드에 맞춰 정리한다. <strong>PRD OBS-3</strong>(<code>docs/00</code> "Hook Lifecycle Capture")는 제품 요구사항이라, collector 폐지에 맞춰 "hook lifecycle을 transcript에서 관측"으로 재정의할지 폐기할지는 제품 결정 — 임의 수정하지 않는다(CLAUDE.md).</p>
+
+    <h2 id="facet-state-2026-06-24">"facet"이 아직 있나? — 용어·상태 종결 마커 (2026-06-24)</h2>
+    <p>동기: <code>facet</code>이 <em>edge 상관 → payload fold → graph 제거</em>를 거치며 가리키는 대상이 여러 번 바뀌어,
+    현존 여부조차 헷갈리는 상태가 됐다(사용자 보고). append-only 이력에 죽은 개념의 <strong>종결 표시</strong>가 없어
+    이미 제거된 <code>facet_of</code>·fold가 살아있는 것처럼 읽힌 게 원인. 이 항목이 그 종결 마커다 — 이력 섹션은
+    그대로 두고, "지금 무엇이 살아있고 무엇이 죽었는가"만 한곳에 못박는다.</p>
+    <h3>현존하는 facet (3종 — 서로 다른 의미)</h3>
+    <ul>
+      <li><strong>TelemetryFacet / MetricFacet / LogFacet</strong> (<code>src/model/observed.rs</code>) — OTel span·metric·log 신호의
+      타입 투영. 각자 자기 <code>ObservedEvent</code>(<code>otel_span</code>/<code>metric_sample</code>/<code>log_record</code>)에 귀속:
+      span은 <code>ObservedEvent.telemetry</code> 필드, metric/log는 <code>payload</code> JSON. slice-3/6 도입.</li>
+      <li><strong>usage_facet</strong> 사이드테이블 (<code>migrations/…_0014_usage_facet.sql</code>, <code>src/db/repo_usage_facet.rs</code>,
+      <code>UsageFacetRow</code>) — assistant 출력 이벤트당 토큰 사용 행. <code>/v1/sessions/:id/usage</code>·turn 롤업·baseline의 근거.</li>
+      <li><strong>(S6) identity facets</strong> — <code>SessionFacets</code>(<code>src/db/repo_observed.rs</code>): project/model/slug/preview.
+      세션 목록용 식별 정보. <code>types.ts</code>의 "identifiability facets". 위 둘과 무관한 별개 용법.</li>
+    </ul>
+    <h3>제거된 facet 개념 (더 이상 없음 — 코드·migration 0건 확인)</h3>
+    <ul>
+      <li><strong><code>facet_of</code> graph edge</strong> (도입 <code>…_0007_graph_edge_inference.sql</code>) — <code>log_record→tool_call</code>,
+      <code>span→assistant</code> 상관 엣지. <code>663b288</code>에서 fold로 대체되며 drop.</li>
+      <li><strong><code>payload.facets</code> fold</strong> (PR #26, 2026-05-31, telemetry-fold) — telemetry를 owner 이벤트의
+      <code>payload.facets</code> 배열로 접던 방식. event-first 재설계에서 제거 — <code>b48e7db</code>(on-demand correlated telemetry),
+      <code>8e4903e</code>(drop graph dependency). 현재 <code>payload.facets</code>·<code>buildEntityFacets</code> 식별자는 코드에 없다.</li>
+      <li><strong>graph 레이어 전체</strong> (graph_edge/graph_node 테이블·모듈) — <code>…_0019_drop_graph.sql</code>,
+      <code>d44bf55</code>(delete graph layer; ingest가 insight 파이프라인 직접 호출). <code>EventKind</code>에 Graph/Episode/Judge 없음.</li>
+    </ul>
+    <h3>현재 메커니즘 + SSOT</h3>
+    <p>telemetry는 <strong>독립 ObservedEvent</strong>로 저장되고, <strong>소비 시점</strong>에 correlation 키
+    (<code>tool_use_id</code>/<code>request_id</code>/<code>turn_id</code>)로 상관한다 — graph 레이어도, payload fold도 없다
+    (<code>webui/…/toolMetrics.ts</code> 주석: "No graph node, no facet — flat correlated <code>log_record</code> events").
+    현재 facet 데이터모델의 권위 문서는 <code>docs/03</code>(telemetry facet · TelemetryFacet/MetricFacet/LogFacet · usage_facet)
+    + <code>docs/02</code>("별도 graph 레이어는 없다"). 이 추적 시점(2026-06-24)에 02·03은 현행 코드와 일치 — drift 없음.
+    이력의 SSOT는 본 문서 + git.</p>
   </section>
 
 </main>
