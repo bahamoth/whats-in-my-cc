@@ -1,0 +1,44 @@
+[
+  {
+    "name": "agent-harness-hub",
+    "source": "github",
+    "repo": "ncmobilecasual/agent-harness-hub",
+    "installLocation": "/Users/bahamoth/.claude/plugins/marketplaces/agent-harness-hub"
+  },
+  {
+    "name": "anthropic-agent-skills",
+    "source": "github",
+    "repo": "anthropics/skills",
+    "installLocation": "/Users/bahamoth/.claude/plugins/marketplaces/anthropic-agent-skills"
+  },
+  {
+    "name": "cc-marketplace",
+    "source": "github",
+    "repo": "bahamoth/claude-marketplace",
+    "installLocation": "/Users/bahamoth/.claude/plugins/marketplaces/cc-marketplace"
+  },
+  {
+    "name": "claude-plugins-official",
+    "source": "github",
+    "repo": "anthropics/claude-plugins-official",
+    "installLocation": "/Users/bahamoth/.claude/plugins/marketplaces/claude-plugins-official"
+  },
+  {
+    "name": "harness-marketplace",
+    "source": "github",
+    "repo": "revfactory/harness",
+    "installLocation": "/Users/bahamoth/.claude/plugins/marketplaces/harness-marketplace"
+  },
+  {
+    "name": "mcc-llm-wiki-dev",
+    "source": "directory",
+    "path": "/Users/bahamoth/projects/mcc-llm-wiki",
+    "installLocation": "/Users/bahamoth/projects/mcc-llm-wiki"
+  },
+  {
+    "name": "wimcc",
+    "source": "directory",
+    "path": "/Users/bahamoth/projects/whats-in-my-cc",
+    "installLocation": "/Users/bahamoth/projects/whats-in-my-cc"
+  }
+]

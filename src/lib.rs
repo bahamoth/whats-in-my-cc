@@ -9,6 +9,7 @@ pub mod insight;
 pub mod live;
 pub mod model;
 pub mod paths;
+pub mod plugins;
 pub mod security;
 pub mod serve;
 pub mod telemetry;
