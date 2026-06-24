@@ -25,6 +25,8 @@ export const en = {
 
   // Session detail
   'detail.analysisToggle': 'Analysis',
+  'detail.taskBoard.title': 'Tasks',
+  'detail.taskBoard.noInProgress': 'no in_progress',
 
   // Insight strip
   'insight.stripAria': 'Session insights',

@@ -402,7 +402,9 @@ describe('SessionDetailPage', () => {
     const callsOf = (matcher: (u: string) => boolean) =>
       f.mock.calls.filter((c) => matcher(String(c[0]))).length;
     const summaryAtMount = callsOf((u) => /\/v1\/sessions\/[^/]+$/.test(u));
-    const eventsAtMount = callsOf((u) => u.includes('/events'));
+    // Exclude the Task-board fetch (`kind=tool_call,tool_result`) — it is a
+    // separate session-wide summary query, not the replay window fetch.
+    const eventsAtMount = callsOf((u) => u.includes('/events') && !u.includes('kind='));
     expect(summaryAtMount).toBe(1);
     expect(eventsAtMount).toBe(1);
 
@@ -440,7 +442,7 @@ describe('SessionDetailPage', () => {
     });
     // The summary is never re-hit by the envelope burst.
     expect(callsOf((u) => /\/v1\/sessions\/[^/]+$/.test(u))).toBe(summaryAtMount);
-    expect(callsOf((u) => u.includes('/events'))).toBe(eventsAtMount + 1);
+    expect(callsOf((u) => u.includes('/events') && !u.includes('kind='))).toBe(eventsAtMount + 1);
   });
 
   // A `gap` frame (SSE broadcast lagged — the channel is shared across all
@@ -464,7 +466,9 @@ describe('SessionDetailPage', () => {
 
     const callsOf = (m: (u: string) => boolean) =>
       f.mock.calls.filter((c) => m(String(c[0]))).length;
-    const initialWindowFetches = callsOf((u) => /\/events\?limit=/.test(u));
+    const initialWindowFetches = callsOf(
+      (u) => /\/events\?limit=/.test(u) && !u.includes('kind='),
+    );
     expect(initialWindowFetches).toBe(1);
 
     // A gap frame arrives on the shared SSE stream.
@@ -477,7 +481,9 @@ describe('SessionDetailPage', () => {
       expect(callsOf((u) => u.includes('/events') && u.includes('after='))).toBe(1);
     });
     // ... and never re-runs the initial window fetch (i.e. never reloads/wipes).
-    expect(callsOf((u) => /\/events\?limit=/.test(u))).toBe(initialWindowFetches);
+    expect(callsOf((u) => /\/events\?limit=/.test(u) && !u.includes('kind='))).toBe(
+      initialWindowFetches,
+    );
   });
 
   // A `resync` frame (SSE reconnected with a cursor the backend can't backfill
@@ -500,7 +506,9 @@ describe('SessionDetailPage', () => {
 
     const callsOf = (m: (u: string) => boolean) =>
       f.mock.calls.filter((c) => m(String(c[0]))).length;
-    const initialWindowFetches = callsOf((u) => /\/events\?limit=/.test(u));
+    const initialWindowFetches = callsOf(
+      (u) => /\/events\?limit=/.test(u) && !u.includes('kind='),
+    );
     expect(initialWindowFetches).toBe(1);
 
     const es = MockEventSource.latest();
@@ -510,7 +518,9 @@ describe('SessionDetailPage', () => {
     await waitFor(() => {
       expect(callsOf((u) => u.includes('/events') && u.includes('after='))).toBe(1);
     });
-    expect(callsOf((u) => /\/events\?limit=/.test(u))).toBe(initialWindowFetches);
+    expect(callsOf((u) => /\/events\?limit=/.test(u) && !u.includes('kind='))).toBe(
+      initialWindowFetches,
+    );
   });
 
   // Windowing: older history is paged by the stream's own near-top scroll
