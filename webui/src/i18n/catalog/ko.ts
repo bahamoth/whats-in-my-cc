@@ -23,6 +23,8 @@ export const ko: Messages = {
 
   // Session detail
   'detail.analysisToggle': '분석',
+  'detail.taskBoard.title': 'Tasks',
+  'detail.taskBoard.noInProgress': 'in_progress 미관측',
 
   // Insight strip
   'insight.stripAria': '세션 인사이트',

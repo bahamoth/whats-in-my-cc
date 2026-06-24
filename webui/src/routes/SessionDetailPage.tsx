@@ -19,10 +19,13 @@ import {
   useSessionUsageQuery,
   useUsageBaselineQuery,
   useSessionTurnsQuery,
+  useSessionTasksQuery,
   useEventRawQuery,
   useCorrelatedEventsQuery,
   useSessionMetricsQuery,
 } from '../lib/queries';
+import { buildTaskBoard } from '../lib/taskBoard';
+import { TaskBoard } from '../components/replay/board/TaskBoard';
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
 import { UntaggedBashPanel } from '../components/replay/stream/UntaggedBashPanel';
@@ -53,6 +56,14 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const usage = useSessionUsageQuery(sessionId);
   const baseline = useUsageBaselineQuery();
   const turns = useSessionTurnsQuery(sessionId);
+
+  // Task board — session-wide TaskCreate/TaskUpdate lifecycle (not the windowed
+  // replay events), correlated by taskId into a per-session todo summary.
+  const tasksQuery = useSessionTasksQuery(sessionId);
+  const taskEntries = useMemo(
+    () => buildTaskBoard(tasksQuery.data?.events ?? []),
+    [tasksQuery.data],
+  );
 
   // Analysis surface — separate from replay (spec §8.3, 원칙 7)
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -336,6 +347,11 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               turns={turns.data?.turns}
             />
             <MetaStrip session={detail.data} events={window_.events} />
+            <TaskBoard
+              entries={taskEntries}
+              selectedEventId={selectedEventId}
+              onSelectEvent={selectStreamCard}
+            />
             <button
               className={styles.analysisToggle}
               aria-pressed={analysisOpen}

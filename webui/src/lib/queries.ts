@@ -17,6 +17,7 @@ import {
   getDiffHunks,
   getEventRaw,
   getCorrelatedEvents,
+  getSessionEvents,
   getSessionMetrics,
   getSessionTurns,
 } from '../api/client';
@@ -45,6 +46,7 @@ export const sessionKeys = {
   usage: (id: string) => ['session', id, 'usage'] as const,
   metrics: (id: string) => ['session', id, 'metrics'] as const,
   turns: (id: string) => ['session', id, 'turns'] as const,
+  tasks: (id: string) => ['session', id, 'tasks'] as const,
 };
 
 /** insight-redesign #6 — store-wide usage baseline (not session-scoped). */
@@ -98,6 +100,20 @@ export function useSessionTurnsQuery(id: string, opts?: QOpts<TurnRollupResponse
   return useQuery<TurnRollupResponse>({
     queryKey: sessionKeys.turns(id),
     queryFn: () => getSessionTurns(id),
+    enabled: !!id,
+    ...opts,
+  });
+}
+
+/** Session-wide TaskCreate/TaskUpdate lifecycle, for the Task board. Fetches the
+ *  whole session's tool_call+tool_result events (not the loaded replay window) so
+ *  the board reflects ALL todos, then `buildTaskBoard` correlates them client-side.
+ *  Bounded by the 5000 limit — a session with more than ~5000 tool events would
+ *  miss its oldest tasks (acceptable for a local dogfooding tool). */
+export function useSessionTasksQuery(id: string, opts?: QOpts<SessionEventsResponse>) {
+  return useQuery<SessionEventsResponse>({
+    queryKey: sessionKeys.tasks(id),
+    queryFn: () => getSessionEvents(id, { kind: 'tool_call,tool_result', limit: 5000 }),
     enabled: !!id,
     ...opts,
   });
