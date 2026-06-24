@@ -1,0 +1,41 @@
+[
+  {
+    "id": "serena@claude-plugins-official",
+    "version": "unknown",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/Users/bahamoth/.claude/plugins/cache/claude-plugins-official/serena/unknown",
+    "installedAt": "2026-06-19T00:10:12.873Z",
+    "lastUpdated": "2026-06-24T06:39:57.463Z",
+    "mcpServers": {
+      "serena": {
+        "command": "uvx",
+        "args": [
+          "--from",
+          "git+https://github.com/oraios/serena",
+          "serena",
+          "start-mcp-server"
+        ]
+      }
+    }
+  },
+  {
+    "id": "dev-tools@cc-marketplace",
+    "version": "0.1.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/bahamoth/.claude/plugins/cache/cc-marketplace/dev-tools/0.1.0",
+    "installedAt": "2026-03-31T00:19:32.576Z",
+    "lastUpdated": "2026-03-31T00:19:32.576Z"
+  },
+  {
+    "id": "mcc-llm-wiki@mcc-llm-wiki-dev",
+    "version": "0.1.0",
+    "scope": "local",
+    "enabled": false,
+    "installPath": "/Users/bahamoth/.claude/plugins/cache/mcc-llm-wiki-dev/mcc-llm-wiki/0.1.0",
+    "installedAt": "2026-04-23T23:52:24.375Z",
+    "lastUpdated": "2026-04-23T23:52:24.375Z",
+    "projectPath": "/Users/bahamoth/projects/mcc-knowledge-vault"
+  }
+]
