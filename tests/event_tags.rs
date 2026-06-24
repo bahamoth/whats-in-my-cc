@@ -6,7 +6,7 @@
 use serde_json::json;
 use wimcc::insight::event_tags::{
     classify_tool_call, meaningful_command, segment_command, TagDisposition, TagOutcome,
-    BASH_FIRST_TOKEN_TAGS, TOOL_SUBCOMMAND_TAGS,
+    BASH_FIRST_TOKEN_TAGS, MCP_SERVER_TOOL_TAGS, TOOL_SUBCOMMAND_TAGS,
 };
 
 fn bash(command: &str) -> TagOutcome {
@@ -404,6 +404,78 @@ fn no_dictionary_key_contains_slash() {
         assert!(!tool.contains('/'), "{tool}");
         for (s, _) in *subs {
             assert!(!s.contains('/'), "{tool} {s}");
+        }
+    }
+}
+
+// ── MCP 도구 태깅 (server→tool 멀티플렉서, "bash처럼 태그") ──────────────────
+
+fn mcp(name: &str) -> TagOutcome {
+    classify_tool_call(Some(name), &json!({ "input": {} }))
+}
+
+#[test]
+fn mcp_serena_tools_tagged_by_verb() {
+    assert_eq!(
+        tag(&mcp("mcp__plugin_serena_serena__get_symbols_overview")),
+        Some("read.code")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__plugin_serena_serena__find_symbol")),
+        Some("read.code")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__plugin_serena_serena__search_for_pattern")),
+        Some("read.code")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__plugin_serena_serena__replace_content")),
+        Some("write.code")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__plugin_serena_serena__execute_shell_command")),
+        Some("run.code")
+    );
+}
+
+#[test]
+fn mcp_token_is_server_scoped_for_the_loop() {
+    // server name is the last underscore-segment of the server-id, so the
+    // plugin-prefixed `plugin_serena_serena` and a bare `serena` both key on serena.
+    let o = mcp("mcp__plugin_serena_serena__get_symbols_overview");
+    assert_eq!(o.disposition, TagDisposition::Tagged);
+    assert_eq!(o.token.as_deref(), Some("serena:get_symbols_overview"));
+}
+
+#[test]
+fn mcp_unknown_tool_is_unmatched_for_identification_loop() {
+    // Known server, unknown tool → surfaced (unmatched), NOT control, so the
+    // unidentified-plugin loop can pick it up. token is server-scoped.
+    let o = mcp("mcp__plugin_serena_serena__some_brand_new_tool");
+    assert_eq!(o.disposition, TagDisposition::Unmatched);
+    assert_eq!(o.value, None);
+    assert_eq!(o.token.as_deref(), Some("serena:some_brand_new_tool"));
+
+    // Unknown server (no dict entry) → also unmatched, server-scoped token.
+    let o2 = mcp("mcp__claude-in-chrome__navigate");
+    assert_eq!(o2.disposition, TagDisposition::Unmatched);
+    assert_eq!(o2.token.as_deref(), Some("claude-in-chrome:navigate"));
+}
+
+#[test]
+fn non_mcp_control_tools_unchanged() {
+    // TaskCreate etc. stay control (no verb.object tag) — unchanged by MCP work.
+    let o = classify_tool_call(Some("TaskCreate"), &json!({ "input": { "subject": "x" } }));
+    assert_eq!(o.disposition, TagDisposition::Control);
+}
+
+#[test]
+fn mcp_dictionary_keys_well_formed() {
+    // server keys carry no "__" (would break parsing); tool keys no slash.
+    for (server, tools) in MCP_SERVER_TOOL_TAGS {
+        assert!(!server.contains("__"), "{server}");
+        for (t, _) in *tools {
+            assert!(!t.contains('/') && !t.contains("__"), "{server} {t}");
         }
     }
 }

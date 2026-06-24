@@ -260,6 +260,35 @@ pub static TOOL_SUBCOMMAND_TAGS: &[(&str, &[(&str, &str)])] = &[
     ("go", GO_SUBS),
 ];
 
+/// MCP 도구 태깅. 도구 이름은 `mcp__[plugin_<plugin>_]<server>__<tool>`. server→tool
+/// 멀티플렉서로 verb.object를 매긴다(TOOL_SUBCOMMAND_TAGS와 동형). 미지의 server/tool은
+/// Unmatched로 남겨 미식별-plugin 루프가 `server:tool`을 표면화하게 한다. 개인 제작
+/// (personal) plugin·MCP는 여기 등록하지 않으므로 자동으로 태깅에서 빠진다 — provenance
+/// 판별은 루프(파일시스템 접근)가 맡고, 결정론 분류기는 사전 매칭만 한다.
+static SERENA_TOOLS: &[(&str, &str)] = &[
+    ("get_symbols_overview", "read.code"),
+    ("find_symbol", "read.code"),
+    ("find_referencing_symbols", "read.code"),
+    ("find_file", "read.code"),
+    ("list_dir", "read.code"),
+    ("read_file", "read.code"),
+    ("search_for_pattern", "read.code"),
+    ("get_diagnostics_for_file", "read.code"),
+    ("replace_content", "write.code"),
+    ("replace_symbol_body", "write.code"),
+    ("insert_after_symbol", "write.code"),
+    ("insert_before_symbol", "write.code"),
+    ("rename_symbol", "write.code"),
+    ("create_text_file", "write.code"),
+    ("execute_shell_command", "run.code"),
+    ("write_memory", "write.file"),
+    ("read_memory", "read.file"),
+    ("list_memories", "read.file"),
+];
+
+/// MCP server → tool 사전(멀티플렉서). 미지 server/tool은 unmatched(루프가 표면화).
+pub static MCP_SERVER_TOOL_TAGS: &[(&str, &[(&str, &str)])] = &[("serena", SERENA_TOOLS)];
+
 /// 서브커맨드보다 앞에 오는, 인자를 소비하는 글로벌 옵션 (`git -C <dir> diff`).
 static SUBCOMMAND_ARG_FLAGS: &[(&str, &[&str])] = &[("git", &["-C", "-c"])];
 
@@ -704,6 +733,21 @@ fn untagged_token(cmd_str: &str) -> String {
 
 /// tool_call 이벤트 하나를 분류한다. `payload`는 observed payload
 /// (`/input/command` 또는 `/input/file_path`).
+/// `mcp__[plugin_<plugin>_]<server>__<tool>` → (server_key, tool).
+/// server_key = server-id의 마지막 `_` 세그먼트(plugin 접두의 밑줄 모호성 회피):
+/// `plugin_serena_serena`→`serena`, `claude_ai_Slack`→`Slack`, `claude-in-chrome`→그대로.
+fn parse_mcp_tool(name: &str) -> Option<(&str, &str)> {
+    let rest = name.strip_prefix("mcp__")?;
+    let idx = rest.find("__")?;
+    let server_id = &rest[..idx];
+    let tool = &rest[idx + 2..];
+    if server_id.is_empty() || tool.is_empty() {
+        return None;
+    }
+    let server_key = server_id.rsplit('_').next().unwrap_or(server_id);
+    Some((server_key, tool))
+}
+
 pub fn classify_tool_call(tool_name: Option<&str>, payload: &serde_json::Value) -> TagOutcome {
     let input = payload.get("input");
     let str_field = |key: &str| -> String {
@@ -754,6 +798,27 @@ pub fn classify_tool_call(tool_name: Option<&str>, payload: &serde_json::Value) 
                 ..TagOutcome::control()
             }
         }
+        // MCP 도구: server→tool 사전으로 verb.object. 미지는 unmatched(루프가 표면화).
+        Some(name) if name.starts_with("mcp__") => match parse_mcp_tool(name) {
+            Some((server, tool)) => {
+                let value = MCP_SERVER_TOOL_TAGS
+                    .iter()
+                    .find(|(s, _)| *s == server)
+                    .and_then(|(_, tools)| tools.iter().find(|(t, _)| *t == tool))
+                    .map(|(_, v)| *v);
+                TagOutcome {
+                    value,
+                    disposition: if value.is_some() {
+                        TagDisposition::Tagged
+                    } else {
+                        TagDisposition::Unmatched
+                    },
+                    token: Some(format!("{server}:{tool}")),
+                    display: None,
+                }
+            }
+            None => TagOutcome::control(),
+        },
         // 그 외 도구: 도구 이름이 곧 라벨 — 칩 없음.
         _ => TagOutcome::control(),
     }
