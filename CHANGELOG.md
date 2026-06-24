@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.10.0...v0.11.0) (2026-06-24)
+
+
+### Features
+
+* **insight:** verification not_executed status 분리 + 태깅 규칙 강화 ([03e2718](https://github.com/bahamoth/whats-in-my-cc/commit/03e27182432f00afcdfbab2422a90d3901cc8ba3))
+
 ## [0.10.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.9.0...v0.10.0) (2026-06-20)
 
 
