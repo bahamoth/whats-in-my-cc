@@ -305,6 +305,7 @@ pub struct UsageBaselineDto {
 pub struct TaskTransitionDto {
     pub status: String,
     pub at_ms: i64,
+    pub event_id: String,
 }
 #[derive(Serialize)]
 pub struct TaskVerifDto {

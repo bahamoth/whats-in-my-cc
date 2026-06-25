@@ -54,6 +54,15 @@ pub struct UsageSample {
     pub cache_read: i64,
 }
 
+/// One status change. Carries the event_id so the UI can jump the replay to it
+/// (e.g. expanding a task jumps to its in_progress event — where work started).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaskTransition {
+    pub status: String,
+    pub at_ms: i64,
+    pub event_id: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Verif4 {
     pub passed: u32,
@@ -79,8 +88,8 @@ pub struct TaskSummary {
     pub create_event_id: String,
     pub created_at_ms: i64,
     pub status: String,
-    /// (status, at_ms) including the synthetic "created" first entry.
-    pub transitions: Vec<(String, i64)>,
+    /// status changes including the synthetic "created" first entry.
+    pub transitions: Vec<TaskTransition>,
     /// last transition − created.
     pub duration_ms: Option<i64>,
     /// completed − in_progress (the active work span). None without that span.
@@ -103,7 +112,7 @@ struct Building {
     active_form: Option<String>,
     create_event_id: String,
     created_at_ms: i64,
-    transitions: Vec<(String, i64)>,
+    transitions: Vec<TaskTransition>,
 }
 
 pub fn build_task_summaries(
@@ -130,7 +139,11 @@ pub fn build_task_summaries(
                 active_form: op.active_form.clone(),
                 create_event_id: op.event_id.clone(),
                 created_at_ms: op.at_ms,
-                transitions: vec![("created".to_string(), op.at_ms)],
+                transitions: vec![TaskTransition {
+                    status: "created".to_string(),
+                    at_ms: op.at_ms,
+                    event_id: op.event_id.clone(),
+                }],
             },
         );
     }
@@ -142,30 +155,34 @@ pub fn build_task_summaries(
         let (Some(status), Some(b)) = (op.status.as_ref(), by_id.get_mut(&op.task_id)) else {
             continue;
         };
-        b.transitions.push((status.clone(), op.at_ms));
+        b.transitions.push(TaskTransition {
+            status: status.clone(),
+            at_ms: op.at_ms,
+            event_id: op.event_id.clone(),
+        });
     }
 
     let mut out = Vec::new();
     for id in &order {
         let b = by_id.remove(id).expect("task present");
         let mut transitions = b.transitions;
-        transitions.sort_by_key(|(_, at)| *at);
+        transitions.sort_by_key(|t| t.at_ms);
         let status = transitions
             .last()
-            .map(|(s, _)| s.clone())
+            .map(|t| t.status.clone())
             .unwrap_or_default();
         let last_at = transitions
             .last()
-            .map(|(_, at)| *at)
+            .map(|t| t.at_ms)
             .unwrap_or(b.created_at_ms);
         let duration_ms = (transitions.len() > 1).then_some(last_at - b.created_at_ms);
-        let saw_in_progress = transitions.iter().any(|(s, _)| s == "in_progress");
+        let saw_in_progress = transitions.iter().any(|t| t.status == "in_progress");
 
         // Work window = [first in_progress, last transition]. None without in_progress.
         let window = transitions
             .iter()
-            .find(|(s, _)| s == "in_progress")
-            .map(|(_, start)| (*start, last_at));
+            .find(|t| t.status == "in_progress")
+            .map(|t| (t.at_ms, last_at));
 
         let mut summary = TaskSummary {
             task_id: b.task_id,
