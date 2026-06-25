@@ -75,6 +75,17 @@ describe('collectUntagged — 서버 tag 필드 기반 집계', () => {
     expect(byToken['Makefile'].hint).toContain('EXT_OBJECT');
   });
 
+  it('excludes MCP tools (owned by the unidentified-plugins loop, not untagged-bash)', () => {
+    const rows = collectUntagged([
+      ev('e1', unmatched('frobnicate', 'frobnicate'), 'Bash'),
+      // unmatched MCP tools (e.g. directly-configured servers) must NOT pollute
+      // untagged-bash — they belong to the unidentified-plugins loop.
+      ev('m1', unmatched('claude-in-chrome:computer'), 'mcp__claude-in-chrome__computer'),
+      ev('m2', unmatched('serena:activate_project'), 'mcp__plugin_serena_serena__activate_project'),
+    ]);
+    expect(rows.map((r) => r.token)).toEqual(['frobnicate']);
+  });
+
   it('rows sort by count desc and empty tokens are skipped', () => {
     const rows = collectUntagged([
       ev('a1', unmatched('aa')),

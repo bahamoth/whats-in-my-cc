@@ -121,8 +121,8 @@ schema-versioning · deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html`
 5. 이전 commit log / 주석 / spec 중 위 검증으로 잘못 판명된 부분이 있다면 같은 commit에서 정정했는가?
 6. `## Status`에 완료된 항목이 남아 있거나 항구 규칙(운영·설계)이 섞여 있지 않은가? 완료분은 삭제,
    항구 규칙은 `Operations`/`Working Principles`로 이전한다 — Status는 in-flight만.
-7. PR을 올리기 직전인가? 그렇다면 `Tagging loop`·`Verification unknown loop`을 실행해
-   untagged/unknown을 해소하거나 명시적 보류 사유를 남겼는가? (미실행 상태로 PR 금지.)
+7. PR을 올리기 직전인가? 그렇다면 `Tagging loop`·`Verification unknown loop`·`Plugin/MCP identification loop`을
+   실행해 untagged/unknown/미식별을 해소하거나 명시적 보류 사유를 남겼는가? (미실행 상태로 PR 금지.)
 
 ## Tagging loop — PR 전 필수 (Bash/Read 분류 강화)
 
@@ -172,6 +172,30 @@ read-only API 원칙과 충돌하지 않는다.
 4. 사용자 승인 후 패턴을 추가하고 재ingest → 스크립트를 다시 실행해 unknown이 줄었는지 확인 — 루프가 닫힌다.
 
 상세·설계 근거: `docs/implementation-notes.html#unknown-verification-loop`.
+
+## Plugin/MCP identification loop — PR 전 필수 (MCP 태깅 강화, 위 둘의 형제)
+
+**PR을 올리기 전 반드시 실행한다.** verb.object 태그가 아직 없는 MCP 도구(`tag.disposition=unmatched`)를
+provenance와 함께 모아, community(official/public) plugin 도구는 태깅하고 personal/configured는 명시적으로
+제외한다. 미실행 상태로 PR을 올리지 않는다. `MCP_SERVER_TOOL_TAGS` 추가는 소스 편집이라 read-only API
+원칙과 충돌하지 않는다.
+
+1. `cd webui && node scripts/unidentified-plugins.ts --all`(특정 세션만 보려면 끝에 `<sessionId>`).
+   stdout이 **깨끗한 JSON**(npm 배너 없음 — node 직접 실행). read-only Pull API(events + `/v1/plugins`)만
+   소비. provenance는 `/v1/plugins`(= `claude plugins list/marketplace list --json`, `src/plugins.rs`)에서
+   온다 — wimcc 서비스는 인터넷을 타지 않는다.
+   출력: `[{token, server, tool, count, provenance, plugin, sessionId, hint}]` (count 내림차순).
+2. `hint`별로 분류한다: provenance `official`/`public`이면 `src/insight/event_tags.rs`의
+   `MCP_SERVER_TOOL_TAGS`에 `server→tool` verb.object를 추가하는 후보(도구의 동작이 모호하면 마켓플레이스
+   repo를 **WebFetch**해 확인 — 이 인터넷 조회는 루프를 도는 **에이전트**의 몫이지 스크립트/서비스가 아님).
+   provenance `personal`(directory-source 마켓)·`configured`(직접 설정 MCP 서버)는 **태깅 제외** — 그대로
+   unmatched로 두고 루프가 쫓지 않는다.
+3. **모든 unmatched가 태깅 대상은 아니다**: 세션 셋업·메타 도구(예: serena `activate_project`)는 read/write
+   /run 어디에도 안 맞으면 의도적으로 unmatched로 남긴다 — 억지로 태그하지 않는다. 추가하는 도구는
+   `tests/event_tags.rs`에 잠그는 케이스를 함께 둘 것(TDD).
+4. 사용자 승인 후 사전에 추가하고 **서버 재빌드·재기동** 후 스크립트를 다시 실행해 목록이 줄었는지 확인 — 루프가 닫힌다.
+
+상세·설계 근거: `docs/implementation-notes.html#unidentified-plugins-loop`.
 
 ## Non-goals (절대 만들지 말 것)
 

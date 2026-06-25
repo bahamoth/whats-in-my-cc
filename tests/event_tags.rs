@@ -448,6 +448,22 @@ fn mcp_token_is_server_scoped_for_the_loop() {
 }
 
 #[test]
+fn mcp_serena_meta_tools_via_identification_loop() {
+    // unidentified-plugins loop surfaced these (official → taggable):
+    // initial_instructions reads serena's manual → read.docs.
+    assert_eq!(
+        tag(&mcp("mcp__plugin_serena_serena__initial_instructions")),
+        Some("read.docs")
+    );
+    // activate_project is session setup (no code verb.object) → stays unmatched
+    // by design — the loop surfaces it but we don't force-tag it.
+    assert_eq!(
+        mcp("mcp__plugin_serena_serena__activate_project").disposition,
+        TagDisposition::Unmatched
+    );
+}
+
+#[test]
 fn mcp_unknown_tool_is_unmatched_for_identification_loop() {
     // Known server, unknown tool → surfaced (unmatched), NOT control, so the
     // unidentified-plugin loop can pick it up. token is server-scoped.
