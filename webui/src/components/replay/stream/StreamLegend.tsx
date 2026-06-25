@@ -1,14 +1,13 @@
 // S10 (UX 재설계 §7.4) — a dismissible colour/shortcut key for the stream.
 // The time-spine gutter is decorative (aria-hidden), so this legend is the
 // accessible key to the lane colours + duration heat, and documents the
-// keyboard shortcuts. Dismissal is persisted (localStorage) so it stays out of
-// the way once read.
-import { useState } from 'react';
+// keyboard shortcuts. CONTROLLED: visibility is owned by the page so dismissing
+// reclaims its full vertical space (no leftover toggle row). The X just closes;
+// the page re-opens it from a toggle that lives in the existing toolbar row, so
+// the dismissed state costs zero layout. `open=false` renders nothing.
 import { X } from 'lucide-react';
 import { useT, type MessageKey } from '../../../i18n';
 import styles from './StreamLegend.module.css';
-
-const DISMISS_KEY = 'wimcc.streamLegend.dismissed';
 
 const LANES: Array<{ labelKey: MessageKey; varName: string }> = [
   { labelKey: 'stream.lane.user', varName: '--wimcc-accent' },
@@ -19,25 +18,9 @@ const LANES: Array<{ labelKey: MessageKey; varName: string }> = [
   { labelKey: 'stream.lane.workflow', varName: '--wimcc-lane-quality' },
 ];
 
-export function StreamLegend() {
+export function StreamLegend({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
-  const [dismissed, setDismissed] = useState(() => {
-    try {
-      return localStorage.getItem(DISMISS_KEY) === '1';
-    } catch {
-      return false;
-    }
-  });
-  if (dismissed) return null;
-
-  const dismiss = () => {
-    try {
-      localStorage.setItem(DISMISS_KEY, '1');
-    } catch {
-      /* ignore quota / private-mode failures — dismissal is best-effort */
-    }
-    setDismissed(true);
-  };
+  if (!open) return null;
 
   return (
     <div className={styles.legend} role="note" aria-label={t('stream.legend.aria')}>
@@ -62,7 +45,7 @@ export function StreamLegend() {
           <kbd>j</kbd>/<kbd>k</kbd> {t('stream.legend.move')} · <kbd>e</kbd> {t('stream.legend.nextError')}
         </span>
       </div>
-      <button type="button" className={styles.close} onClick={dismiss} aria-label={t('stream.legend.close')}>
+      <button type="button" className={styles.close} onClick={onClose} aria-label={t('stream.legend.close')}>
         <X size={12} aria-hidden />
       </button>
     </div>

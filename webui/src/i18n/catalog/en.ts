@@ -26,6 +26,7 @@ export const en = {
   // Session detail
   'detail.analysisToggle': 'Analysis',
   'detail.taskBoard.title': 'Tasks',
+  'detail.taskBoard.done': 'done',
   'detail.taskBoard.noInProgress': 'no in_progress',
   'detail.plugin.title': 'Plugin',
   'detail.plugin.configured': 'Directly-configured MCP server (not a marketplace plugin).',
@@ -226,6 +227,7 @@ export const en = {
   'stream.legend.move': 'move',
   'stream.legend.nextError': 'next error',
   'stream.legend.close': 'Close legend',
+  'stream.legend.show': 'Legend',
 
   // Stream — message card
   'stream.msg.summary': 'Summary',

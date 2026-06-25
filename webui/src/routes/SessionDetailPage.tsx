@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, PanelTopOpen } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { MetaStrip } from '../components/MetaStrip';
 import { DetailPanel } from '../components/replay/detail/DetailPanel';
@@ -24,8 +24,6 @@ import {
   useCorrelatedEventsQuery,
   useSessionMetricsQuery,
 } from '../lib/queries';
-import { buildTaskBoard } from '../lib/taskBoard';
-import { TaskBoard } from '../components/replay/board/TaskBoard';
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
 import { UntaggedBashPanel } from '../components/replay/stream/UntaggedBashPanel';
@@ -46,6 +44,9 @@ import styles from './SessionDetailPage.module.css';
 // forward `?after=` page fetch (mirrors the bridge's graph-invalidate debounce).
 const BACKFILL_DEBOUNCE_MS = 600;
 
+// Stream-legend dismissal flag (legacy key, kept so prior dismissals carry over).
+const LEGEND_DISMISS_KEY = 'wimcc.streamLegend.dismissed';
+
 function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const t = useT();
   const sel = useReplaySelection();
@@ -57,17 +58,35 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const baseline = useUsageBaselineQuery();
   const turns = useSessionTurnsQuery(sessionId);
 
-  // Task board — session-wide TaskCreate/TaskUpdate lifecycle (not the windowed
-  // replay events), correlated by taskId into a per-session todo summary.
+  // Per-task summaries (status·duration·work-span aggregations), computed
+  // server-side by the task_summary aggregator (GET /v1/sessions/:id/tasks).
+  // buildStreamModel collects tasks into one inline TaskList block.
   const tasksQuery = useSessionTasksQuery(sessionId);
-  const taskEntries = useMemo(
-    () => buildTaskBoard(tasksQuery.data?.events ?? []),
-    [tasksQuery.data],
-  );
 
   // Analysis surface — separate from replay (spec §8.3, 원칙 7)
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const metricsQuery = useSessionMetricsQuery(sessionId, { enabled: analysisOpen && !!sessionId });
+
+  // Stream legend visibility is owned HERE (not inside StreamLegend) so that
+  // dismissing it reclaims its full vertical space — the re-open control is a
+  // toggle in the toolbar row below, costing zero extra layout. Persisted: once
+  // dismissed it stays dismissed across mounts (legacy key reused).
+  const [legendOpen, setLegendOpen] = useState(() => {
+    try {
+      return localStorage.getItem(LEGEND_DISMISS_KEY) !== '1';
+    } catch {
+      return true;
+    }
+  });
+  const setLegend = useCallback((open: boolean) => {
+    try {
+      if (open) localStorage.removeItem(LEGEND_DISMISS_KEY);
+      else localStorage.setItem(LEGEND_DISMISS_KEY, '1');
+    } catch {
+      /* ignore quota / private-mode failures — persistence is best-effort */
+    }
+    setLegendOpen(open);
+  }, []);
 
   // Event id from a `?selected=` deep-link present AT MOUNT (captured once, so it
   // stays stable as the user later selects other events). Drives the initial
@@ -156,8 +175,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   );
 
   const streamItems = useMemo(
-    () => buildStreamModel(window_.events, metricsByReq),
-    [window_.events, metricsByReq],
+    () => buildStreamModel(window_.events, metricsByReq, tasksQuery.data ?? []),
+    [window_.events, metricsByReq, tasksQuery.data],
   );
 
   // event ids that have a signal. evidence_refs are event ids (bare-string
@@ -347,19 +366,25 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               turns={turns.data?.turns}
             />
             <MetaStrip session={detail.data} events={window_.events} />
-            <TaskBoard
-              entries={taskEntries}
-              selectedEventId={selectedEventId}
-              onSelectEvent={selectStreamCard}
-            />
-            <button
-              className={styles.analysisToggle}
-              aria-pressed={analysisOpen}
-              onClick={() => setAnalysisOpen((v) => !v)}
-            >
-              <BarChart3 size={13} aria-hidden />
-              {t('detail.analysisToggle')}
-            </button>
+            <div className={styles.toolbar}>
+              <button
+                className={styles.toolBtn}
+                aria-pressed={legendOpen}
+                onClick={() => setLegend(!legendOpen)}
+                title={t('stream.legend.aria')}
+              >
+                <PanelTopOpen size={13} aria-hidden />
+                {t('stream.legend.show')}
+              </button>
+              <button
+                className={styles.toolBtn}
+                aria-pressed={analysisOpen}
+                onClick={() => setAnalysisOpen((v) => !v)}
+              >
+                <BarChart3 size={13} aria-hidden />
+                {t('detail.analysisToggle')}
+              </button>
+            </div>
           </div>
 
           {analysisOpen && (
@@ -374,7 +399,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
           )}
 
           <div className={styles.stream} data-slot="stream">
-            <StreamLegend />
+            <StreamLegend open={legendOpen} onClose={() => setLegend(false)} />
             {window_.loading === 'older' && (
               <div className={styles.loadingOlder} role="status" aria-live="polite">
                 <span className={styles.spinner} aria-hidden />
