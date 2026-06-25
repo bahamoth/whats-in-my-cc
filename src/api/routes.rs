@@ -14,6 +14,10 @@ use crate::db::{
     repo_audit, repo_diff_hunk, repo_observed, repo_raw, repo_retention, repo_signal,
     repo_usage_facet, repo_verification_run,
 };
+use crate::insight::event_tags::classify_tool_call;
+use crate::insight::task_summary::{
+    build_task_summaries, DiffSample, TagSample, TaskOp, TaskOpKind, UsageSample, VerifSample,
+};
 use crate::model::meta::{Envelope, ResponseMeta, SCHEMA_VERSION};
 
 #[derive(Deserialize)]
@@ -140,6 +144,210 @@ pub async fn list_plugins() -> impl IntoResponse {
             description: e.description.clone(),
         })
         .collect();
+    Json(Envelope {
+        meta: ResponseMeta::now(),
+        data,
+    })
+}
+
+fn parse_ms(s: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(s)
+        .ok()
+        .map(|dt| dt.timestamp_millis())
+}
+
+/// "Task #N created…" → "N". The TaskCreate taskId only appears in its result.
+fn parse_task_num(content: &str) -> Option<String> {
+    let i = content.find('#')?;
+    let n: String = content[i + 1..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    (!n.is_empty()).then_some(n)
+}
+
+/// `GET /v1/sessions/:id/tasks` — per-task summary: TaskCreate/TaskUpdate
+/// correlated (taskId resolved from each create's result) + work-span window
+/// aggregations (tag histogram · diff · verification · tokens). Aggregation in
+/// `crate::insight::task_summary`; this maps storage rows → its samples.
+pub async fn session_tasks(
+    State(pool): State<SqlitePool>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let events = repo_observed::list_session(&pool, &id, 100_000)
+        .await
+        .expect("db");
+    let diffs = repo_diff_hunk::list_session(&pool, &id).await.expect("db");
+    let verifs = repo_verification_run::list_session(&pool, &id)
+        .await
+        .expect("db");
+    let usage = repo_usage_facet::list_session(&pool, &id)
+        .await
+        .expect("db");
+
+    // event_id → at_ms (for diff timestamping); tool_use_id → result content
+    // (for TaskCreate taskId resolution).
+    let mut at_by_event: std::collections::HashMap<&str, i64> = std::collections::HashMap::new();
+    let mut result_by_use: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+    for e in &events {
+        at_by_event.insert(&e.event_id, e.observed_at.timestamp_millis());
+        if e.kind.as_str() == "tool_result" {
+            if let (Some(uid), Some(c)) = (
+                e.tool_use_id.as_deref(),
+                e.payload
+                    .get("tool_result")
+                    .and_then(|t| t.get("content"))
+                    .and_then(|c| c.as_str()),
+            ) {
+                result_by_use.insert(uid, c);
+            }
+        }
+    }
+
+    let mut ops: Vec<TaskOp> = Vec::new();
+    let mut tags: Vec<TagSample> = Vec::new();
+    for e in &events {
+        if e.kind.as_str() != "tool_call" {
+            continue;
+        }
+        let at_ms = e.observed_at.timestamp_millis();
+        let name = e
+            .tool_name
+            .clone()
+            .or_else(|| {
+                e.payload
+                    .get("tool_name")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+            })
+            .unwrap_or_default();
+        // every tool_call contributes a tag sample (for the work histogram)
+        let outcome = classify_tool_call(Some(&name), &e.payload);
+        tags.push(TagSample {
+            at_ms,
+            tag: outcome.value.map(String::from),
+        });
+        let input = e.payload.get("input");
+        let s = |k: &str| {
+            input
+                .and_then(|i| i.get(k))
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        };
+        match name.as_str() {
+            "TaskCreate" => {
+                let task_id = e
+                    .tool_use_id
+                    .as_deref()
+                    .and_then(|u| result_by_use.get(u))
+                    .and_then(|c| parse_task_num(c));
+                if let Some(task_id) = task_id {
+                    ops.push(TaskOp {
+                        event_id: e.event_id.clone(),
+                        task_id,
+                        at_ms,
+                        kind: TaskOpKind::Create,
+                        subject: s("subject"),
+                        description: s("description"),
+                        active_form: s("activeForm"),
+                        status: None,
+                    });
+                }
+            }
+            "TaskUpdate" => {
+                if let (Some(task_id), Some(status)) = (s("taskId"), s("status")) {
+                    ops.push(TaskOp {
+                        event_id: e.event_id.clone(),
+                        task_id,
+                        at_ms,
+                        kind: TaskOpKind::Update,
+                        subject: None,
+                        description: None,
+                        active_form: None,
+                        status: Some(status),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let diff_samples: Vec<DiffSample> = diffs
+        .iter()
+        .filter_map(|d| {
+            at_by_event
+                .get(d.introduced_by_event_id.as_str())
+                .map(|at| DiffSample {
+                    at_ms: *at,
+                    added: d.lines_added,
+                    removed: d.lines_removed,
+                })
+        })
+        .collect();
+    let verif_samples: Vec<VerifSample> = verifs
+        .iter()
+        .filter_map(|v| {
+            parse_ms(&v.started_at).map(|at| VerifSample {
+                at_ms: at,
+                status: v.status.clone(),
+            })
+        })
+        .collect();
+    let usage_samples: Vec<UsageSample> = usage
+        .iter()
+        .filter_map(|u| {
+            parse_ms(&u.observed_at).map(|at| UsageSample {
+                at_ms: at,
+                input: u.input_tokens,
+                output: u.output_tokens,
+                cache_creation: u.cache_creation_input_tokens,
+                cache_read: u.cache_read_input_tokens,
+            })
+        })
+        .collect();
+
+    let data: Vec<TaskDto> =
+        build_task_summaries(&ops, &tags, &diff_samples, &verif_samples, &usage_samples)
+            .into_iter()
+            .map(|t| TaskDto {
+                task_id: t.task_id,
+                subject: t.subject,
+                description: t.description,
+                active_form: t.active_form,
+                event_id: t.create_event_id,
+                created_at_ms: t.created_at_ms,
+                status: t.status,
+                transitions: t
+                    .transitions
+                    .into_iter()
+                    .map(|(status, at_ms)| TaskTransitionDto { status, at_ms })
+                    .collect(),
+                duration_ms: t.duration_ms,
+                work_duration_ms: t.work_duration_ms,
+                saw_in_progress: t.saw_in_progress,
+                activity_count: t.activity_count,
+                tag_histogram: t
+                    .tag_histogram
+                    .into_iter()
+                    .map(|(tag, count)| TaskHistEntryDto { tag, count })
+                    .collect(),
+                lines_added: t.lines_added,
+                lines_removed: t.lines_removed,
+                verification: t.verification.map(|v| TaskVerifDto {
+                    passed: v.passed,
+                    failed: v.failed,
+                    unknown: v.unknown,
+                    not_executed: v.not_executed,
+                }),
+                tokens: t.tokens.map(|k| TaskTokensDto {
+                    input: k.input,
+                    output: k.output,
+                    cache_creation: k.cache_creation,
+                    cache_read: k.cache_read,
+                }),
+            })
+            .collect();
+
     Json(Envelope {
         meta: ResponseMeta::now(),
         data,
