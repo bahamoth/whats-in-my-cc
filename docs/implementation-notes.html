@@ -5273,6 +5273,46 @@ vitest: 69 passed
     현재 facet 데이터모델의 권위 문서는 <code>docs/03</code>(telemetry facet · TelemetryFacet/MetricFacet/LogFacet · usage_facet)
     + <code>docs/02</code>("별도 graph 레이어는 없다"). 이 추적 시점(2026-06-24)에 02·03은 현행 코드와 일치 — drift 없음.
     이력의 SSOT는 본 문서 + git.</p>
+
+    <h2 id="task-board-2026-06-25">Task 보드 + MCP 실행 인사이트 · plugin 식별 (2026-06-25)</h2>
+    <p>두 트랙: (A) 세션 Task 라이프사이클 보드, (B) MCP/plugin 도구의 실행 인사이트 + provenance.
+    원 요청: 태스크의 시각적 파악, 그리고 "plugin이 호출하는 MCP/skill 도구 정보를 가져올 방법".</p>
+    <h3>A. Task 보드</h3>
+    <p><code>TaskCreate</code>(결과 "Task #N")↔<code>TaskUpdate</code>(taskId)를 taskId로 상관해 세션 전체 todo를
+    공유 시간축 보드로 시각화(생성→진행→완료·소요시간·<code>in_progress</code> 미관측 플래그). 순수
+    <code>buildTaskBoard</code>(<code>webui/src/lib/taskBoard.ts</code>)가 상관, KPI 스트립에 마운트. 세션 전체 task는
+    윈도우와 별도로 <code>?kind=tool_call,tool_result</code> 필터로 fetch(<code>useSessionTasksQuery</code>).
+    <code>TaskStop</code>은 숫자 todo가 아니라 백그라운드 태스크(<code>braz4pe91</code> 류) 중단이라 제외.</p>
+    <h3>B. MCP/plugin 실행 인사이트 + provenance</h3>
+    <ul>
+      <li><strong>측정/판별 분리 결론</strong>: 스트림 행에 노출할 "실행 인사이트"(method·operation·result 크기·
+      duration·decision_source)는 <em>이미 OTel tool_result log_record</em>에 있었고 detail에만 갇혀 있었다 —
+      새로 만든 건 사실상 ① MCP verb.object 태깅과 ② 이름 가독화·provenance 카드뿐. 토큰은 turn 레벨만(per-tool 귀속 불가).</li>
+      <li><strong>MCP 태깅</strong>(<code>event_tags.rs</code> <code>MCP_SERVER_TOOL_TAGS</code>): <code>mcp__[plugin_&lt;p&gt;_]&lt;server&gt;__&lt;tool&gt;</code>를
+      파싱(server = server-id의 마지막 <code>_</code> 세그먼트 — 밑줄 모호성 회피)해 server→tool 사전으로 read.code/write.code/
+      run.code 등을 매김. 종전엔 MCP 전부 control(무태그). 미지 server/tool은 unmatched(루프가 표면화). personal은 사전 미등록 → 자동 제외.</li>
+      <li><strong>plugin provenance</strong>(<code>src/plugins.rs</code>, <code>GET /v1/plugins</code>): 정보 출처는
+      <strong><code>claude</code> CLI</strong>(<code>claude plugins list --json</code> + <code>marketplace list --json</code>)로 확정 —
+      내부 캐시 파일(<code>~/.claude/plugins/*.json</code>)·거대한 <code>~/.claude.json</code>을 읽지 않는다. CLI의 <code>mcpServers</code>
+      필드가 plugin↔서버 매핑을 직접 줘 밑줄 모호성을 없앤다. provenance = 마켓플레이스 source 규칙(github
+      <code>anthropics/*</code>→official / github 기타→public / <code>directory</code>→personal). description은 installPath의 plugin.json.
+      serve당 1회 <code>OnceLock</code> 캐시, <code>claude</code> 부재 시 빈 레지스트리로 graceful degradation.</li>
+      <li><strong>UI</strong>: 스트림/detail에서 <code>mcp__…</code>를 <code>serena · get_symbols_overview</code>로 가독화
+      (<code>nodeLabel.formatMcpToolName</code>). detail Insight 탭에 PLUGIN 카드 — <code>/v1/plugins</code>로 선택 도구의 server를
+      plugin에 매칭(<code>findPluginForTool</code>)해 provenance 배지·id·description 표시. plugin이 아닌 직접 설정 서버는 "configured".</li>
+      <li id="unidentified-plugins-loop"><strong>식별 루프</strong>(<code>webui/scripts/unidentified-plugins.ts</code>): untagged-bash·
+      unknown-verification의 형제. unmatched MCP 도구를 <code>/v1/plugins</code> provenance와 조인해 surface — community는 태깅 후보,
+      personal/configured는 제외. 인터넷 조회(community 도구 동작 확인)는 루프를 도는 에이전트의 WebFetch 몫이지 스크립트/서비스가
+      아니다(측정/판별 분리). 2026-06-25 라운드: serena <code>initial_instructions</code>→read.docs 추가, <code>activate_project</code>는
+      세션 셋업이라 의도적 unmatched.</li>
+    </ul>
+    <h3>편차/주의</h3>
+    <p><code>~/.claude.json</code> 의존 설계를 검토했다가 폐기 — MCP 설정과 plugin/settings는 독립 시스템이고(plugin은
+    settings의 <code>enabledPlugins</code> + 마켓플레이스), 마켓플레이스 plugin 정보는 <code>claude</code> CLI로 충분. 직접 설정
+    MCP 서버(user/project/local 스코프, <code>~/.claude.json</code>/<code>.mcp.json</code>/<code>.claude/settings.local.json</code>)는
+    이름에 <code>plugin_</code>이 없어 "configured"로 식별만 하고 리치 메타·태깅에서 제외. <code>installed_plugins.json</code>은
+    실재하나 docs 미문서화 내부 캐시 — CLI를 정본으로 쓴다. webui 목업 단계에서 쓴 "facet"은 코드의 telemetry facet과 무관한
+    일반어였음(<a href="#facet-state-2026-06-24">facet 종결 마커</a> 참조) — 신규 개념은 facet이라 부르지 않았다.</p>
   </section>
 
 </main>

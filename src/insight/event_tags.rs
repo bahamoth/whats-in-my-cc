@@ -284,6 +284,9 @@ static SERENA_TOOLS: &[(&str, &str)] = &[
     ("write_memory", "write.file"),
     ("read_memory", "read.file"),
     ("list_memories", "read.file"),
+    // serena onboarding/manual reads (unidentified-plugins loop, 2026-06-25).
+    // `activate_project` is intentionally NOT here — session setup, no code verb.
+    ("initial_instructions", "read.docs"),
 ];
 
 /// MCP server → tool 사전(멀티플렉서). 미지 server/tool은 unmatched(루프가 표면화).

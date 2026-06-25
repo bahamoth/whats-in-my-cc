@@ -63,6 +63,11 @@ export function collectUntagged(events: ObservedEventDto[]): UntaggedRow[] {
   for (const e of events) {
     const t = e.tag;
     if (!t || t.disposition !== 'unmatched') continue;
+    // MCP tools (now verb.object-tagged by the server) are the
+    // unidentified-plugins loop's domain — it joins them with plugin provenance.
+    // Excluding them here keeps untagged-bash focused on Bash/Read and unpolluted
+    // by directly-configured MCP servers (claude-in-chrome / Slack / …).
+    if (e.tool_name?.startsWith('mcp__')) continue;
     const token = t.token ?? '';
     if (!token) continue;
     const cur = byToken.get(token);
