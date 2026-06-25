@@ -2,9 +2,13 @@
  * order; rows are selectable and (when well-tracked) foldable to nested work.
  * Reads tokens.css (--wimcc-*). */
 
+/* Tasks are a first-class organizing element — a distinct accent rail + tinted
+ * header marks the block as special without colliding with the stream lanes
+ * (it reads as a container, not a spine node). */
 .block {
   margin: 8px 0;
   border: 1px solid var(--wimcc-border);
+  border-left: 3px solid var(--wimcc-accent);
   border-radius: var(--wimcc-radius-md, 9px);
   background: var(--wimcc-surface-1);
   overflow: hidden;
@@ -15,8 +19,8 @@
   align-items: center;
   gap: 8px;
   padding: 7px 12px;
-  border-bottom: 1px solid var(--wimcc-border);
-  background: var(--wimcc-surface-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--wimcc-accent) 22%, var(--wimcc-border));
+  background: color-mix(in srgb, var(--wimcc-accent) 9%, var(--wimcc-surface-2));
 }
 .headIcon {
   color: var(--wimcc-accent);
@@ -25,7 +29,8 @@
 .title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--wimcc-fg);
+  letter-spacing: 0.02em;
+  color: var(--wimcc-accent);
 }
 .count {
   font-family: var(--wimcc-mono);
