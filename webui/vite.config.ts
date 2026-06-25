@@ -5,6 +5,11 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    // Bind the IPv4 loopback explicitly. The default (`localhost`) resolves to
+    // `::1` (IPv6) on macOS, so `127.0.0.1:5173` is refused — which the
+    // claude-in-chrome extension (authorized on 127.0.0.1) needs. Loopback only,
+    // not `host: true` (no LAN exposure — local-first).
+    host: '127.0.0.1',
     port: 5173,
     proxy: {
       // Default to the local serve on :7878. `WIMCC_PROXY_TARGET` lets a dev
