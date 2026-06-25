@@ -115,10 +115,13 @@ fn correlates_tasks_with_status_and_duration() {
     assert_eq!(
         t1.transitions
             .iter()
-            .map(|(s, _)| s.as_str())
+            .map(|t| t.status.as_str())
             .collect::<Vec<_>>(),
         ["created", "in_progress", "completed"]
     );
+    // transitions carry the event_id (for jump-to-work): created = create event.
+    assert_eq!(t1.transitions[0].event_id, "c1");
+    assert_eq!(t1.transitions[1].status, "in_progress");
 }
 
 #[test]

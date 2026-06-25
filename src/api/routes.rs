@@ -320,7 +320,11 @@ pub async fn session_tasks(
                 transitions: t
                     .transitions
                     .into_iter()
-                    .map(|(status, at_ms)| TaskTransitionDto { status, at_ms })
+                    .map(|tr| TaskTransitionDto {
+                        status: tr.status,
+                        at_ms: tr.at_ms,
+                        event_id: tr.event_id,
+                    })
                     .collect(),
                 duration_ms: t.duration_ms,
                 work_duration_ms: t.work_duration_ms,
