@@ -27,6 +27,8 @@ export const en = {
   'detail.analysisToggle': 'Analysis',
   'detail.taskBoard.title': 'Tasks',
   'detail.taskBoard.noInProgress': 'no in_progress',
+  'detail.plugin.title': 'Plugin',
+  'detail.plugin.configured': 'Directly-configured MCP server (not a marketplace plugin).',
 
   // Insight strip
   'insight.stripAria': 'Session insights',

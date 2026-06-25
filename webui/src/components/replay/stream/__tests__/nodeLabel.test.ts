@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nodeLabel, formatModel } from '../nodeLabel';
+import { nodeLabel, formatModel, formatMcpToolName } from '../nodeLabel';
 import { translate } from '../../../../i18n/t';
 import { en } from '../../../../i18n/catalog/en';
 import { ko } from '../../../../i18n/catalog/ko';
@@ -28,6 +28,20 @@ describe('formatModel', () => {
   });
 });
 
+describe('formatMcpToolName', () => {
+  it('parses plugin and direct MCP names; null for non-MCP', () => {
+    // plugin tool: server = last underscore-segment of the server-id (matches the
+    // Rust tagger), so plugin_serena_serena → serena.
+    expect(formatMcpToolName('mcp__plugin_serena_serena__get_symbols_overview')).toBe(
+      'serena · get_symbols_overview',
+    );
+    // directly-configured server (no plugin_ prefix), hyphens preserved.
+    expect(formatMcpToolName('mcp__claude-in-chrome__navigate')).toBe('claude-in-chrome · navigate');
+    expect(formatMcpToolName('Read')).toBeNull();
+    expect(formatMcpToolName('mcp__weird')).toBeNull();
+  });
+});
+
 describe('nodeLabel', () => {
   it('tool_call: tool name + key arg', () => {
     expect(L('tool_call', { tool_name: 'Read', input: { file_path: '/a/slide_logo-17.jpg' } }))
@@ -48,6 +62,14 @@ describe('nodeLabel', () => {
       .toBe('cd /repo && git add -A && git status');
     expect(L('tool_call', { tool_name: 'Skill', input: { skill: 'corp-pptx-style' } }))
       .toEqual({ kind: 'tool', primary: 'Skill', secondary: 'corp-pptx-style' });
+  });
+  it('tool_call: MCP names render as "server · tool"', () => {
+    expect(
+      L('tool_call', {
+        tool_name: 'mcp__plugin_serena_serena__get_symbols_overview',
+        input: { relative_path: 'src/cli.rs' },
+      }).primary,
+    ).toBe('serena · get_symbols_overview');
   });
   it('tool_call: action-style (browser/computer) tools show what they did', () => {
     // mcp computer: action + coordinate → "what work was done"
