@@ -24,6 +24,7 @@ export const ko: Messages = {
   // Session detail
   'detail.analysisToggle': '분석',
   'detail.taskBoard.title': 'Tasks',
+  'detail.taskBoard.done': '완료',
   'detail.taskBoard.noInProgress': 'in_progress 미관측',
   'detail.plugin.title': 'Plugin',
   'detail.plugin.configured': '직접 설정한 MCP 서버 (마켓플레이스 plugin 아님).',
@@ -213,6 +214,7 @@ export const ko: Messages = {
   'stream.legend.move': '이동',
   'stream.legend.nextError': '다음 오류',
   'stream.legend.close': '범례 닫기',
+  'stream.legend.show': '범례',
 
   // Stream — message card
   'stream.msg.summary': '요약',

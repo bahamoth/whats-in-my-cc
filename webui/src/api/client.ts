@@ -12,6 +12,7 @@ import type {
   SessionMetricsDto,
   TurnRollupResponse,
   PluginDto,
+  TaskDto,
 } from './types';
 
 export class ApiError extends Error {
@@ -87,6 +88,11 @@ export function getCorrelatedEvents(
 /** Marketplace-installed plugin registry (provenance + MCP server mapping).
  *  Process-global on the server (cached); not session-scoped. */
 export const getPlugins = (): Promise<PluginDto[]> => jsonGet<PluginDto[]>('/v1/plugins');
+
+/** Per-task summaries (TaskCreate/TaskUpdate correlated + work-span aggregations),
+ *  computed server-side. Drives the task list. */
+export const getSessionTasks = (id: string): Promise<TaskDto[]> =>
+  jsonGet<TaskDto[]>(`/v1/sessions/${encodeURIComponent(id)}/tasks`);
 
 export const getSignals = (id: string): Promise<SignalDto[]> =>
   jsonGet<SignalDto[]>(`/v1/sessions/${encodeURIComponent(id)}/signals`);

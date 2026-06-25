@@ -9,6 +9,7 @@ import { BatchGroup } from './BatchGroup';
 import { WorkflowGroup } from './WorkflowGroup';
 import { ScaffoldGroup } from './ScaffoldGroup';
 import { ThinkingMarker } from './ThinkingMarker';
+import { TaskList } from './TaskList';
 import { AutoscrollToggle } from './AutoscrollToggle';
 import { BgGutter } from './BgGutter';
 import type { SpineKind } from './BgGutter';
@@ -74,6 +75,13 @@ function itemContainsEvent(item: StreamItem, eventId: string): boolean {
   // notification event targets the end card that represents it.
   if (item.type === 'subagent-end') return item.notificationEventId === eventId;
   if (item.type === 'workflow-end') return item.notificationEventId === eventId;
+  // the task-list block "contains" any event nested under a task row (its work)
+  // OR a task's own create event, so a deep-link scrolls to (and auto-expands)
+  // the block.
+  if (item.type === 'task-list')
+    return item.rows.some(
+      (r) => r.task.event_id === eventId || r.work.some((i) => itemContainsEvent(i, eventId)),
+    );
   return item.events.some((ae) => ae.event.event_id === eventId);
 }
 
@@ -471,6 +479,24 @@ export function ConversationStream({
         <WorkflowEndCard card={item} onSelect={onSelect} selected={item.notificationEventId === selectedEventId} />
       );
     }
+    if (item.type === 'task-list') {
+      const autoOpen = new Set(
+        selectedEventId == null
+          ? []
+          : item.rows
+              .filter((r) => r.work.some((w) => itemContainsEvent(w, selectedEventId)))
+              .map((r) => r.task.task_id),
+      );
+      return (
+        <TaskList
+          rows={item.rows}
+          selectedEventId={selectedEventId}
+          autoOpenTaskIds={autoOpen}
+          onSelect={onSelect}
+          renderChild={renderItem}
+        />
+      );
+    }
     // An activity-run renders as ONE contiguous ActivityStack (its events).
     return (
       <ActivityStack
@@ -505,6 +531,7 @@ export function ConversationStream({
         return 'scaffold';
       case 'subagent-end':
       case 'workflow-end':
+      case 'task-list':
         return null;
       default:
         return 'tool'; // activity-run

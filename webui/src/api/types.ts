@@ -255,6 +255,36 @@ export type UsageBaselineDto = {
   output_tokens: BaselineStat;
 };
 
+/** `GET /v1/sessions/:id/tasks` — per-task summary (TaskCreate/TaskUpdate
+ *  correlated + work-span window aggregations). Computed server-side by the
+ *  `task_summary` aggregator. The task list (glance) renders these; expanding a
+ *  row jumps the replay to its in_progress transition's `event_id`. */
+export type TaskTransitionDto = { status: string; at_ms: number; event_id: string };
+export type TaskVerifDto = { passed: number; failed: number; unknown: number; not_executed: number };
+export type TaskTokensDto = { input: number; output: number; cache_creation: number; cache_read: number };
+export type TaskHistEntryDto = { tag: string; count: number };
+export type TaskDto = {
+  task_id: string;
+  subject: string;
+  description: string | null;
+  active_form: string | null;
+  /** TaskCreate event_id. */
+  event_id: string;
+  created_at_ms: number;
+  status: string;
+  transitions: TaskTransitionDto[];
+  duration_ms: number | null;
+  work_duration_ms: number | null;
+  saw_in_progress: boolean;
+  // work-span window aggregations (null unless there is an in_progress span):
+  activity_count: number | null;
+  tag_histogram: TaskHistEntryDto[];
+  lines_added: number | null;
+  lines_removed: number | null;
+  verification: TaskVerifDto | null;
+  tokens: TaskTokensDto | null;
+};
+
 /** `GET /v1/plugins` — a marketplace-installed plugin, resolved from the
  *  `claude` CLI (see Rust `src/plugins.rs`). The detail view matches an MCP tool
  *  call's server name against `mcp_servers` to show this reference card. */

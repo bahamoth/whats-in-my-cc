@@ -42,6 +42,7 @@ function itemEventIds(it: StreamItem): string[] {
   if (it.type === 'batch-group' || it.type === 'workflow-group')
     return it.agentGroups.flatMap(itemEventIds);
   if (it.type === 'subagent-end' || it.type === 'workflow-end') return [];
+  if (it.type === 'task-list') return []; // top-level only; never nested in a group
   return it.items.flatMap(itemEventIds);
 }
 

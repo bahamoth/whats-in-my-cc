@@ -402,9 +402,7 @@ describe('SessionDetailPage', () => {
     const callsOf = (matcher: (u: string) => boolean) =>
       f.mock.calls.filter((c) => matcher(String(c[0]))).length;
     const summaryAtMount = callsOf((u) => /\/v1\/sessions\/[^/]+$/.test(u));
-    // Exclude the Task-board fetch (`kind=tool_call,tool_result`) — it is a
-    // separate session-wide summary query, not the replay window fetch.
-    const eventsAtMount = callsOf((u) => u.includes('/events') && !u.includes('kind='));
+    const eventsAtMount = callsOf((u) => u.includes('/events'));
     expect(summaryAtMount).toBe(1);
     expect(eventsAtMount).toBe(1);
 
@@ -442,7 +440,7 @@ describe('SessionDetailPage', () => {
     });
     // The summary is never re-hit by the envelope burst.
     expect(callsOf((u) => /\/v1\/sessions\/[^/]+$/.test(u))).toBe(summaryAtMount);
-    expect(callsOf((u) => u.includes('/events') && !u.includes('kind='))).toBe(eventsAtMount + 1);
+    expect(callsOf((u) => u.includes('/events'))).toBe(eventsAtMount + 1);
   });
 
   // A `gap` frame (SSE broadcast lagged — the channel is shared across all
@@ -467,7 +465,7 @@ describe('SessionDetailPage', () => {
     const callsOf = (m: (u: string) => boolean) =>
       f.mock.calls.filter((c) => m(String(c[0]))).length;
     const initialWindowFetches = callsOf(
-      (u) => /\/events\?limit=/.test(u) && !u.includes('kind='),
+      (u) => /\/events\?limit=/.test(u),
     );
     expect(initialWindowFetches).toBe(1);
 
@@ -481,7 +479,7 @@ describe('SessionDetailPage', () => {
       expect(callsOf((u) => u.includes('/events') && u.includes('after='))).toBe(1);
     });
     // ... and never re-runs the initial window fetch (i.e. never reloads/wipes).
-    expect(callsOf((u) => /\/events\?limit=/.test(u) && !u.includes('kind='))).toBe(
+    expect(callsOf((u) => /\/events\?limit=/.test(u))).toBe(
       initialWindowFetches,
     );
   });
@@ -507,7 +505,7 @@ describe('SessionDetailPage', () => {
     const callsOf = (m: (u: string) => boolean) =>
       f.mock.calls.filter((c) => m(String(c[0]))).length;
     const initialWindowFetches = callsOf(
-      (u) => /\/events\?limit=/.test(u) && !u.includes('kind='),
+      (u) => /\/events\?limit=/.test(u),
     );
     expect(initialWindowFetches).toBe(1);
 
@@ -518,7 +516,7 @@ describe('SessionDetailPage', () => {
     await waitFor(() => {
       expect(callsOf((u) => u.includes('/events') && u.includes('after='))).toBe(1);
     });
-    expect(callsOf((u) => /\/events\?limit=/.test(u) && !u.includes('kind='))).toBe(
+    expect(callsOf((u) => /\/events\?limit=/.test(u))).toBe(
       initialWindowFetches,
     );
   });

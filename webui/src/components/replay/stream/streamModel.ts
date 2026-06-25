@@ -1,5 +1,5 @@
 // webui/src/components/replay/stream/streamModel.ts
-import type { ObservedEventDto } from '../../../api/types';
+import type { ObservedEventDto, TaskDto } from '../../../api/types';
 import type { LlmRequestMetrics } from './llmRequestMetrics';
 import { messageOrigin, type MessageOrigin } from './messageOrigin';
 import { agentColor } from '../../../lib/colorHash';
@@ -285,6 +285,31 @@ export interface WorkflowEndCard {
   notificationEventId: string;
 }
 
+/** One row of the collected task list: a task plus the work it produced. */
+export interface TaskListRow {
+  task: TaskDto;
+  /** work events that ran during [in_progress, last-transition], nested under
+   *  the row. Empty for a task that never went in_progress (e.g. created →
+   *  completed directly) — there is no observable span, so the row shows its
+   *  summary/transitions but has no nested work. */
+  work: StreamItem[];
+}
+
+/** The session's tasks (TaskCreate/TaskUpdate), collected into ONE inline block
+ *  in the stream — all tasks in id order, like Claude Code's todo list. Each row
+ *  is selectable (→ detail panel) and foldable: expanding a row reveals that
+ *  task's work nested in place (構成: work under task), not a jump or a panel.
+ *  The block is anchored where the task work begins; the wrapped work events are
+ *  pulled out of the main stream and the Task* tool_call markers are suppressed. */
+export interface TaskListItem {
+  type: 'task-list';
+  id: string;
+  rows: TaskListRow[];
+  /** where the block sits on the time-spine (first in_progress, else earliest
+   *  task creation). */
+  anchorMs: number | null;
+}
+
 export type StreamItem =
   | MessageItem
   | ActivityRun
@@ -294,7 +319,8 @@ export type StreamItem =
   | WorkflowGroup
   | ScaffoldGroup
   | SubagentEndCard
-  | WorkflowEndCard;
+  | WorkflowEndCard
+  | TaskListItem;
 
 /** One lane cell painted in the background-subagent gutter for a given row. */
 export interface GutterCell {
@@ -722,6 +748,7 @@ export function rowTimeMs(it: StreamItem): number | null {
   if (it.type === 'activity-run') return it.events.length ? t(it.events[0].event.observed_at) : null;
   if (it.type === 'thinking') return it.events.length ? t(it.events[0].timestamp) : null;
   if (it.type === 'scaffold-group') return it.items.length ? t(it.items[0].timestamp) : null;
+  if (it.type === 'task-list') return it.anchorMs;
   // group containers: earliest child event
   const groups = it.type === 'sidechain-group' ? [it] : it.agentGroups;
   let min = Infinity;
@@ -923,9 +950,145 @@ export function insertSubagentEndCards(items: StreamItem[]): StreamItem[] {
   return out;
 }
 
+const TASK_TOOLS = new Set(['TaskCreate', 'TaskUpdate', 'TaskStop']);
+function isTaskToolEvent(e: ObservedEventDto): boolean {
+  if (e.kind !== 'tool_call') return false;
+  const name = e.tool_name ?? (asObj(e.payload).tool_name as string | undefined);
+  return !!name && TASK_TOOLS.has(name);
+}
+
+/** Drop the Task* tool_call marker rows (Create/Update/Stop) — they are
+ *  represented by the TaskList rows, not by generic tool rows. Empty runs
+ *  that contained only Task* events are dropped entirely. */
+function stripTaskTools(items: StreamItem[]): StreamItem[] {
+  const out: StreamItem[] = [];
+  for (const it of items) {
+    if (it.type === 'activity-run') {
+      const kept = it.events.filter((ae) => !isTaskToolEvent(ae.event));
+      if (kept.length === 0) continue;
+      out.push(kept.length === it.events.length ? it : { ...it, events: kept });
+    } else {
+      out.push(it);
+    }
+  }
+  return out;
+}
+
+/** Numeric task-id ordering (falls back to lexical for non-numeric ids). */
+function byTaskId(a: TaskDto, b: TaskDto): number {
+  const na = Number(a.task_id);
+  const nb = Number(b.task_id);
+  if (Number.isNaN(na) || Number.isNaN(nb)) return a.task_id.localeCompare(b.task_id);
+  return na - nb;
+}
+
+/** Main-chain work only — never pull a parallel subagent/background/batch group
+ *  into a task's nested work (it would mis-attribute concurrent work to the
+ *  task). Those containers stay in the stream at their own position. */
+const MAIN_CHAIN_TYPES = new Set(['message', 'activity-run', 'thinking', 'scaffold-group']);
+function isMainChainWork(it: StreamItem): boolean {
+  return MAIN_CHAIN_TYPES.has(it.type);
+}
+
+/** Collect ALL tasks into ONE inline block, in id order (the collected todo
+ *  list). Attribution is PER-TASK and marker-driven, never guessed:
+ *
+ *  - A task WITH an in_progress marker owns the MAIN-CHAIN work during its
+ *    [in_progress, last-transition] window — the window the markers DEFINE — and
+ *    that work is pulled out of the stream and nested under its row. (If it was
+ *    the only task in_progress while several tasks' work happened, that work is
+ *    its window's by the only signal we have; siblings that never went
+ *    in_progress get nothing. That is CC's tracking gap, surfaced honestly — not
+ *    a guess by us.) Parallel subagent/background groups are filtered out and
+ *    stay in the stream.
+ *  - A task WITHOUT an in_progress marker owns no work — its row is a checklist
+ *    entry carrying an honest "no in_progress" flag.
+ *
+ *  Anchor: first in_progress, else earliest creation. The Task* tool_call
+ *  markers are always dropped. No-op when there are no tasks. */
+function buildTaskList(items: StreamItem[], tasks: TaskDto[]): StreamItem[] {
+  if (tasks.length === 0) return items;
+  const work = stripTaskTools(items);
+  const times = work.map(rowTimeMs);
+
+  const ipTimes = tasks
+    .map((t) => t.transitions.find((x) => x.status === 'in_progress')?.at_ms)
+    .filter((x): x is number => x != null);
+  const earliestCreated = Math.min(...tasks.map((t) => t.created_at_ms));
+  // Anchor where the first task became active (its work begins), else — for a
+  // list where nobody ever went in_progress — at the earliest creation.
+  const anchorMs = ipTimes.length ? Math.min(...ipTimes) : earliestCreated;
+
+  // PER-TASK attribution: each task that has an in_progress marker owns the
+  // MAIN-CHAIN work in its [in_progress, last-transition] window — the window
+  // the markers DEFINE (not a guessed boundary). The main-chain filter keeps
+  // parallel subagent/background groups out (they stay in the stream). A task
+  // with no in_progress marker owns nothing (its row is a checklist entry) —
+  // we never guess which work was its. owner[i] = index of the owning task.
+  const owner = new Array<number>(work.length).fill(-1);
+  const ordered = [...tasks].sort(byTaskId);
+  interface Span {
+    taskIdx: number;
+    start: number;
+    end: number;
+  }
+  const spans: Span[] = [];
+  ordered.forEach((task, taskIdx) => {
+    const ip = task.transitions.find((x) => x.status === 'in_progress');
+    if (!ip) return;
+    const last = task.transitions[task.transitions.length - 1];
+    const s = ip.at_ms;
+    const e = Math.max(last ? last.at_ms : s, s);
+    let start = -1;
+    let end = -1;
+    for (let i = 0; i < work.length; i++) {
+      const tm = times[i];
+      if (tm == null || tm < s || tm > e || !isMainChainWork(work[i])) continue;
+      if (start < 0) start = i;
+      end = i;
+    }
+    if (start >= 0) spans.push({ taskIdx, start, end });
+  });
+  // first-claimant wins so overlapping in_progress windows don't double-attach.
+  spans.sort((a, b) => a.start - b.start);
+  spans.forEach((sp) => {
+    for (let i = sp.start; i <= sp.end; i++)
+      if (owner[i] < 0 && isMainChainWork(work[i])) owner[i] = sp.taskIdx;
+  });
+
+  const rows: TaskListRow[] = ordered.map((task, taskIdx) => ({
+    task,
+    work: work.filter((_, i) => owner[i] === taskIdx),
+  }));
+  const block: TaskListItem = { type: 'task-list', id: 'task-list', rows, anchorMs };
+
+  // Anchor index: first item at/after anchorMs. Owned (now-nested) items are
+  // dropped; everything else stays in the stream.
+  let anchorIdx = work.length;
+  for (let i = 0; i < work.length; i++) {
+    const tm = times[i];
+    if (tm != null && tm >= anchorMs) {
+      anchorIdx = i;
+      break;
+    }
+  }
+  const out: StreamItem[] = [];
+  let inserted = false;
+  for (let i = 0; i < work.length; i++) {
+    if (!inserted && i >= anchorIdx) {
+      out.push(block);
+      inserted = true;
+    }
+    if (owner[i] < 0) out.push(work[i]);
+  }
+  if (!inserted) out.push(block);
+  return out;
+}
+
 export function buildStreamModel(
   events: ObservedEventDto[],
   metricsByReq?: Map<string, LlmRequestMetrics>,
+  tasks: TaskDto[] = [],
 ): StreamItem[] {
   const resultByUse = new Map<string, ObservedEventDto>();
   // Caller-linkage prepass: sidecar meta per agent, tool_call event ids per
@@ -1302,18 +1465,21 @@ export function buildStreamModel(
   const wfNameByToolUse = new Map<string, string | null>();
   for (const c of wfCalls) wfNameByToolUse.set(c.toolUseId, c.name);
 
-  return insertSubagentEndCards(
-    groupScaffold(
-      syncTaskNotifications(
-        annotateConcurrency(mergeConcurrentGroups(items)),
-        notiByToolUse,
-        wfToolUseByEvent,
-        agentDispatchToolUse,
-        callMetaByUse,
-        wfNameByToolUse,
-        notiByTaskId,
+  return buildTaskList(
+    insertSubagentEndCards(
+      groupScaffold(
+        syncTaskNotifications(
+          annotateConcurrency(mergeConcurrentGroups(items)),
+          notiByToolUse,
+          wfToolUseByEvent,
+          agentDispatchToolUse,
+          callMetaByUse,
+          wfNameByToolUse,
+          notiByTaskId,
+        ),
       ),
     ),
+    tasks,
   );
 }
 

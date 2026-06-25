@@ -44,9 +44,14 @@
 }
 .kpi { grid-area: kpi; }
 
-/* Analysis toggle button — small, neutral, floats at the end of the kpi strip */
-.analysisToggle {
+/* Toolbar row — legend + analysis toggles, floated at the end of the kpi strip */
+.toolbar {
   align-self: flex-end;
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.toolBtn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -58,10 +63,9 @@
   font-size: 12px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
-  margin-top: 8px;
 }
-.analysisToggle:hover,
-.analysisToggle[aria-pressed="true"] {
+.toolBtn:hover,
+.toolBtn[aria-pressed="true"] {
   background: var(--wimcc-surface-3, #1b202a);
   color: var(--wimcc-fg, #e6e8ee);
   border-color: var(--wimcc-accent, #4f8cff);

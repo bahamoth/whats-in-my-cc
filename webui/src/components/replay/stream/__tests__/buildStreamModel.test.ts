@@ -1258,3 +1258,123 @@ describe('syncTaskNotifications — subagent join by task-id == agent_id (sideca
     expect(out.some((i) => i.id === 'noti-a')).toBe(false); // absorbed → no duplicate card
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task list block (2026-06-25): tasks collected into ONE inline block, in id
+// order. PER-TASK marker-driven attribution: a task WITH an in_progress marker
+// nests the main-chain work in its [in_progress, end] window; a task WITHOUT one
+// (e.g. created → completed directly, like real session 4dc1b1bb #2/#3) owns no
+// work (checklist row) — we never guess which work was its.
+// ---------------------------------------------------------------------------
+describe('buildTaskList', () => {
+  const ms = (iso: string) => new Date(iso).getTime();
+  const T = {
+    create: '2026-05-28T00:00:00.000Z',
+    ip1: '2026-05-28T00:01:00.000Z',
+    w1: '2026-05-28T00:01:30.000Z',
+    done1: '2026-05-28T00:02:00.000Z',
+    ip2: '2026-05-28T00:03:00.000Z',
+    w2: '2026-05-28T00:03:30.000Z',
+    done2: '2026-05-28T00:04:00.000Z',
+  };
+  function task(over: Partial<import('../../../../api/types').TaskDto> & { task_id: string }) {
+    return {
+      subject: `task ${over.task_id}`,
+      description: null,
+      active_form: null,
+      event_id: `tc-${over.task_id}`,
+      created_at_ms: ms(T.create),
+      status: 'completed',
+      transitions: [],
+      duration_ms: null,
+      work_duration_ms: null,
+      saw_in_progress: false,
+      activity_count: null,
+      tag_histogram: [],
+      lines_added: null,
+      lines_removed: null,
+      verification: null,
+      tokens: null,
+      ...over,
+    } as import('../../../../api/types').TaskDto;
+  }
+  const findBlock = (items: StreamItem[]) =>
+    items.find((i) => i.type === 'task-list') as Extract<StreamItem, { type: 'task-list' }> | undefined;
+
+  it('per-task: a tracked task nests its window work; an untracked sibling owns nothing', () => {
+    const tasks = [
+      task({
+        task_id: '1',
+        saw_in_progress: true,
+        transitions: [
+          { status: 'created', at_ms: ms(T.create), event_id: 'tc-1' },
+          { status: 'in_progress', at_ms: ms(T.ip1), event_id: 'tu-1a' },
+          { status: 'completed', at_ms: ms(T.done1), event_id: 'tu-1b' },
+        ],
+      }),
+      task({
+        task_id: '2',
+        saw_in_progress: false, // created → completed directly (the #2/#3 case)
+        transitions: [
+          { status: 'created', at_ms: ms(T.create), event_id: 'tc-2' },
+          { status: 'completed', at_ms: ms(T.done1), event_id: 'tu-2' },
+        ],
+      }),
+    ];
+    const items = buildStreamModel(
+      [ev({ event_id: 'w1', kind: 'assistant_message', actor: 'assistant', observed_at: T.w1, payload: { text: 'work in #1 window' } })],
+      undefined,
+      tasks,
+    );
+    const block = findBlock(items);
+    expect(block).toBeDefined();
+    expect(block!.rows.map((r) => r.task.task_id)).toEqual(['1', '2']);
+    // #1 (has in_progress) nests the main-chain work in its window…
+    const r1 = block!.rows.find((r) => r.task.task_id === '1')!;
+    expect(r1.work.some((i) => i.type === 'message' && (i as MessageItem).eventId === 'w1')).toBe(true);
+    // …#2 (no in_progress) owns nothing — never guessed.
+    expect(block!.rows.find((r) => r.task.task_id === '2')!.work).toHaveLength(0);
+    // the nested work is pulled out of the top-level stream (not duplicated).
+    expect(items.some((i) => i.type === 'message' && (i as MessageItem).eventId === 'w1')).toBe(false);
+  });
+
+  it('two tracked tasks → each nests the main-chain work in its own window', () => {
+    const tasks = [
+      task({
+        task_id: '1',
+        saw_in_progress: true,
+        transitions: [
+          { status: 'created', at_ms: ms(T.create), event_id: 'tc-1' },
+          { status: 'in_progress', at_ms: ms(T.ip1), event_id: 'tu-1a' },
+          { status: 'completed', at_ms: ms(T.done1), event_id: 'tu-1b' },
+        ],
+      }),
+      task({
+        task_id: '2',
+        saw_in_progress: true,
+        transitions: [
+          { status: 'created', at_ms: ms(T.create), event_id: 'tc-2' },
+          { status: 'in_progress', at_ms: ms(T.ip2), event_id: 'tu-2a' },
+          { status: 'completed', at_ms: ms(T.done2), event_id: 'tu-2b' },
+        ],
+      }),
+    ];
+    const items = buildStreamModel(
+      [
+        ev({ event_id: 'w1', kind: 'assistant_message', actor: 'assistant', observed_at: T.w1, payload: { text: 'work for #1' } }),
+        ev({ event_id: 'w2', kind: 'assistant_message', actor: 'assistant', observed_at: T.w2, payload: { text: 'work for #2' } }),
+      ],
+      undefined,
+      tasks,
+    );
+    const block = findBlock(items);
+    expect(block).toBeDefined();
+    // each task's work nested under its own row (w1 → #1, w2 → #2).
+    const r1 = block!.rows.find((r) => r.task.task_id === '1')!;
+    const r2 = block!.rows.find((r) => r.task.task_id === '2')!;
+    expect(r1.work.some((i) => i.type === 'message' && (i as MessageItem).eventId === 'w1')).toBe(true);
+    expect(r2.work.some((i) => i.type === 'message' && (i as MessageItem).eventId === 'w2')).toBe(true);
+    // pulled out of the top-level stream (now nested, not duplicated).
+    expect(items.some((i) => i.type === 'message')).toBe(false);
+  });
+});
