@@ -5274,15 +5274,52 @@ vitest: 69 passed
     + <code>docs/02</code>("별도 graph 레이어는 없다"). 이 추적 시점(2026-06-24)에 02·03은 현행 코드와 일치 — drift 없음.
     이력의 SSOT는 본 문서 + git.</p>
 
-    <h2 id="task-board-2026-06-25">Task 보드 + MCP 실행 인사이트 · plugin 식별 (2026-06-25)</h2>
-    <p>두 트랙: (A) 세션 Task 라이프사이클 보드, (B) MCP/plugin 도구의 실행 인사이트 + provenance.
+    <h2 id="task-board-2026-06-25">Task 모아보기 (스트림 인라인) + MCP 실행 인사이트 · plugin 식별 (2026-06-25)</h2>
+    <p>두 트랙: (A) 세션 Task 모아보기(메시지 스트림 인라인), (B) MCP/plugin 도구의 실행 인사이트 + provenance.
     원 요청: 태스크의 시각적 파악, 그리고 "plugin이 호출하는 MCP/skill 도구 정보를 가져올 방법".</p>
-    <h3>A. Task 보드</h3>
-    <p><code>TaskCreate</code>(결과 "Task #N")↔<code>TaskUpdate</code>(taskId)를 taskId로 상관해 세션 전체 todo를
-    공유 시간축 보드로 시각화(생성→진행→완료·소요시간·<code>in_progress</code> 미관측 플래그). 순수
-    <code>buildTaskBoard</code>(<code>webui/src/lib/taskBoard.ts</code>)가 상관, KPI 스트립에 마운트. 세션 전체 task는
-    윈도우와 별도로 <code>?kind=tool_call,tool_result</code> 필터로 fetch(<code>useSessionTasksQuery</code>).
+    <h3>A. Task 모아보기 (스트림 인라인 블록)</h3>
+    <p><code>TaskCreate</code>(결과 "Task #N")↔<code>TaskUpdate</code>(taskId)를 taskId로 상관해 세션 todo를
+    <strong>메시지 스트림 안 하나의 모아보기 블록</strong>으로 렌더한다(별도 KPI 패널/탭이 아니라 — Claude Code가 todo를
+    인라인으로 보여주는 방식). 행은 id순, 클릭 시 해당 <code>TaskCreate</code> 이벤트가 detail 패널에 열린다(선택 가능).
+    글랜스(접힘) = 상태·#id·subject(<code>in_progress</code>면 activeForm)·소요시간 + 작업구간 요약(activity 수·verb.object
+    태그 히스토그램·diff ±·verification 4-outcome·tokens). 개별 <code>Task*</code> tool_call 행은 흡수(suppress). 세션 전체
+    task는 윈도우와 별도로 <code>GET /v1/sessions/:id/tasks</code>(<code>useSessionTasksQuery</code>)로 fetch.
     <code>TaskStop</code>은 숫자 todo가 아니라 백그라운드 태스크(<code>braz4pe91</code> 류) 중단이라 제외.</p>
+    <p><strong>작업 귀속 = per-task·마커 기반, 추측 없음(측정/판별 분리).</strong> <code>in_progress</code> 마커가 있는 태스크는
+    <code>[in_progress, 마지막 전이]</code> <em>활성 구간</em>의 <strong>메인체인</strong> 작업을 행 아래에 펼쳐 중첩한다
+    (<code>buildTaskList</code>·<code>TaskList.tsx</code>, <code>streamModel.ts</code>). 마커 없이 <code>created→completed</code>
+    직행한 태스크는 작업을 갖지 않고 "in_progress 미관측" 플래그만 단다. raw <code>description</code>은 노출하지 않는다
+    (정리 안 된 prose).</p>
+    <h3>A-1. 설계 결정 — 왜 "추측 시간 블록"이 아니라 "마커 활성 구간 + 메인체인"인가</h3>
+    <p>한 실세션(<code>4dc1b1bb</code>: #1만 <code>in_progress</code>를 찍고 #2/#3은 마커 없이 일괄 <code>completed</code>)을
+    DB 원본으로 전수 조사한 결론:</p>
+    <ul>
+      <li>작업 이벤트(Edit/Bash/Read)에 <code>taskId</code> 키가 <strong>없다</strong>(payload·컬럼 확인). <code>turn_id</code>는
+      세션 전체 공유(1 turn), <code>message_id</code>는 도구콜 단위, parent_uuid 체인도 task로 안 잇는다 — <strong>마커가 정의한
+      활성 구간 외에 결정론적 귀속 키가 없다.</strong></li>
+      <li>그래서 귀속은 본질적으로 "그 태스크가 활성일 때 일어난 이벤트" = 시간 구간일 수밖에 없다. 위험한 건 <em>경계를
+      추측</em>하는 시간 블록(<code>[created, completed]</code>·시간 공백 등)이고, <code>[in_progress, 마지막 전이]</code>는
+      <strong>마커가 명시적으로 정의한</strong> 활성 구간이라 추측이 아니다.</li>
+      <li>병렬 서브에이전트/배치/워크플로우 오염은 별개 문제 — <code>isMainChainWork</code>로 그 그룹들을 구간에서 제외(스트림에
+      남김)해 막는다(검증: 해당 세션 #1 구간 376 이벤트 전부 메인체인, 병렬 0).</li>
+      <li>한 태스크의 활성 구간이 형제 태스크의 작업까지 삼켜도(#1이 #2/#3 작업 흡수) <strong>데이터상 그 작업은 활성 태스크
+      것</strong>이다 — 이는 CC가 #2/#3 <code>in_progress</code>를 안 찍은 추적 공백이지 wimcc가 휴리스틱으로 메울 일이 아니다.
+      "이 README edit은 #2 것" 같은 판별(파일경로↔subject 매칭)은 retrospect LLM 스킬 몫.</li>
+      <li>수집 자체는 정상 — 더미 태스크 3개로 <code>in_progress</code>가 태스크마다 캡처됨을 트랜스크립트·DB·집계기 3중 확인.</li>
+    </ul>
+    <h3>A-2. 스트림 범례 복구 토글</h3>
+    <p>범례를 X로 닫으면 <strong>완전히 사라져 세로 공간을 회수</strong>하고, 재활성화는 detail 페이지 toolbar의 "범례"
+    토글로(새 세로 공간 0). 종전엔 닫으면 잔여 토글 줄이 공간을 먹어 X가 무의미했다 → 가시성을 페이지가 소유하는 제어형
+    <code>StreamLegend</code>로 전환(localStorage 영속).</p>
+    <h3>A-3. 편차/주의</h3>
+    <ul>
+      <li>설계가 gantt KPI 보드 → 탭 → 스트림 인라인 그룹 → <strong>스트림 인라인 모아보기 블록</strong>으로 수렴. 구
+      <code>buildTaskBoard</code>/<code>TaskBoard.tsx</code>/<code>lib/taskBoard.ts</code> 제거.</li>
+      <li><code>TaskTransition</code>에 <code>event_id</code> 부착(전이로 replay 점프/시각 표시) — dto/routes/집계기 동기화.</li>
+      <li><strong>윈도 페이징 엣지</strong>: 태스크 작업 이벤트가 로드된 윈도에 없으면(예: 태스크 생성 이벤트로 딥링크 →
+      윈도가 생성 시점 주변만 로드) 행이 빈 채로 보인다. 작업 이벤트가 스크롤/딥링크로 로드되면 중첩된다 — 윈도 페이징의
+      본질이며 버그 아님.</li>
+    </ul>
     <h3>B. MCP/plugin 실행 인사이트 + provenance</h3>
     <ul>
       <li><strong>측정/판별 분리 결론</strong>: 스트림 행에 노출할 "실행 인사이트"(method·operation·result 크기·
