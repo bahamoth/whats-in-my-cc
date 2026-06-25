@@ -152,6 +152,35 @@ pub async fn assistant_raw_lines(
     Ok(rows.into_iter().map(map_assistant_raw_line).collect())
 }
 
+/// All usage rows for a session (per assistant-output event), with observed_at
+/// + token columns — for windowed per-task token sums (task_summary aggregator).
+pub async fn list_session(pool: &SqlitePool, session_id: &str) -> Result<Vec<UsageFacetRow>> {
+    let rows = sqlx::query(
+        "SELECT raw_event_id, schema_version, session_id, model,
+                input_tokens, cache_creation_input_tokens, cache_read_input_tokens,
+                output_tokens, observed_at, parser_version
+         FROM usage_facet WHERE session_id = ? ORDER BY observed_at ASC",
+    )
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| UsageFacetRow {
+            raw_event_id: r.get("raw_event_id"),
+            schema_version: r.get("schema_version"),
+            session_id: r.get("session_id"),
+            model: r.try_get("model").ok().flatten(),
+            input_tokens: r.get("input_tokens"),
+            cache_creation_input_tokens: r.get("cache_creation_input_tokens"),
+            cache_read_input_tokens: r.get("cache_read_input_tokens"),
+            output_tokens: r.get("output_tokens"),
+            observed_at: r.get("observed_at"),
+            parser_version: r.get("parser_version"),
+        })
+        .collect())
+}
+
 pub async fn session_aggregate(pool: &SqlitePool, session_id: &str) -> Result<UsageAggregate> {
     let row = sqlx::query(
         "SELECT COUNT(*) AS assistant_events,

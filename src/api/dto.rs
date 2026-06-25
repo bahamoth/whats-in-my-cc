@@ -299,6 +299,54 @@ pub struct UsageBaselineDto {
     pub output_tokens: BaselineStat,
 }
 
+/// `GET /v1/sessions/:id/tasks` — per-task summary (TaskCreate/TaskUpdate
+/// correlated + work-span window aggregations). See `task_summary` aggregator.
+#[derive(Serialize)]
+pub struct TaskTransitionDto {
+    pub status: String,
+    pub at_ms: i64,
+}
+#[derive(Serialize)]
+pub struct TaskVerifDto {
+    pub passed: u32,
+    pub failed: u32,
+    pub unknown: u32,
+    pub not_executed: u32,
+}
+#[derive(Serialize)]
+pub struct TaskTokensDto {
+    pub input: i64,
+    pub output: i64,
+    pub cache_creation: i64,
+    pub cache_read: i64,
+}
+#[derive(Serialize)]
+pub struct TaskHistEntryDto {
+    pub tag: String,
+    pub count: u32,
+}
+#[derive(Serialize)]
+pub struct TaskDto {
+    pub task_id: String,
+    pub subject: String,
+    pub description: Option<String>,
+    pub active_form: Option<String>,
+    /// TaskCreate event_id — the glance row jumps the replay here.
+    pub event_id: String,
+    pub created_at_ms: i64,
+    pub status: String,
+    pub transitions: Vec<TaskTransitionDto>,
+    pub duration_ms: Option<i64>,
+    pub work_duration_ms: Option<i64>,
+    pub saw_in_progress: bool,
+    pub activity_count: Option<u32>,
+    pub tag_histogram: Vec<TaskHistEntryDto>,
+    pub lines_added: Option<i64>,
+    pub lines_removed: Option<i64>,
+    pub verification: Option<TaskVerifDto>,
+    pub tokens: Option<TaskTokensDto>,
+}
+
 /// `GET /v1/plugins` — one marketplace-installed plugin, resolved from the
 /// `claude` CLI (see `crate::plugins`). The webui matches an MCP tool call's
 /// server name against `mcp_servers` to enrich the detail view.
