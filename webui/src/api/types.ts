@@ -255,6 +255,22 @@ export type UsageBaselineDto = {
   output_tokens: BaselineStat;
 };
 
+/** `GET /v1/plugins` — a marketplace-installed plugin, resolved from the
+ *  `claude` CLI (see Rust `src/plugins.rs`). The detail view matches an MCP tool
+ *  call's server name against `mcp_servers` to show this reference card. */
+export type PluginDto = {
+  /** `plugin@marketplace`. */
+  id: string;
+  plugin: string;
+  marketplace: string;
+  /** `official` | `public` | `personal` | `unknown`. */
+  provenance: string;
+  scope: string;
+  enabled: boolean;
+  mcp_servers: string[];
+  description: string | null;
+};
+
 export type SessionMetricsDto = {
   session_id: string;
   tool_call_total: number;

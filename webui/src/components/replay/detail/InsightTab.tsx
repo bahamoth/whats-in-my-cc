@@ -12,6 +12,7 @@ import type { ToolMetrics } from './toolMetrics';
 import { EntityMetricsPanel } from './EntityMetricsPanel';
 import { eventProvenance } from './eventProvenance';
 import { WhatSection } from './WhatSection';
+import { McpPluginCard } from './McpPluginCard';
 import { useT } from '../../../i18n';
 import styles from './InsightTab.module.css';
 
@@ -175,6 +176,14 @@ export function InsightTab({ signals, event, toolMetrics, llmMetrics, matchedRes
               payload={event.payload}
             />
           </div>
+
+          {/* Plugin reference — only for MCP tool calls (server·tool). */}
+          {event.kind === 'tool_call' && event.tool_name?.startsWith('mcp__') && (
+            <div className={styles.section}>
+              <div className={styles.sectionTitle}>{t('detail.plugin.title')}</div>
+              <McpPluginCard toolName={event.tool_name} />
+            </div>
+          )}
         </>
       )}
 

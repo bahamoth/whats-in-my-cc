@@ -64,6 +64,34 @@ function toolArg(input: unknown, commandDisplay?: string): string {
   return '';
 }
 
+/** Parse `mcp__[plugin_<plugin>_]<server>__<tool>` → { server, tool }, or null
+ *  for non-MCP names. server = the last underscore-segment of the server-id
+ *  (matches the Rust tagger: `plugin_serena_serena` → `serena`,
+ *  `claude_ai_Slack` → `Slack`, `claude-in-chrome` → unchanged). */
+function parseMcpName(name: string): { server: string; tool: string } | null {
+  if (!name.startsWith('mcp__')) return null;
+  const rest = name.slice('mcp__'.length);
+  const idx = rest.indexOf('__');
+  if (idx <= 0) return null;
+  const serverId = rest.slice(0, idx);
+  const tool = rest.slice(idx + 2);
+  if (!serverId || !tool) return null;
+  const server = serverId.includes('_') ? serverId.slice(serverId.lastIndexOf('_') + 1) : serverId;
+  return { server, tool };
+}
+
+/** `mcp__…` → `<server> · <tool>` for display; null for non-MCP names. */
+export function formatMcpToolName(name: string): string | null {
+  const p = parseMcpName(name);
+  return p ? `${p.server} · ${p.tool}` : null;
+}
+
+/** The MCP server a tool call belongs to (for matching against the plugin
+ *  registry's `mcp_servers`); null for non-MCP names. */
+export function mcpServerOf(name: string): string | null {
+  return parseMcpName(name)?.server ?? null;
+}
+
 export function nodeLabel(
   node: {
     node_kind: string;
@@ -82,15 +110,18 @@ export function nodeLabel(
 ): NodeLabel {
   const p = asObj(node.payload);
   switch (node.node_kind) {
-    case 'tool_call':
+    case 'tool_call': {
+      const name = (p.tool_name as string) || 'tool';
       return {
         kind: 'tool',
-        primary: (p.tool_name as string) || 'tool',
+        // MCP tools render as "server · tool" instead of the raw mcp__… string.
+        primary: formatMcpToolName(name) ?? name,
         secondary: toolArg(
           p.input,
           typeof node.tag?.display === 'string' ? node.tag.display : undefined,
         ),
       };
+    }
     case 'assistant_message':
       return {
         kind: 'assistant',

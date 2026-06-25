@@ -20,6 +20,7 @@ import {
   getSessionEvents,
   getSessionMetrics,
   getSessionTurns,
+  getPlugins,
 } from '../api/client';
 import type {
   SessionDetail,
@@ -32,6 +33,7 @@ import type {
   SessionEventsResponse,
   SessionMetricsDto,
   TurnRollupResponse,
+  PluginDto,
 } from '../api/types';
 
 export const sessionKeys = {
@@ -52,6 +54,11 @@ export const sessionKeys = {
 /** insight-redesign #6 — store-wide usage baseline (not session-scoped). */
 export const usageKeys = {
   baseline: () => ['usage', 'baseline'] as const,
+};
+
+/** Plugin registry is process-global on the server (not session-scoped). */
+export const pluginKeys = {
+  all: () => ['plugins'] as const,
 };
 
 type QOpts<T> = Omit<UseQueryOptions<T, Error, T>, 'queryKey' | 'queryFn'>;
@@ -115,6 +122,16 @@ export function useSessionTasksQuery(id: string, opts?: QOpts<SessionEventsRespo
     queryKey: sessionKeys.tasks(id),
     queryFn: () => getSessionEvents(id, { kind: 'tool_call,tool_result', limit: 5000 }),
     enabled: !!id,
+    ...opts,
+  });
+}
+
+/** Plugin registry — long-lived (plugins rarely change mid-session). */
+export function usePluginsQuery(opts?: QOpts<PluginDto[]>) {
+  return useQuery<PluginDto[]>({
+    queryKey: pluginKeys.all(),
+    queryFn: () => getPlugins(),
+    staleTime: 300_000,
     ...opts,
   });
 }

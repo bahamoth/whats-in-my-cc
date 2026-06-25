@@ -11,6 +11,7 @@ import type {
   UsageBaselineDto,
   SessionMetricsDto,
   TurnRollupResponse,
+  PluginDto,
 } from './types';
 
 export class ApiError extends Error {
@@ -82,6 +83,10 @@ export function getCorrelatedEvents(
 }
 
 // ---- Pull API helpers ------------------------------------------
+
+/** Marketplace-installed plugin registry (provenance + MCP server mapping).
+ *  Process-global on the server (cached); not session-scoped. */
+export const getPlugins = (): Promise<PluginDto[]> => jsonGet<PluginDto[]>('/v1/plugins');
 
 export const getSignals = (id: string): Promise<SignalDto[]> =>
   jsonGet<SignalDto[]>(`/v1/sessions/${encodeURIComponent(id)}/signals`);
