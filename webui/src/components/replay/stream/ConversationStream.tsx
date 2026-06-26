@@ -348,10 +348,19 @@ export function ConversationStream({
     if (idx < 0) return; // not loaded yet — retried when items / totalSize change
     const vItems = virtualizer.getVirtualItems();
     if (vItems.length > 0) {
-      const rendered = vItems.some((vi) => vi.index === idx);
-      if (rendered) {
-        // Target row is mounted: it was already on screen (in-stream click — must
-        // not re-center / yank) or the core's scrollToIndex reconcile has landed.
+      // VISIBLE = the target row overlaps the actual viewport — NOT merely
+      // "rendered" (getVirtualItems includes overscan, so an undershot
+      // scrollToIndex renders the target just BELOW the fold; satisfying there
+      // left the deep-link target off-screen, "포커스 메시지로 이동 안 함"). This
+      // also subsumes the in-stream-click case: a clicked card is by definition
+      // visible, so it satisfies immediately (no re-center / yank), while a
+      // deep-link target (off-screen) keeps marching until it lands in view.
+      const vi = vItems.find((v) => v.index === idx);
+      const top = parentRef.current?.scrollTop ?? 0;
+      const vh = parentRef.current?.clientHeight ?? 0;
+      const targetVisible = !!vi && vi.start < top + vh && vi.end > top;
+      if (targetVisible) {
+        // Target is in view (clicked card, or the scrollToIndex reconcile landed).
         // Done — let the measurement compensation resume.
         scrollSatisfiedRef.current = selectedEventId;
         scrollPendingRef.current = false;
