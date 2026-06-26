@@ -1377,4 +1377,33 @@ describe('buildTaskList', () => {
     // pulled out of the top-level stream (now nested, not duplicated).
     expect(items.some((i) => i.type === 'message')).toBe(false);
   });
+
+  // Regression (deep-link focus): the /tasks endpoint is session-wide, but a
+  // loaded window is a slice. A window that does NOT overlap the tasks' lifetime
+  // (e.g. a deep-link far past the tasks) must NOT get the block forced onto it —
+  // a misplaced block at the top showed the wrong rows AND threw off the
+  // scroll-to-index for the deep-linked target ("좌측 뷰가 포커스 메시지로 이동 안 함").
+  it('window NOT overlapping the tasks → no block forced onto it (deep-link focus)', () => {
+    const tasks = [
+      task({
+        task_id: '1',
+        saw_in_progress: true,
+        transitions: [
+          { status: 'created', at_ms: ms(T.create), event_id: 'tc-1' },
+          { status: 'in_progress', at_ms: ms(T.ip1), event_id: 'tu-1a' },
+          { status: 'completed', at_ms: ms(T.done1), event_id: 'tu-1b' },
+        ],
+      }),
+    ];
+    // a window two hours past the tasks (a deep-linked far slice).
+    const far = '2026-05-28T02:00:00.000Z';
+    const items = buildStreamModel(
+      [ev({ event_id: 'wFar', kind: 'assistant_message', actor: 'assistant', observed_at: far, payload: { text: 'far past the tasks' } })],
+      undefined,
+      tasks,
+    );
+    expect(findBlock(items)).toBeUndefined(); // no block in this unrelated slice
+    // the window's own event is untouched (stays in the stream).
+    expect(items.some((i) => i.type === 'message' && (i as MessageItem).eventId === 'wFar')).toBe(true);
+  });
 });
