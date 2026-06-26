@@ -34,6 +34,9 @@
 .badge[data-prov='personal'] {
   color: var(--wimcc-warning);
 }
+.badge[data-prov='connector'] {
+  color: var(--wimcc-accent);
+}
 .badge[data-prov='unknown'],
 .badge[data-prov='configured'] {
   color: var(--wimcc-fg-subtle);

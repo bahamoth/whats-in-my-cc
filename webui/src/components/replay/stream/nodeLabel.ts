@@ -92,6 +92,20 @@ export function mcpServerOf(name: string): string | null {
   return parseMcpName(name)?.server ?? null;
 }
 
+/** True when the MCP tool belongs to an official Anthropic integration — a
+ *  claude.ai connector (`mcp__claude_ai_<Service>__…`) or the Chrome extension
+ *  (`mcp__claude-in-chrome__…`). These are managed, known-semantics servers (not
+ *  one-off user configs), so they are tagged and labelled "connector" rather
+ *  than "configured" even though they are not marketplace plugins. */
+export function mcpOfficialIntegration(name: string): boolean {
+  if (!name.startsWith('mcp__')) return false;
+  const rest = name.slice('mcp__'.length);
+  const idx = rest.indexOf('__');
+  if (idx <= 0) return false;
+  const serverId = rest.slice(0, idx);
+  return serverId.startsWith('claude_ai_') || serverId === 'claude-in-chrome';
+}
+
 export function nodeLabel(
   node: {
     node_kind: string;
