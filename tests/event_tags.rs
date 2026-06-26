@@ -455,12 +455,115 @@ fn mcp_serena_meta_tools_via_identification_loop() {
         tag(&mcp("mcp__plugin_serena_serena__initial_instructions")),
         Some("read.docs")
     );
-    // activate_project is session setup (no code verb.object) → stays unmatched
-    // by design — the loop surfaces it but we don't force-tag it.
+    // get_current_config returns the agent config without mutating state → read.config.
+    assert_eq!(
+        tag(&mcp("mcp__plugin_serena_serena__get_current_config")),
+        Some("read.config")
+    );
+    // activate_project(session setup·state write) and onboarding(meta) have no
+    // code/file/docs verb → stay unmatched by design (surfaced, not force-tagged).
     assert_eq!(
         mcp("mcp__plugin_serena_serena__activate_project").disposition,
         TagDisposition::Unmatched
     );
+    assert_eq!(
+        mcp("mcp__plugin_serena_serena__onboarding").disposition,
+        TagDisposition::Unmatched
+    );
+}
+
+#[test]
+fn mcp_official_connectors_tagged_by_prefix() {
+    // claude-in-chrome (Anthropic browser extension): page actions → run.web,
+    // reads → read.web, captures → write.image. Verb from the tool-name prefix.
+    assert_eq!(
+        tag(&mcp("mcp__claude-in-chrome__navigate")),
+        Some("run.web")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude-in-chrome__computer")),
+        Some("run.web")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude-in-chrome__browser_batch")),
+        Some("run.web")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude-in-chrome__read_page")),
+        Some("read.web")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude-in-chrome__get_page_text")),
+        Some("read.web")
+    );
+    assert_eq!(tag(&mcp("mcp__claude-in-chrome__find")), Some("read.web"));
+    assert_eq!(
+        tag(&mcp("mcp__claude-in-chrome__tabs_context_mcp")),
+        Some("read.web")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude-in-chrome__gif_creator")),
+        Some("write.image")
+    );
+
+    // claude.ai Slack connector → read/write.chat.
+    assert_eq!(
+        tag(&mcp("mcp__claude_ai_Slack__slack_search_channels")),
+        Some("read.chat")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude_ai_Slack__slack_read_thread")),
+        Some("read.chat")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude_ai_Slack__slack_send_message")),
+        Some("write.chat")
+    );
+
+    // claude.ai Linear connector → read/write.issue.
+    assert_eq!(
+        tag(&mcp("mcp__claude_ai_Linear__get_issue")),
+        Some("read.issue")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude_ai_Linear__list_issues")),
+        Some("read.issue")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude_ai_Linear__save_issue")),
+        Some("write.issue")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude_ai_Linear__create_issue_label")),
+        Some("write.issue")
+    );
+
+    // claude.ai Notion connector → read/write.docs (reuses the docs object).
+    assert_eq!(
+        tag(&mcp("mcp__claude_ai_Notion__notion-fetch")),
+        Some("read.docs")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude_ai_Notion__notion-search")),
+        Some("read.docs")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude_ai_Notion__notion-get-comments")),
+        Some("read.docs")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude_ai_Notion__notion-create-pages")),
+        Some("write.docs")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__claude_ai_Notion__notion-update-page")),
+        Some("write.docs")
+    );
+
+    // token stays server-scoped (for the loop), even when tagged via prefix rule.
+    let o = mcp("mcp__claude_ai_Slack__slack_send_message");
+    assert_eq!(o.disposition, TagDisposition::Tagged);
+    assert_eq!(o.token.as_deref(), Some("Slack:slack_send_message"));
 }
 
 #[test]
@@ -472,10 +575,15 @@ fn mcp_unknown_tool_is_unmatched_for_identification_loop() {
     assert_eq!(o.value, None);
     assert_eq!(o.token.as_deref(), Some("serena:some_brand_new_tool"));
 
-    // Unknown server (no dict entry) → also unmatched, server-scoped token.
-    let o2 = mcp("mcp__claude-in-chrome__navigate");
+    // A company/personal MCP server (not a universal official integration) has no
+    // knowable-universal semantics → stays unmatched (we don't hardcode per-org
+    // servers; only official integrations + marketplace plugins are tagged).
+    let o2 = mcp("mcp__optiflow-help__optiflow_help_get_article");
     assert_eq!(o2.disposition, TagDisposition::Unmatched);
-    assert_eq!(o2.token.as_deref(), Some("claude-in-chrome:navigate"));
+    assert_eq!(
+        o2.token.as_deref(),
+        Some("optiflow-help:optiflow_help_get_article")
+    );
 }
 
 #[test]

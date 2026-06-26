@@ -284,13 +284,86 @@ static SERENA_TOOLS: &[(&str, &str)] = &[
     ("write_memory", "write.file"),
     ("read_memory", "read.file"),
     ("list_memories", "read.file"),
-    // serena onboarding/manual reads (unidentified-plugins loop, 2026-06-25).
-    // `activate_project` is intentionally NOT here — session setup, no code verb.
+    // serena manual/config reads (unidentified-plugins loop, 2026-06-25/26).
+    // `get_current_config` returns the agent config without mutating state (read).
+    // `activate_project`(session setup·state write) and `onboarding`(meta) stay
+    // intentionally unmatched — no code/file/docs verb fits.
     ("initial_instructions", "read.docs"),
+    ("get_current_config", "read.config"),
 ];
 
 /// MCP server → tool 사전(멀티플렉서). 미지 server/tool은 unmatched(루프가 표면화).
 pub static MCP_SERVER_TOOL_TAGS: &[(&str, &[(&str, &str)])] = &[("serena", SERENA_TOOLS)];
+
+/// 공식 통합(Anthropic 확장·claude.ai 커넥터)은 도구가 수십 개고 verb가 도구명
+/// 접두에 안정적으로 드러난다 — 수십 개를 enumerate하는 대신 server별로 (접두→
+/// "verb.object") + default를 둔다(object = 서버 도메인). exact 사전이 먼저 검사되어
+/// 구체 override가 이긴다. "직접 설정한 one-off"가 아니라 동작이 알려진 보편 통합이라
+/// 태깅 대상에 포함한다(회사/개인 전용 서버는 보편성이 없어 여전히 unmatched).
+struct ConnectorRule {
+    server: &'static str,
+    /// 도구명 접두 → 전체 "verb.object"(static). 첫 매치가 이긴다.
+    prefixes: &'static [(&'static str, &'static str)],
+    /// 어느 접두에도 안 맞는 도구의 verb.object.
+    default: &'static str,
+}
+
+static MCP_CONNECTOR_RULES: &[ConnectorRule] = &[
+    // claude-in-chrome (Anthropic 브라우저 확장): 대부분 페이지 조작(run), 일부 read.
+    ConnectorRule {
+        server: "claude-in-chrome",
+        prefixes: &[
+            ("read_", "read.web"),
+            ("get_", "read.web"),
+            ("find", "read.web"),
+            ("tabs_context", "read.web"),
+            ("list_", "read.web"),
+            ("gif_creator", "write.image"),
+            ("upload_image", "write.image"),
+            ("file_upload", "write.web"),
+        ],
+        default: "run.web", // navigate·computer·browser_batch·javascript·tabs_create/close·resize…
+    },
+    // claude.ai Slack 커넥터.
+    ConnectorRule {
+        server: "Slack",
+        prefixes: &[("slack_search", "read.chat"), ("slack_read", "read.chat")],
+        default: "write.chat", // send·schedule·draft·create_canvas·update_canvas
+    },
+    // claude.ai Linear 커넥터(이슈 트래커).
+    ConnectorRule {
+        server: "Linear",
+        prefixes: &[
+            ("get_", "read.issue"),
+            ("list_", "read.issue"),
+            ("search_", "read.issue"),
+        ],
+        default: "write.issue", // save·create·delete·update
+    },
+    // claude.ai Notion 커넥터(문서).
+    ConnectorRule {
+        server: "Notion",
+        prefixes: &[
+            ("notion-fetch", "read.docs"),
+            ("notion-search", "read.docs"),
+            ("notion-query", "read.docs"),
+            ("notion-get", "read.docs"),
+        ],
+        default: "write.docs", // notion-create·update·duplicate·move
+    },
+];
+
+/// 공식 통합 서버의 도구를 접두 규칙으로 분류(exact 사전 miss 후 호출).
+fn connector_tag(server: &str, tool: &str) -> Option<&'static str> {
+    let rule = MCP_CONNECTOR_RULES.iter().find(|r| r.server == server)?;
+    Some(
+        rule.prefixes
+            .iter()
+            .find(|(p, _)| tool.starts_with(p))
+            .map(|(_, v)| *v)
+            .unwrap_or(rule.default),
+    )
+}
 
 /// 서브커맨드보다 앞에 오는, 인자를 소비하는 글로벌 옵션 (`git -C <dir> diff`).
 static SUBCOMMAND_ARG_FLAGS: &[(&str, &[&str])] = &[("git", &["-C", "-c"])];
@@ -808,7 +881,9 @@ pub fn classify_tool_call(tool_name: Option<&str>, payload: &serde_json::Value) 
                     .iter()
                     .find(|(s, _)| *s == server)
                     .and_then(|(_, tools)| tools.iter().find(|(t, _)| *t == tool))
-                    .map(|(_, v)| *v);
+                    .map(|(_, v)| *v)
+                    // exact-dict miss → official-integration prefix rule (connectors).
+                    .or_else(|| connector_tag(server, tool));
                 TagOutcome {
                     value,
                     disposition: if value.is_some() {
