@@ -80,10 +80,12 @@ function parseMcpName(name: string): { server: string; tool: string } | null {
   return { server, tool };
 }
 
-/** `mcp__…` → `<server> · <tool>` for display; null for non-MCP names. */
+/** `mcp__…` → `mcp · <server> · <tool>` for display; null for non-MCP names.
+ *  The leading `mcp` marker is kept so the row still reads as an MCP call (the
+ *  raw `mcp__` prefix was the only signal; dropping it entirely hid that). */
 export function formatMcpToolName(name: string): string | null {
   const p = parseMcpName(name);
-  return p ? `${p.server} · ${p.tool}` : null;
+  return p ? `mcp · ${p.server} · ${p.tool}` : null;
 }
 
 /** The MCP server a tool call belongs to (for matching against the plugin
