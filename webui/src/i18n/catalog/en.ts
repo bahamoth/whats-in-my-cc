@@ -30,6 +30,7 @@ export const en = {
   'detail.taskBoard.noInProgress': 'no in_progress',
   'detail.plugin.title': 'Plugin',
   'detail.plugin.configured': 'Directly-configured MCP server (not a marketplace plugin).',
+  'detail.plugin.connector': 'Official Anthropic integration (managed connector / extension).',
 
   // Insight strip
   'insight.stripAria': 'Session insights',

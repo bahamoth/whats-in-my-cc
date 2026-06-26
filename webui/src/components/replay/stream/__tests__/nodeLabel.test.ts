@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nodeLabel, formatModel, formatMcpToolName } from '../nodeLabel';
+import { nodeLabel, formatModel, formatMcpToolName, mcpOfficialIntegration } from '../nodeLabel';
 import { translate } from '../../../../i18n/t';
 import { en } from '../../../../i18n/catalog/en';
 import { ko } from '../../../../i18n/catalog/ko';
@@ -39,6 +39,21 @@ describe('formatMcpToolName', () => {
     expect(formatMcpToolName('mcp__claude-in-chrome__navigate')).toBe('claude-in-chrome · navigate');
     expect(formatMcpToolName('Read')).toBeNull();
     expect(formatMcpToolName('mcp__weird')).toBeNull();
+  });
+});
+
+describe('mcpOfficialIntegration', () => {
+  it('claude.ai connectors and the Chrome extension are official integrations', () => {
+    expect(mcpOfficialIntegration('mcp__claude_ai_Slack__slack_send_message')).toBe(true);
+    expect(mcpOfficialIntegration('mcp__claude_ai_Linear__get_issue')).toBe(true);
+    expect(mcpOfficialIntegration('mcp__claude-in-chrome__navigate')).toBe(true);
+  });
+  it('marketplace plugins and one-off configured servers are NOT', () => {
+    // a marketplace plugin (owned by /v1/plugins) is identified there, not here.
+    expect(mcpOfficialIntegration('mcp__plugin_serena_serena__find_symbol')).toBe(false);
+    // a genuinely one-off / company-internal configured server.
+    expect(mcpOfficialIntegration('mcp__optiflow-help__optiflow_help_get_article')).toBe(false);
+    expect(mcpOfficialIntegration('Read')).toBe(false);
   });
 });
 

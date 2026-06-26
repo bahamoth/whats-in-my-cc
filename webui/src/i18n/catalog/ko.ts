@@ -28,6 +28,7 @@ export const ko: Messages = {
   'detail.taskBoard.noInProgress': 'in_progress 미관측',
   'detail.plugin.title': 'Plugin',
   'detail.plugin.configured': '직접 설정한 MCP 서버 (마켓플레이스 plugin 아님).',
+  'detail.plugin.connector': 'Anthropic 공식 통합 (관리되는 커넥터 / 확장).',
 
   // Insight strip
   'insight.stripAria': '세션 인사이트',

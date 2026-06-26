@@ -4,7 +4,7 @@
 // directly-configured ("personal") MCP server — shown as such, never tagged.
 import { usePluginsQuery } from '../../../lib/queries';
 import { findPluginForTool } from '../../../lib/pluginMatch';
-import { mcpServerOf } from '../stream/nodeLabel';
+import { mcpServerOf, mcpOfficialIntegration } from '../stream/nodeLabel';
 import { useT } from '../../../i18n';
 import styles from './McpPluginCard.module.css';
 
@@ -16,16 +16,21 @@ export function McpPluginCard({ toolName }: { toolName: string | null }) {
 
   const plugin = findPluginForTool(plugins.data ?? [], toolName);
   if (!plugin) {
-    // MCP server not provided by any marketplace plugin → directly configured.
+    // Not a marketplace plugin. Distinguish an official Anthropic integration
+    // (claude.ai connector / Chrome extension — managed, known semantics, tagged)
+    // from a genuinely one-off, directly-configured server.
+    const connector = mcpOfficialIntegration(toolName ?? '');
     return (
       <div className={styles.card}>
         <div className={styles.head}>
-          <span className={styles.badge} data-prov="configured">
-            configured
+          <span className={styles.badge} data-prov={connector ? 'connector' : 'configured'}>
+            {connector ? 'connector' : 'configured'}
           </span>
           <span className={styles.id}>{server}</span>
         </div>
-        <p className={styles.desc}>{t('detail.plugin.configured')}</p>
+        <p className={styles.desc}>
+          {t(connector ? 'detail.plugin.connector' : 'detail.plugin.configured')}
+        </p>
       </div>
     );
   }
