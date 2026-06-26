@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.12.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.11.0...v0.12.0) (2026-06-26)
+
+
+### Features
+
+* **api:** GET /v1/plugins — claude CLI 기반 plugin 레지스트리 엔드포인트 ([871355e](https://github.com/bahamoth/whats-in-my-cc/commit/871355e92ed6fb496245621411f0f28a4bd03fb5))
+* **api:** GET /v1/sessions/:id/tasks — Task 요약 엔드포인트 ([b7cc1a9](https://github.com/bahamoth/whats-in-my-cc/commit/b7cc1a9573dfc93d34617e024387682f29e4a93a))
+* **insight:** MCP 도구 verb.object 태깅 (server→tool 사전) ([d07c928](https://github.com/bahamoth/whats-in-my-cc/commit/d07c928879434e6fe00e9147073fae981b868022))
+* **insight:** task transition에 event_id 부착 ([89e80a1](https://github.com/bahamoth/whats-in-my-cc/commit/89e80a112d127b3cd99f25e53f048ac292df53eb))
+* **insight:** Task 요약 집계기 (상관 + 작업구간 윈도우 집계) ([995159b](https://github.com/bahamoth/whats-in-my-cc/commit/995159b4aa3b91fceb2436e9611e4496c4836477))
+* **insight:** 공식 통합(claude.ai 커넥터·claude-in-chrome) MCP 태깅 ([c1491bf](https://github.com/bahamoth/whats-in-my-cc/commit/c1491bf81237f1daf52c3b717b5a08f1918c961b))
+* **insight:** 미식별 plugin/MCP 식별 루프 (untagged-bash·unknown-verification의 형제) ([21a9152](https://github.com/bahamoth/whats-in-my-cc/commit/21a9152e765cee8b6e836c7904302c26d827ef53))
+* **plugins:** 마켓플레이스 plugin 레지스트리 core (claude CLI 기반) ([a61fd42](https://github.com/bahamoth/whats-in-my-cc/commit/a61fd42b4d20e3ddffd573e8c5619a7cfde1ba47))
+* **webui:** MCP 공식 통합을 'connector'로 식별·라벨 ([b387992](https://github.com/bahamoth/whats-in-my-cc/commit/b387992d582a252684fef026c2c80139fc435680))
+* **webui:** MCP 도구 실행 인사이트 UI — 가독 이름 + provenance 카드 ([9650ea0](https://github.com/bahamoth/whats-in-my-cc/commit/9650ea0d6098187a873734520f55ba48a0492932))
+* **webui:** Task 모아보기 블록에 accent 표식 추가 ([d978be8](https://github.com/bahamoth/whats-in-my-cc/commit/d978be8a7941726bf72bada504e3fa718a3ae32c))
+* **webui:** 세션 Task 라이프사이클 보드 (TaskCreate/TaskUpdate 상관) ([782eff5](https://github.com/bahamoth/whats-in-my-cc/commit/782eff54bba41dd3a76111140af8952ab84cb7e7))
+* **webui:** 스트림 내 태스크 모아보기 블록 + 범례 복구 토글 ([f2e78c4](https://github.com/bahamoth/whats-in-my-cc/commit/f2e78c493f3bd089d86f63aa69fd4617d7adf6d6))
+
+
+### Bug Fixes
+
+* **webui:** MCP 도구명을 'mcp · server · tool'로 — 가독 + MCP 표시 유지 ([3655be4](https://github.com/bahamoth/whats-in-my-cc/commit/3655be486170713d56269e57ec86c5de5e54fff5))
+* **webui:** task 영역이 없는 윈도엔 모아보기 블록을 끼우지 않음 (딥링크 포커스) ([14fc8ec](https://github.com/bahamoth/whats-in-my-cc/commit/14fc8ec2fe7126f6a343871723fee5085cc76706))
+* **webui:** 딥링크 스크롤을 'rendered'가 아니라 'viewport 가시'로 종료 판정 ([c3f6164](https://github.com/bahamoth/whats-in-my-cc/commit/c3f6164becb9325670543528c81d8391a7f59b9f))
+
 ## [0.11.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.10.0...v0.11.0) (2026-06-24)
 
 
