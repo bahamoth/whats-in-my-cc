@@ -33,10 +33,10 @@ describe('formatMcpToolName', () => {
     // plugin tool: server = last underscore-segment of the server-id (matches the
     // Rust tagger), so plugin_serena_serena → serena.
     expect(formatMcpToolName('mcp__plugin_serena_serena__get_symbols_overview')).toBe(
-      'serena · get_symbols_overview',
+      'mcp · serena · get_symbols_overview',
     );
     // directly-configured server (no plugin_ prefix), hyphens preserved.
-    expect(formatMcpToolName('mcp__claude-in-chrome__navigate')).toBe('claude-in-chrome · navigate');
+    expect(formatMcpToolName('mcp__claude-in-chrome__navigate')).toBe('mcp · claude-in-chrome · navigate');
     expect(formatMcpToolName('Read')).toBeNull();
     expect(formatMcpToolName('mcp__weird')).toBeNull();
   });
@@ -78,13 +78,13 @@ describe('nodeLabel', () => {
     expect(L('tool_call', { tool_name: 'Skill', input: { skill: 'corp-pptx-style' } }))
       .toEqual({ kind: 'tool', primary: 'Skill', secondary: 'corp-pptx-style' });
   });
-  it('tool_call: MCP names render as "server · tool"', () => {
+  it('tool_call: MCP names render as "mcp · server · tool" (keeps the mcp marker)', () => {
     expect(
       L('tool_call', {
         tool_name: 'mcp__plugin_serena_serena__get_symbols_overview',
         input: { relative_path: 'src/cli.rs' },
       }).primary,
-    ).toBe('serena · get_symbols_overview');
+    ).toBe('mcp · serena · get_symbols_overview');
   });
   it('tool_call: action-style (browser/computer) tools show what they did', () => {
     // mcp computer: action + coordinate → "what work was done"
