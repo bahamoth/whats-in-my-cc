@@ -88,6 +88,21 @@ export function formatMcpToolName(name: string): string | null {
   return p ? `mcp · ${p.server} · ${p.tool}` : null;
 }
 
+/** Readable display for an IDENTITY field (a tool name or a hook name) — the
+ *  only fields we reformat. Raw MCP names → `mcp · server · tool`, including the
+ *  reference embedded after a hook prefix (`PreToolUse:mcp__…` →
+ *  `PreToolUse:mcp · server · tool`). Non-MCP names pass through unchanged.
+ *  CONTENT fields (query / command / message text) are NEVER passed here — they
+ *  render verbatim, so a search query like `select:mcp__…` stays as typed. */
+export function displayToolName(name: string): string {
+  const colon = name.indexOf(':');
+  if (colon > 0) {
+    const rest = name.slice(colon + 1);
+    return name.slice(0, colon + 1) + (formatMcpToolName(rest) ?? rest);
+  }
+  return formatMcpToolName(name) ?? name;
+}
+
 /** The MCP server a tool call belongs to (for matching against the plugin
  *  registry's `mcp_servers`); null for non-MCP names. */
 export function mcpServerOf(name: string): string | null {
@@ -182,7 +197,9 @@ export function nodeLabel(
         (p.hookName as string) ??
         (asObj(p.hook).hook_event_name as string) ??
         '';
-      return { kind: 'hook', primary: 'hook', secondary: hn };
+      // hookName is an IDENTITY field (Event:tool) — render the embedded tool
+      // reference readably (`PreToolUse:mcp · server · tool`).
+      return { kind: 'hook', primary: 'hook', secondary: displayToolName(hn) };
     }
     case 'otel_span':
       return {
