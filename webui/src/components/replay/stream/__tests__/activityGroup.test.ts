@@ -17,16 +17,25 @@ describe('summarizeStack', () => {
     expect(s.errorCount).toBe(1);
   });
 
-  it('renders MCP / hook tool names readably (not the raw mcp__… string)', () => {
+  it('renders MCP tool names readably + folds hook wrappers into their tool', () => {
     const s = summarizeStack({ events: [
       a('1','tool_call','mcp__claude-in-chrome__computer'),
       a('2','hook_event','PreToolUse:mcp__claude-in-chrome__computer'),
+      a('3','hook_event','PostToolUse:mcp__claude-in-chrome__computer'),
     ] });
-    // raw `mcp__server__tool` → `mcp · server · tool` (keeps the mcp marker so
-    // the row still reads as an MCP call), including inside a hook name.
-    expect(s.topTools).toContain('mcp · claude-in-chrome · computer');
-    expect(s.topTools).toContain('PreToolUse:mcp · claude-in-chrome · computer');
+    // the tool shows ONCE, readable + mcp marker — the PreToolUse/PostToolUse
+    // wrappers are folded out of the summary (not three repeated entries).
+    expect(s.topTools).toEqual(['mcp · claude-in-chrome · computer']);
+    // but the hooks still count toward the total event count.
+    expect(s.count).toBe(3);
     // never leak the raw mcp__ string into the collapsed summary.
     expect(s.topTools.some((x) => x.includes('mcp__'))).toBe(false);
+  });
+
+  it('a hook-only stack (wrapped tool_call not loaded) falls back to the hook subject', () => {
+    const s = summarizeStack({ events: [
+      a('1','hook_event','PreToolUse:mcp__claude-in-chrome__computer'),
+    ] });
+    expect(s.topTools).toEqual(['mcp · claude-in-chrome · computer']);
   });
 });

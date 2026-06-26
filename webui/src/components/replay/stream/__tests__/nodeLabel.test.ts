@@ -149,6 +149,13 @@ describe('nodeLabel', () => {
     expect(L('hook_event', { hookName: 'PreToolUse:Agent' }).secondary).toBe('PreToolUse:Agent');
     expect(L('hook_event', { hook: { hook_event_name: 'PreToolUse' } }).secondary).toBe('PreToolUse');
   });
+  it('hook_event: hookName is an IDENTITY field → embedded MCP ref renders readably', () => {
+    // `PreToolUse:mcp__server__tool` → `PreToolUse:mcp · server · tool`.
+    expect(L('hook_event', { hookName: 'PreToolUse:mcp__plugin_serena_serena__initial_instructions' }).secondary)
+      .toBe('PreToolUse:mcp · serena · initial_instructions');
+    // non-MCP hook subjects are unchanged.
+    expect(L('hook_event', { hookName: 'PostToolUse:Bash' }).secondary).toBe('PostToolUse:Bash');
+  });
   it('otel_span: span name from the telemetry facet (C4: not payload.raw_span)', () => {
     expect(L('otel_span', {}, { span_name: 'claude_code.interaction' }).secondary).toBe('claude_code.interaction');
     // graceful fallback when the facet is absent
