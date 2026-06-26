@@ -5342,6 +5342,16 @@ vitest: 69 passed
       personal/configured는 제외. 인터넷 조회(community 도구 동작 확인)는 루프를 도는 에이전트의 WebFetch 몫이지 스크립트/서비스가
       아니다(측정/판별 분리). 2026-06-25 라운드: serena <code>initial_instructions</code>→read.docs 추가, <code>activate_project</code>는
       세션 셋업이라 의도적 unmatched.</li>
+      <li><strong>공식 통합 태깅(2026-06-26)</strong>: 한 실세션에서 unmatched 38건 중 35건이 <code>configured</code>였는데
+      (claude-in-chrome·claude.ai Slack/Linear/Notion), 이는 "직접 설정한 one-off"가 아니라 <em>동작이 알려진 보편 통합</em>이라
+      전부 제외하면 MCP 호출 대부분이 무태그로 남는다. 태깅 기준을 "마켓플레이스 plugin"이 아니라 <strong>"동작이 알려진 보편
+      서버"</strong>로 재정의: 공식 통합(<code>claude_ai_*</code> 커넥터·<code>claude-in-chrome</code>)은 도구가 수십 개고 verb가
+      도구명 접두에 안정적이라 enumerate 대신 <code>MCP_CONNECTOR_RULES</code>(server별 접두→verb.object + default, object =
+      서버 도메인)로 태깅 — 브라우저→<code>web</code>(run/read), Slack→신규 <code>chat</code>, Linear→신규 <code>issue</code>,
+      Notion→<code>docs</code>(기존), serena <code>get_current_config</code>→<code>read.config</code>(WebFetch로 read 확인). exact
+      사전(serena) 다음에 검사돼 구체 override가 이긴다. 회사/개인 전용 서버(<code>optiflow-help</code> 류)는 보편성이 없어 코어
+      사전에 안 넣고 unmatched 유지. UI: 공식 통합은 detail 카드에서 "configured"가 아니라 <strong>"connector"</strong> 배지로
+      표시(<code>mcpOfficialIntegration</code>).</li>
     </ul>
     <h3>편차/주의</h3>
     <p><code>~/.claude.json</code> 의존 설계를 검토했다가 폐기 — MCP 설정과 plugin/settings는 독립 시스템이고(plugin은

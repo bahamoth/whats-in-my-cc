@@ -176,20 +176,26 @@ read-only API 원칙과 충돌하지 않는다.
 ## Plugin/MCP identification loop — PR 전 필수 (MCP 태깅 강화, 위 둘의 형제)
 
 **PR을 올리기 전 반드시 실행한다.** verb.object 태그가 아직 없는 MCP 도구(`tag.disposition=unmatched`)를
-provenance와 함께 모아, community(official/public) plugin 도구는 태깅하고 personal/configured는 명시적으로
-제외한다. 미실행 상태로 PR을 올리지 않는다. `MCP_SERVER_TOOL_TAGS` 추가는 소스 편집이라 read-only API
-원칙과 충돌하지 않는다.
+provenance와 함께 모아, **동작이 알려진 보편 서버**(community official/public plugin + Anthropic 공식 통합:
+claude.ai 커넥터·claude-in-chrome 확장)는 태깅하고, **보편성이 없는 서버**(directory-source personal 마켓 +
+회사/개인 전용 one-off 설정 서버)는 명시적으로 제외한다. 미실행 상태로 PR을 올리지 않는다.
+`MCP_SERVER_TOOL_TAGS`/`MCP_CONNECTOR_RULES` 추가는 소스 편집이라 read-only API 원칙과 충돌하지 않는다.
 
 1. `cd webui && node scripts/unidentified-plugins.ts --all`(특정 세션만 보려면 끝에 `<sessionId>`).
    stdout이 **깨끗한 JSON**(npm 배너 없음 — node 직접 실행). read-only Pull API(events + `/v1/plugins`)만
    소비. provenance는 `/v1/plugins`(= `claude plugins list/marketplace list --json`, `src/plugins.rs`)에서
    온다 — wimcc 서비스는 인터넷을 타지 않는다.
    출력: `[{token, server, tool, count, provenance, plugin, sessionId, hint}]` (count 내림차순).
-2. `hint`별로 분류한다: provenance `official`/`public`이면 `src/insight/event_tags.rs`의
-   `MCP_SERVER_TOOL_TAGS`에 `server→tool` verb.object를 추가하는 후보(도구의 동작이 모호하면 마켓플레이스
-   repo를 **WebFetch**해 확인 — 이 인터넷 조회는 루프를 도는 **에이전트**의 몫이지 스크립트/서비스가 아님).
-   provenance `personal`(directory-source 마켓)·`configured`(직접 설정 MCP 서버)는 **태깅 제외** — 그대로
-   unmatched로 두고 루프가 쫓지 않는다.
+2. `hint`별로 분류한다(`src/insight/event_tags.rs`):
+   - provenance `official`/`public`(마켓플레이스 plugin): `MCP_SERVER_TOOL_TAGS`에 `server→tool` verb.object 추가.
+   - `configured`인데 **공식 통합**(`mcp__claude_ai_<Service>__…` 커넥터 / `mcp__claude-in-chrome__…` 확장):
+     도구가 수십 개고 verb가 도구명 접두에 안정적이라 enumerate 대신 `MCP_CONNECTOR_RULES`에 server별
+     (접두→verb.object)+default 규칙을 둔다(object = 서버 도메인: web/chat/issue/docs…). 이들은 "직접 설정한
+     one-off"가 아니라 동작이 알려진 보편 통합이라 태깅 대상이다.
+   - 도구의 동작이 모호하면 마켓플레이스/서버 repo를 **WebFetch**해 확인(이 인터넷 조회는 루프를 도는
+     **에이전트**의 몫이지 스크립트/서비스가 아님).
+   - provenance `personal`(directory-source 마켓)·**회사/개인 전용 one-off `configured` 서버**(예
+     `optiflow-help`)는 **태깅 제외** — 보편성이 없어 코어 사전에 하드코딩하지 않고 unmatched로 둔다.
 3. **모든 unmatched가 태깅 대상은 아니다**: 세션 셋업·메타 도구(예: serena `activate_project`)는 read/write
    /run 어디에도 안 맞으면 의도적으로 unmatched로 남긴다 — 억지로 태그하지 않는다. 추가하는 도구는
    `tests/event_tags.rs`에 잠그는 케이스를 함께 둘 것(TDD).
