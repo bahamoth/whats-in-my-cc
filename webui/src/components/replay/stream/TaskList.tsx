@@ -164,7 +164,14 @@ export function TaskList({
                 </div>
                 <div className={styles.work}>
                   {work.map((it) => (
-                    <div key={it.id} data-selected={String(it.id === selectedEventId)}>
+                    // message children carry data-event-id so a deep-link to a
+                    // task-nested event can scroll/select it (the row auto-expands
+                    // via autoOpenTaskIds). The child renders its own selected
+                    // highlight via renderChild.
+                    <div
+                      key={it.id}
+                      {...(it.type === 'message' ? { 'data-event-id': it.eventId } : {})}
+                    >
                       {renderChild(it)}
                     </div>
                   ))}

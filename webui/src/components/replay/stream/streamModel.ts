@@ -1019,6 +1019,23 @@ function buildTaskList(items: StreamItem[], tasks: TaskDto[]): StreamItem[] {
   // list where nobody ever went in_progress — at the earliest creation.
   const anchorMs = ipTimes.length ? Math.min(...ipTimes) : earliestCreated;
 
+  // Window-bound: the tasks endpoint is session-wide, but a loaded window is a
+  // slice. Only render the block in the slice whose time span OVERLAPS the tasks'
+  // lifetime [earliest transition, latest transition]. Otherwise the tasks belong
+  // to a different slice — skip, so we never force a misplaced block onto an
+  // unrelated window (which both shows the wrong rows AND throws off the deep-link
+  // scroll-to-index for the real target). The block reappears when the task
+  // region's slice loads. (Overlap, not `anchorMs in window`, because in_progress
+  // precedes the first work event, so the anchor often sits just before firstWin.)
+  const winTimes = times.filter((t): t is number => t != null);
+  if (!winTimes.length || anchorMs == null) return work;
+  const firstWin = Math.min(...winTimes);
+  const lastWin = Math.max(...winTimes);
+  const taskTimes = tasks.flatMap((t) => [t.created_at_ms, ...t.transitions.map((x) => x.at_ms)]);
+  const taskMin = Math.min(...taskTimes);
+  const taskMax = Math.max(...taskTimes);
+  if (lastWin < taskMin || firstWin > taskMax) return work;
+
   // PER-TASK attribution: each task that has an in_progress marker owns the
   // MAIN-CHAIN work in its [in_progress, last-transition] window — the window
   // the markers DEFINE (not a guessed boundary). The main-chain filter keeps
