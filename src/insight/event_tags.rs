@@ -26,13 +26,17 @@ pub static EXT_OBJECT: &[(&str, &str)] = &[
     ("css", "code"),
     ("py", "code"),
     ("vue", "code"),
+    ("cs", "code"),
+    ("mjs", "code"),
     ("md", "docs"),
     ("html", "docs"),
     ("txt", "docs"),
+    ("pdf", "docs"),
     ("toml", "config"),
     ("yaml", "config"),
     ("yml", "config"),
     ("ini", "config"),
+    ("conf", "config"),
     ("json", "data"),
     ("sql", "data"),
     ("jsonl", "data"),
@@ -51,6 +55,7 @@ pub static EXT_OBJECT: &[(&str, &str)] = &[
     ("webp", "image"),
     // shell script content is code (distinct from the `sh` COMMAND below).
     ("sh", "code"),
+    ("zsh", "code"),
 ];
 
 /// 확장자 없는 알려진 파일명 → object. `ext_of`가 빈 문자열을 주는 dotfile·
@@ -88,6 +93,7 @@ pub static BASH_FIRST_TOKEN_TAGS: &[(&str, &str)] = &[
     ("egrep", "read.file"),
     ("fgrep", "read.file"),
     ("find", "read.file"),
+    ("fd", "read.file"),
     ("ls", "read.file"),
     ("cat", "read.file"),
     ("head", "read.file"),
@@ -104,11 +110,15 @@ pub static BASH_FIRST_TOKEN_TAGS: &[(&str, &str)] = &[
     ("awk", "read.file"),
     ("pwd", "read.file"),
     ("realpath", "read.file"),
+    ("readlink", "read.file"),
     ("diff", "read.file"),
     // read.proc — 프로세스/포트/시스템 상태
     ("ps", "read.proc"),
     ("lsof", "read.proc"),
     ("date", "read.proc"),
+    ("printenv", "read.proc"),
+    ("sysctl", "read.proc"),
+    ("uptime", "read.proc"),
     // read.db
     ("sqlite3", "read.db"),
     ("psql", "read.db"),
@@ -116,6 +126,7 @@ pub static BASH_FIRST_TOKEN_TAGS: &[(&str, &str)] = &[
     // read.web
     ("curl", "read.web"),
     ("wget", "read.web"),
+    ("dig", "read.web"),
     // write.file — 생성/수정 (비파괴)
     ("mkdir", "write.file"),
     ("touch", "write.file"),
@@ -135,12 +146,14 @@ pub static BASH_FIRST_TOKEN_TAGS: &[(&str, &str)] = &[
     ("python", "run.code"),
     ("node", "run.code"),
     ("ruby", "run.code"),
+    ("perl", "run.code"),
     ("osascript", "run.code"),
     ("bash", "run.code"),
     ("sh", "run.code"),
     ("zsh", "run.code"),
     ("npx", "run.code"),
     ("markitdown", "run.code"),
+    ("ffmpeg", "run.code"),
     // read.file — 해시/검사
     ("shasum", "read.file"),
     ("sha256sum", "read.file"),
@@ -156,8 +169,11 @@ pub static BASH_FIRST_TOKEN_TAGS: &[(&str, &str)] = &[
     ("eslint", "lint.code"),
     ("ruff", "lint.code"),
     ("prettier", "lint.code"),
+    ("rustfmt", "lint.code"),
     // misc single-purpose tools (2026-06-23 tagging loop)
     ("pdftotext", "read.docs"), // extract text from a PDF document
+    ("pdfinfo", "read.docs"),   // PDF metadata / page info
+    ("pdftoppm", "read.docs"),  // render PDF pages (reads the source PDF)
     ("serena", "run.code"),     // serena CLI (e.g. `serena project index`)
     // vcs (git 외)
     ("gh", "write.vcs"),
@@ -176,6 +192,12 @@ static GIT_SUBS: &[(&str, &str)] = &[
     ("remote", "read.vcs"),
     ("config", "read.vcs"),
     ("ls-files", "read.vcs"),
+    ("ls-tree", "read.vcs"),
+    ("ls-remote", "read.vcs"),
+    ("diff-tree", "read.vcs"),
+    ("merge-base", "read.vcs"),
+    ("reflog", "read.vcs"),
+    ("rev-list", "read.vcs"),
     ("check-ignore", "read.vcs"),
     ("shortlog", "read.vcs"),
     ("add", "write.vcs"),
@@ -230,6 +252,7 @@ static PNPM_SUBS: &[(&str, &str)] = &[
     ("add", "write.deps"),
     ("test", "test.code"),
     ("vitest", "test.code"),
+    ("build", "build.code"),
     ("start", "run.code"),
     ("run", "run.code"),
 ];

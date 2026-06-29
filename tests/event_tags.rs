@@ -380,6 +380,60 @@ fn tagging_loop_2026_06_23_additions() {
     assert_eq!(tag(&bash("git check-ignore -v .claude")), Some("read.vcs"));
 }
 
+// 2026-06-29 tagging hygiene loop — universal CLIs/extensions surfaced by
+// untagged-bash.ts --all. Multiplexers (aws/claude/uv/rustup) and verb-ambiguous
+// subs (cargo metadata/clean/tree/doc, npm list/init) are deferred, not
+// force-tagged; `env`/`time` are command wrappers (env VAR=x cmd) so they're not
+// single-verb; `qmd` is a company one-off CLI (`qmd search …`, NOT the .qmd
+// Quarto extension — sample-verified) so it's deferred; shell-tokenizer
+// fragments (vars/heredocs/regex/company paths) are not dictionary-addressable.
+#[test]
+fn tagging_loop_2026_06_29_additions() {
+    // Source/doc/config extensions. `.zsh` script content is code (like `.sh`).
+    assert_eq!(tag(&read("Assets/Scripts/Player.cs")), Some("read.code")); // C#
+    assert_eq!(tag(&edit("server.mjs")), Some("write.code")); // ES module
+    assert_eq!(tag(&read(".zsh.config/bastion.zsh")), Some("read.code"));
+    assert_eq!(tag(&read("nginx.conf")), Some("read.config"));
+    assert_eq!(tag(&read("report.pdf")), Some("read.docs"));
+    // First-token tools: perl/ffmpeg run a binary → run.code; fd/readlink inspect
+    // the filesystem → read.file; dig queries DNS → read.web; rustfmt formats →
+    // lint.code; pdfinfo/pdftoppm read a PDF → read.docs; printenv/sysctl/uptime
+    // report system state → read.proc.
+    assert_eq!(tag(&bash("perl -pi -e 's/a/b/' f")), Some("run.code"));
+    assert_eq!(tag(&bash("ffmpeg -i in.mp4 out.gif")), Some("run.code"));
+    assert_eq!(tag(&bash("fd -e rs src")), Some("read.file"));
+    assert_eq!(tag(&bash("readlink -f /x")), Some("read.file"));
+    assert_eq!(tag(&bash("dig +short example.com")), Some("read.web"));
+    assert_eq!(tag(&bash("rustfmt src/main.rs")), Some("lint.code"));
+    assert_eq!(tag(&bash("pdfinfo doc.pdf")), Some("read.docs"));
+    assert_eq!(tag(&bash("pdftoppm -png in.pdf out")), Some("read.docs"));
+    assert_eq!(tag(&bash("printenv PATH")), Some("read.proc"));
+    assert_eq!(tag(&bash("sysctl -n hw.ncpu")), Some("read.proc"));
+    assert_eq!(tag(&bash("uptime")), Some("read.proc"));
+    // git read-only subcommands surfaced by the loop.
+    assert_eq!(
+        tag(&bash("git diff-tree --no-commit-id -r HEAD")),
+        Some("read.vcs")
+    );
+    assert_eq!(tag(&bash("git merge-base main HEAD")), Some("read.vcs"));
+    assert_eq!(tag(&bash("git reflog")), Some("read.vcs"));
+    assert_eq!(tag(&bash("git ls-remote origin")), Some("read.vcs"));
+    assert_eq!(tag(&bash("git ls-tree HEAD")), Some("read.vcs"));
+    assert_eq!(tag(&bash("git rev-list --count HEAD")), Some("read.vcs"));
+    // pnpm build subcommand.
+    assert_eq!(tag(&bash("pnpm build")), Some("build.code"));
+    // Deferred multiplexers stay unmatched (surfaced for a future loop, not
+    // force-tagged): aws/claude need per-subcommand mapping.
+    assert_eq!(
+        bash("aws sts get-caller-identity").disposition,
+        TagDisposition::Unmatched
+    );
+    assert_eq!(
+        bash("claude mcp list").disposition,
+        TagDisposition::Unmatched
+    );
+}
+
 #[test]
 fn display_is_meaningful_command_or_file_path() {
     assert_eq!(
