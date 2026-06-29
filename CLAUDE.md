@@ -122,14 +122,20 @@ schema-versioning · deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html`
 6. `## Status`에 완료된 항목이 남아 있거나 항구 규칙(운영·설계)이 섞여 있지 않은가? 완료분은 삭제,
    항구 규칙은 `Operations`/`Working Principles`로 이전한다 — Status는 in-flight만.
 7. PR을 올리기 직전인가? 그렇다면 `Tagging loop`·`Verification unknown loop`·`Plugin/MCP identification loop`을
-   실행해 untagged/unknown/미식별을 해소하거나 명시적 보류 사유를 남겼는가? (미실행 상태로 PR 금지.)
+   실행해 **보편 항목(공식/공개 plugin·보편 CLI·확장자)은 이 PR에서 태깅 추가로 해소**했는가(별도
+   태깅 PR로 미루지 않는다 — "이 PR과 무관"은 보류 사유가 아님), **비보편**(회사/개인 one-off·세션
+   메타 도구·토크나이저 파편·복구 불가 출력)만 명시적 보류 사유를 남겼는가? (미실행·미해소 PR 금지.)
 
 ## Tagging loop — PR 전 필수 (Bash/Read 분류 강화)
 
 **PR을 올리기 전 반드시 실행한다.** 이 세션 실행에서 아직 분류되지 않은 Bash 명령을 surface하고,
-타당한 것은 태깅 규칙으로 추가(아래 3번 — 승인+TDD), 나머지는 명시적 보류 사유를 남긴다. 미실행
-상태로 PR을 올리지 않는다 — 매 세션 태깅 개선 루프를 닫는 것이 목적이다. 규칙 추가는 소스 편집이라
-read-only API 원칙과 충돌하지 않는다.
+**보편 토큰(보편 CLI·확장자, 공식/공개 plugin)은 반드시 이 PR에서** 태깅 규칙으로 추가한다(아래
+3번 — 승인+TDD). 태깅을 **별도 PR로 분리하지 않는다** — "이 PR과 무관"은 보류 사유가 아니다(태그
+위생은 매 PR이 닫아야 하는 것이지 미루는 것이 아니다). 보류는 **비보편에만** 허용하고 사유를
+남긴다: 회사/개인 전용 one-off, 세션 셋업·메타 도구, 셸 토크나이저가 변수·heredoc·정규식·함수정의
+·경로 리터럴에서 첫 토큰을 잘못 잡은 파편(사전으로 해결 불가). 미실행·미해소 상태로 PR을 올리지
+않는다 — 매 세션 태깅 개선 루프를 닫는 것이 목적이다. 규칙 추가는 소스 편집이라 read-only API
+원칙과 충돌하지 않는다.
 
 1. `cd webui && node scripts/untagged-bash.ts --all` 실행(특정 세션만 보려면 끝에 `<sessionId>`).
    stdout이 **깨끗한 JSON**(npm 배너 없음 — `npm run`은 stdout에 배너를 찍으므로 node 직접 실행).
