@@ -422,6 +422,11 @@ async fn recompute_session(pool: &SqlitePool, session_id: &str) -> Result<()> {
     // Run the deterministic signal detector pipeline so signals are refreshed
     // immediately after ingest. (Previously a side effect of the removed graph rebuild.)
     crate::insight::pipeline::run_detectors(pool, session_id).await?;
+
+    // perf-2026-06-29 — refresh this session's materialized identity facets
+    // (project/model/slug/preview) so GET /v1/sessions reads them from
+    // session_summary instead of re-scanning observed_event on every request.
+    repo_observed::upsert_session_summary(pool, session_id).await?;
     Ok(())
 }
 

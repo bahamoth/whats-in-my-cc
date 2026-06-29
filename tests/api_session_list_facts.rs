@@ -107,6 +107,57 @@ async fn preview_skips_slash_command_wrappers() {
     );
 }
 
+/// perf-2026-06-29 — facets are materialized into the `session_summary` table
+/// by `recompute_session` (transcript ingest path) so `/v1/sessions` reads them
+/// without re-scanning + json_extract over the whole observed_event table on
+/// every request. Lock that the table is populated by an ordinary ingest.
+#[tokio::test]
+async fn recompute_materializes_session_summary_facets() {
+    use sqlx::Row as _;
+    let pool = fresh_pool().await;
+    ingest_inline(&pool, SESSION_JSONL).await;
+    let row = sqlx::query(
+        "SELECT project, model, slug, first_user_message_preview \
+         FROM session_summary WHERE session_id = 'sess-facts'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("session_summary row must exist after ingest");
+    assert_eq!(row.get::<String, _>("project"), "/tmp/myproj");
+    assert_eq!(row.get::<String, _>("model"), "claude-opus-4-8");
+    assert_eq!(row.get::<String, _>("slug"), "calm-river-otter");
+    assert_eq!(
+        row.get::<String, _>("first_user_message_preview"),
+        "리팩터링 계획을 세워줘"
+    );
+}
+
+/// perf-2026-06-29 — pre-migration sessions (ingested before session_summary
+/// existed) are backfilled on serve/ingest startup. Simulate by clearing the
+/// materialized table after ingest, then backfilling.
+#[tokio::test]
+async fn backfill_fills_session_summary_for_existing_sessions() {
+    let pool = fresh_pool().await;
+    ingest_inline(&pool, SESSION_JSONL).await;
+    sqlx::query("DELETE FROM session_summary")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let n = wimcc::db::repo_observed::backfill_session_summary(&pool)
+        .await
+        .expect("backfill must succeed");
+    assert!(
+        n >= 1,
+        "backfill must fill at least the one ingested session"
+    );
+    let model: String =
+        sqlx::query_scalar("SELECT model FROM session_summary WHERE session_id = 'sess-facts'")
+            .fetch_one(&pool)
+            .await
+            .expect("backfilled row must exist");
+    assert_eq!(model, "claude-opus-4-8");
+}
+
 /// slug 의미 잠금: 실 transcript(`session_facts_v01.jsonl`)의 `system`
 /// 요약 라인 top-level `slug`가 list 응답으로 surface 된다.
 #[tokio::test]
