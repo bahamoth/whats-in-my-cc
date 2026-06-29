@@ -19,6 +19,13 @@ pub async fn connect(url: &str) -> Result<SqlitePool> {
         .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
         .foreign_keys(true)
         .busy_timeout(std::time::Duration::from_millis(5000))
+        // perf-2026-06-29 — cap the WAL file at 64MiB. PASSIVE autocheckpoint
+        // empties WAL frames into the main DB but never shrinks the file, so
+        // without this the WAL keeps its historical peak (dogfood DB held 532MB
+        // while only ~2MB was live). With the limit set, SQLite truncates the
+        // WAL back to ≤64MiB after each checkpoint. This is disk hygiene, not a
+        // read-latency fix (reads hit the wal-index hash, not the file length).
+        .pragma("journal_size_limit", "67108864")
         .create_if_missing(true);
     let pool = SqlitePoolOptions::new()
         .max_connections(8)
@@ -30,4 +37,30 @@ pub async fn connect(url: &str) -> Result<SqlitePool> {
 pub async fn migrate(pool: &SqlitePool) -> Result<()> {
     sqlx::migrate!("./migrations").run(pool).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// perf-2026-06-29 — PASSIVE autocheckpoint empties WAL frames but never
+    /// truncates the file, so without a journal_size_limit the WAL keeps its
+    /// historical peak size (the dogfood DB sat at 532MB while only ~2MB was
+    /// live). Cap it at 64MiB so checkpointed WAL is truncated back down.
+    #[tokio::test]
+    async fn connect_caps_journal_size_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wal_cap.sqlite");
+        let url = format!("sqlite://{}?mode=rwc", path.display());
+        let pool = connect(&url).await.unwrap();
+        let limit: i64 = sqlx::query_scalar("PRAGMA journal_size_limit")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            limit, 67_108_864,
+            "connect() must cap journal_size_limit at 64MiB so a checkpointed \
+             WAL is truncated instead of growing unbounded"
+        );
+    }
 }
