@@ -79,7 +79,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
     "schema_version": "0.5.0",
     "collection_profile": "local_transcript_slice1",
     "redaction_policy": { "applied": true, "level": "standard" },
-    "redaction_summary": {            // optional — 아래 callout 참조
+    "redaction_summary": {            // optional · /v1/sessions에선 ?include=redaction opt-in — 아래 callout 참조
       "total_items_redacted": 0,
       "rules_seen": [],
       "any_unredacted_sensitive": false
@@ -88,7 +88,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   },
   "data": { ... }
 }</code></pre>
-<div class="callout"><strong>redaction:</strong> redaction은 ingest 시점에 동작한다 — <code>raw_event</code> 저장 <em>전에</em> rule pack v1(11규칙)으로 payload를 scan하여 마스킹된 텍스트를 저장한다(<code>high_entropy_heuristic.v1</code>은 flag-only, 마스킹하지 않음). 따라서 API가 반환하는 raw payload도 마스킹된 텍스트다. <code>redaction_policy</code>는 <code>{applied: true, level: "standard"}</code>로 선언되며, <code>redaction_summary</code>는 <code>/v1/sessions</code>(목록 첫 번째 = 응답에 포함된 전 세션 집계)와 <code>/v1/sessions/:id/events</code>(cursor window 응답)에 실린다 — <code>/v1/events/:id/raw</code>에는 실리지 않는다. 규칙 목록·manifest 상세는 Security Spec 05 §04 참조.</div>
+<div class="callout"><strong>redaction:</strong> redaction은 ingest 시점에 동작한다 — <code>raw_event</code> 저장 <em>전에</em> rule pack v1(11규칙)으로 payload를 scan하여 마스킹된 텍스트를 저장한다(<code>high_entropy_heuristic.v1</code>은 flag-only, 마스킹하지 않음). 따라서 API가 반환하는 raw payload도 마스킹된 텍스트다. <code>redaction_policy</code>는 <code>{applied: true, level: "standard"}</code>로 선언되며, <code>redaction_summary</code>는 <code>/v1/sessions/:id/events</code>(cursor window 응답)에 항상 실리고, <code>/v1/sessions</code> 목록에는 <strong>opt-in</strong>이다 — <code>?include=redaction</code>일 때만 응답에 포함된 전 세션을 집계해 싣는다(기본 응답에선 생략). <code>/v1/events/:id/raw</code>에는 실리지 않는다. <span class="note">perf-2026-06-29: 목록 집계는 raw_event manifest를 전 세션에 걸쳐 스캔(dogfood DB ≈1.9s)하는데 현재 소비자가 목록 응답에서 이를 읽지 않아 opt-in으로 전환했다. <code>redaction_policy</code>는 정적·저비용이라 모든 응답에 유지된다.</span> 규칙 목록·manifest 상세는 Security Spec 05 §04 참조.</div>
 <h3>주요 DTO 계약</h3>
 <ul>
 <li><strong>usage:</strong> <code>assistant_events</code>(usage_facet 행 수 = assistant 출력 event 수)와 <code>user_turns</code>(distinct <code>turn_id</code> 수 = 사용자 prompt 수)를 제공한다. per-session <code>cache_hit_ratio</code> scalar는 없다 — 소비자가 토큰 성분으로 계산한다. <code>estimated_cost_usd</code>는 공개 단가 <em>추정</em>이며 실제 청구가 아니다 (<code>cost_basis = "estimate_public_pricing"</code>, <code>models_without_pricing</code>으로 미가격 모델 공개).</li>

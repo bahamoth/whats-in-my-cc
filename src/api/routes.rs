@@ -29,6 +29,22 @@ pub struct ListQuery {
     /// session-retrospect skill resolve "the sessions of this project"
     /// without hand-copied session IDs.
     pub project: Option<String>,
+    /// perf-2026-06-29 — comma-separated opt-in expansions. The only token
+    /// today is `redaction`, which re-enables `meta.redaction_summary` on
+    /// `/v1/sessions`. It is omitted by default because computing it scans
+    /// raw_event manifests across every listed session (≈1.9s on the dogfood
+    /// DB) and no current consumer reads it from the list response.
+    pub include: Option<String>,
+}
+
+impl ListQuery {
+    /// True when `include=` contains the `redaction` token.
+    fn wants_redaction(&self) -> bool {
+        self.include
+            .as_deref()
+            .map(|s| s.split(',').any(|t| t.trim() == "redaction"))
+            .unwrap_or(false)
+    }
 }
 
 /// Full-retention (2026-06-11) — 410 gate shared by every handler whose
@@ -375,10 +391,19 @@ pub async fn list_sessions(
     // redaction manifests of *every* session in this response (per design §6,
     // the summary covers the response's raw events), not just the most
     // recent session.
-    let session_ids: Vec<String> = rows.iter().map(|r| r.session_id.clone()).collect();
-    let summary = repo_raw::aggregate_sessions_summary(&pool, &session_ids)
-        .await
-        .ok();
+    //
+    // perf-2026-06-29: this aggregate scans raw_event manifests across every
+    // listed session (≈1.9s on the dogfood DB) and the WebUI never reads it,
+    // so it is now OPT-IN via `?include=redaction`. redaction_policy below is
+    // static/cheap and stays on every response.
+    let summary = if q.wants_redaction() {
+        let session_ids: Vec<String> = rows.iter().map(|r| r.session_id.clone()).collect();
+        repo_raw::aggregate_sessions_summary(&pool, &session_ids)
+            .await
+            .ok()
+    } else {
+        None
+    };
     let data: Vec<SessionListItem> = rows
         .into_iter()
         .map(|r| SessionListItem {
