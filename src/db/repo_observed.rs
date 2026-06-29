@@ -255,8 +255,10 @@ pub async fn list_sessions_filtered(
         by_kind_map.entry(sid).or_default().insert(kind, n);
     }
 
-    // S6 — identifiability facets, one grouped pass each over the returned ids.
-    let mut facets = session_facets(pool, &ids, &placeholders).await?;
+    // perf-2026-06-29 — facets are materialized in session_summary by
+    // recompute_session (transcript ingest path) and read back here, instead of
+    // re-scanning + json_extract over observed_event on every list request.
+    let mut facets = read_session_summaries(pool, &ids, &placeholders).await?;
 
     Ok(totals
         .into_iter()
@@ -390,6 +392,99 @@ async fn session_facets(
     }
 
     Ok(out)
+}
+
+/// perf-2026-06-29 — read materialized facets for an already-resolved id set
+/// from `session_summary` (populated by `recompute_session` / backfill). This
+/// replaces the four per-request grouped `json_extract` scans of
+/// `session_facets`. Sessions absent from the table (OTLP-only, or not yet
+/// backfilled) simply yield no entry → default (all-None) facets, which is
+/// correct: they have no transcript-derived model/slug/preview.
+async fn read_session_summaries(
+    pool: &SqlitePool,
+    ids: &[String],
+    placeholders: &str,
+) -> Result<std::collections::HashMap<String, SessionFacets>> {
+    use sqlx::Row as _Row;
+    let sql = format!(
+        "SELECT session_id, project, model, slug, first_user_message_preview
+           FROM session_summary
+          WHERE session_id IN ({placeholders})"
+    );
+    let mut q = sqlx::query(&sql);
+    for id in ids {
+        q = q.bind(id);
+    }
+    let mut out = std::collections::HashMap::new();
+    for r in q.fetch_all(pool).await? {
+        let sid: String = r.get("session_id");
+        out.insert(
+            sid,
+            SessionFacets {
+                project: r.try_get::<Option<String>, _>("project").ok().flatten(),
+                model: r.try_get::<Option<String>, _>("model").ok().flatten(),
+                slug: r.try_get::<Option<String>, _>("slug").ok().flatten(),
+                preview: r
+                    .try_get::<Option<String>, _>("first_user_message_preview")
+                    .ok()
+                    .flatten(),
+            },
+        );
+    }
+    Ok(out)
+}
+
+/// perf-2026-06-29 — compute one session's transcript facets and UPSERT them
+/// into `session_summary`. Called by `recompute_session` after a transcript
+/// batch (and by backfill). Idempotent. Empty `session_id` is a no-op.
+pub async fn upsert_session_summary(pool: &SqlitePool, session_id: &str) -> Result<()> {
+    if session_id.is_empty() {
+        return Ok(());
+    }
+    let mut facets = session_facets(pool, &[session_id.to_string()], "?").await?;
+    let f = facets.remove(session_id).unwrap_or_default();
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        "INSERT INTO session_summary
+            (session_id, project, model, slug, first_user_message_preview, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET
+            project = excluded.project,
+            model = excluded.model,
+            slug = excluded.slug,
+            first_user_message_preview = excluded.first_user_message_preview,
+            updated_at = excluded.updated_at",
+    )
+    .bind(session_id)
+    .bind(f.project)
+    .bind(f.model)
+    .bind(f.slug)
+    .bind(f.preview)
+    .bind(now)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// perf-2026-06-29 — fill `session_summary` for every session present in
+/// `observed_event` but missing from the table (rows ingested before migration
+/// 0025). Called on serve/ingest startup; non-fatal. Returns the number of
+/// sessions filled. Idempotent: once filled, subsequent calls find nothing
+/// missing and return 0.
+pub async fn backfill_session_summary(pool: &SqlitePool) -> Result<u64> {
+    let missing: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT session_id FROM observed_event
+          WHERE session_id != ''
+            AND session_id NOT IN (SELECT session_id FROM session_summary)",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut n = 0u64;
+    for sid in &missing {
+        upsert_session_summary(pool, sid).await?;
+        n += 1;
+    }
+    Ok(n)
 }
 
 /// Char-safe single-line preview: collapse whitespace runs, trim, and cap at

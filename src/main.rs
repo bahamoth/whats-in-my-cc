@@ -131,6 +131,15 @@ async fn serve_cmd(
         Ok(_) => {}
         Err(e) => tracing::warn!(error = ?e, "workflow_run_id backfill failed (non-fatal)"),
     }
+    // 0025 (perf-2026-06-29): materialize per-session transcript facets so
+    // /v1/sessions reads them instead of re-scanning observed_event. Fills only
+    // sessions missing from session_summary; new/updated ones refresh via
+    // recompute_session. Non-fatal.
+    match db::repo_observed::backfill_session_summary(&pool).await {
+        Ok(n) if n > 0 => tracing::info!(sessions = n, "backfilled session_summary facets"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = ?e, "session_summary backfill failed (non-fatal)"),
+    }
 
     let cancel = tokio_util::sync::CancellationToken::new();
     let mut bg_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
@@ -276,6 +285,14 @@ async fn ingest_cmd(
     tracing::info!(file_count = files.len(), "ingesting (batch)");
     let stats = wimcc::ingest::store::ingest_paths(&pool, &files, &wimcc::live::NoopSink).await?;
     tracing::info!(?stats, "ingest done");
+    // 0025 (perf-2026-06-29): backfill facets for any sessions present in the DB
+    // but missing from session_summary (e.g. pre-migration rows). Ingested
+    // sessions are already refreshed by recompute_session; this catches the rest.
+    match db::repo_observed::backfill_session_summary(&pool).await {
+        Ok(n) if n > 0 => tracing::info!(sessions = n, "backfilled session_summary facets"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = ?e, "session_summary backfill failed (non-fatal)"),
+    }
     Ok(())
 }
 

@@ -5362,6 +5362,51 @@ vitest: 69 passed
     일반어였음(<a href="#facet-state-2026-06-24">facet 종결 마커</a> 참조) — 신규 개념은 facet이라 부르지 않았다.</p>
   </section>
 
+  <section id="session-list-perf-2026-06-29">
+    <h2>세션 리스트 로딩 51배 단축 — facet materialize + redaction opt-in (2026-06-29)</h2>
+    <p><strong>증상:</strong> 세션 리스트 뷰 갱신이 느림(상세 뷰는 분할 로딩이라 빠름). dogfood DB
+    실측(observed_event 291k행 · 433세션 · 1.9GB): <code>GET /v1/sessions</code> 기본 <code>limit=500</code>이
+    release 3.77s / debug 6.71s. limit 5/50/500 = 0.39/1.30/3.77s로 <em>세션 수에 선형 비례</em>.</p>
+
+    <h3>진단 (실측 분해, cold SQL)</h3>
+    <ul>
+      <li><strong>totals</strong>(MIN/MAX/COUNT) 0.035s — <code>idx_obs_session_time</code> covering, <em>병목 아님</em>.</li>
+      <li><strong>facet ×5</strong>(by_kind·cwd·slug·model·preview) 합 ~1s — non-covering 스캔 + 거대 payload row
+        touch + <code>json_extract</code> 파싱, 직렬 실행.</li>
+      <li><strong><code>aggregate_sessions_summary</code> 1.9s</strong>(routes.rs) — observed_event 전체 SCAN + raw_event
+        조인. 그런데 <em>WebUI는 meta.redaction_summary를 전혀 읽지 않음</em>(grep 0건). 응답 비용의 절반이 미사용 집계.</li>
+    </ul>
+
+    <h3>조치</h3>
+    <ol>
+      <li><strong>redaction_summary opt-in</strong> — <code>/v1/sessions</code>에서 기본 생략, <code>?include=redaction</code>일
+        때만 집계(<code>ListQuery.include</code>). <code>redaction_policy</code>는 정적·저비용이라 유지. <code>/v1/sessions/:id/events</code>의
+        summary는 단일 세션이라 유지. docs/04 갱신. 절감 ~1.9s.</li>
+      <li><strong>session_summary materialized 테이블</strong>(migration 0025) — transcript 파생 facet(project·model·slug·
+        first_user_message_preview)만 저장. <code>recompute_session</code>(store.rs)에서 UPSERT — transcript 파일 ingest와
+        serve tail 경로가 탐. 기존 행은 <code>backfill_session_summary</code>(serve/ingest startup, 0023/0024 패턴)로 채움
+        (재ingest 불필요). 리스트는 <code>read_session_summaries</code>로 단일 인덱스 lookup.</li>
+      <li><strong>by_kind는 materialize하지 않고 LIVE 유지</strong> + covering index <code>idx_obs_session_kind(session_id, kind)</code>
+        추가. 이유: by_kind는 OTLP 이벤트(span/metric/log) 카운트를 포함하는데 OTLP 라이브 경로(api/otel.rs)는
+        <code>recompute_session</code>을 타지 않아 materialize 시 stale. covering index면 row touch 없이 인덱스만 스캔해
+        totals처럼 빠르고 <em>OTLP 포함 항상 정확</em>. (transcript 파생 facet은 OTLP와 무관하므로 materialize가 안전.)</li>
+    </ol>
+
+    <h3>결과 (release, 동일 dogfood DB)</h3>
+    <p>limit 5/50/500 = 0.037/0.050/0.073s. <strong>limit=500 기준 3.77s → 0.073s (≈51배)</strong>, 세션 수에 거의 평탄.
+    <code>?include=redaction</code>일 때만 1.34s. backfill 433세션 성공(session_summary 433행, model 보유 110 — 나머지는
+    OTLP-only/텍스트 assistant 없는 세션으로 null이 정상).</p>
+
+    <h3>편차/열린 질문</h3>
+    <ul>
+      <li><strong>WAL 532MB</strong>: 런타임 내내 성장(고빈도 metric/log write + PASSIVE autocheckpoint 한계, SSE는 broadcast
+        기반이라 long read tx 아님). 단 facet 해결 후 read가 532MB WAL 상태에서도 0.073s라 <em>성능 주효과는 미미</em> —
+        디스크 건강성 이슈로 분리. 주기적 <code>wal_checkpoint(TRUNCATE)</code> task는 성능이 아닌 디스크 목적의 선택지.</li>
+      <li><strong>debug vs release</strong>: 동일 변경에서 debug가 release의 ~1.8배 느림. serve를 release로 운영 권고
+        (코드 외 운영 사항).</li>
+    </ul>
+  </section>
+
 </main>
 </div>
 </body></html>
