@@ -49,14 +49,17 @@ async fn sessions_endpoint_includes_redaction_policy() {
     );
 }
 
-/// doc-audit-2026-06-10 — `/v1/sessions` meta.redaction_summary must
-/// aggregate across *all* sessions in the response, not just the most
-/// recent one. Setup: the redacted fixture session (timestamps 2026-06-01)
-/// plus a newer clean session, so the clean session sorts first
-/// (list_sessions orders by last_observed_at DESC) and a first-session-only
-/// aggregate would report zero redactions.
+/// perf-2026-06-29 — `/v1/sessions` meta.redaction_summary is now OPT-IN.
+/// Computing it aggregates raw_event manifests across every listed session
+/// (a 29万-row scan + join on the dogfood DB ≈ 1.9s), and the WebUI never
+/// reads it. So the default list omits it and `?include=redaction` opts in.
+/// When opted in it must still aggregate across *all* sessions in the
+/// response, not just the most recent one. Setup: the redacted fixture
+/// session (timestamps 2026-06-01) plus a newer clean session, so the clean
+/// session sorts first (list_sessions orders by last_observed_at DESC) and a
+/// first-session-only aggregate would report zero redactions.
 #[tokio::test]
-async fn sessions_redaction_summary_aggregates_across_all_sessions() {
+async fn sessions_redaction_summary_is_opt_in() {
     let pool = pool_with_redacted_session().await;
 
     let dir = tempfile::tempdir().unwrap();
@@ -74,7 +77,23 @@ async fn sessions_redaction_summary_aggregates_across_all_sessions() {
     store::ingest_file(&pool, &clean, &NoopSink).await.unwrap();
 
     let server = build_server(pool);
+
+    // Default list: redaction_summary omitted (null), policy still present.
     let r = server.get("/v1/sessions").await;
+    r.assert_status_ok();
+    let body: Value = r.json();
+    assert!(
+        body["meta"]["redaction_summary"].is_null(),
+        "default /v1/sessions must omit redaction_summary (opt-in only); got: {}",
+        body["meta"]["redaction_summary"]
+    );
+    assert!(
+        body["meta"]["redaction_policy"].is_object(),
+        "redaction_policy must always be present even when summary is omitted"
+    );
+
+    // Opt-in: ?include=redaction aggregates across all listed sessions.
+    let r = server.get("/v1/sessions?include=redaction").await;
     r.assert_status_ok();
     let body: Value = r.json();
 
@@ -88,10 +107,10 @@ async fn sessions_redaction_summary_aggregates_across_all_sessions() {
 
     let total = body["meta"]["redaction_summary"]["total_items_redacted"]
         .as_u64()
-        .expect("total_items_redacted must be a number");
+        .expect("total_items_redacted must be a number when ?include=redaction");
     assert!(
         total >= 1,
-        "summary must cover every listed session — the redacted fixture \
+        "opt-in summary must cover every listed session — the redacted fixture \
          session has >=1 redactions but is not first; got total={total}"
     );
 }
