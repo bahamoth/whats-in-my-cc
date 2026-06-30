@@ -434,6 +434,50 @@ fn tagging_loop_2026_06_29_additions() {
     );
 }
 
+// 2026-06-30 — Noise disposition. Shell-tokenizer fragments (vars, quotes,
+// brackets, heredocs, regex, function defs, timestamps, non-ascii) were tried
+// but the first token isn't a valid command identifier, so they're Noise, not
+// Unmatched — the untagged loop stops resurfacing the same ~80 fragments every
+// PR. Genuine unknown commands / multiplexers stay Unmatched (real candidates).
+#[test]
+fn noise_disposition_for_tokenizer_fragments() {
+    for frag in [
+        "}",
+        "$page",
+        "\"$soffice\" --headless",
+        "<<'eof'",
+        "strip(){ echo x; }",
+        "[[pltv-optiflow]]",
+        "^error\"",
+        "true)",
+        "fi)\"",
+        "+%s)",
+        "2026-05-14t10:11:00z",
+    ] {
+        assert_eq!(
+            bash(frag).disposition,
+            TagDisposition::Noise,
+            "frag={frag:?}"
+        );
+        // Noise carries no taggable token (it must not feed the untagged loop).
+        assert_eq!(bash(frag).value, None, "frag={frag:?}");
+    }
+    // Genuine unknown commands and multiplexers are valid identifiers → stay
+    // Unmatched (real tagging candidates), NOT noise.
+    assert_eq!(bash("frobnicate x").disposition, TagDisposition::Unmatched);
+    assert_eq!(
+        bash("git frobnicate").disposition,
+        TagDisposition::Unmatched
+    );
+    assert_eq!(
+        bash("aws sts get-caller-identity").disposition,
+        TagDisposition::Unmatched
+    );
+    // Tagged / Control commands are unaffected.
+    assert_eq!(bash("perl -pi -e x f").disposition, TagDisposition::Tagged);
+    assert_eq!(bash("cd /tmp").disposition, TagDisposition::Control);
+}
+
 #[test]
 fn display_is_meaningful_command_or_file_path() {
     assert_eq!(
