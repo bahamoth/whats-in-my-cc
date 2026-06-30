@@ -5407,6 +5407,33 @@ vitest: 69 passed
     </ul>
   </section>
 
+  <section id="noise-disposition-2026-06-30">
+    <h2>Noise disposition — 태깅 루프가 닫히게 (2026-06-30)</h2>
+    <p><strong>문제:</strong> PR 전 Tagging loop이 매번 같은 셸 파편을 <code>Unmatched</code>로 표면화해 루프가 영영
+    닫히지 않았다(변수 <code>$x</code>·따옴표·괄호 <code>}</code>/<code>true)</code>·heredoc <code>&lt;&lt;eof</code>·정규식
+    <code>^error"</code>·함수정의 <code>strip(){</code>·위키링크 <code>[[x]]</code>·타임스탬프·non-ascii). 이전 세션에서
+    이들을 "사전으로 해결 불가"라며 보류했는데, 그건 verb.object 사전 한정으로만 맞다 — 분류기 단계에서 흡수할 수 있었다.</p>
+    <h3>설계: 새 disposition <code>Noise</code></h3>
+    <p><code>TagDisposition</code>은 Tagged/Control/Unmatched 3종뿐이라 "분류를 시도했으나 명령이 아닌 파편"을 표현할 분류가
+    없었다. <code>Noise</code>를 추가하고, Bash 분류에서 <code>classify_command</code>가 Unmatched이고 첫 토큰이 유효 명령
+    식별자 패턴(<code>^[a-z][a-z0-9._-]*$</code>)을 벗어나면 Noise로 강등한다(token 없음). <code>collectUntagged</code>는
+    <code>disposition === 'unmatched'</code>만 수집하므로 Noise는 자동 제외 — webui는 types union에 <code>'noise'</code>만
+    더했고 수집 로직은 불변이다.</p>
+    <h3>보수적 판정 — false-positive 없음</h3>
+    <p>판정을 <em>classify 실패(Unmatched) 이후</em>에만 적용하고 "유효 식별자 패턴 위반"으로 한정했다. 그래서 멀티플렉서
+    (<code>git</code>·<code>aws</code>)·미지 명령(<code>frobnicate</code>)은 모두 유효 식별자라 <code>Unmatched</code>로 남아
+    태깅 후보로 유지된다. 경로 실행(<code>./x</code>)은 이미 Tagged라 대상이 아니다.</p>
+    <h3>효과 / 한계</h3>
+    <p>untagged 147→83(파편 64개 제외, 최초 170). 남는 83은 식별자 형태라 noise가 아니다: 멀티플렉서 보류
+    (aws·claude), builtin(exit), 회사 one-off(qmd), verb 모호(cargo metadata), 그리고 <code>$(git rev-parse</code>·
+    <code>$(gh pr</code> 같은 <strong>서브셸 내부 토큰</strong>(rev-parse·pr) — 식별자 형태라 noise로는 못 거른다. 이들을
+    더 줄이려면 토크나이저가 <code>$()</code> 내부를 인식해야 하는데, 그건 별도 작업으로 둔다.</p>
+    <h3>관련</h3>
+    <p>같은 PR에서 보편 토큰 23개를 사전에 추가(<code>tagging_loop_2026_06_29_additions</code>)하고, CLAUDE.md의 보류
+    탈출구를 좁혔다(보편 토큰은 분리 PR 금지, 해당 PR에서 해소). Noise 덕에 untagged가 진짜 후보만 남아, 향후 PR-전 게이트
+    훅("보편 후보 잔존 시 차단")이 비로소 의미를 갖는다.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
