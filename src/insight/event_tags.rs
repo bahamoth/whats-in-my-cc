@@ -408,6 +408,12 @@ pub enum TagDisposition {
     Tagged,
     Control,
     Unmatched,
+    /// 분류를 시도했으나 첫 토큰이 유효한 명령 식별자가 아닌 셸 토크나이저
+    /// 파편(변수·따옴표·괄호·heredoc·정규식·함수정의·타임스탬프·non-ascii 등).
+    /// `Unmatched`와 달리 태깅 후보가 아니다 — untagged 루프(`collectUntagged`,
+    /// `disposition === 'unmatched'`만 수집)에서 자동 제외돼 매 PR마다 같은
+    /// 파편이 다시 표면화되지 않는다(2026-06-30).
+    Noise,
 }
 
 impl TagDisposition {
@@ -416,6 +422,7 @@ impl TagDisposition {
             TagDisposition::Tagged => "tagged",
             TagDisposition::Control => "control",
             TagDisposition::Unmatched => "unmatched",
+            TagDisposition::Noise => "noise",
         }
     }
 }
@@ -572,6 +579,23 @@ fn is_assignment(s: &str) -> bool {
 
 fn is_control_token(tok: &str) -> bool {
     CONTROL_TOKENS.contains(&tok) || tok.starts_with('-')
+}
+
+/// A first token that could never be a command we tag: it isn't a valid command
+/// identifier (`^[a-z][a-z0-9._-]*$`). `first_token` already lowercased it, so
+/// anything starting with a shell metachar/var/quote/bracket/digit, or carrying
+/// `(){}[]<>$"'^+=|` etc., or non-ascii, is a tokenizer fragment — not a real
+/// command. Callers map this to `Noise` (vs `Unmatched`) only when classification
+/// already failed, so genuine multiplexers (`git`, `aws`) and unknown commands
+/// (`frobnicate`) — all valid identifiers — stay `Unmatched` as tagging candidates.
+fn is_noise_token(tok: &str) -> bool {
+    let mut chars = tok.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() => {}
+        _ => return true,
+    }
+    !tok.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-')
 }
 
 fn is_duration(tok: &str) -> bool {
@@ -885,6 +909,17 @@ pub fn classify_tool_call(tool_name: Option<&str>, payload: &serde_json::Value) 
                     continue;
                 }
                 let r = classify_command(&cmd_str);
+                // Demote unmatched tokenizer fragments to Noise so the untagged
+                // loop doesn't resurface them every PR (2026-06-30). Noise carries
+                // no token — it is not a tagging candidate.
+                if r.disposition == TagDisposition::Unmatched && is_noise_token(&tok) {
+                    return TagOutcome {
+                        value: None,
+                        disposition: TagDisposition::Noise,
+                        token: None,
+                        display,
+                    };
+                }
                 return TagOutcome {
                     value: r.value,
                     disposition: r.disposition,

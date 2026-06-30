@@ -41,7 +41,7 @@ export type TelemetryFacetDto = {
  *  Rust가 소유한다 — UI는 표현(칩 색)과 집계만 담당. */
 export type EventTagDto = {
   value: string | null;
-  disposition: 'tagged' | 'control' | 'unmatched';
+  disposition: 'tagged' | 'control' | 'unmatched' | 'noise';
   /** untagged 루프 집계 키 — Bash 첫 토큰 | `"tool sub"` | 확장자 | basename. */
   token: string | null;
   /** 표시용 — 선행 제어 세그먼트를 제거한 명령 또는 file_path. */
