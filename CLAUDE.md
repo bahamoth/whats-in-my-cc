@@ -10,6 +10,12 @@ transcript가 아닌 **execution replay**로 "무엇이·왜 그렇게 됐는가
 - 외부 접근: Pull API / MCP Streamable HTTP — **read-only**, 기본 bind `127.0.0.1`
 - 설계 이력 SSOT: git history + `docs/implementation-notes.html`
 
+## Serena usage
+
+코드 작업 시작 전 Serena를 셋업한다(`initial_instructions` → `activate_project`).
+심볼 단위 조회·참조검색·편집을 raw 파일 읽기보다 우선하고, 리팩터링은 의미 기반
+rename/edit을 쓴다.
+
 ## Document Map
 
 작업 시작 전 관련 사양서를 먼저 읽는다(모두 자기완결 HTML — 외부 JS/CSS 없음).
