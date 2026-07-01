@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.13.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.12.0...v0.13.0) (2026-07-01)
+
+
+### Features
+
+* **insight:** Noise disposition — 셸 토크나이저 파편을 untagged에서 분리 ([41d73af](https://github.com/bahamoth/whats-in-my-cc/commit/41d73af296e166a458137144abc9abf7b53a63f7))
+
+
+### Bug Fixes
+
+* **db:** WAL 파일을 64MiB로 제한해 무한 유지 방지 ([65bd5b1](https://github.com/bahamoth/whats-in-my-cc/commit/65bd5b14c4503133b9679c24f562546e3cbb9d22))
+
+
+### Performance Improvements
+
+* **api:** /v1/sessions의 redaction_summary를 opt-in으로 전환 ([8025ac1](https://github.com/bahamoth/whats-in-my-cc/commit/8025ac119db940d155f867b2e55712774953205b))
+* **api:** 세션 리스트 facet을 session_summary 테이블로 materialize ([d759c2f](https://github.com/bahamoth/whats-in-my-cc/commit/d759c2f012f9fd5efe0cc3172a09dd95adfcc232))
+
 ## [0.12.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.11.0...v0.12.0) (2026-06-26)
 
 
