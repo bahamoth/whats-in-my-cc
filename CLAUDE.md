@@ -12,12 +12,9 @@ transcript가 아닌 **execution replay**로 "무엇이·왜 그렇게 됐는가
 
 ## Serena usage
 
-코드 탐색·참조검색·rename은 Serena 심볼 도구를 우선한다(크로스파일 rename은 `rename_symbol` 1콜로
-참조·import·주석까지 갱신 — grep+read+edit보다 정확·효율). 작은/비심볼(설정·주석·문자열·문서) 편집은
-하네스 Edit로 충분하다. 도구가 deferred면 ToolSearch로 로드하고 `initial_instructions`로 매뉴얼을 읽는다.
-**`activate_project`는 MCP 서버가 살아있는 한 유지되므로 최초 1회만** — 새 세션에선 `get_current_config`로
-active project를 확인해 이 프로젝트가 아닐 때만 재활성화한다. 심볼 인덱스는 파일 변경 시 자동 갱신되고
-name-path는 편집 후에도 안정하다.
+탐색·참조검색·rename은 Serena 심볼 도구 우선(크로스파일 rename은 `rename_symbol` 1콜), 작은·비심볼
+편집은 하네스 Edit. `activate_project`는 최초 1회 — 새 세션엔 `get_current_config`로 확인 후 이 프로젝트가
+아닐 때만(도구 deferred면 ToolSearch 로드). 인덱스는 파일 변경 시 자동 갱신되니 캐시는 신경 쓰지 않는다.
 
 ## Document Map
 
