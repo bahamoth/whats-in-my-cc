@@ -12,9 +12,12 @@ transcript가 아닌 **execution replay**로 "무엇이·왜 그렇게 됐는가
 
 ## Serena usage
 
-코드 작업 시작 전 Serena를 셋업한다(`initial_instructions` → `activate_project`).
-심볼 단위 조회·참조검색·편집을 raw 파일 읽기보다 우선하고, 리팩터링은 의미 기반
-rename/edit을 쓴다.
+코드 탐색·편집은 Serena 심볼 도구를 raw 파일 읽기보다 우선하고, 리팩터링은 의미 기반
+rename/edit을 쓴다. 도구가 deferred면 ToolSearch로 로드하고 `initial_instructions`로 매뉴얼을 읽는다.
+**`activate_project`는 MCP 서버 프로세스가 살아있는 한 유지되므로 최초 1회만** — 새 세션에선
+`get_current_config`로 active project를 확인해 이 프로젝트가 아닐 때만 재활성화한다(맹목적 재셋업 금지).
+심볼은 LSP가 대체로 최신 반영하고 name-path는 편집 후에도 안정하나, 외부 대량 변경·브랜치 전환 후
+stale이 의심되면 `restart_language_server`.
 
 ## Document Map
 
