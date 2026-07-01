@@ -12,13 +12,12 @@ transcript가 아닌 **execution replay**로 "무엇이·왜 그렇게 됐는가
 
 ## Serena usage
 
-코드 탐색·편집은 Serena 심볼 도구를 raw 파일 읽기보다 우선하고, 리팩터링은 의미 기반
-rename/edit을 쓴다. 도구가 deferred면 ToolSearch로 로드하고 `initial_instructions`로 매뉴얼을 읽는다.
-**`activate_project`는 MCP 서버 프로세스가 살아있는 한 유지되므로 최초 1회만** — 새 세션에선
-`get_current_config`로 active project를 확인해 이 프로젝트가 아닐 때만 재활성화한다(맹목적 재셋업 금지).
-심볼은 LSP가 대체로 최신 반영하고 name-path는 편집 후에도 안정하나, 빌드 설정 변경·외부 편집·브랜치
-전환 후엔 캐시가 stale일 수 있다(자동 무효화는 캐시 버전 기준뿐). 심볼 조회가 실제 코드와 어긋나면
-`.serena/cache` 삭제 후 재조회하거나 Read로 대조.
+코드 탐색·참조검색·rename은 Serena 심볼 도구를 우선한다(크로스파일 rename은 `rename_symbol` 1콜로
+참조·import·주석까지 갱신 — grep+read+edit보다 정확·효율). 작은/비심볼(설정·주석·문자열·문서) 편집은
+하네스 Edit로 충분하다. 도구가 deferred면 ToolSearch로 로드하고 `initial_instructions`로 매뉴얼을 읽는다.
+**`activate_project`는 MCP 서버가 살아있는 한 유지되므로 최초 1회만** — 새 세션에선 `get_current_config`로
+active project를 확인해 이 프로젝트가 아닐 때만 재활성화한다. 심볼 인덱스는 파일 변경 시 자동 갱신되고
+name-path는 편집 후에도 안정하다.
 
 ## Document Map
 
