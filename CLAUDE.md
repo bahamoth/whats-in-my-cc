@@ -14,8 +14,8 @@ transcript가 아닌 **execution replay**로 "무엇이·왜 그렇게 됐는가
 
 탐색·참조검색·rename은 Serena 심볼 도구 우선(크로스파일 rename은 `rename_symbol` 1콜), 작은·비심볼
 편집은 하네스 Edit. `activate_project`는 최초 1회 — 새 세션엔 `get_current_config`로 확인 후 이 프로젝트가
-아닐 때만(도구 deferred면 ToolSearch 로드). 인덱스는 파일 변경 시 대체로 자동 갱신 — 심볼이 실제 코드와
-어긋나면(대량 변경·브랜치 전환 후 등) Read로 대조.
+아닐 때만(도구 deferred면 ToolSearch 로드). 인덱스는 파일 변경 시 대체로 자동 갱신 — 어긋나면(대량 변경·
+브랜치 전환 후) Read로 대조하고 `.serena/cache` 삭제 후 재조회로 갱신한다.
 
 ## Document Map
 
