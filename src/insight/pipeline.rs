@@ -31,8 +31,9 @@ use crate::insight::view::OwnedSessionInsightData;
 /// Deterministic detector pipeline. Every emitted candidate is promoted to a
 /// signal row. Idempotent (INSERT OR REPLACE keyed by derived `signal_id`).
 pub async fn run_detectors(pool: &SqlitePool, session_id: &str) -> Result<Vec<SignalRow>> {
-    // Plan 4에서 파일 로드로 교체; 지금은 코드 default.
-    let cfg = DetectorConfig::default();
+    // 매 패스 파일에서 로드 (작은 파일 1회 read/ingest batch) — serve 재시작
+    // 없이 튜닝이 반영된다. 결측 → 코드 기본값 (config.rs 계약).
+    let cfg = DetectorConfig::load();
     let data = OwnedSessionInsightData::load(pool, session_id).await?;
     let view = data.as_view(session_id);
     let mut rows = Vec::new();
@@ -58,7 +59,7 @@ pub async fn run_detectors(pool: &SqlitePool, session_id: &str) -> Result<Vec<Si
         // view, so the current pass is the complete, authoritative set.
         let mut keep_ids = Vec::with_capacity(cands.len());
         for c in cands {
-            let row = build_signal_row(session_id, &c);
+            let row = build_signal_row(session_id, &c, cfg.pack_id());
             keep_ids.push(row.signal_id.clone());
             repo_signal::insert(pool, &row).await?;
             rows.push(row);
@@ -68,14 +69,17 @@ pub async fn run_detectors(pool: &SqlitePool, session_id: &str) -> Result<Vec<Si
     Ok(rows)
 }
 
-fn build_signal_row(session_id: &str, c: &SignalCandidate) -> SignalRow {
+fn build_signal_row(session_id: &str, c: &SignalCandidate, rule_pack: Option<&str>) -> SignalRow {
     let prov = Provenance {
         // Owned String — no `Box::leak`. `run_detectors` runs once per ingest
         // (per OTLP batch for a live session), so leaking a `&'static str` here
         // would grow unbounded over a long-lived `serve`.
         detector: format!("{}@v1", c.detector),
         version: "L1",
-        rule_pack: None,
+        // 03 spec: 코드 기본이면 null, TOML pack 로드 시 그 id. pack이 로드되면
+        // 그 패스의 모든 detector에 찍힌다 — 섹션이 없는 detector도 그 pack의
+        // 지배(기본값 위임) 아래 돈 것이므로.
+        rule_pack: rule_pack.map(String::from),
     };
     // Derive `signal_id` from the stable `dedup_key` when the detector provides
     // one (aggregating detectors like re_read), else from `evidence_refs` (fixed
