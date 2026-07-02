@@ -29,6 +29,19 @@ pub async fn call(args: &Value, pool: &SqlitePool) -> Value {
         Err(e) => return tool_error(format!("db error: {e}")),
     };
 
+    // Pre-truncation total, so the LIMIT above is never a silent cap — same
+    // contract as the HTTP series' matched_count.
+    let matched_count: i64 = match sqlx::query_scalar(
+        "SELECT COUNT(*) FROM observed_event WHERE kind = 'otel_span' AND trace_id = ?",
+    )
+    .bind(trace_id)
+    .fetch_one(pool)
+    .await
+    {
+        Ok(c) => c,
+        Err(e) => return tool_error(format!("db error: {e}")),
+    };
+
     let spans: Vec<Value> = rows
         .into_iter()
         .map(|r| {
@@ -55,6 +68,7 @@ pub async fn call(args: &Value, pool: &SqlitePool) -> Value {
 
     tool_success(json!({
         "trace_id": trace_id,
-        "spans": spans
+        "spans": spans,
+        "matched_count": matched_count
     }))
 }

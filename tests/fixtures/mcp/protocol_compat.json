@@ -42,6 +42,15 @@
         "name": "whats_in_my_cc.get_project_metrics"
       },
       {
+        "name": "whats_in_my_cc.get_session_metrics"
+      },
+      {
+        "name": "whats_in_my_cc.get_session_signals"
+      },
+      {
+        "name": "whats_in_my_cc.get_session_fingerprint"
+      },
+      {
         "name": "whats_in_my_cc.list_detectors"
       }
     ]

@@ -11,10 +11,10 @@ SKILL.md의 Step 2–5를 수행할 때의 세부 가이드. 이 워크플로우
 |------|---------|------|
 | 프로젝트의 세션 찾기 | `search_sessions {project}` | `GET /v1/sessions?project=` |
 | 턴 집계 + 파일 churn | `get_session_turns {session_id}` | `GET /v1/sessions/:id/turns` |
-| 세션 메트릭 | — | `GET /v1/sessions/:id/metrics` |
-| 세션 fingerprint (모델·CC버전·branch·CLAUDE.md 해시) | — | `GET /v1/sessions/:id/fingerprint` |
+| 세션 메트릭 | `get_session_metrics {session_id}` | `GET /v1/sessions/:id/metrics` |
+| 세션 fingerprint (모델·CC버전·branch·cwd·entrypoint) | `get_session_fingerprint {session_id}` | `GET /v1/sessions/:id/fingerprint` |
 | 세션 횡단 series (전후 비교) | `get_project_metrics {project?, from?, to?, limit?}` | `GET /v1/metrics?project=&from=&to=&limit=` |
-| Signal 목록 | — | `GET /v1/sessions/:id/signals` |
+| Signal 목록 | `get_session_signals {session_id}` | `GET /v1/sessions/:id/signals` |
 | detector manifest (metric_class 포함) | `list_detectors` | `GET /v1/detectors` |
 | kind 필터 이벤트 | — | `GET /v1/sessions/:id/events?kind=a,b&limit=` |
 | 특정 tool_use 상관 조회 | — | `GET /v1/sessions/:id/events?tool_use_id=` |
@@ -52,12 +52,12 @@ events 커서는 `data.prev_cursor` / `data.next_cursor` (URL 인코딩 필요).
 움직였는지 판정한다.
 
 1. **코호트 분할 기준** (우선순위 순):
-   1. `fingerprint.instruction_sha256` 변화 — 제안이 CLAUDE.md/instruction
-      변경이었다면 가장 정확. 단 hook collector가 설치된 세션에만 존재하고,
-      collector 도입 이전 세션은 결측이라 이 기준으로 나눌 수 없다.
-   2. 채택 커밋 시각 — `git log -1 --format=%cI <commit>` vs 각 세션의
-      `first_observed_at`.
-   3. 사용자 수동 지정.
+   1. 채택 커밋 시각 — `git log -1 --format=%cI <commit>` vs 각 세션의
+      `first_observed_at`. CLAUDE.md/instruction 변경 제안도 동일하게 그
+      변경 커밋 시각이 경계다. (fingerprint의 instruction 스냅샷 필드
+      `instruction_sha256`/`claude_md`는 2026-06-19 hook collector와 함께
+      제거됨 — git 이력이 이 역할을 대신한다.)
+   2. 사용자 수동 지정.
 2. **수집**: `get_project_metrics {"project": "<루트>", "limit": 50}`.
    필요하면 `from`/`to`(RFC3339)로 창을 좁힌다.
 3. **비교**: 예측에 적힌 지표만 본다(사후 지표 쇼핑 금지 — 그게 원장의 존재
@@ -104,8 +104,8 @@ events 커서는 `data.prev_cursor` / `data.next_cursor` (URL 인코딩 필요).
   기준이다. 텔레메트리 전용 세션이면 비어 있을 수 있다.
 - 비코드 프로젝트의 검증 활동(브라우저 smoke)은 verification-runs에 잡히지
   않는다 (wimcc 알려진 사각지대, 2026-06-12 기준).
-- `fingerprint.claude_md`는 SessionStart hook collector가 설치된 이후의
-  세션에만 존재한다. 과거 세션 소급은 불가 — transcript에는 CLAUDE.md가
-  기록되지 않는다(2026-06-12 실측: 4개 프로젝트 12 transcript 음성).
-  커밋된 프로젝트 CLAUDE.md에 한해 세션 시각 × git history로 근사 복원만
-  가능하다.
+- fingerprint에 instruction(CLAUDE.md) 스냅샷은 없다 — `claude_md`/
+  `instruction_sha256` 필드는 hook collector 폐지와 함께 2026-06-19 제거됐다.
+  transcript에는 CLAUDE.md가 기록되지 않으므로(2026-06-12 실측: 4개 프로젝트
+  12 transcript 음성) 세션별 instruction 소급은 불가하고, 커밋된 프로젝트
+  CLAUDE.md에 한해 세션 시각 × git history로 근사만 가능하다.

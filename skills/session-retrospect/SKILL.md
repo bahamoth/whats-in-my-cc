@@ -61,13 +61,16 @@ wimcc(What's in My Claude Code)의 read-only 데이터로 최근 세션을 회�
 1. **턴 집계** — `whats_in_my_cc.get_session_turns` (또는
    `GET /v1/sessions/:id/turns`): 턴별 tool histogram·편집 파일·user_message
    발췌, 그리고 `file_churn`(파일별 턴 수·편집 수).
-2. **메트릭** — `GET /v1/sessions/:id/metrics`: tool 실패·중단·턴 시간 등.
-3. **Signal** — `GET /v1/sessions/:id/signals`: detector가 발화한 Signal과
+2. **메트릭** — `whats_in_my_cc.get_session_metrics` (또는
+   `GET /v1/sessions/:id/metrics`): tool 실패·중단·턴 시간 등.
+3. **Signal** — `whats_in_my_cc.get_session_signals` (또는
+   `GET /v1/sessions/:id/signals`): detector가 발화한 Signal과
    evidence_refs.
-4. **Fingerprint** — `GET /v1/sessions/:id/fingerprint`: 이 세션이 어떤
-   모델·CC 버전·branch·instruction(CLAUDE.md 해시) 아래에서 돌았는가.
-   (hook collector 미설치 또는 과거 세션은 `claude_md`가 빈다 — 결측은
-   결측으로 보고하고 instruction 코호트 분할에 쓰지 않는다.)
+4. **Fingerprint** — `whats_in_my_cc.get_session_fingerprint` (또는
+   `GET /v1/sessions/:id/fingerprint`): 이 세션이 어떤 모델·CC 버전·
+   branch·cwd·entrypoint 아래에서 돌았는가. (instruction 스냅샷 필드
+   `claude_md`/`instruction_sha256`은 2026-06-19 hook collector와 함께
+   제거됨 — CLAUDE.md 변경 경계는 git 이력으로 잡는다.)
 5. 필요 시 특정 구간 원문 — `GET /v1/sessions/:id/events?kind=user_message`
    (kind는 CSV 가능: `user_message,tool_call`).
 
@@ -112,8 +115,8 @@ references/workflow.md의 "전후 비교 절차" 절.
 
 요약: `whats_in_my_cc.get_project_metrics {"project": "<루트>"}` (HTTP
 fallback `GET /v1/metrics?project=`)로 세션 series를 받아, 채택 커밋 시각
-또는 `fingerprint.instruction_sha256` 변화로 전/후 코호트를 나누고
-**예측했던 지표만** 비교한다. 보고 규칙:
+(CLAUDE.md/instruction 변경 제안이면 그 변경 커밋 시각)으로 전/후 코호트를
+나누고 **예측했던 지표만** 비교한다. 보고 규칙:
 
 - 전/후 표본 수를 명시한다. 한쪽이 3 미만이면 "참고 수준"으로 강등.
 - 혼재 요인 점검: 전/후 코호트의 `models`·`cc_versions`가 다르면 명시하고

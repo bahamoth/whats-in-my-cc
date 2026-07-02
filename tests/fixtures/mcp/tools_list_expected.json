@@ -42,7 +42,7 @@
     },
     {
       "name": "whats_in_my_cc.get_otel_trace",
-      "description": "Return OTel spans for a trace ID observed in this session.",
+      "description": "Return OTel spans for a trace ID observed in this session. Returns at most 200 spans; matched_count reports the pre-truncation total.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -97,6 +97,54 @@
           }
         },
         "required": []
+      }
+    },
+    {
+      "name": "whats_in_my_cc.get_session_metrics",
+      "description": "On-demand deterministic behavioral metrics for one session (SessionMetrics): tool/verification/disposition counts, session facts, and detector_firing. Counts only — rates and judgments are the caller's. Same data as GET /v1/sessions/:id/metrics.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "Session ID"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      }
+    },
+    {
+      "name": "whats_in_my_cc.get_session_signals",
+      "description": "Evidence-linked deterministic L1 signals for one session. Each signal carries detector id, factual summary, facts projection, and evidence_refs (event IDs) — no severity/confidence; judgments are the caller's. Same data as GET /v1/sessions/:id/signals.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "Session ID"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      }
+    },
+    {
+      "name": "whats_in_my_cc.get_session_fingerprint",
+      "description": "Session environment fingerprint: distinct models, cc_versions, git_branches, cwds, entrypoints observed in the session. Observations only — the independent-variable surface for before/after cohort comparison. Same data as GET /v1/sessions/:id/fingerprint.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "Session ID"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
       }
     },
     {
