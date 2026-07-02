@@ -5434,6 +5434,57 @@ vitest: 69 passed
     훅("보편 후보 잔존 시 차단")이 비로소 의미를 갖는다.</p>
   </section>
 
+  <section id="mcp-parity-detector-config-2026-07-03">
+    <h2>MCP 표면 완결 + DetectorConfig wiring + 잔재 정리 (2026-07-03)</h2>
+    <p>구현·기능 전반 리뷰(세션 평가)에서 도출된 개선점 중 즉시 실행 가능한 세 묶음을 처리한 라운드.
+    사용자 결정이 필요한 항목(final_state_mismatch의 영어 lexical 어휘 처리 방침)과 실 fixture가
+    선행돼야 하는 항목(verification allowlist 생태계 확장), 대형 UI 작업(프로젝트 대시보드)은 보류
+    — 아래 "남은 개선점" 참고.</p>
+    <h3>MCP 표면 완결 — 절단 노출 + 세션 단위 parity 툴 3종</h3>
+    <p><code>get_otel_trace</code>가 LIMIT 200을 표기 없이 잘라 <em>MCP 경로에만</em> silent truncation이
+    있었다(HTTP series는 matched_count로 노출). COUNT 쿼리를 더해 <code>matched_count</code>로 절단 전
+    총수를 보고한다. 또 회고 흐름의 세션 단위 리소스 3종(metrics·signals·fingerprint)이 HTTP 전용이라
+    순수 MCP 클라이언트(session-retrospect 스킬 포함)가 폴백 없이 완주하지 못했다 —
+    <code>get_session_metrics</code>·<code>get_session_signals</code>·<code>get_session_fingerprint</code>를
+    1:1 미러로 추가(6종→9종). Signal DTO 변환은 HTTP 핸들러의 <code>signal_row_to_dto</code>를
+    <code>pub(crate)</code>로 공유해 두 표면이 같은 형태를 반환한다. PRD SRV-3·04 spec 카탈로그·스킬
+    치트시트 동기화. <strong>미해소:</strong> MCP 툴 응답의 단일 text 블록 직렬화·페이지네이션 부재는
+    그대로다(구조적 변경이라 별도 설계 필요).</p>
+    <h3>스킬 stale 정정 — instruction_sha256/claude_md</h3>
+    <p>fingerprint의 instruction 스냅샷 필드(<code>claude_md</code>/<code>instruction_sha256</code>)는
+    2026-06-19 hook collector와 함께 제거됐는데 session-retrospect 스킬(SKILL.md Step 2·5,
+    workflow.md 치트시트·코호트 절·알려진 한계)이 계속 참조하고 있었다. 코호트 경계는 채택 커밋
+    시각(git 이력)으로 일원화해 정정.</p>
+    <h3>DetectorConfig 파일 로딩 wiring</h3>
+    <p><code>pipeline.rs</code>의 <code>DetectorConfig::default()</code> 하드코딩("Plan 4에서 파일 로드로
+    교체")을 해소. 결정 사항: <b>위치</b>는 token과 같은 컨벤션 <code>$WIMCC_CONFIG_DIR/detectors.toml</code>
+    (기본 <code>~/.config/wimcc/detectors.toml</code>) — 사양은 위치를 규정하지 않아(§10.4 참조는 stale이라
+    제거) 기존 컨벤션 재사용이 최소 결정. <b>로드 시점</b>은 run_detectors 패스마다 fresh read(작은 파일
+    1회/ingest batch) — serve 재시작 없이 튜닝 반영. <b>실패 모드</b>는 결측→기본값(기존 계약), 읽기/파싱
+    실패→warn 후 기본값(config가 ingest를 깨지 않는다). <b>rule_pack</b>은 03 spec("TOML rule pack 로드 시
+    그 id")대로 최상위 <code>id</code> 키를 pack id로 삼아, 로드된 패스의 <em>모든</em> signal
+    provenance에 찍는다 — 섹션 없는 detector도 그 pack의 지배(기본값 위임) 아래 돈 것이므로. id 없는
+    파일은 파라미터만 적용되고 rule_pack은 null(무명 pack — id 명시 권장).</p>
+    <p><b>테스트 격리 주의:</b> <code>tests/detector_config_file.rs</code>는 <code>WIMCC_CONFIG_DIR</code>을
+    설정하므로 전용 바이너리로 프로세스 격리(각 tests/*.rs = 별도 프로세스, token 테스트와 같은 관행).
+    역으로 다른 테스트 바이너리의 ingest는 이제 개발 머신의 실제 <code>~/.config/wimcc/detectors.toml</code>을
+    읽을 수 있다 — 현재 CI·개발 환경에 그 파일이 없어 무해하나, detector 임계값을 실제로 튜닝하기 시작하면
+    테스트가 환경에 오염될 수 있다(그때 hermetic 장치 필요).</p>
+    <h3>hook collector 잔재 정리</h3>
+    <p><code>PARSER_VERSION_HOOK</code>/<code>_FILE_GIT</code> 상수(참조 없음), <code>HookIngestResponse</code>
+    DTO(사용처 없음), api/mod.rs 비인증 라우트 주석의 존재하지 않는 <code>/hooks/*</code>(실재하는
+    <code>/v1/stream</code>으로 정정). migration 파일 내 폐기 테이블 언급 주석(retention 0012 등)은
+    sqlx checksum 때문에 수정하지 않는다 — 적용된 migration은 불변.</p>
+    <h3>남은 개선점 (이 라운드 보류, 리뷰에서 도출)</h3>
+    <p>① <b>final_state_mismatch 방침</b>: 영어 고정 lexical 어휘(GOAL_VERBS·COMPLETION_MARKERS)는 "의미
+    판별은 LLM" 원칙과의 긴장 + 한국어 세션 미발화 — L1 제거(LLM 이관) vs 언어 한계 명시 유지, 사용자 결정
+    필요. ② <b>verification allowlist 확장</b>: 16개 정규식이 cargo 편중 — 비Rust 프로젝트의 outcome 지표가
+    unknown으로 쏠린다. 실 fixture 동결(DEV-S11-03 절차) 선행 필요. ③ <b>프로젝트 대시보드 라우트</b>:
+    /v1/metrics series+fingerprint의 시각화(세션 횡단 트렌드 + 코호트 경계) — 브라우저 smoke 포함 대형 UI
+    작업. ④ MCP 응답 구조(단일 text 블록·페이지네이션)·⑤ events MCP 툴 부재·⑥ 성능 부채(live tail 전체
+    재해시·metrics 무캐시 — §10.1 원칙대로 호출 빈도가 정당화할 때).</p>
+  </section>
+
 </main>
 </div>
 </body></html>
