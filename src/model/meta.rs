@@ -5,8 +5,9 @@ pub const PARSER_VERSION_TRANSCRIPT: &str = "transcript@0.1.0";
 pub const PARSER_VERSION_OTEL: &str = "otel@0.1.0";
 pub const PARSER_VERSION_OTEL_METRICS: &str = "otel-metrics@0.5";
 pub const PARSER_VERSION_OTEL_LOGS: &str = "otel-logs@0.5";
-pub const PARSER_VERSION_HOOK: &str = "hook@0.1.0";
-pub const PARSER_VERSION_FILE_GIT: &str = "file_git@0.1.0";
+// PARSER_VERSION_HOOK / PARSER_VERSION_FILE_GIT는 2026-07-03 제거 — hook stdin
+// collector(2026-06-19 폐지)·git poller(slice-10a에서 diff_hunk로 대체)의 잔재로,
+// 참조하는 ingest 경로가 없었다. hook 이벤트는 transcript attachment에서 파생된다.
 pub const COLLECTION_PROFILE: &str = "local_transcript_slice1";
 
 pub const SOURCE_TYPE_OTEL_METRICS: &str = "otel-metrics";

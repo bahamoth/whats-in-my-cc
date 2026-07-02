@@ -84,7 +84,8 @@ impl FromRef<AppState> for SqlitePool {
 
 pub fn router(state: AppState) -> Router {
     // Routes that require bearer-token authentication (all /v1/* and /mcp).
-    // Non-auth routes: /otel/*, /hooks/*, static SPA.
+    // Non-auth routes: /otel/* collectors, /v1/stream (SSE), static SPA.
+    // (/hooks/*는 2026-06 hook collector 폐지로 존재하지 않는다.)
     // The AppState is added as a request extension so the auth middleware
     // can extract the expected token without a separate axum::extract::State call.
     let auth_state = state.clone();
