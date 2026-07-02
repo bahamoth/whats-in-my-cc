@@ -172,6 +172,9 @@ returns 404.
 - `whats_in_my_cc.get_otel_trace`
 - `whats_in_my_cc.get_session_turns`
 - `whats_in_my_cc.get_project_metrics`
+- `whats_in_my_cc.get_session_metrics`
+- `whats_in_my_cc.get_session_signals`
+- `whats_in_my_cc.get_session_fingerprint`
 - `whats_in_my_cc.list_detectors`
 
 It also serves MCP resources: a per-session summary plus file-lineage and
