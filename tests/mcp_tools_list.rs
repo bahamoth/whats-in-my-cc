@@ -57,8 +57,8 @@ async fn tools_list_returns_five_tools() {
         .expect("tools must be an array");
     assert_eq!(
         tools.len(),
-        6,
-        "expected exactly 6 tools (loop-foundations 2026-06-12: +get_project_metrics), got {}",
+        9,
+        "expected exactly 9 tools (MCP parity 2026-07-03: +get_session_metrics/signals/fingerprint), got {}",
         tools.len()
     );
 }
@@ -86,6 +86,9 @@ async fn tools_list_contains_required_tool_names() {
         "whats_in_my_cc.search_sessions",
         "whats_in_my_cc.list_detectors",
         "whats_in_my_cc.get_project_metrics",
+        "whats_in_my_cc.get_session_metrics",
+        "whats_in_my_cc.get_session_signals",
+        "whats_in_my_cc.get_session_fingerprint",
     ];
     for name in &required {
         assert!(

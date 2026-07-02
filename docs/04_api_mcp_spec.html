@@ -43,7 +43,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <div class="callout"><strong>용어:</strong> MCP 공식 명칭은 <em>Streamable HTTP transport</em>다. 본 문서에서는 사용자의 표현인 “MCP streaming http”를 이 transport로 해석한다.</div>
 </section>
 <section id="surface"><h2><span class="num">02</span>Serving Surface</h2>
-<div class="grid three"><div class="card"><h4>Local WebUI</h4><p>브라우저 기반 React SPA (rust-embed로 서버에 내장). 같은 Pull API + SSE를 소비해 event-first replay와 insight strip을 렌더링한다.</p></div><div class="card"><h4>Pull API</h4><p>HTTP JSON API. <strong>전부 GET</strong> read-only. write endpoint 없음.</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p><code>/mcp</code> 단일 endpoint. AI client가 resources와 read-only tools 6종으로 insight를 조회한다.</p></div></div>
+<div class="grid three"><div class="card"><h4>Local WebUI</h4><p>브라우저 기반 React SPA (rust-embed로 서버에 내장). 같은 Pull API + SSE를 소비해 event-first replay와 insight strip을 렌더링한다.</p></div><div class="card"><h4>Pull API</h4><p>HTTP JSON API. <strong>전부 GET</strong> read-only. write endpoint 없음.</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p><code>/mcp</code> 단일 endpoint. AI client가 resources와 read-only tools 9종으로 insight를 조회한다.</p></div></div>
 <div class="callout"><strong>Collectors (입력면):</strong> 같은 서버가 OTLP/HTTP receiver(<code>POST /otel/v1/traces|metrics|logs</code>)를 연다. 이는 telemetry <em>수집</em>이며 read-only 원칙의 예외가 아니다 — domain resource를 외부에서 수정하는 경로가 아니다. (hook receiver <code>/hooks/v1/events</code>는 2026-06 제거 — hook은 transcript에서 관측한다.)</div>
 </section>
 <section id="api"><h2><span class="num">03</span>Pull API Contract</h2>
@@ -127,16 +127,19 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 whats-in-my-cc://file-lineage/{session_id}
 whats-in-my-cc://otel/traces/{trace_id}</code></pre>
 <p class="muted"><code>resources/list</code>는 저장된 세션들을 <code>whats-in-my-cc://sessions/{session_id}</code> URI로 나열한다. 위 3개 template 외 패턴은 인식되지 않는다.</p>
-<h3>Read-only tool catalog <span class="pill green">6종 — src/api/mcp/tools/</span></h3><table><thead><tr><th>Tool</th><th>Input (required <strong>굵게</strong>)</th><th>Output</th><th>Mutates?</th></tr></thead><tbody>
+<h3>Read-only tool catalog <span class="pill green">9종 — src/api/mcp/tools/</span></h3><table><thead><tr><th>Tool</th><th>Input (required <strong>굵게</strong>)</th><th>Output</th><th>Mutates?</th></tr></thead><tbody>
 <tr><td><code>whats_in_my_cc.search_sessions</code></td><td><code>limit</code> (integer, 기본 20), <code>project</code> (string — cwd 일치 프로젝트 필터)</td><td>최근 로컬 관측 세션 요약 목록</td><td>No</td></tr>
 <tr><td><code>whats_in_my_cc.get_file_lineage</code></td><td><strong><code>session_id</code></strong>, <strong><code>file_path</code></strong></td><td>해당 파일의 diff-hunk lineage</td><td>No</td></tr>
-<tr><td><code>whats_in_my_cc.get_otel_trace</code></td><td><strong><code>trace_id</code></strong> (hex)</td><td>trace의 OTel span 목록</td><td>No</td></tr>
+<tr><td><code>whats_in_my_cc.get_otel_trace</code></td><td><strong><code>trace_id</code></strong> (hex)</td><td>trace의 OTel span 목록 — 최대 200 span, <code>matched_count</code>가 절단 전 총수를 보고 (silent truncation 금지)</td><td>No</td></tr>
 <tr><td><code>whats_in_my_cc.get_session_turns</code></td><td><strong><code>session_id</code></strong></td><td>턴 단위 결정론 집계 — <code>/v1/sessions/:id/turns</code>와 동일 rollup</td><td>No</td></tr>
 <tr><td><code>whats_in_my_cc.get_project_metrics</code></td><td><code>project?</code> · <code>from?</code> · <code>to?</code> · <code>limit?</code></td><td>세션 횡단 metrics+fingerprint series — <code>/v1/metrics</code>와 동일. fingerprint 그룹(<code>models</code>·<code>cc_versions</code> 등)으로 개입 전후 비교</td><td>No</td></tr>
+<tr><td><code>whats_in_my_cc.get_session_metrics</code></td><td><strong><code>session_id</code></strong></td><td>세션 SessionMetrics(on-demand count) — <code>/v1/sessions/:id/metrics</code>와 동일</td><td>No</td></tr>
+<tr><td><code>whats_in_my_cc.get_session_signals</code></td><td><strong><code>session_id</code></strong></td><td>세션의 evidence-linked L1 Signal 목록 — <code>/v1/sessions/:id/signals</code>와 동일</td><td>No</td></tr>
+<tr><td><code>whats_in_my_cc.get_session_fingerprint</code></td><td><strong><code>session_id</code></strong></td><td>세션 환경 fingerprint — <code>/v1/sessions/:id/fingerprint</code>와 동일</td><td>No</td></tr>
 <tr><td><code>whats_in_my_cc.list_detectors</code></td><td>(없음)</td><td>detector manifest catalog — <code>/v1/detectors</code>와 동일 내용</td><td>No</td></tr>
 </tbody></table>
 <div class="callout"><strong>tool 출력 형식:</strong> 모든 tool 결과는 JSON을 직렬화한 단일 <code>text</code> content block으로 래핑된다. 오류는 <code>isError: true</code> + 메시지 text.</div>
-<div class="callout"><strong>완결성:</strong> 위 6종이 제공되는 tool의 전부다.</div>
+<div class="callout"><strong>완결성:</strong> 위 9종이 제공되는 tool의 전부다.</div>
 </section>
 <section id="streaming"><h2><span class="num">06</span>Streaming — <code>GET /v1/stream</code> (SSE)</h2>
 <p>ingest writer가 event를 쓸 때마다 <code>LiveEvent</code> envelope을 SSE로 전달한다. WebUI의 라이브 갱신이 이 stream을 소비한다. domain data를 수정하지 않는다.</p>

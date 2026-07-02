@@ -1229,7 +1229,8 @@ pub async fn session_fingerprint(
 
 /// Convert a `SignalRow` to the API DTO shape. JSON columns (`evidence_refs`,
 /// `facts`, `provenance`) are parsed so callers receive typed values.
-fn signal_row_to_dto(row: repo_signal::SignalRow) -> SignalDto {
+/// `pub(crate)`: MCP `get_session_signals`가 같은 변환을 공유한다 (parity 2026-07-03).
+pub(crate) fn signal_row_to_dto(row: repo_signal::SignalRow) -> SignalDto {
     let evidence_refs: Vec<serde_json::Value> =
         serde_json::from_str(&row.evidence_refs).unwrap_or_default();
     let facts: serde_json::Value =

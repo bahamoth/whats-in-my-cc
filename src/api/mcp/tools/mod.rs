@@ -4,7 +4,9 @@
 //! Tool outputs are wrapped in a single `text` content block (DEV-S17-03).
 //!
 //! Plan 1: the `search_findings` tool was removed with the finding subsystem.
-//! A signal tool is deferred to a later plan (Plan 4).
+//! MCP parity (2026-07-03): session-scoped metrics/signals/fingerprint tools
+//! mirror their `/v1/sessions/:id/*` endpoints 1:1, so a pure-MCP client can
+//! complete the retrospect flow without HTTP fallback.
 
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
@@ -12,6 +14,9 @@ use sqlx::SqlitePool;
 pub mod get_file_lineage;
 pub mod get_otel_trace;
 pub mod get_project_metrics;
+pub mod get_session_fingerprint;
+pub mod get_session_metrics;
+pub mod get_session_signals;
 pub mod get_session_turns;
 pub mod list_detectors;
 pub mod search_sessions;
@@ -97,6 +102,17 @@ fn list_detectors_schema() -> Value {
     })
 }
 
+/// MCP parity (2026-07-03) — 세션 단위 툴 3종이 공유하는 입력 스키마.
+fn session_id_only_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "session_id": { "type": "string", "description": "Session ID" }
+        },
+        "required": ["session_id"]
+    })
+}
+
 /// Build the tools/list response body.
 pub fn tools_list_response() -> Value {
     json!({
@@ -113,7 +129,7 @@ pub fn tools_list_response() -> Value {
             },
             {
                 "name": "whats_in_my_cc.get_otel_trace",
-                "description": "Return OTel spans for a trace ID observed in this session.",
+                "description": "Return OTel spans for a trace ID observed in this session. Returns at most 200 spans; matched_count reports the pre-truncation total.",
                 "inputSchema": get_otel_trace_schema()
             },
             {
@@ -125,6 +141,21 @@ pub fn tools_list_response() -> Value {
                 "name": "whats_in_my_cc.get_project_metrics",
                 "description": "Cross-session deterministic metrics series: per-session behavioral counts (SessionMetrics) plus environment fingerprint (models, cc_versions, git_branches, cwds, entrypoints). Counts and observations only — rates and judgments are the caller's.",
                 "inputSchema": get_project_metrics_schema()
+            },
+            {
+                "name": "whats_in_my_cc.get_session_metrics",
+                "description": "On-demand deterministic behavioral metrics for one session (SessionMetrics): tool/verification/disposition counts, session facts, and detector_firing. Counts only — rates and judgments are the caller's. Same data as GET /v1/sessions/:id/metrics.",
+                "inputSchema": session_id_only_schema()
+            },
+            {
+                "name": "whats_in_my_cc.get_session_signals",
+                "description": "Evidence-linked deterministic L1 signals for one session. Each signal carries detector id, factual summary, facts projection, and evidence_refs (event IDs) — no severity/confidence; judgments are the caller's. Same data as GET /v1/sessions/:id/signals.",
+                "inputSchema": session_id_only_schema()
+            },
+            {
+                "name": "whats_in_my_cc.get_session_fingerprint",
+                "description": "Session environment fingerprint: distinct models, cc_versions, git_branches, cwds, entrypoints observed in the session. Observations only — the independent-variable surface for before/after cohort comparison. Same data as GET /v1/sessions/:id/fingerprint.",
+                "inputSchema": session_id_only_schema()
             },
             {
                 "name": "whats_in_my_cc.list_detectors",
@@ -143,6 +174,9 @@ pub async fn dispatch(name: &str, args: &Value, pool: &SqlitePool) -> Value {
         "whats_in_my_cc.get_otel_trace" => get_otel_trace::call(args, pool).await,
         "whats_in_my_cc.get_session_turns" => get_session_turns::call(args, pool).await,
         "whats_in_my_cc.get_project_metrics" => get_project_metrics::call(args, pool).await,
+        "whats_in_my_cc.get_session_metrics" => get_session_metrics::call(args, pool).await,
+        "whats_in_my_cc.get_session_signals" => get_session_signals::call(args, pool).await,
+        "whats_in_my_cc.get_session_fingerprint" => get_session_fingerprint::call(args, pool).await,
         "whats_in_my_cc.list_detectors" => list_detectors::call(args, pool).await,
         _ => tool_error(format!("unknown tool: {name}")),
     }
