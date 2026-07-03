@@ -112,17 +112,18 @@ CC 2.1.198 teammate 실행 모델 대응 잔여 전부 처리
   `tagging-gate-baseline.json`(토큰→사유) 커밋으로. CLAUDE.md 개선 루프
   절에 편입. CC hook이 아니라 repo 스크립트(Non-goal 준수).
 
-## B-8. 성능 부채 (§10.1 게이트 — 아플 때 착수)
+## B-8. 성능 부채 — 실측 완료, 1건 해소 (2026-07-04)
 
-셋 다 같은 조건(대형 세션·잦은 조회)에서 동시에 아파진다:
+§10.1 원칙대로 실측 후 판단(implementation-notes `#metrics-cache-2026-07-04`):
 
-- live tail이 변경 파일 **전체**를 매 flush 재해시(바이트 커서 없음 —
-  `src/transcript_tail.rs` 모듈 헤더의 의도된 트레이드오프, DEV-S7-01).
-- `recompute_session`/turn_id backfill이 세션당 최대 10만 행 인메모리 로드
-  (`src/ingest/store.rs`).
-- SessionMetrics 매 호출 full-scan 재계산(무캐시 — `src/insight/metrics.rs`
-  헤더에 의도 명시).
-- **원칙**: 캐싱·커서는 호출 빈도가 정당화할 때(§10.1). 착수 전 실측 먼저.
+- **SessionMetrics 해소**: 실측 6003-이벤트 세션 232ms/콜, series(18세션)
+  1.2s — B-1 대시보드가 series를 인터랙티브 경로로 만들어 게이트 충족.
+  프로세스 수명 인메모리 캐시(키: event_count+last_observed_at) 도입 —
+  warm 단일 세션 2ms(116배), series 0.19s(7배).
+- **live tail 재해시 게이트 유지**: 최대 transcript 33.4MB의 sha256
+  ≈ 10ms/flush — 무통(실측 2026-07-04).
+- **recompute_session 게이트 유지**: 현 코퍼스 최대 세션 6k행 — 10만 행
+  상한과 거리가 멀어 무통. 아플 때 재실측.
 
 ## B-9. PRD §09 열린 결정 — 완료 (2026-07-04)
 

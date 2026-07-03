@@ -116,6 +116,50 @@ fn is_interruption_marker(text: &str) -> bool {
     text.starts_with("[Request interrupted by user")
 }
 
+// B-8 (2026-07-04) — 프로세스 수명 인메모리 캐시. §10.1 실측(스크래치 DB):
+// 6003-이벤트 세션 232ms/콜, series(18세션) 1.2s — B-1 대시보드가 series를
+// 인터랙티브 경로로 만들어 호출 빈도 게이트가 열렸다. 키는
+// (event_count, last_observed_at): append-only ingest에서 데이터 변화는
+// 반드시 키를 바꾼다. detector 재구성만으로 signal이 바뀌는 경로는 새
+// 이벤트 flush 또는 프로세스 재시작을 동반한다(인메모리라 함께 사라짐).
+
+/// 세션별 캐시 엔트리 — event_count, last_observed_at, 계산 결과.
+type CacheEntry = (i64, String, SessionMetrics);
+static METRICS_CACHE: once_cell::sync::Lazy<
+    std::sync::Mutex<std::collections::HashMap<String, CacheEntry>>,
+> = once_cell::sync::Lazy::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+static CACHE_HITS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// 누적 캐시 적중 수 — 테스트 관측용.
+pub fn cache_hits() -> u64 {
+    CACHE_HITS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub async fn compute_session_metrics(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<SessionMetrics> {
+    // 캐시 키 조회는 covering-index 집계라 저렴하다(perf 노트 2026-06-29:
+    // totals 0.035s/500세션). 세션이 없으면 기존과 같이 빈 집계 경로.
+    let key = repo_observed::session_summary(pool, session_id).await?;
+    if let Some((count, _first, last)) = &key {
+        if let Some((c, l, m)) = METRICS_CACHE.lock().unwrap().get(session_id) {
+            if c == count && l == last {
+                CACHE_HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return Ok(m.clone());
+            }
+        }
+    }
+    let computed = compute_session_metrics_uncached(pool, session_id).await?;
+    if let Some((count, _first, last)) = key {
+        METRICS_CACHE
+            .lock()
+            .unwrap()
+            .insert(session_id.to_string(), (count, last, computed.clone()));
+    }
+    Ok(computed)
+}
+
 /// Compute on-demand behavioral metrics for `session_id`.
 ///
 /// Aggregates in a single pass over each side-table. The three repo calls are
@@ -128,7 +172,7 @@ fn is_interruption_marker(text: &str) -> bool {
 ///   `SignalRow.detector` is the correct field name.
 /// - `repo_verification_run::list_session(pool, id)` — exists.
 ///   `VerificationRunRow.status` is "passed"/"failed"/"unknown".
-pub async fn compute_session_metrics(
+async fn compute_session_metrics_uncached(
     pool: &SqlitePool,
     session_id: &str,
 ) -> Result<SessionMetrics> {
