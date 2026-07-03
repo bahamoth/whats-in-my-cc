@@ -747,3 +747,57 @@ fn tagging_loop_2026_07_03_additions() {
         Some("read.docs")
     );
 }
+
+/// tagging loop 2026-07-04 (docs/backlog-b9-prd09-decisions PR): 보편 CLI 사전 추가.
+/// 표본: untagged-bash --all 86건 중 보편 51건 해소분.
+#[test]
+fn tagging_loop_2026_07_04_additions() {
+    // pnpm exec — 투명 wrapper (pnpm docs: node_modules/.bin의 명령 실행) —
+    // 내부 명령을 재분류한다. nohup/command/time 동형.
+    assert_eq!(tag(&bash("pnpm exec tsc -b")), Some("build.code"));
+    assert_eq!(tag(&bash("pnpm exec vitest run")), Some("test.code"));
+    // pnpm <script>/<binary> 폴백 (pnpm docs: built-in이 아닌 명령은 스크립트/
+    // 바이너리로 실행) — 내부 토큰이 사전 분류되면 그 태그, 아니면 기존대로
+    // unmatched("pnpm <sub>"로 루프 표면화).
+    assert_eq!(tag(&bash("pnpm tsc --noEmit")), Some("lint.code"));
+    assert_eq!(tag(&bash("pnpm tsc -b")), Some("build.code"));
+    // pnpm dev — dev-server 관행 스크립트(Vite/Next 표준 템플릿).
+    assert_eq!(tag(&bash("pnpm dev")), Some("run.code"));
+    // 멀티플렉서 + `--version`(서브커맨드 없음) — 도구 버전 조회는 시스템
+    // 상태 조회(read.proc, printenv/sysctl 동족).
+    assert_eq!(tag(&bash("cargo --version")), Some("read.proc"));
+    assert_eq!(tag(&bash("git --version")), Some("read.proc"));
+    // git plumbing 조회 서브커맨드.
+    assert_eq!(
+        tag(&bash("git cat-file -e f1e720e:tests/x.rs")),
+        Some("read.vcs")
+    );
+    assert_eq!(
+        tag(&bash("git for-each-ref --sort=-committerdate refs/heads/")),
+        Some("read.vcs")
+    );
+    // chezmoi — dotfile 관리자: diff/managed/source-path 조회, apply는 타겟 반영.
+    assert_eq!(tag(&bash("chezmoi diff ~/.zshrc")), Some("read.config"));
+    assert_eq!(tag(&bash("chezmoi managed")), Some("read.config"));
+    assert_eq!(tag(&bash("chezmoi source-path")), Some("read.config"));
+    assert_eq!(tag(&bash("chezmoi apply")), Some("write.config"));
+    // volta — Node 툴체인 설치 (rustup install 동족).
+    assert_eq!(tag(&bash("volta install node@22")), Some("write.deps"));
+    // open — macOS 앱/URL 실행(프로세스 기동).
+    assert_eq!(
+        tag(&bash("open \"rectangle-pro://execute-layout\"")),
+        Some("run.proc")
+    );
+    // plutil — plist(설정) 조회/변환.
+    assert_eq!(
+        tag(&bash(
+            "plutil -convert xml1 -o - ~/Library/Preferences/x.plist"
+        )),
+        Some("read.config")
+    );
+    // wimcc — 자기 CLI(의미는 이 repo의 clap 정의가 SSOT): init-db/ingest는
+    // DB 쓰기, serve는 서버 프로세스 기동.
+    assert_eq!(tag(&bash("wimcc init-db")), Some("write.db"));
+    assert_eq!(tag(&bash("wimcc ingest --all")), Some("write.db"));
+    assert_eq!(tag(&bash("wimcc serve --port 7878")), Some("run.proc"));
+}

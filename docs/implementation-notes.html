@@ -5598,6 +5598,40 @@ vitest: 69 passed
     포함)·§03 Bind 카드(LAN 불허 확정)·§06(export 기본값) 동기화. BACKLOG B-9 종결.</p>
   </section>
 
+  <section id="tagging-loop-2026-07-04">
+    <h2>PR-전 개선 루프 실행 — 2026-07-04 (docs/backlog-b9-prd09-decisions)</h2>
+    <p><b>untagged-bash (전 코퍼스 28토큰·86건):</b> 보편 추가 —
+    <code>pnpm exec</code>(투명 wrapper, command_of에서 내부 명령 재분류 — nohup/command/time
+    동형) + <b>pnpm 폴백</b>(pnpm docs: built-in이 아닌 명령은 스크립트/바이너리 실행 —
+    서브커맨드 사전 미스 시 내부 토큰을 재분류, <code>pnpm tsc --noEmit</code>→lint.code)·
+    <code>pnpm dev</code>(dev-server 관행 스크립트)·<b>멀티플렉서 <code>--version</code></b>
+    (서브커맨드 없음 + --version = 도구 버전 조회 → read.proc, printenv 동족 —
+    <code>cargo --version</code> 5건 해소)·git <code>cat-file</code>/<code>for-each-ref</code>
+    (plumbing 조회)·<code>chezmoi</code>(신규 SUBS: diff/managed/source-path→read.config,
+    apply→write.config — dogfood DB 관측 4형태)·<code>volta install</code>(write.deps, rustup
+    동족)·<code>open</code>(run.proc)·<code>plutil</code>(read.config)·<code>wimcc</code>
+    (신규 SUBS — 자기 CLI, 의미 SSOT는 src/cli.rs clap 정의). 이를 위해
+    <code>resolve_subcommand</code>를 <code>resolve_subcommand_with_tail</code>(서브커맨드
+    시작 오프셋 보존)로 일반화.</p>
+    <p><b>보류(사유):</b> 서브셸/루프 내부 토큰 pr·rev-parse(B-7a $() 토크나이저 — 이번
+    백로그 세션에서 처리 예정), 무확장 디렉토리 Read(src·common·model·ingest·extractors·mcp
+    — 확장자 사전이 아니라 별도 규칙 필요, B-7 인접), 멀티라인/문자열 파편(vite·splitrunbyphase·
+    a299522d·doc-tests·expect·determine_splits — 복구 불가), <code>npm --prefix &lt;path&gt;</code>
+    (플래그 인자 소비 — SUBCOMMAND_ARG_FLAGS에 npm --prefix 추가는 표본 2건이 멀티라인
+    파편이라 보류).</p>
+    <p><b>TS union 드리프트 동기화:</b> webui <code>eventTags.ts</code>의 <code>Tag</code>
+    union이 2026-06-26 커넥터 태깅(chat/issue/run.web/write.web)과 read.deps/build.docs를
+    반영하지 않아 Rust 전집과 어긋나 있었다 — 전집 미러로 동기화(런타임 무영향, 타입 문서
+    정확성).</p>
+    <p><b>unknown-verification (전 코퍼스):</b> 파서 추가 대상 없음 — exit-basis 빈 출력
+    (vitest 136·build 80 등; 성공 시 transcript에 exit 0 신호 없음 — 구조적 unknown,
+    2026-07-03 판정 유지)과 piped 요약 소실(복구 불가)뿐. <b>unidentified-plugins:</b>
+    빈 배열(후보 없음 — 운영 DB 기준).</p>
+    <p><b>닫힘 확인:</b> 스크래치 DB(이 프로젝트 코퍼스, debug 빌드 + :7999 serve)로 재확인
+    — 보편 후보 전부 소멸, 잔존 13건은 전부 위 보류 클래스(2026-07-03과 동일 절차: 전 코퍼스
+    재확인은 운영 serve 재기동이 필요해 생략, 최초 실행 출력으로 판정).</p>
+  </section>
+
 </main>
 </div>
 </body></html>
