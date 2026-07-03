@@ -11,6 +11,7 @@ import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
 import {
   getSession,
   getSignals,
+  listSessions,
   getSessionUsage,
   getUsageBaseline,
   getVerificationRuns,
@@ -24,6 +25,7 @@ import {
 } from '../api/client';
 import type {
   SessionDetail,
+  SessionListItem,
   SignalDto,
   SessionUsageDto,
   UsageBaselineDto,
@@ -50,6 +52,12 @@ export const sessionKeys = {
   metrics: (id: string) => ['session', id, 'metrics'] as const,
   turns: (id: string) => ['session', id, 'turns'] as const,
   tasks: (id: string) => ['session', id, 'tasks'] as const,
+};
+
+/** 세션 목록 (store-global) — 세션 상세의 팀 배지·teammate 링크가 team 필드
+ *  클라이언트 조인에 쓴다 (2026-07-03). */
+export const sessionListKeys = {
+  all: () => ['sessions'] as const,
 };
 
 /** insight-redesign #6 — store-wide usage baseline (not session-scoped). */
@@ -120,6 +128,17 @@ export function useSessionTasksQuery(id: string, opts?: QOpts<TaskDto[]>) {
     queryKey: sessionKeys.tasks(id),
     queryFn: () => getSessionTasks(id),
     enabled: !!id,
+    ...opts,
+  });
+}
+
+/** 세션 목록 — 팀 배지·teammate 링크의 조인 데이터원. 팀 관계는 세션 생성
+ *  시점에 고정되므로 상세 화면에서는 느슨한 staleTime으로 충분하다. */
+export function useSessionsListQuery(opts?: QOpts<SessionListItem[]>) {
+  return useQuery<SessionListItem[]>({
+    queryKey: sessionListKeys.all(),
+    queryFn: listSessions,
+    staleTime: 60_000,
     ...opts,
   });
 }

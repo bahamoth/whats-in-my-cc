@@ -3,11 +3,33 @@ import { renderWithI18n as render } from '../../../../test/i18nRender';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import { MessageCard } from '../MessageCard';
+import { TeamLinkProvider } from '../TeamLinkContext';
 import type { MessageItem } from '../streamModel';
 
 const m = (over: Partial<MessageItem>): MessageItem => ({ type: 'message', id: 'x', eventId: 'x', role: 'user', model: null, text: 'hi', timestamp: '2026-05-28T09:14:02Z', sidechain: false, ...over });
 
 describe('MessageCard', () => {
+  it('teammate origin: 발신자 라벨 + 매핑 있으면 세션 링크 (You 아님)', () => {
+    const item = m({
+      role: 'user',
+      origin: 'teammate',
+      teammateId: 'explore-api',
+      text: 'Another Claude session sent a message:\n<teammate-message teammate_id="explore-api">보고</teammate-message>',
+    });
+    const { rerender } = render(
+      <MessageCard item={item} selected={false} onSelect={() => {}} />,
+    );
+    expect(screen.queryByText('You')).toBeNull();
+    expect(screen.getByText('explore-api')).toBeInTheDocument();
+    expect(screen.queryByTestId('teammate-open')).toBeNull();
+    rerender(
+      <TeamLinkProvider value={{ 'explore-api': 'e8b4a11e-541d-4d64-9aae-52663c01c5cc' }}>
+        <MessageCard item={item} selected={false} onSelect={() => {}} />
+      </TeamLinkProvider>,
+    );
+    const a = screen.getByTestId('teammate-open');
+    expect(a).toHaveAttribute('href', '/sessions/e8b4a11e-541d-4d64-9aae-52663c01c5cc');
+  });
   it('user message aligns right with You label', () => {
     render(<MessageCard item={m({ role: 'user', text: '질문' })} selected={false} onSelect={() => {}} />);
     const c = screen.getByTestId('message-card');

@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { User, Bot, BrainCog, Lightbulb, CornerDownRight, Info, Code2, Type, Terminal, Sparkles, Bell, Users } from 'lucide-react';
 import type { MessageItem } from './streamModel';
 import { userDisplayText } from './messageOrigin';
+import { useTeammateSessionId } from './TeamLinkContext';
 import { formatModel } from './nodeLabel';
 import { endStatusLabel } from './endStatus';
 import { useT } from '../../../i18n';
@@ -54,6 +55,11 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
   // it never masquerades as the words the user actually typed.
   const userOrigin = (isRight ? item.origin : 'human') ?? 'human';
   const isScaffold = userOrigin !== 'human';
+  // teammate 응답 카드 → 그 세션 replay 점프. 매핑(agent_name→session_id)이
+  // 없으면 라벨만 — 단정 불가한 조인 없이 조용히 생략한다.
+  const teammateSessionId = useTeammateSessionId(
+    userOrigin === 'teammate' ? item.teammateId : null,
+  );
 
   // Rendered body: strip <command-*>/<local-command-*> scaffolding to a clean
   // line for command/output records; verbatim otherwise.
@@ -169,6 +175,17 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
         <Icon size={14} aria-hidden className={styles.icon} />
         <span className={styles.label}>{label}</span>
         <span data-testid="source-badge" className={styles.sourceBadge}>{sourceTag}</span>
+        {teammateSessionId && (
+          <a
+            data-testid="teammate-open"
+            className={styles.teammateOpen}
+            href={`/sessions/${teammateSessionId}`}
+            title={t('stream.msg.openTeammateSession')}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {t('stream.msg.openSession')}
+          </a>
+        )}
         {item.concurrentBackground ? (
           <span
             data-testid="bg-marker"

@@ -360,3 +360,15 @@
   color: var(--wimcc-lane-context, #b07dff);
 }
 .notiJump:hover { background: var(--wimcc-surface-3, #1b202a); }
+
+/* teammate 응답 카드의 세션 점프 링크 (2026-07-03) */
+.teammateOpen {
+  font-size: 11px;
+  color: var(--wimcc-fg-muted);
+  text-decoration: none;
+  border: 1px solid var(--wimcc-border);
+  border-radius: 999px;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+.teammateOpen:hover { color: var(--wimcc-fg); border-color: var(--wimcc-fg-muted); }
