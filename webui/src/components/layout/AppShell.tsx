@@ -23,6 +23,12 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
           </span>
           <span className={styles.navText}>{t('nav.sessions')}</span>
         </Link>
+        <Link to="/dashboard" className={styles.navLink} aria-label={t('nav.dashboard')}>
+          <span aria-hidden="true" className={styles.navGlyph}>
+            ▦
+          </span>
+          <span className={styles.navText}>{t('nav.dashboard')}</span>
+        </Link>
         <LanguageToggle />
       </nav>
       <main id="wimcc-main" className={styles.main} role="main">

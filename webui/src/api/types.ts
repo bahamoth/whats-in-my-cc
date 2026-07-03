@@ -343,6 +343,35 @@ export type SessionMetricsDto = {
   detector_firing: Record<string, number>;
 };
 
+/** `/v1/sessions/:id/fingerprint` · `/v1/metrics` row 내장 — 세션 환경
+ *  fingerprint (distinct 정렬 목록들). 코호트 경계 판정의 재료. */
+export type SessionFingerprintDto = {
+  session_id: string;
+  models: string[];
+  cc_versions: string[];
+  git_branches: string[];
+  cwds: string[];
+  entrypoints: string[];
+};
+
+/** `/v1/metrics` — 세션 횡단 series의 세션 한 행. */
+export type SessionSeriesRowDto = {
+  session_id: string;
+  first_observed_at: string;
+  last_observed_at: string;
+  event_count: number;
+  metrics: SessionMetricsDto;
+  fingerprint: SessionFingerprintDto;
+};
+
+/** `GET /v1/metrics?project=&from=&to=&limit=` 응답 data. limit 절단은
+ *  matched_count로 노출된다(silent cap 금지 — series.rs). */
+export type MetricsSeriesDto = {
+  sessions: SessionSeriesRowDto[];
+  session_count: number;
+  matched_count: number;
+};
+
 export type RawEventResponse = {
   schema_version: string;
   event_id: string;

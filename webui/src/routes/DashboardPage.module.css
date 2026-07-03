@@ -1,0 +1,264 @@
+.page {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 24px 28px 48px;
+}
+
+.header {
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 2px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wimcc-fg-subtle);
+}
+
+.title {
+  margin: 0 0 12px;
+  font-size: 26px;
+  font-weight: 650;
+  font-family: var(--wimcc-mono);
+  letter-spacing: -0.01em;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.filterLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--wimcc-fg-muted);
+}
+
+.select {
+  padding: 5px 8px;
+  border: 1px solid var(--wimcc-border-strong);
+  border-radius: 6px;
+  background: var(--wimcc-surface-2);
+  color: var(--wimcc-fg);
+  font-size: 12px;
+  font-family: var(--wimcc-mono);
+}
+
+.windowGroup {
+  display: inline-flex;
+  border: 1px solid var(--wimcc-border-strong);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.windowBtn,
+.windowOn {
+  padding: 5px 12px;
+  border: none;
+  background: transparent;
+  color: var(--wimcc-fg-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.windowOn {
+  background: var(--wimcc-accent-soft);
+  color: var(--wimcc-fg);
+}
+
+.windowBtn:focus-visible,
+.windowOn:focus-visible {
+  outline: 2px solid var(--wimcc-accent);
+  outline-offset: -2px;
+}
+
+.meta {
+  margin: 10px 0 0;
+  font-size: 12px;
+  font-family: var(--wimcc-mono);
+  color: var(--wimcc-fg-muted);
+}
+
+.truncNote {
+  color: var(--wimcc-warning);
+}
+
+.state {
+  padding: 48px 0;
+  color: var(--wimcc-fg-muted);
+  font-size: 14px;
+}
+
+.stateError {
+  padding: 48px 0;
+  color: var(--wimcc-danger);
+  font-size: 14px;
+}
+
+.hint {
+  margin-top: 8px;
+  font-family: var(--wimcc-mono);
+  font-size: 12px;
+  color: var(--wimcc-fg-subtle);
+}
+
+/* ── 공유 축 차트 영역 — 오버레이 룰이 전 블록을 관통한다 ── */
+
+.charts {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* 룰은 콘텐츠 뒤에 깐다(z 0) — 텍스트·마크를 긋지 않고, 빈 영역에서만
+ * 보인다. 블록이 z 1로 스택 컨텍스트를 만든다. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.rule {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed color-mix(in srgb, var(--wimcc-warning) 45%, transparent);
+}
+
+.block {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.blockHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.blockTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.blockTip {
+  font-size: 11px;
+  color: var(--wimcc-fg-subtle);
+  max-width: 620px;
+}
+
+.maxTag {
+  font-size: 10px;
+  font-family: var(--wimcc-mono);
+  color: var(--wimcc-fg-subtle);
+  border: 1px solid var(--wimcc-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.legend {
+  display: flex;
+  gap: 14px;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--wimcc-mono);
+  color: var(--wimcc-fg-muted);
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.strips {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.strip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stripHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.stripTitle {
+  font-size: 11px;
+  color: var(--wimcc-fg-muted);
+}
+
+.axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 10px;
+  font-family: var(--wimcc-mono);
+  color: var(--wimcc-fg-subtle);
+}
+
+/* ── 데이터 표 ── */
+
+.tableBox {
+  margin-top: 28px;
+  font-size: 12px;
+}
+
+.tableBox > summary {
+  cursor: pointer;
+  color: var(--wimcc-fg-muted);
+}
+
+.tableScroll {
+  margin-top: 10px;
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  font-family: var(--wimcc-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.table th,
+.table td {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--wimcc-border);
+  text-align: right;
+}
+
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+
+.table th {
+  color: var(--wimcc-fg-subtle);
+  font-weight: 500;
+}

@@ -10,6 +10,7 @@ import type {
   SessionUsageDto,
   UsageBaselineDto,
   SessionMetricsDto,
+  MetricsSeriesDto,
   TurnRollupResponse,
   PluginDto,
   TaskDto,
@@ -120,3 +121,20 @@ export const getSessionMetrics = (id: string): Promise<SessionMetricsDto> =>
 /** S8 — per-turn rollup (incl. per-turn token sums) for the KPI sparklines. */
 export const getSessionTurns = (id: string): Promise<TurnRollupResponse> =>
   jsonGet<TurnRollupResponse>(`/v1/sessions/${encodeURIComponent(id)}/turns`);
+
+/** B-1 대시보드 — 세션 횡단 metrics+fingerprint series.
+ *  limit 절단은 응답의 matched_count로 드러난다(silent cap 금지). */
+export function getMetricsSeries(opts: {
+  project?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+} = {}): Promise<MetricsSeriesDto> {
+  const params = new URLSearchParams();
+  if (opts.project) params.set('project', opts.project);
+  if (opts.from) params.set('from', opts.from);
+  if (opts.to) params.set('to', opts.to);
+  if (opts.limit !== undefined) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  return jsonGet<MetricsSeriesDto>(`/v1/metrics${qs ? `?${qs}` : ''}`);
+}
