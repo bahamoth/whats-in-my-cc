@@ -5856,6 +5856,40 @@ vitest: 69 passed
     strip·목록 무회귀).</p>
   </section>
 
+  <section id="dashboard-feedback-2026-07-04">
+    <h2>대시보드 피드백 2차 반영 (2026-07-04)</h2>
+    <p><b>설명 방식 통일:</b> 카드 본문의 장문 설명(CardDescription)이 기존 제품의 설명
+    관례와 어긋나고(AI 말투·줄바꿈 문제 포함) 가시성을 해쳤다 — insight strip의
+    <b>InfoTip("?" 툴팁)</b>을 재사용해 제목 옆으로 이동, 문구는 제품 톤(간결 서술)으로
+    교정.</p>
+    <p><b>모델 정보 복원(피드백: 누락):</b> ReferenceArea 밴드(7% tint)는 사실상 보이지
+    않아 세션별 모델 식별이 사라졌었다 — <b>모델 레일</b>을 Recharts 미니 바(세션당 1값,
+    Cell 색 = 코호트 슬롯, 미관측은 투명)로 복원해 메인 차트와 플롯 정렬을 라이브러리
+    네이티브로 보장. 밴드는 제거(중복), 경계 룰·칩 범례 유지. CC 버전은 툴팁 유지(매 세션
+    변동 — 상시 표시는 소음).</p>
+    <p><b>Brush 클릭 버그:</b> 범위 조절 바 조작이 차트 onClick(activeTooltipIndex)으로
+    새서 세션으로 이동해버렸다 — 이벤트 타깃이 <code>.recharts-brush</code> 내부면 탐색으로
+    보고 무시.</p>
+    <p><b>rate limit + 토큰 사용량(신규 측정):</b> SessionMetrics에
+    <code>api_rate_limit_count</code>(api_error 중 /error/status==429 — Anthropic API docs의
+    rate_limit_error; payload 경로는 실측 529 표본 11건 전수와 동일 구조) +
+    <code>input/output/cache_read/cache_creation_input_tokens</code>(usage facet
+    session_aggregate 합계 — F1 count·합 원칙) 추가. 03 spec·TS DTO 동기화. 대시보드:
+    rate limit strip + 토큰 사용량 카드(과금 계열 input·cache 생성·output 스택 + cache
+    읽기는 규모가 압도적이라 별도 strip, 축·배지는 k/M 축약). <b>토큰 "할당량"(rate limit
+    budget)은 로컬 관측면에 존재하지 않는다</b> — 사용량만 측정하고 툴팁 문구로 명시.
+    캐시 주의: usage facet 단독 삽입은 metrics 캐시 키(observed_event 기준)를 안 바꾸나,
+    운영에선 facet이 이벤트와 같은 flush로 들어와 안전(테스트 주석에 기록).</p>
+    <p><b>모델 레일 3차 수정(피드백: 색-만 레일은 초판보다 후퇴):</b> Recharts 미니바
+    (Cell 색)+칩 범례 조합은 이름이 분리돼 가시성이 떨어졌다 — <b>세그먼트에 이름을 직접
+    표기하는 커스텀 HTML 레일로 복귀</b>(초판 방식). 이번엔 플롯 기하 상수(margin 8 +
+    YAxis 36)를 코드가 공유해 픽셀 정렬이 보장되고, <b>Brush 창 상태(onChange)를 끌어와
+    레일이 차트와 같은 구간을 본다</b>. 원칙 교훈: 라이브러리가 잘하는 것(바·툴팁·브러시·
+    동기화)은 라이브러리로, 못하는 것(라벨 있는 구간 밴드)은 커스텀으로 — 도구를 고집하지
+    않는다. 참고: 모델 레일은 세션당 관측된 모델 "집합"이다(fingerprint) — 세션 안의 모델
+    전환 시퀀스는 관측 창에 없다(턴 단위 모델은 replay가 보여준다).</p>
+  </section>
+
 </main>
 </div>
 </body></html>

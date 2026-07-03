@@ -5,6 +5,7 @@
 
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::db::repo_signal::SignalRow;
+use wimcc::db::repo_usage_facet;
 use wimcc::db::repo_verification_run::VerificationRunRow;
 use wimcc::db::{migrate, repo_observed, repo_raw, repo_runs, repo_signal, repo_verification_run};
 use wimcc::insight::metrics::compute_session_metrics;
@@ -602,4 +603,70 @@ async fn user_interruption_markers_counted() {
 
     let m = compute_session_metrics(&pool, sid).await.unwrap();
     assert_eq!(m.user_interruption_count, 2);
+}
+
+/// 대시보드 피드백(2026-07-04) — rate limit 횟수 + 토큰 사용량 노출.
+///
+/// api_rate_limit_count: api_error payload의 `/error/status`가 429인 것만
+/// 센다(Anthropic API docs: 429 = rate_limit_error). payload 경로는 실측
+/// 표본(이 DB 529 overloaded 11건 전수: `error.status` 숫자 필드)과 동일
+/// 구조 — 상태값 분류만 docs 인용.
+/// input/output/cache 토큰 합계: usage facet 세션 합계(session_aggregate와
+/// 같은 측정면)를 SessionMetrics로 노출 — F1 원칙(count·합만)에 부합.
+#[tokio::test]
+async fn rate_limit_and_token_totals() {
+    let pool = test_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    let sid = "sess-rl";
+    // 429 rate limit — 실측 529 구조(error.status)에서 status만 429.
+    seed_event_with_payload(
+        &pool,
+        &run_id,
+        sid,
+        "e429",
+        EventKind::SystemSummary,
+        Some("api_error"),
+        serde_json::json!({"error": {"status": 429, "message": "429 rate_limit_error"}}),
+    )
+    .await;
+    // 529 overloaded — rate limit 아님(api_error_count에는 포함).
+    seed_event_with_payload(
+        &pool,
+        &run_id,
+        sid,
+        "e529",
+        EventKind::SystemSummary,
+        Some("api_error"),
+        serde_json::json!({"error": {"status": 529, "message": "529 Overloaded"}}),
+    )
+    .await;
+
+    // usage facet 합계 배선 — 첫 compute 전에 삽입한다(캐시 키는
+    // observed_event 기준이라 facet 단독 삽입은 키를 바꾸지 않음; 운영에선
+    // facet이 이벤트와 같은 ingest flush로 들어와 안전).
+    repo_usage_facet::insert(
+        &pool,
+        &repo_usage_facet::UsageFacetRow {
+            raw_event_id: "raw_e429".into(),
+            schema_version: "0.5.0".into(),
+            session_id: sid.into(),
+            model: Some("claude-opus-4-8".into()),
+            input_tokens: 120,
+            cache_creation_input_tokens: 30,
+            cache_read_input_tokens: 4000,
+            output_tokens: 250,
+            observed_at: "2026-07-04T00:00:00Z".into(),
+            parser_version: "usage@0.1".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let m = compute_session_metrics(&pool, sid).await.unwrap();
+    assert_eq!(m.api_error_count, 2);
+    assert_eq!(m.api_rate_limit_count, 1, "429만 rate limit으로 센다");
+    assert_eq!(m.input_tokens, 120);
+    assert_eq!(m.output_tokens, 250);
+    assert_eq!(m.cache_read_input_tokens, 4000);
+    assert_eq!(m.cache_creation_input_tokens, 30);
 }

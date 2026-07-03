@@ -12,7 +12,6 @@ import {
   BarChart,
   Brush,
   CartesianGrid,
-  ReferenceArea,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -33,13 +32,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -59,6 +52,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { InfoTip } from '../components/replay/insight-strip/InfoTip';
 import { useT } from '../i18n';
 
 type SeriesState =
@@ -69,6 +63,11 @@ type SeriesState =
 type WindowKey = '30d' | '90d' | 'all';
 const WINDOW_DAYS: Record<Exclude<WindowKey, 'all'>, number> = { '30d': 30, '90d': 90 };
 
+/* 모든 차트가 공유하는 플롯 기하 — 커스텀 모델 레일이 같은 값으로 정렬한다
+ * (margin.left/right + YAxis 폭을 우리가 고정 지정하므로 픽셀 정렬 가능). */
+const PLOT_LEFT_PX = 8 + 36; // margin.left + YAxis width
+const PLOT_RIGHT_PX = 8;
+
 /* 코호트 밴드 — dataviz validator 통과 categorical 세트(빈도순 슬롯,
  * 초과분은 중립 슬레이트 "Other" 접기). */
 const MODEL_SLOTS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)'];
@@ -78,6 +77,7 @@ const STRIP_METRICS = [
   'tool_failure_count',
   'context_bloat_count',
   'api_error_count',
+  'api_rate_limit_count',
   'user_interruption_count',
   'compact_boundary_count',
   'tool_result_truncated_count',
@@ -90,6 +90,13 @@ function basename(path: string): string {
 }
 const shortId = (id: string) => id.slice(0, 8);
 const fmtDate = (iso: string) => iso.slice(5, 10);
+/** 토큰 수 축약 — 1_600_000 → 1.6M, 12_300 → 12.3k. */
+const fmtCompact = (v: number): string =>
+  v >= 1_000_000
+    ? `${(v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 1)}M`
+    : v >= 1_000
+      ? `${(v / 1_000).toFixed(v >= 10_000 ? 0 : 1)}k`
+      : String(v);
 
 export default function DashboardPage() {
   const t = useT();
@@ -171,6 +178,13 @@ export default function DashboardPage() {
         user_interruption_count: r.metrics.user_interruption_count,
         compact_boundary_count: r.metrics.compact_boundary_count,
         tool_result_truncated_count: r.metrics.tool_result_truncated_count,
+        // `?? 0`: 구버전 serve(필드 이전 바이너리) 응답에도 견딘다.
+        api_rate_limit_count: r.metrics.api_rate_limit_count ?? 0,
+        input: r.metrics.input_tokens ?? 0,
+        output: r.metrics.output_tokens ?? 0,
+        cacheCreation: r.metrics.cache_creation_input_tokens ?? 0,
+        cacheRead: r.metrics.cache_read_input_tokens ?? 0,
+        one: 1,
         events: r.event_count,
         models: cohortModels(r.fingerprint).join(' + ').replaceAll('claude-', '') || '—',
         cc: r.fingerprint.cc_versions.join(' + ') || '—',
@@ -203,6 +217,12 @@ export default function DashboardPage() {
     unknown: { label: t('dash.outcome.unknown'), color: '#6a7180' },
   } satisfies ChartConfig;
 
+  const tokensConfig = {
+    input: { label: t('dash.tokens.input'), color: 'var(--chart-1)' },
+    cacheCreation: { label: t('dash.tokens.cacheCreation'), color: 'var(--chart-3)' },
+    output: { label: t('dash.tokens.output'), color: 'var(--chart-2)' },
+  } satisfies ChartConfig;
+
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(params);
     if (value === null) next.delete(key);
@@ -212,7 +232,11 @@ export default function DashboardPage() {
 
   /* 차트 클릭 → 세션 replay 딥링크. recharts v3 onClick 파라미터의 활성
    * 인덱스만 쓴다(activeTooltipIndex — 카테고리 축이라 곧 chartData 인덱스). */
-  const openSession = (state: unknown) => {
+  const openSession = (state: unknown, e?: unknown) => {
+    // Brush(범위 조절 바) 위의 클릭/드래그는 탐색이지 선택이 아니다 —
+    // 세션 이동을 트리거하지 않는다 (2026-07-04 피드백).
+    const target = (e as { target?: EventTarget } | undefined)?.target;
+    if (target instanceof Element && target.closest('.recharts-brush')) return;
     const raw = (state as { activeTooltipIndex?: number | string } | null)?.activeTooltipIndex;
     const idx = typeof raw === 'string' ? Number(raw) : raw;
     const sid = typeof idx === 'number' && Number.isFinite(idx) ? chartData[idx]?.sid : undefined;
@@ -236,20 +260,8 @@ export default function DashboardPage() {
   const maxOf = (metric: StripMetric) => Math.max(0, ...chartData.map((d) => d[metric]));
   const outcomeMax = Math.max(0, ...chartData.map((d) => d.passed + d.failed + d.unknown));
 
-  const cohortRefs = (withLabel: boolean) => (
+  const cohortRefs = () => (
     <>
-      {withLabel &&
-        modelSegments
-          .filter((s) => s.known)
-          .map((s) => (
-            <ReferenceArea
-              key={`band-${s.start}`}
-              x1={s.start}
-              x2={s.end}
-              fill={slotOf.get(s.label) ?? MODEL_OVERFLOW}
-              fillOpacity={0.07}
-            />
-          ))}
       {boundaries.map((b) => (
         <ReferenceLine
           key={`rule-${b.index}`}
@@ -261,6 +273,31 @@ export default function DashboardPage() {
       ))}
     </>
   );
+
+  /* Brush 창 — 커스텀 모델 레일이 차트와 같은 구간을 보이게 상태로 끈다.
+   * (레일은 Recharts가 잘 못 그리는 "라벨 있는 구간 밴드"라 커스텀 HTML —
+   * 차트가 잘하는 것은 차트로, 아닌 것은 다른 방법으로.) */
+  const [brushWin, setBrushWin] = useState<{ s: number; e: number } | null>(null);
+  const winStart = brushWin?.s ?? 0;
+  const winEnd = brushWin?.e ?? Math.max(0, chartData.length - 1);
+  const winLen = Math.max(1, winEnd - winStart + 1);
+
+  /* 모델 레일 세그먼트 — 현재 Brush 창으로 클리핑, 위치는 창 기준 %. */
+  const railSegments = modelSegments
+    .map((seg) => {
+      const s0 = Math.max(seg.start, winStart);
+      const e0 = Math.min(seg.end, winEnd);
+      if (s0 > e0) return null;
+      return {
+        key: `${seg.start}-${seg.label || 'unknown'}`,
+        label: seg.label,
+        known: seg.known,
+        leftPct: ((s0 - winStart) / winLen) * 100,
+        widthPct: ((e0 - s0 + 1) / winLen) * 100,
+        color: seg.known ? (slotOf.get(seg.label) ?? MODEL_OVERFLOW) : 'transparent',
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-7 py-6">
@@ -362,15 +399,56 @@ export default function DashboardPage() {
           <TabsContent value="charts" className="space-y-5">
             <Card>
               <CardHeader>
-                <div className="flex items-baseline justify-between gap-3">
-                  <CardTitle>{t('dash.outcome.title')}</CardTitle>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle className="flex items-center gap-1.5">
+                    {t('dash.outcome.title')}
+                    <InfoTip label={t('dash.outcome.title')} text={t('dash.outcome.tip')} />
+                  </CardTitle>
                   <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground">
                     {outcomeMax > 0 ? t('dash.axis.max', outcomeMax) : t('dash.outcome.none')}
                   </Badge>
                 </div>
-                <CardDescription>{t('dash.outcome.tip')}</CardDescription>
               </CardHeader>
               <CardContent>
+                {/* 모델 레일 — 세그먼트에 이름을 직접 표기(초판 방식 복원).
+                    커스텀 HTML이지만 플롯 기하 상수를 공유해 차트와 정렬되고,
+                    Brush 창 상태로 같은 구간을 본다. */}
+                <div className="mb-1 flex items-center gap-1.5">
+                  <span className="w-fit text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                    {t('dash.cohort.models')}
+                  </span>
+                  <InfoTip label={t('dash.cohort.title')} text={t('dash.cohort.tip')} />
+                </div>
+                <div
+                  className="relative mb-1.5 h-[22px]"
+                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
+                >
+                  {railSegments.map((seg) =>
+                    seg.known ? (
+                      <span
+                        key={seg.key}
+                        title={seg.label}
+                        className="absolute inset-y-0 flex items-center overflow-hidden rounded-[4px] px-1.5 font-mono text-[10px] whitespace-nowrap text-white"
+                        style={{
+                          left: `${seg.leftPct}%`,
+                          width: `calc(${seg.widthPct}% - 2px)`,
+                          background: seg.color,
+                        }}
+                      >
+                        {seg.label.replaceAll('claude-', '')}
+                      </span>
+                    ) : (
+                      <span
+                        key={seg.key}
+                        title={t('dash.cohort.unknown')}
+                        className="absolute inset-y-0 flex items-center overflow-hidden rounded-[4px] border border-dashed border-(--wimcc-border-strong) px-1.5 font-mono text-[10px] whitespace-nowrap text-muted-foreground"
+                        style={{ left: `${seg.leftPct}%`, width: `calc(${seg.widthPct}% - 2px)` }}
+                      >
+                        {t('dash.cohort.unknown')}
+                      </span>
+                    ),
+                  )}
+                </div>
                 <ChartContainer config={outcomeConfig} className="h-64 w-full">
                   <BarChart
                     data={chartData}
@@ -389,8 +467,8 @@ export default function DashboardPage() {
                       minTickGap={40}
                       fontSize={10}
                     />
-                    <YAxis width={28} tickLine={false} axisLine={false} fontSize={10} allowDecimals={false} />
-                    {cohortRefs(true)}
+                    <YAxis width={36} tickLine={false} axisLine={false} fontSize={10} allowDecimals={false} />
+                    {cohortRefs()}
                     <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
                     <ChartLegend content={<ChartLegendContent />} />
                     <Bar dataKey="passed" stackId="v" fill="var(--color-passed)" />
@@ -403,37 +481,91 @@ export default function DashboardPage() {
                       stroke="var(--wimcc-border-strong)"
                       fill="var(--card)"
                       tickFormatter={(v: number) => chartData[v]?.date ?? ''}
+                      onChange={(r) =>
+                        setBrushWin({
+                          s: (r as { startIndex?: number }).startIndex ?? 0,
+                          e: (r as { endIndex?: number }).endIndex ?? Math.max(0, chartData.length - 1),
+                        })
+                      }
                     />
                   </BarChart>
                 </ChartContainer>
-                {/* 코호트 칩 범례 — 밴드 인라인 라벨은 좁은 구간에서 겹쳐
-                    칩으로 옮겼다(색=밴드 tint, 첫 등장 순). */}
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
-                    {t('dash.cohort.models')}
-                  </span>
-                  {[...new Map(modelSegments.filter((s) => s.known).map((s) => [s.label, s])).values()].map(
-                    (s) => (
-                      <span
-                        key={s.label}
-                        className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground"
-                      >
-                        <span
-                          className="size-2.5 rounded-[3px]"
-                          style={{ background: slotOf.get(s.label) ?? MODEL_OVERFLOW }}
-                        />
-                        {s.label.replaceAll('claude-', '')}
-                      </span>
-                    ),
-                  )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle className="flex items-center gap-1.5">
+                    {t('dash.tokens.title')}
+                    <InfoTip label={t('dash.tokens.title')} text={t('dash.tokens.tip')} />
+                  </CardTitle>
+                  <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground">
+                    {t('dash.axis.max', fmtCompact(Math.max(0, ...chartData.map((d) => d.input + d.output + d.cacheCreation))))}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <ChartContainer config={tokensConfig} className="h-36 w-full">
+                  <BarChart
+                    data={chartData}
+                    syncId="dash"
+                    onClick={openSession}
+                    margin={{ top: 4, right: 8, left: 8, bottom: 0 }}
+                    className="cursor-pointer"
+                  >
+                    <CartesianGrid vertical={false} stroke="var(--border)" />
+                    <XAxis dataKey="idx" hide />
+                    <YAxis
+                      width={36}
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={10}
+                      tickFormatter={(v: number) => fmtCompact(v)}
+                    />
+                    {cohortRefs()}
+                    <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Bar dataKey="input" stackId="tok" fill="var(--color-input)" />
+                    <Bar dataKey="cacheCreation" stackId="tok" fill="var(--color-cacheCreation)" />
+                    <Bar dataKey="output" stackId="tok" fill="var(--color-output)" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ChartContainer>
+                <div>
+                  <div className="mb-1 flex items-baseline justify-between">
+                    <span className="text-xs text-muted-foreground">{t('dash.tokens.cacheRead')}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground/70">
+                      {t('dash.axis.max', fmtCompact(Math.max(0, ...chartData.map((d) => d.cacheRead))))}
+                    </span>
+                  </div>
+                  <ChartContainer
+                    config={{ cacheRead: { label: t('dash.tokens.cacheRead'), color: 'var(--wimcc-info)' } }}
+                    className="h-14 w-full"
+                  >
+                    <BarChart
+                      data={chartData}
+                      syncId="dash"
+                      onClick={openSession}
+                      margin={{ top: 2, right: 8, left: 8, bottom: 0 }}
+                      className="cursor-pointer"
+                    >
+                      <XAxis dataKey="idx" hide />
+                      <YAxis hide width={36} />
+                      {cohortRefs()}
+                      <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
+                      <Bar dataKey="cacheRead" fill="var(--wimcc-info)" radius={[2, 2, 0, 0]} />
+                    </BarChart>
+                  </ChartContainer>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>{t('dash.multiples.title')}</CardTitle>
-                <CardDescription>{t('dash.multiples.tip')}</CardDescription>
+                <CardTitle className="flex items-center gap-1.5">
+                  {t('dash.multiples.title')}
+                  <InfoTip label={t('dash.multiples.title')} text={t('dash.multiples.tip')} />
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {STRIP_METRICS.map((metric) => (
@@ -459,8 +591,8 @@ export default function DashboardPage() {
                       >
                         <XAxis dataKey="idx" hide />
                         {/* 메인 차트와 플롯 영역 정렬 — 같은 폭의 숨은 YAxis. */}
-                        <YAxis hide width={28} />
-                        {cohortRefs(false)}
+                        <YAxis hide width={36} />
+                        {cohortRefs()}
                         <ChartTooltip
                           content={<ChartTooltipContent labelFormatter={tooltipLabel} />}
                         />
@@ -490,6 +622,8 @@ export default function DashboardPage() {
                           {t(`dash.metric.${m}`)}
                         </TableHead>
                       ))}
+                      <TableHead className="text-right">{t('dash.tokens.input')}</TableHead>
+                      <TableHead className="text-right">{t('dash.tokens.output')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -510,6 +644,8 @@ export default function DashboardPage() {
                             {d[m]}
                           </TableCell>
                         ))}
+                        <TableCell className="text-right">{d.input.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{d.output.toLocaleString()}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

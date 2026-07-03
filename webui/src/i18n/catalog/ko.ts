@@ -276,31 +276,43 @@ export const ko: Messages = {
   'dash.emptyHint': '먼저 transcript를 수집하세요: wimcc ingest --all',
   'dash.error': 'series를 불러오지 못했습니다.',
   'dash.loading': 'series 불러오는 중…',
-  'dash.cohort.title': '환경 코호트',
+  'dash.cohort.title': '모델 코호트',
   'dash.cohort.tip':
-    'fingerprint에서 관측된 모델 집합·Claude Code 버전으로 세션을 묶습니다. ' +
-    '세로줄이 관측된 변화 지점이고, fingerprint가 없는 세션은 직전 코호트를 이어갑니다.',
+    'fingerprint에서 관측된 모델 집합 코호트. fingerprint가 없는 세션은 직전 코호트를 ' +
+    '이어가고, 세로 점선이 관측된 변화 지점이다. CC 버전은 각 막대 툴팁에서 확인한다.',
   'dash.cohort.models': '모델',
   'dash.cohort.cc': 'CC 버전',
   'dash.cohort.unknown': '미관측',
   'dash.outcome.title': '검증 outcome',
   'dash.outcome.tip':
-    '세션별 verification run의 outcome 분포입니다. unknown = 실행됐으나 결과를 읽지 못함. ' +
-    '실행되지 않은 run(거부/차단/취소/백그라운드)은 outcome이 아니므로 표시하지 않습니다.',
+    '세션별 verification run의 outcome 분포. unknown은 실행됐으나 결과를 읽지 못한 run — ' +
+    '실패가 아니다. 실행되지 않은 run(거부·차단·취소·백그라운드)은 outcome이 아니므로 ' +
+    '세지 않는다.',
   'dash.outcome.passed': 'passed',
   'dash.outcome.failed': 'failed',
   'dash.outcome.unknown': 'unknown',
   'dash.outcome.none': '이 기간에 verification run이 없습니다',
   'dash.multiples.title': '프로세스 신호',
   'dash.multiples.tip':
-    '세션별 결정론 count입니다. 좋아졌는가의 판단은 사용자의 몫 — 위 outcome 차트와 함께 읽으세요.',
+    '세션별 결정론 count를 있는 그대로 측정한다. 판단은 표시하지 않는다 — 위 outcome ' +
+    '차트와 함께 읽는 것을 전제로 한 값이다.',
   'dash.metric.tool_failure_count': '도구 실패',
   'dash.metric.context_bloat_count': 'context bloat 신호',
   'dash.metric.api_error_count': 'API 오류',
   'dash.metric.user_interruption_count': '사용자 중단',
   'dash.metric.compact_boundary_count': '컨텍스트 압축',
   'dash.metric.tool_result_truncated_count': '잘린 tool result',
-  'dash.axis.max': (n: number) => `최대 ${n}`,
+  'dash.metric.api_rate_limit_count': 'rate limit(429)',
+  'dash.tokens.title': '토큰 사용량',
+  'dash.tokens.tip':
+    'assistant 응답 usage 블록의 세션 합계. 과금 input·cache 생성·output을 스택으로, ' +
+    'cache 읽기는 규모가 압도적이라 아래 별도 strip으로 둔다. 토큰 할당량은 로컬 ' +
+    '관측면에 존재하지 않아 사용량만 측정한다.',
+  'dash.tokens.input': 'input',
+  'dash.tokens.output': 'output',
+  'dash.tokens.cacheCreation': 'cache 생성',
+  'dash.tokens.cacheRead': 'cache 읽기',
+  'dash.axis.max': (n: number | string) => `최대 ${n}`,
   'dash.tab.charts': '차트',
   'dash.table.summary': '데이터 표',
   'dash.table.session': '세션',

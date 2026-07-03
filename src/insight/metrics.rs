@@ -69,6 +69,17 @@ pub struct SessionMetrics {
     pub turn_duration_count: i64,
     /// system/api_error 레코드 수 (API 요청 실패·재시도 이벤트).
     pub api_error_count: i64,
+    /// api_error 중 `/error/status == 429`(rate limit)인 것 — Anthropic API
+    /// docs의 429 rate_limit_error. payload 경로는 실측(529 표본 11건 전수:
+    /// error.status 숫자 필드)과 동일 구조 (2026-07-04 대시보드 피드백).
+    pub api_rate_limit_count: i64,
+    /// usage facet(assistant usage 블록) 세션 합계 — repo_usage_facet
+    /// session_aggregate와 같은 측정면(F1: count·합만). 참고: 토큰 "할당량"
+    /// (rate limit budget)은 로컬 관측면에 존재하지 않는다 — 사용량만.
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_input_tokens: i64,
+    pub cache_creation_input_tokens: i64,
     /// system/compact_boundary 레코드 수 (컨텍스트 압축 발생 횟수).
     pub compact_boundary_count: i64,
     /// system/away_summary 레코드 수 (사용자 자리비움 turn). away/compact turn은
@@ -179,6 +190,8 @@ async fn compute_session_metrics_uncached(
     let events = repo_observed::list_session(pool, session_id, 100_000).await?;
     let signals = repo_signal::list_by_session(pool, session_id).await?;
     let vruns = repo_verification_run::list_session(pool, session_id).await?;
+    // 토큰 사용량 — usage facet 세션 합계(2026-07-04). 할당량은 관측면에 없다.
+    let usage = crate::db::repo_usage_facet::session_aggregate(pool, session_id).await?;
 
     let tool_call_total = events
         .iter()
@@ -192,6 +205,7 @@ async fn compute_session_metrics_uncached(
     // 코퍼스 실측 session fact 카운트 (session_facts_v01.jsonl로 잠김).
     let (mut turn_duration_ms_total, mut turn_duration_count) = (0i64, 0i64);
     let (mut api_error_count, mut compact_boundary_count) = (0i64, 0i64);
+    let mut api_rate_limit_count = 0i64;
     let mut away_summary_count = 0i64;
     let (mut tool_result_truncated_count, mut user_interruption_count) = (0i64, 0i64);
     for e in &events {
@@ -226,7 +240,12 @@ async fn compute_session_metrics_uncached(
                         .and_then(|v| v.as_i64())
                         .unwrap_or(0);
                 }
-                Some("api_error") => api_error_count += 1,
+                Some("api_error") => {
+                    api_error_count += 1;
+                    if e.payload.pointer("/error/status").and_then(|v| v.as_i64()) == Some(429) {
+                        api_rate_limit_count += 1;
+                    }
+                }
                 Some("compact_boundary") => compact_boundary_count += 1,
                 Some("away_summary") => away_summary_count += 1,
                 _ => {}
@@ -277,6 +296,11 @@ async fn compute_session_metrics_uncached(
         turn_duration_ms_total,
         turn_duration_count,
         api_error_count,
+        api_rate_limit_count,
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        cache_read_input_tokens: usage.cache_read_input_tokens,
+        cache_creation_input_tokens: usage.cache_creation_input_tokens,
         compact_boundary_count,
         away_summary_count,
         tool_result_truncated_count,
