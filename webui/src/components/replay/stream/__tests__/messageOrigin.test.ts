@@ -64,6 +64,49 @@ describe('messageOrigin — deterministic caller classification of user_message'
   });
 });
 
+// Teammate 세션 (CC 2.1.198, 2026-07-03 실측 — teammate_v01 fixture, 표본 1):
+// named Agent 스폰의 응답·유휴 알림은 리드 transcript에 type:"user"·isMeta 없음
+// 으로 접히고, 본문이 "Another Claude session sent a message:\n<teammate-message
+// teammate_id=…>"로 시작한다. 마커 미등록 시 사람 "You" 버블로 새는 갭 —
+// message_origin_v01 라운드(주입 텍스트 누수)와 동형.
+describe('messageOrigin — teammate messages (teammate_v01, frozen real records)', () => {
+  const leadFixture = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '../../../../../../tests/fixtures/transcripts/real/teammate_v01/lead_teammate_messages.jsonl',
+  );
+  const leadRecords = readFileSync(leadFixture, 'utf8')
+    .split('\n')
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l) as { isMeta?: boolean; message: { content: string } });
+
+  it('lead-side teammate reply is origin teammate with the sender id, never human', () => {
+    expect(leadRecords.length).toBeGreaterThan(0);
+    for (const r of leadRecords) {
+      const res = messageOrigin({ payload: { content: r.message.content }, is_meta: r.isMeta });
+      expect(res.origin).toBe('teammate');
+      expect(res.teammateId).toBe('explore-ingest');
+    }
+  });
+
+  it('teammate-side inbound prompt (direct <teammate-message …> lead) classifies too', () => {
+    // teammate transcript의 첫 user 레코드는 접두문 없이 마커로 바로 시작한다.
+    const headFixture = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../../../../../tests/fixtures/transcripts/real/teammate_v01/teammate_session_head.jsonl',
+    );
+    const user = readFileSync(headFixture, 'utf8')
+      .split('\n')
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as { type: string; message?: { content?: unknown } })
+      .find((r) => r.type === 'user');
+    expect(user).toBeDefined();
+    const content = user!.message!.content as string;
+    const res = messageOrigin({ payload: { content }, is_meta: false });
+    expect(res.origin).toBe('teammate');
+    expect(res.teammateId).toBe('team-lead');
+  });
+});
+
 // Real-data anchor (CLAUDE.md "Real-data anchoring"): invariants asserted
 // against FROZEN real transcript records, not hand-written shapes.
 describe('messageOrigin — frozen real records (message_origin_v01)', () => {

@@ -21,12 +21,15 @@ export type MessageOrigin =
   | 'command-output' // local-command stdout/caveat echoed back as a user record
   | 'skill' // skill / command body injected on the user's behalf (isMeta)
   | 'system' // a system beat folded into type:"user" (e.g. interrupt)
-  | 'notification'; // a harness background-task notice (<task-notification> …)
+  | 'notification' // a harness background-task notice (<task-notification> …)
+  | 'teammate'; // a teammate session's message relayed in (<teammate-message …>)
 
 export interface OriginResult {
   origin: MessageOrigin;
   /** the invoked command (e.g. "/model") when origin === 'command', else null. */
   commandName: string | null;
+  /** the sending teammate (teammate_id attr) when origin === 'teammate', else null. */
+  teammateId?: string | null;
 }
 
 /** Leading markers CC writes into the user record text. Anchored at the start
@@ -40,6 +43,11 @@ const SKILL_SCAFFOLD = /^\s*Base directory for this skill:/;
 // so the marker (not isMeta) is the deterministic signal that distinguishes it
 // from a human turn (which would otherwise post as "You").
 const NOTIFICATION = /^\s*<task-notification>/;
+// Teammate 세션(CC 2.1.198, named Agent 스폰)의 메시지 — 리드 쪽은
+// "Another Claude session sent a message:" 접두문 뒤, 팀메이트 쪽 인바운드는
+// 접두문 없이 마커로 바로 시작한다 (teammate_v01 fixture, 표본 1). isMeta 없음
+// — 마커가 유일한 결정론 신호.
+const TEAMMATE_MESSAGE = /^\s*(?:Another Claude session sent a message:\s*)?<teammate-message[\s>]/;
 
 /** Union of every non-human leading marker — kept so other surfaces can reuse
  *  the exact same set instead of re-listing it (the old per-file SCAFFOLD). */
@@ -49,7 +57,8 @@ export function hasScaffoldMarker(text: string): boolean {
     COMMAND_OUTPUT.test(text) ||
     SYSTEM_BEAT.test(text) ||
     SKILL_SCAFFOLD.test(text) ||
-    NOTIFICATION.test(text)
+    NOTIFICATION.test(text) ||
+    TEAMMATE_MESSAGE.test(text)
   );
 }
 
@@ -82,6 +91,10 @@ export function messageOrigin(e: {
   if (COMMAND_OUTPUT.test(text)) return { origin: 'command-output', commandName: null };
   if (SYSTEM_BEAT.test(text)) return { origin: 'system', commandName: null };
   if (NOTIFICATION.test(text)) return { origin: 'notification', commandName: null };
+  if (TEAMMATE_MESSAGE.test(text)) {
+    const id = text.match(/<teammate-message[^>]*\steammate_id="([^"]*)"/)?.[1] ?? null;
+    return { origin: 'teammate', commandName: null, teammateId: id };
+  }
   if (SKILL_SCAFFOLD.test(text)) return { origin: 'skill', commandName: null };
   // No marker: isMeta=true is the remaining injection signal (skill bodies,
   // injected guidance). Everything else — including <system-reminder>-wrapped
