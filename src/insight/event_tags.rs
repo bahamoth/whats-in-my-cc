@@ -61,7 +61,14 @@ pub static EXT_OBJECT: &[(&str, &str)] = &[
 /// 확장자 없는 알려진 파일명 → object. `ext_of`가 빈 문자열을 주는 dotfile·
 /// 무확장 파일(`.gitignore`/`justfile` 등)을 basename으로 조회한다
 /// (2026-06-23 tagging loop). EXT_OBJECT(확장자) 미스 시에만 참조된다.
-pub static FILENAME_OBJECT: &[(&str, &str)] = &[(".gitignore", "config"), ("justfile", "code")];
+pub static FILENAME_OBJECT: &[(&str, &str)] = &[
+    (".gitignore", "config"),
+    ("justfile", "code"),
+    // tagging loop 2026-07-03: .gitattributes는 .gitignore 동족, bare
+    // `config`는 ~/.ssh/config·.git/config류의 보편 무확장 설정 파일명.
+    (".gitattributes", "config"),
+    ("config", "config"),
+];
 
 fn read_tag_for_object(object: &str) -> Option<&'static str> {
     match object {
@@ -100,6 +107,8 @@ pub static BASH_FIRST_TOKEN_TAGS: &[(&str, &str)] = &[
     ("tail", "read.file"),
     ("wc", "read.file"),
     ("jq", "read.file"),
+    // base64는 jq/sed/awk와 같은 stdin 변환 계열 (tagging loop 2026-07-03).
+    ("base64", "read.file"),
     ("tree", "read.file"),
     ("which", "read.file"),
     ("file", "read.file"),
@@ -235,6 +244,12 @@ static CARGO_SUBS: &[(&str, &str)] = &[
     ("add", "write.deps"),
     ("update", "write.deps"),
     ("remove", "write.deps"),
+    // tagging loop 2026-07-03: metadata/tree는 의존성 조회, clean은 빌드
+    // 산출물 삭제(rm 동족), doc은 문서 생성.
+    ("metadata", "read.deps"),
+    ("tree", "read.deps"),
+    ("clean", "delete.file"),
+    ("doc", "build.docs"),
 ];
 static NPM_SUBS: &[(&str, &str)] = &[
     ("install", "write.deps"),
@@ -245,7 +260,23 @@ static NPM_SUBS: &[(&str, &str)] = &[
     ("t", "test.code"),
     ("start", "run.code"),
     ("run", "run.code"),
+    // tagging loop 2026-07-03: 의존성 조회.
+    ("list", "read.deps"),
+    ("ls", "read.deps"),
 ];
+/// rustup — 툴체인 관리 (tagging loop 2026-07-03). 설치·갱신은 write.deps,
+/// show는 read.deps. `default` 등 미관측 서브커맨드는 unmatched로 남긴다.
+static RUSTUP_SUBS: &[(&str, &str)] = &[
+    ("toolchain", "write.deps"),
+    ("component", "write.deps"),
+    ("update", "write.deps"),
+    ("install", "write.deps"),
+    ("show", "read.deps"),
+];
+/// aws — sts는 자격 신원 조회(printenv/sysctl의 read.proc 동족). 그 외
+/// 서비스 서브커맨드는 verb가 3단계(aws <svc> <op>)에 있어 미관측인 채로
+/// unmatched 유지 (tagging loop 2026-07-03).
+static AWS_SUBS: &[(&str, &str)] = &[("sts", "read.proc")];
 static PNPM_SUBS: &[(&str, &str)] = &[
     ("install", "write.deps"),
     ("i", "write.deps"),
@@ -281,6 +312,8 @@ pub static TOOL_SUBCOMMAND_TAGS: &[(&str, &[(&str, &str)])] = &[
     ("pnpm", PNPM_SUBS),
     ("yarn", YARN_SUBS),
     ("go", GO_SUBS),
+    ("rustup", RUSTUP_SUBS),
+    ("aws", AWS_SUBS),
 ];
 
 /// MCP 도구 태깅. 도구 이름은 `mcp__[plugin_<plugin>_]<server>__<tool>`. server→tool
@@ -374,6 +407,13 @@ static MCP_CONNECTOR_RULES: &[ConnectorRule] = &[
         ],
         default: "write.docs", // notion-create·update·duplicate·move
     },
+    // context7 (공식 plugin, unidentified-plugins loop 2026-07-03): 도구 전부
+    // 라이브러리 문서 조회 — query-docs·resolve-library-id.
+    ConnectorRule {
+        server: "context7",
+        prefixes: &[],
+        default: "read.docs",
+    },
 ];
 
 /// 공식 통합 서버의 도구를 접두 규칙으로 분류(exact 사전 miss 후 호출).
@@ -394,7 +434,7 @@ static SUBCOMMAND_ARG_FLAGS: &[(&str, &[&str])] = &[("git", &["-C", "-c"])];
 static CONTROL_TOKENS: &[&str] = &[
     "cd", "echo", "printf", "sleep", "for", "export", "source", "set", "pgrep", "kill", "pkill",
     "wait", "true", ":", "while", "until", "if", "case", "esac", "done", "fi", "[", "[[", "test",
-    "break", "continue",
+    "break", "continue", "exit",
 ];
 static PREFIX_KEYWORDS: &[&str] = &["do", "then", "else", "elif"];
 /// `timeout`의 값-소비 플래그 (공백 분리형 — `--signal=KILL`은 해당 없음).
@@ -637,6 +677,47 @@ fn command_of(segment: &str) -> String {
         if ft == "nohup" {
             // transparent wrapper (`nohup <cmd>`) — re-tag the inner command.
             let rest = s["nohup".len()..].trim().to_string();
+            if rest.is_empty() {
+                return String::new();
+            }
+            s = rest;
+            continue;
+        }
+        if ft == "command" {
+            // POSIX builtin (tagging loop 2026-07-03): `command -v/-V X`는
+            // 실행이 아니라 조회 — which의 의미 쌍둥이로 재작성해 사전이
+            // read.file로 태깅하게 한다. 그 외(`command [-p] <cmd>`)는 함수
+            // 우회 실행 wrapper — 내부 명령을 재분류.
+            let mut rest = s["command".len()..].trim().to_string();
+            if rest.starts_with("-v") || rest.starts_with("-V") {
+                let args = rest[2..].trim();
+                if args.is_empty() {
+                    return String::new();
+                }
+                return format!("which {args}");
+            }
+            if let Some(stripped) = rest.strip_prefix("-p ") {
+                rest = stripped.trim().to_string();
+            }
+            if rest.is_empty() {
+                return String::new();
+            }
+            s = rest;
+            continue;
+        }
+        if ft == "time" {
+            // transparent wrapper (`time [-p] <cmd>`) — nohup과 동형, 선행
+            // 플래그만 걷어낸다 (tagging loop 2026-07-03).
+            let mut rest = s["time".len()..].trim().to_string();
+            while rest.starts_with('-') {
+                match rest.find(' ') {
+                    None => {
+                        rest = String::new();
+                        break;
+                    }
+                    Some(sp) => rest = rest[sp + 1..].trim().to_string(),
+                }
+            }
             if rest.is_empty() {
                 return String::new();
             }
