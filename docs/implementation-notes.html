@@ -5580,6 +5580,24 @@ vitest: 69 passed
     부재 단언(episode_removed 선례). 사양 00/01/02/03/04의 5종 나열·표·JSON 예시 동기화.</p>
   </section>
 
+  <section id="prd-09-decisions-2026-07-04">
+    <h2>PRD §09 열린 결정 3건 종결 (2026-07-04)</h2>
+    <p><b>결정(사용자):</b> BACKLOG B-9로 대기하던 PRD §09 열린 결정 3건을 2026-07-04
+    세션에서 사용자가 확정했다. ① <b>raw API body</b>는 local_full_evidence에 <b>기본
+    포함</b>(권장안이던 opt-in을 기각) — 단 현재 raw API body 수집원(collector)이 존재하지
+    않으므로 실수집 변화는 없다. 수집원을 도입하는 시점에 opt-in 게이트 없이 프로파일 기본
+    범위로 들어간다는 설계 결정이다. ② 외부 MCP client의 LAN 접근은 <b>불허</b> — localhost
+    전용(기본 bind 127.0.0.1 + /mcp Origin allowlist) 현행을 설계 경계로 확정. ③ export
+    bundle은 <b>redacted normalized evidence 기본 + raw payload explicit opt-in</b>(권장안
+    채택) — B-4(POST /v1/export-bundles) 구현 계약의 선행 결정.</p>
+    <p><b>일관성:</b> ①과 ③은 상충이 아니라 상보다 — 로컬 수집은 최대 충실도(localhost
+    경계 안), 반출은 보수적 기본값(redacted). 05 spec §01의 "수집과 외부 전송 가능성의 엄격한
+    분리" 방침을 그대로 따른다.</p>
+    <p><b>반영:</b> 코드 변경 없음(①은 수집원 부재, ②는 현행 확정, ③은 B-4 구현 시 반영).
+    PRD §09를 결정 완료로 갱신, 05 spec §02 프로파일 표·Default 카드(raw_api_body 도입 시 기본
+    포함)·§03 Bind 카드(LAN 불허 확정)·§06(export 기본값) 동기화. BACKLOG B-9 종결.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
