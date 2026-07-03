@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import '@testing-library/jest-dom/vitest';
 import DashboardPage from '../DashboardPage';
@@ -86,7 +87,10 @@ describe('DashboardPage', () => {
     expect(screen.getByText(/wimcc ingest --all/)).toBeInTheDocument();
   });
 
-  it('renders cohort segments with direct labels and charts', async () => {
+  it('renders chart cards, strip titles and session meta', async () => {
+    // 2026-07-04 shadcn/Recharts 개편: 코호트 라벨·마크는 SVG(jsdom에서
+    // ResponsiveContainer 폭 0이라 미렌더) — 코호트 로직은 lib/seriesView
+    // 테스트가 SSOT. 여기선 카드 골격·메타·strip 제목을 잠근다.
     mockFetch({
       sessions: [
         seriesRow('b2', '2026-07-02T00:00:00+00:00', ['claude-fable-5'], ['2.1.200'], 3),
@@ -96,16 +100,12 @@ describe('DashboardPage', () => {
       matched_count: 2,
     });
     render(withRouter(<DashboardPage />));
-    // 레일 표시는 'claude-' 접두를 뗀다(전체 이름은 title 속성이 유지).
-    await waitFor(() => expect(screen.getByText('opus-4-7')).toBeInTheDocument());
-    expect(screen.getByText('fable-5')).toBeInTheDocument();
-    expect(screen.getByTitle('claude-opus-4-7')).toBeInTheDocument();
-    expect(screen.getByText('2.1.198')).toBeInTheDocument();
-    expect(screen.getByText('2.1.200')).toBeInTheDocument();
-    // outcome 차트와 프로세스 strip이 세션당 클릭 타깃(딥링크)을 만든다:
-    // 블록 7개(outcome + strip 6) × 세션 2 = 14.
-    const cols = screen.getAllByRole('button', { name: /open session/i });
-    expect(cols.length).toBe(14);
+    await waitFor(() =>
+      expect(screen.getByText(/verification outcomes/i)).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/process signals/i)).toBeInTheDocument();
+    expect(screen.getByText('tool failures')).toBeInTheDocument();
+    expect(screen.getByText('context bloat signals')).toBeInTheDocument();
     expect(screen.getByText('2 sessions')).toBeInTheDocument();
   });
 
@@ -131,10 +131,11 @@ describe('DashboardPage', () => {
       matched_count: 2,
     });
     render(withRouter(<DashboardPage />));
-    await waitFor(() => expect(screen.getByText(/data table/i)).toBeInTheDocument());
-    const rows = screen.getAllByRole('row');
-    // 헤더 1 + 세션 2.
-    expect(rows.length).toBe(3);
+    // 표는 탭 뒤에 있다 — 탭 전환 후 행 수 확인(헤더 1 + 세션 2).
+    // Radix Tabs는 fireEvent.click에 반응하지 않는다 — userEvent 사용.
+    const tab = await screen.findByRole('tab', { name: /data table/i });
+    await userEvent.click(tab);
+    await waitFor(() => expect(screen.getAllByRole('row').length).toBe(3));
   });
 
   it('shows the error state on API failure', async () => {

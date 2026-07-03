@@ -1,6 +1,68 @@
 @import './tokens.css';
 @import 'tailwindcss';
 
+/* ── shadcn/ui 테마 (2026-07-04, 대시보드 UX 개선) ────────────────────────
+   shadcn 컴포넌트(src/components/ui/*)가 소비하는 시맨틱 변수. 값은 전부
+   기존 wimcc 다크 팔레트(tokens.css)에서 매핑 — 제품이 하나의 시스템으로
+   읽히게. 앱은 다크 전용이라 :root에 직접 정의한다. chart-1..4는 dataviz
+   validator 통과 categorical 세트, chart-5는 검증 상태 green. */
+:root {
+  --radius: 0.625rem;
+  --background: var(--wimcc-bg);
+  --foreground: var(--wimcc-fg);
+  --card: var(--wimcc-surface-1);
+  --card-foreground: var(--wimcc-fg);
+  --popover: var(--wimcc-surface-2);
+  --popover-foreground: var(--wimcc-fg);
+  --primary: var(--wimcc-accent);
+  --primary-foreground: var(--wimcc-fg-on-accent);
+  --secondary: var(--wimcc-surface-3);
+  --secondary-foreground: var(--wimcc-fg);
+  --muted: var(--wimcc-surface-2);
+  --muted-foreground: var(--wimcc-fg-muted);
+  --accent: var(--wimcc-surface-3);
+  --accent-foreground: var(--wimcc-fg);
+  --destructive: var(--wimcc-danger);
+  --border: var(--wimcc-border);
+  --input: var(--wimcc-border-strong);
+  --ring: var(--wimcc-accent);
+  --chart-1: #3987e5;
+  --chart-2: #c98500;
+  --chart-3: #9085e9;
+  --chart-4: #d95926;
+  --chart-5: #199e70;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
 :root {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: var(--wimcc-fg);

@@ -1,26 +1,65 @@
-// B-1 프로젝트 대시보드 — 세션 횡단 트렌드. "개선됐는가"라는 질문에 사람이
-// 회고 LLM과 같은 데이터(/v1/metrics series + fingerprint)를 보게 한다.
+// B-1 프로젝트 대시보드 — 세션 횡단 트렌드 (2026-07-04 shadcn/Recharts 개편).
 //
-// 구조: 모든 차트 블록(코호트 레일·outcome·metric strip)이 같은 세션 축
-// (등폭 트랙, columns.ts)을 공유하고, 코호트 경계 룰은 단일 오버레이가
-// 전 블록을 관통해 그린다 — 환경 변화와 지표 이동을 한 시선으로 잇는 것이
-// 이 페이지의 존재 이유다. 판단은 렌더하지 않는다(측정/판별 분리): 여기엔
-// count·구간·경계만 있고 "좋아졌다"는 문장은 없다.
+// 정보 구성·가로 시계열은 초판과 동일: 모든 차트가 같은 세션 축을 공유하고
+// (Recharts syncId — hover·Brush 구간이 전 차트 동기), 모델 코호트는
+// ReferenceArea 밴드 + 경계 ReferenceLine으로 표시한다. 코호트 원칙(경계는
+// 관측된 비어있지 않은 값이 달라질 때만)의 SSOT는 lib/seriesView.ts.
+// 판단 문장은 렌더하지 않는다(측정/판별 분리) — count·구간·경계만.
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  Bar,
+  BarChart,
+  Brush,
+  CartesianGrid,
+  ReferenceArea,
+  ReferenceLine,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { getMetricsSeries, listSessions, ApiError } from '../api/client';
-import type { MetricsSeriesDto, SessionListItem, SessionMetricsDto } from '../api/types';
+import type { MetricsSeriesDto, SessionListItem } from '../api/types';
 import {
   sortSeriesAscending,
   cohortSegments,
   cohortBoundaries,
   cohortModels,
 } from '../lib/seriesView';
-import { CohortRail } from '../components/dashboard/CohortRail';
-import { ColumnsChart } from '../components/dashboard/ColumnsChart';
-import { trackLeft } from '../components/dashboard/columns';
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useT } from '../i18n';
-import styles from './DashboardPage.module.css';
 
 type SeriesState =
   | { kind: 'loading' }
@@ -30,11 +69,10 @@ type SeriesState =
 type WindowKey = '30d' | '90d' | 'all';
 const WINDOW_DAYS: Record<Exclude<WindowKey, 'all'>, number> = { '30d': 30, '90d': 90 };
 
-/* 검증 outcome 상태색 — dataviz validator 통과쌍(green/red) + 의도된
- * de-emphasis gray(unknown = 신호 부재). 세그먼트 2px 갭 + 범례가 2차 부호. */
-const OUTCOME_COLORS = { passed: '#199e70', failed: '#e66767', unknown: '#6a7180' } as const;
-/* 프로세스 strip 단일 hue — 정체성은 strip 제목이 전달한다. */
-const STRIP_COLOR = 'var(--wimcc-info)';
+/* 코호트 밴드 — dataviz validator 통과 categorical 세트(빈도순 슬롯,
+ * 초과분은 중립 슬레이트 "Other" 접기). */
+const MODEL_SLOTS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)'];
+const MODEL_OVERFLOW = '#48536b';
 
 const STRIP_METRICS = [
   'tool_failure_count',
@@ -50,17 +88,12 @@ function basename(path: string): string {
   const parts = path.split('/').filter(Boolean);
   return parts[parts.length - 1] ?? path;
 }
-
-function shortId(id: string): string {
-  return id.slice(0, 8);
-}
-
-function fmtDate(iso: string): string {
-  return iso.slice(0, 10);
-}
+const shortId = (id: string) => id.slice(0, 8);
+const fmtDate = (iso: string) => iso.slice(5, 10);
 
 export default function DashboardPage() {
   const t = useT();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [series, setSeries] = useState<SeriesState>({ kind: 'loading' });
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -68,7 +101,6 @@ export default function DashboardPage() {
   const windowKey = (params.get('w') as WindowKey | null) ?? 'all';
   const projectParam = params.get('project');
 
-  // 프로젝트 선택지 — 세션 목록에서 파생(최근 활동순). 별도 API 없음.
   useEffect(() => {
     let alive = true;
     listSessions()
@@ -93,12 +125,10 @@ export default function DashboardPage() {
     return [...latest.entries()].sort((a, b) => b[1].localeCompare(a[1])).map(([p]) => p);
   }, [sessions]);
 
-  // 기본값: 가장 최근 활동 프로젝트. 'all'은 명시 선택.
   const effectiveProject =
     projectParam === 'all' ? undefined : (projectParam ?? projects[0] ?? undefined);
 
   useEffect(() => {
-    // 프로젝트 선택지가 아직 안 왔고 기본값 대기 중이면 첫 로드는 미룬다.
     if (projectParam === null && sessions.length === 0) return;
     let alive = true;
     setSeries({ kind: 'loading' });
@@ -123,38 +153,55 @@ export default function DashboardPage() {
     () => (series.kind === 'ok' ? sortSeriesAscending(series.data.sessions) : []),
     [series],
   );
+
+  /* Recharts 데이터 — 세션 = 카테고리 축의 한 칸(등폭, 초판과 동일 의미). */
+  const chartData = useMemo(
+    () =>
+      rows.map((r, i) => ({
+        idx: i,
+        sid: r.session_id,
+        sid8: shortId(r.session_id),
+        date: fmtDate(r.first_observed_at),
+        passed: r.metrics.verification_passed,
+        failed: r.metrics.verification_failed,
+        unknown: r.metrics.verification_unknown,
+        tool_failure_count: r.metrics.tool_failure_count,
+        context_bloat_count: r.metrics.context_bloat_count,
+        api_error_count: r.metrics.api_error_count,
+        user_interruption_count: r.metrics.user_interruption_count,
+        compact_boundary_count: r.metrics.compact_boundary_count,
+        tool_result_truncated_count: r.metrics.tool_result_truncated_count,
+        events: r.event_count,
+        models: cohortModels(r.fingerprint).join(' + ').replaceAll('claude-', '') || '—',
+        cc: r.fingerprint.cc_versions.join(' + ') || '—',
+      })),
+    [rows],
+  );
+
   const modelSegments = useMemo(
     () => cohortSegments(rows, (r) => cohortModels(r.fingerprint)),
     [rows],
   );
-  const ccSegments = useMemo(() => cohortSegments(rows, (r) => r.fingerprint.cc_versions), [rows]);
-  // 관통 룰은 모델 집합 변화만 — CC 버전은 거의 매 세션 바뀌어(릴리스 주기)
-  // 전부 그리면 소음이 된다. CC 경계는 레일 세그먼트 가장자리가 전달한다.
-  const boundaryIndices = useMemo(
-    () => cohortBoundaries(modelSegments).map((b) => b.index),
-    [modelSegments],
-  );
+  const boundaries = useMemo(() => cohortBoundaries(modelSegments), [modelSegments]);
+  const slotOf = useMemo(() => {
+    const weight = new Map<string, number>();
+    for (const s of modelSegments) {
+      if (!s.known) continue;
+      weight.set(s.label, (weight.get(s.label) ?? 0) + (s.end - s.start + 1));
+    }
+    const ranked = [...weight.entries()].sort((a, b) =>
+      b[1] !== a[1] ? b[1] - a[1] : a[0].localeCompare(b[0]),
+    );
+    const m = new Map<string, string>();
+    ranked.forEach(([label], i) => m.set(label, i < MODEL_SLOTS.length ? MODEL_SLOTS[i] : MODEL_OVERFLOW));
+    return m;
+  }, [modelSegments]);
 
-  const outcomeStacks = useMemo(
-    () => [
-      {
-        key: 'passed',
-        color: OUTCOME_COLORS.passed,
-        values: rows.map((r) => r.metrics.verification_passed),
-      },
-      {
-        key: 'failed',
-        color: OUTCOME_COLORS.failed,
-        values: rows.map((r) => r.metrics.verification_failed),
-      },
-      {
-        key: 'unknown',
-        color: OUTCOME_COLORS.unknown,
-        values: rows.map((r) => r.metrics.verification_unknown),
-      },
-    ],
-    [rows],
-  );
+  const outcomeConfig = {
+    passed: { label: t('dash.outcome.passed'), color: 'var(--chart-5)' },
+    failed: { label: t('dash.outcome.failed'), color: '#e66767' },
+    unknown: { label: t('dash.outcome.unknown'), color: '#6a7180' },
+  } satisfies ChartConfig;
 
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(params);
@@ -163,225 +210,314 @@ export default function DashboardPage() {
     setParams(next, { replace: true });
   };
 
-  const outcomeTooltip = (i: number) => {
-    const r = rows[i];
-    if (!r) return null;
-    const m = r.metrics;
-    return [
-      `${shortId(r.session_id)} · ${fmtDate(r.first_observed_at)}`,
-      `${t('dash.outcome.passed')} ${m.verification_passed} · ${t('dash.outcome.failed')} ${m.verification_failed} · ${t('dash.outcome.unknown')} ${m.verification_unknown}`,
-    ].join('\n');
+  /* 차트 클릭 → 세션 replay 딥링크. recharts v3 onClick 파라미터의 활성
+   * 인덱스만 쓴다(activeTooltipIndex — 카테고리 축이라 곧 chartData 인덱스). */
+  const openSession = (state: unknown) => {
+    const raw = (state as { activeTooltipIndex?: number | string } | null)?.activeTooltipIndex;
+    const idx = typeof raw === 'string' ? Number(raw) : raw;
+    const sid = typeof idx === 'number' && Number.isFinite(idx) ? chartData[idx]?.sid : undefined;
+    if (sid) navigate(`/sessions/${encodeURIComponent(sid)}`);
   };
 
-  const stripTooltip = (metric: StripMetric) => (i: number) => {
-    const r = rows[i];
-    if (!r) return null;
-    return `${shortId(r.session_id)} · ${fmtDate(r.first_observed_at)}\n${t(`dash.metric.${metric}`)} ${r.metrics[metric]}`;
+  /* 툴팁 라벨: 세션id · 날짜 · 모델 · CC — fingerprint를 hover에서 바로. */
+  const tooltipLabel = (_: unknown, payload: readonly { payload?: (typeof chartData)[number] }[]) => {
+    const p = payload?.[0]?.payload;
+    if (!p) return null;
+    return (
+      <div className="space-y-0.5">
+        <div className="font-mono">{p.sid8} · {p.date}</div>
+        <div className="text-muted-foreground font-normal">
+          {p.models} · CC {p.cc} · {t('dash.tooltip.events', p.events)}
+        </div>
+      </div>
+    );
   };
 
-  const maxOf = (metric: StripMetric) => Math.max(0, ...rows.map((r) => r.metrics[metric]));
-  const outcomeMax = Math.max(
-    0,
-    ...rows.map(
-      (r) =>
-        r.metrics.verification_passed + r.metrics.verification_failed + r.metrics.verification_unknown,
-    ),
+  const maxOf = (metric: StripMetric) => Math.max(0, ...chartData.map((d) => d[metric]));
+  const outcomeMax = Math.max(0, ...chartData.map((d) => d.passed + d.failed + d.unknown));
+
+  const cohortRefs = (withLabel: boolean) => (
+    <>
+      {withLabel &&
+        modelSegments
+          .filter((s) => s.known)
+          .map((s) => (
+            <ReferenceArea
+              key={`band-${s.start}`}
+              x1={s.start}
+              x2={s.end}
+              fill={slotOf.get(s.label) ?? MODEL_OVERFLOW}
+              fillOpacity={0.07}
+            />
+          ))}
+      {boundaries.map((b) => (
+        <ReferenceLine
+          key={`rule-${b.index}`}
+          x={b.index}
+          stroke="var(--wimcc-warning)"
+          strokeOpacity={0.5}
+          strokeDasharray="4 3"
+        />
+      ))}
+    </>
   );
 
   return (
-    <div className={styles.page}>
-      <header className={styles.header}>
-        <p className={styles.eyebrow}>{t('dash.eyebrow')}</p>
-        <h1 className={styles.title}>
-          {effectiveProject ? basename(effectiveProject) : t('dash.allProjects')}
-        </h1>
-        <div className={styles.filters}>
-          <label className={styles.filterLabel}>
-            {t('dash.projectLabel')}
-            <select
-              className={styles.select}
-              value={projectParam ?? (projects[0] ? '' : 'all')}
-              onChange={(e) => setParam('project', e.target.value === '' ? null : e.target.value)}
-            >
-              {projects[0] && <option value="">{basename(projects[0])} (auto)</option>}
-              <option value="all">{t('dash.allProjects')}</option>
-              {projects.map((p) => (
-                <option key={p} value={p}>
-                  {basename(p)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className={styles.windowGroup} role="group" aria-label={t('dash.windowLabel')}>
-            {(['30d', '90d', 'all'] as const).map((w) => (
-              <button
-                key={w}
-                type="button"
-                className={windowKey === w ? styles.windowOn : styles.windowBtn}
-                aria-pressed={windowKey === w}
-                onClick={() => setParam('w', w === 'all' ? null : w)}
-              >
-                {t(`dash.window.${w}`)}
-              </button>
-            ))}
-          </div>
-        </div>
-        {series.kind === 'ok' && (
-          <p className={styles.meta}>
-            {t('dash.sessionCount', series.data.session_count)}
-            {series.data.matched_count > series.data.session_count && (
-              <span className={styles.truncNote}>
-                {' · '}
-                {t('dash.truncated', { n: series.data.session_count, m: series.data.matched_count })}
-              </span>
-            )}
+    <div className="mx-auto max-w-6xl space-y-5 px-7 py-6">
+      <header className="space-y-3">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            {t('dash.eyebrow')}
           </p>
-        )}
+          <h1 className="font-mono text-2xl font-semibold tracking-tight">
+            {effectiveProject ? basename(effectiveProject) : t('dash.allProjects')}
+          </h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Select
+            value={projectParam ?? ''}
+            onValueChange={(v) => setParam('project', v === '__auto__' ? null : v)}
+          >
+            <SelectTrigger size="sm" className="w-56 font-mono text-xs" aria-label={t('dash.projectLabel')}>
+              <SelectValue placeholder={projects[0] ? `${basename(projects[0])} (auto)` : t('dash.allProjects')} />
+            </SelectTrigger>
+            <SelectContent>
+              {projects[0] && (
+                <SelectItem value="__auto__" className="font-mono text-xs">
+                  {basename(projects[0])} (auto)
+                </SelectItem>
+              )}
+              <SelectItem value="all" className="font-mono text-xs">
+                {t('dash.allProjects')}
+              </SelectItem>
+              {projects.map((p) => (
+                <SelectItem key={p} value={p} className="font-mono text-xs">
+                  {basename(p)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={windowKey}
+            onValueChange={(v) => v && setParam('w', v === 'all' ? null : v)}
+            aria-label={t('dash.windowLabel')}
+          >
+            <ToggleGroupItem value="30d" className="px-3 text-xs">{t('dash.window.30d')}</ToggleGroupItem>
+            <ToggleGroupItem value="90d" className="px-3 text-xs">{t('dash.window.90d')}</ToggleGroupItem>
+            <ToggleGroupItem value="all" className="px-3 text-xs">{t('dash.window.all')}</ToggleGroupItem>
+          </ToggleGroup>
+          {series.kind === 'ok' && (
+            <span className="ml-auto font-mono text-xs text-muted-foreground">
+              {t('dash.sessionCount', series.data.session_count)}
+              {series.data.matched_count > series.data.session_count && (
+                <span className="text-(--wimcc-warning)">
+                  {' · '}
+                  {t('dash.truncated', {
+                    n: series.data.session_count,
+                    m: series.data.matched_count,
+                  })}
+                </span>
+              )}
+            </span>
+          )}
+        </div>
       </header>
 
-      {series.kind === 'loading' && <p className={styles.state}>{t('dash.loading')}</p>}
+      {series.kind === 'loading' && (
+        <div className="space-y-5">
+          <Skeleton className="h-72 w-full rounded-xl" />
+          <Skeleton className="h-96 w-full rounded-xl" />
+        </div>
+      )}
       {series.kind === 'error' && (
-        <p className={styles.stateError} role="alert">
-          {t('dash.error')} — {series.message}
-        </p>
+        <Card role="alert" className="border-destructive/40">
+          <CardContent className="py-6 text-sm text-destructive">
+            {t('dash.error')} — {series.message}
+          </CardContent>
+        </Card>
       )}
       {series.kind === 'ok' && rows.length === 0 && (
-        <div className={styles.state}>
-          <p>{t('dash.empty')}</p>
-          <p className={styles.hint}>
-            <code>{t('dash.emptyHint')}</code>
-          </p>
-        </div>
+        <Card>
+          <CardContent className="space-y-2 py-10 text-center text-sm text-muted-foreground">
+            <p>{t('dash.empty')}</p>
+            <p>
+              <code className="rounded bg-muted px-2 py-1 font-mono text-xs">
+                {t('dash.emptyHint')}
+              </code>
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       {series.kind === 'ok' && rows.length > 0 && (
-        <>
-          <div className={styles.charts}>
-            {/* 경계 오버레이 — 모든 블록 관통. */}
-            <div className={styles.overlay} aria-hidden="true">
-              {boundaryIndices.map((idx) => (
-                <span key={idx} className={styles.rule} style={{ left: trackLeft(idx, rows.length) }} />
-              ))}
-            </div>
+        <Tabs defaultValue="charts">
+          <TabsList>
+            <TabsTrigger value="charts">{t('dash.tab.charts')}</TabsTrigger>
+            <TabsTrigger value="table">{t('dash.table.summary')}</TabsTrigger>
+          </TabsList>
 
-            <section className={styles.block} aria-label={t('dash.cohort.title')}>
-              <div className={styles.blockHead}>
-                <h2 className={styles.blockTitle}>{t('dash.cohort.title')}</h2>
-                <span className={styles.blockTip}>{t('dash.cohort.tip')}</span>
-              </div>
-              <CohortRail
-                bandLabel={t('dash.cohort.models')}
-                segments={modelSegments}
-                total={rows.length}
-                kind="categorical"
-                unknownLabel={t('dash.cohort.unknown')}
-              />
-              <CohortRail
-                bandLabel={t('dash.cohort.cc')}
-                segments={ccSegments}
-                total={rows.length}
-                kind="ordinal"
-                unknownLabel={t('dash.cohort.unknown')}
-              />
-            </section>
-
-            <section className={styles.block} aria-label={t('dash.outcome.title')}>
-              <div className={styles.blockHead}>
-                <h2 className={styles.blockTitle}>{t('dash.outcome.title')}</h2>
-                <span className={styles.maxTag}>
-                  {outcomeMax > 0 ? t('dash.axis.max', outcomeMax) : t('dash.outcome.none')}
-                </span>
-                <span className={styles.blockTip}>{t('dash.outcome.tip')}</span>
-              </div>
-              <ColumnsChart
-                rows={rows}
-                stacks={outcomeStacks}
-                height={140}
-                ariaLabel={t('dash.outcome.title')}
-                tooltip={outcomeTooltip}
-                openSessionLabel={(id) => t('dash.openSession', shortId(id))}
-              />
-              <div className={styles.legend}>
-                {(['passed', 'failed', 'unknown'] as const).map((k) => (
-                  <span key={k} className={styles.legendItem}>
-                    <span className={styles.swatch} style={{ background: OUTCOME_COLORS[k] }} />
-                    {t(`dash.outcome.${k}`)}
-                  </span>
-                ))}
-              </div>
-            </section>
-
-            <section className={styles.block} aria-label={t('dash.multiples.title')}>
-              <div className={styles.blockHead}>
-                <h2 className={styles.blockTitle}>{t('dash.multiples.title')}</h2>
-                <span className={styles.blockTip}>{t('dash.multiples.tip')}</span>
-              </div>
-              <div className={styles.strips}>
-                {STRIP_METRICS.map((metric) => (
-                  <div key={metric} className={styles.strip}>
-                    <div className={styles.stripHead}>
-                      <span className={styles.stripTitle}>{t(`dash.metric.${metric}`)}</span>
-                      <span className={styles.maxTag}>{t('dash.axis.max', maxOf(metric))}</span>
-                    </div>
-                    <ColumnsChart
-                      rows={rows}
-                      stacks={[
-                        { key: metric, color: STRIP_COLOR, values: rows.map((r) => r.metrics[metric]) },
-                      ]}
-                      height={44}
-                      ariaLabel={t(`dash.metric.${metric}`)}
-                      tooltip={stripTooltip(metric)}
-                      openSessionLabel={(id) => t('dash.openSession', shortId(id))}
+          <TabsContent value="charts" className="space-y-5">
+            <Card>
+              <CardHeader>
+                <div className="flex items-baseline justify-between gap-3">
+                  <CardTitle>{t('dash.outcome.title')}</CardTitle>
+                  <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground">
+                    {outcomeMax > 0 ? t('dash.axis.max', outcomeMax) : t('dash.outcome.none')}
+                  </Badge>
+                </div>
+                <CardDescription>{t('dash.outcome.tip')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={outcomeConfig} className="h-64 w-full">
+                  <BarChart
+                    data={chartData}
+                    syncId="dash"
+                    onClick={openSession}
+                    margin={{ top: 18, right: 8, left: 8, bottom: 0 }}
+                    className="cursor-pointer"
+                  >
+                    <CartesianGrid vertical={false} stroke="var(--border)" />
+                    <XAxis
+                      dataKey="idx"
+                      tickFormatter={(v: number) => chartData[v]?.date ?? ''}
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      minTickGap={40}
+                      fontSize={10}
                     />
+                    <YAxis width={28} tickLine={false} axisLine={false} fontSize={10} allowDecimals={false} />
+                    {cohortRefs(true)}
+                    <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Bar dataKey="passed" stackId="v" fill="var(--color-passed)" />
+                    <Bar dataKey="failed" stackId="v" fill="var(--color-failed)" />
+                    <Bar dataKey="unknown" stackId="v" fill="var(--color-unknown)" radius={[3, 3, 0, 0]} />
+                    <Brush
+                      dataKey="idx"
+                      height={22}
+                      travellerWidth={8}
+                      stroke="var(--wimcc-border-strong)"
+                      fill="var(--card)"
+                      tickFormatter={(v: number) => chartData[v]?.date ?? ''}
+                    />
+                  </BarChart>
+                </ChartContainer>
+                {/* 코호트 칩 범례 — 밴드 인라인 라벨은 좁은 구간에서 겹쳐
+                    칩으로 옮겼다(색=밴드 tint, 첫 등장 순). */}
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                    {t('dash.cohort.models')}
+                  </span>
+                  {[...new Map(modelSegments.filter((s) => s.known).map((s) => [s.label, s])).values()].map(
+                    (s) => (
+                      <span
+                        key={s.label}
+                        className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground"
+                      >
+                        <span
+                          className="size-2.5 rounded-[3px]"
+                          style={{ background: slotOf.get(s.label) ?? MODEL_OVERFLOW }}
+                        />
+                        {s.label.replaceAll('claude-', '')}
+                      </span>
+                    ),
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('dash.multiples.title')}</CardTitle>
+                <CardDescription>{t('dash.multiples.tip')}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {STRIP_METRICS.map((metric) => (
+                  <div key={metric}>
+                    <div className="mb-1 flex items-baseline justify-between">
+                      <span className="text-xs text-muted-foreground">
+                        {t(`dash.metric.${metric}`)}
+                      </span>
+                      <span className="font-mono text-[10px] text-muted-foreground/70">
+                        {t('dash.axis.max', maxOf(metric))}
+                      </span>
+                    </div>
+                    <ChartContainer
+                      config={{ [metric]: { label: t(`dash.metric.${metric}`), color: 'var(--wimcc-info)' } }}
+                      className="h-16 w-full"
+                    >
+                      <BarChart
+                        data={chartData}
+                        syncId="dash"
+                        onClick={openSession}
+                        margin={{ top: 2, right: 8, left: 8, bottom: 0 }}
+                        className="cursor-pointer"
+                      >
+                        <XAxis dataKey="idx" hide />
+                        {/* 메인 차트와 플롯 영역 정렬 — 같은 폭의 숨은 YAxis. */}
+                        <YAxis hide width={28} />
+                        {cohortRefs(false)}
+                        <ChartTooltip
+                          content={<ChartTooltipContent labelFormatter={tooltipLabel} />}
+                        />
+                        <Bar dataKey={metric} fill="var(--wimcc-info)" radius={[2, 2, 0, 0]} />
+                      </BarChart>
+                    </ChartContainer>
                   </div>
                 ))}
-              </div>
-            </section>
-          </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-          <div className={styles.axis} aria-hidden="true">
-            <span>{fmtDate(rows[0].first_observed_at)}</span>
-            <span>{fmtDate(rows[rows.length - 1].first_observed_at)}</span>
-          </div>
-
-          <details className={styles.tableBox}>
-            <summary>{t('dash.table.summary')}</summary>
-            <div className={styles.tableScroll}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>{t('dash.table.session')}</th>
-                    <th>{t('dash.table.date')}</th>
-                    <th>{t('dash.table.events')}</th>
-                    <th>{t('dash.outcome.passed')}</th>
-                    <th>{t('dash.outcome.failed')}</th>
-                    <th>{t('dash.outcome.unknown')}</th>
-                    {STRIP_METRICS.map((m) => (
-                      <th key={m}>{t(`dash.metric.${m}`)}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.session_id}>
-                      <td>
-                        <code>{shortId(r.session_id)}</code>
-                      </td>
-                      <td>{fmtDate(r.first_observed_at)}</td>
-                      <td>{r.event_count}</td>
-                      <td>{r.metrics.verification_passed}</td>
-                      <td>{r.metrics.verification_failed}</td>
-                      <td>{r.metrics.verification_unknown}</td>
+          <TabsContent value="table">
+            <Card>
+              <CardContent className="overflow-x-auto pt-6">
+                <Table className="font-mono text-xs">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('dash.table.session')}</TableHead>
+                      <TableHead>{t('dash.table.date')}</TableHead>
+                      <TableHead className="text-right">{t('dash.table.events')}</TableHead>
+                      <TableHead className="text-right">{t('dash.outcome.passed')}</TableHead>
+                      <TableHead className="text-right">{t('dash.outcome.failed')}</TableHead>
+                      <TableHead className="text-right">{t('dash.outcome.unknown')}</TableHead>
                       {STRIP_METRICS.map((m) => (
-                        <td key={m}>{(r.metrics as SessionMetricsDto)[m]}</td>
+                        <TableHead key={m} className="text-right">
+                          {t(`dash.metric.${m}`)}
+                        </TableHead>
                       ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </details>
-        </>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {chartData.map((d) => (
+                      <TableRow
+                        key={d.sid}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/sessions/${encodeURIComponent(d.sid)}`)}
+                      >
+                        <TableCell>{d.sid8}</TableCell>
+                        <TableCell>{d.date}</TableCell>
+                        <TableCell className="text-right">{d.events}</TableCell>
+                        <TableCell className="text-right">{d.passed}</TableCell>
+                        <TableCell className="text-right">{d.failed}</TableCell>
+                        <TableCell className="text-right">{d.unknown}</TableCell>
+                        {STRIP_METRICS.map((m) => (
+                          <TableCell key={m} className="text-right">
+                            {d[m]}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       )}
     </div>
   );
