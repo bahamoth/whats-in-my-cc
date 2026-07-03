@@ -123,6 +123,9 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/signals/:id", get(routes::signal_detail))
         .route("/v1/events/:event_id/raw", get(routes::event_raw))
         .route("/v1/audit", get(routes::list_audit))
+        // B-4 (2026-07-04) — read-only 원칙의 유일한 write 예외: owner-only
+        // local export. 데이터는 로컬 파일로만 쓰인다(외부 전송 없음).
+        .route("/v1/export-bundles", post(routes::create_export_bundle))
         .route("/v1/detectors", get(routes::list_detectors))
         .route("/v1/plugins", get(routes::list_plugins))
         .layer(axum_mw::from_fn_with_state(

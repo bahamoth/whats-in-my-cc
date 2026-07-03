@@ -59,14 +59,14 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 </section>
 <section id="redaction"><h2><span class="num">04</span>Redaction Policy</h2>
 <div class="callout good"><strong>Redaction gate:</strong> ingest 시점에 동작한다 — <code>raw_event</code> 저장 <em>전에</em> payload를 마스킹하므로 DB에는 마스킹된 텍스트가 저장된다(transcript·hook·OTel ingest 경로 모두, <code>src/ingest/store.rs</code>·<code>hook.rs</code>·<code>otel.rs</code> → <code>src/security/redaction/engine.rs</code>). rule pack은 <code>rule_pack@v1</code> — 정확히 11개 규칙(추가 시 <code>_v2</code> bump): <code>api_key_anthropic.v1</code>, <code>api_key_openai.v1</code>, <code>github_pat.v1</code>, <code>aws_access_key_id.v1</code>, <code>aws_secret_access_key.v1</code>, <code>bearer_token.v1</code>, <code>private_key_pem.v1</code>, <code>email.v1</code>, <code>phone.v1</code>, <code>korean_rrn.v1</code>, <code>high_entropy_heuristic.v1</code>(flag-only — 마스킹하지 않고 <code>has_unredacted_sensitive_payload</code>만 set). 이벤트별 manifest는 <code>raw_event.redaction_manifest</code>에 저장되고, API 응답 <code>meta.redaction_summary</code>로 집계되며, MCP <code>resources/read</code>는 <code>annotations.redaction_policy</code>/<code>redaction_summary</code>를 싣는다.</div>
-<div class="callout warn"><strong>범위:</strong> redaction은 위 11개 규칙 기반 pattern masking이 전부다. sensitive path prefix redaction은 적용하지 않으며, export 전 review 흐름은 없다(export bundle 자체를 제공하지 않는다 — §06).</div>
+<div class="callout warn"><strong>범위:</strong> redaction은 위 11개 규칙 기반 pattern masking이 전부다. sensitive path prefix redaction은 적용하지 않으며, export 전 review 흐름은 없다(§06 — 번들은 저장 시점 redaction 상태 그대로다).</div>
 <table><thead><tr><th>Category</th><th>Examples</th><th>현행 동작</th></tr></thead><tbody>
 <tr><td>Secrets</td><td>API key, bearer token, password</td><td><code>rule_pack@v1</code> 패턴으로 value 마스킹 — type과 location은 보존</td></tr>
 <tr><td>Credentials</td><td>private key, SSH key, cloud credential</td><td>PEM·AWS 패턴 마스킹</td></tr>
 <tr><td>PII</td><td>email, phone, 주민등록번호</td><td>email/phone/RRN 규칙으로 마스킹</td></tr>
 <tr><td>Sensitive paths</td><td>home path, private repo path</td><td>path prefix redaction은 적용하지 않는다</td></tr>
 <tr><td>Command output</td><td>env dump, config, logs</td><td>ingest 시점 scan으로 마스킹 — 저장 이후 별도 scan 없음</td></tr>
-<tr><td>Proprietary code</td><td>source files, diffs</td><td>로컬 표시 허용; export는 제공하지 않는다</td></tr>
+<tr><td>Proprietary code</td><td>source files, diffs</td><td>로컬 표시 허용; export는 owner 명시 행위(§06)로만</td></tr>
 </tbody></table>
 <pre><code>{
   "redaction_manifest": {
@@ -91,10 +91,10 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <tr><td>Signal</td><td>180 days</td><td>30 days</td><td>세션 만료와 함께 삭제 (tombstone → <code>/v1/signals/:id</code> 410 Gone). normalized와 보존 일수가 같아야 함 — 테스트로 잠금</td><td><span class="pill green">삭제함</span></td></tr>
 <tr><td>Audit log</td><td>90 days</td><td>30 days</td><td>기간 경과 row 삭제 — sweep 자신의 <code>retention.deleted</code> row는 같은 트랜잭션에서 새로 기록되므로 항상 최신이 남는다</td><td><span class="pill green">삭제함</span></td></tr>
 </tbody></table>
-<p class="muted"><code>none</code>(기본) profile은 모든 class 무기한 보존 — sweep task 자체가 기동하지 않는다. export bundle은 제공하지 않으므로(§06) retention 대상이 아니다.</p>
+<p class="muted"><code>none</code>(기본) profile은 모든 class 무기한 보존 — sweep task 자체가 기동하지 않는다. export bundle 파일은 서비스 DB 밖의 owner 파일이라(§06) retention 대상이 아니다.</p>
 </section>
 <section id="export"><h2><span class="num">06</span>Export Governance</h2>
-<div class="callout danger"><strong>현행 상태:</strong> export bundle 기능(<code>POST /v1/export-bundles</code>)은 제공하지 않는다 — 데이터가 로컬을 떠나는 경로는 없다. 이 섹션은 governance 원칙이며, 도입한다면 아래 흐름과 제약을 따른다.</div>
+<div class="callout"><strong>현행 상태 (2026-07-04 구현):</strong> <code>POST /v1/export-bundles</code>가 owner-only local export를 제공한다 — 번들은 <code>$WIMCC_CONFIG_DIR/exports/</code>에 로컬 파일(JSON + sha256)로만 쓰이며, 데이터가 로컬을 떠나는 전송 경로는 여전히 없다(반출 소비는 owner 책임). kind는 우선 <code>session</code>만. 기본은 redacted normalized evidence(observed — ingest 시점 redaction 게이트 통과분), raw record는 <code>include_raw</code> explicit opt-in(§09-3 결정). 모든 export는 audit 원장에 <code>export_bundle_created</code>로 남는다.</div>
 <p>Export는 로컬 owner action이다. 외부 service가 domain object에 쓰기 작업을 하는 방식이 아니다. (read-only API 원칙의 유일한 write 예외.) 도입 시 기본값은 <strong>redacted normalized evidence만 포함, raw payload는 explicit opt-in</strong>이다(PRD §09-3, 2026-07-04 사용자 결정).</p>
 <div class="flow"><div class="step"><b>Select resource</b><span>signal/session/lineage</span></div><div class="step"><b>Preview evidence</b><span>nodes · raw refs</span></div><div class="step"><b>Apply redaction</b><span>manifest required</span></div><div class="step"><b>Review warning</b><span>sensitive payload check</span></div><div class="step"><b>Create bundle</b><span>local file + hash</span></div><div class="step"><b>Consume externally</b><span>outside responsibility</span></div></div>
 <div class="callout warn"><strong>Export bundle must not include:</strong> patch, hook installation script, Claude settings change, memory write, skill scaffold, command that mutates project state.</div>

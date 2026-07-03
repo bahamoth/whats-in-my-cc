@@ -54,16 +54,14 @@ outcome 스택 + 프로세스 strip 6종, 공유 세션 축, 모델 집합 변�
   결정론 집계 조합(판단 문장 없음). 00/01/02/04 spec·회고 스킬 치트시트
   동기화.
 
-## B-4. export bundle 구현 (우선순위 중, §09 결정 포함)
+## B-4. export bundle — 완료 (2026-07-04)
 
-- **무엇**: `POST /v1/export-bundles` — owner-only local export (PRD에 계획만
-  존재, 코드 없음). read-only 원칙의 유일한 예외로 이미 지정돼 있다.
-- **왜**: 회고 결과·evidence를 PR·이슈·팀 공유로 반출하는 유일한 경로.
-  현재 인사이트는 로컬 브라우저와 LLM 컨텍스트 안에 갇혀 있다.
-- **선행 결정 해소(2026-07-04)**: redacted normalized evidence 기본 +
-  raw는 explicit opt-in으로 사용자 결정 완료 — B-9 참조. 구현만 남음.
-- **참조**: `docs/00_prd_revised.html` §09, CLAUDE.md Non-goals 예외 절,
-  implementation-notes `#prd-09-decisions-2026-07-04`.
+`POST /v1/export-bundles` 구현(implementation-notes
+`#export-bundle-2026-07-04`). kind=session, 기본 redacted normalized
+evidence + raw explicit opt-in(§09-3 결정), 번들은
+`$WIMCC_CONFIG_DIR/exports/` 로컬 JSON + sha256, audit
+`export_bundle_created` 기록. signal/lineage kind는 세션 번들이
+상위집합이라 필요 관측 시 추가. 04·05 spec·CLAUDE.md 예외 절 동기화.
 
 ## B-5. implementation-notes 이원화 (우선순위 중)
 

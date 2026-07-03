@@ -73,7 +73,7 @@ schema-versioning·deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html` �
 - hidden reasoning / private chain-of-thought 복원 주장
 - 원격 multi-user SaaS 운영 기능 (MVP 범위 외)
 
-예외: `POST /v1/export-bundles`(미구현, 계획만)는 owner-only local export이며 외부 write가 아니다.
+예외: `POST /v1/export-bundles`(2026-07-04 구현)는 owner-only local export이며 외부 write가 아니다 — 번들은 `$WIMCC_CONFIG_DIR/exports/` 로컬 파일로만 쓰인다.
 
 ## Self-check before every commit
 
