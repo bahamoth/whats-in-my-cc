@@ -1,6 +1,12 @@
-# BACKLOG — 남은 작업 (2026-07-03 기준)
+# BACKLOG — 남은 작업 (2026-07-04 갱신)
 
 다른 세션이 이어서 작업할 수 있도록 보류·계획 항목을 한곳에 모은 문서.
+
+**2026-07-04 스윕:** B-1~B-11 전 항목 처리 완료. 남은 것은 명시적 표본/관문
+게이트뿐이다 — B-2 보류분(비Rust 검증 도구: 코퍼스 표본 관측 시), B-7b
+(claude CLI: 표본 관측 시), B-8 잔여 2건(성능: 실측상 무통 — 아플 때),
+B-10(detector 후보: 서로 다른 세션 2개+ 확정 시). 게이트 조건과 착수 절차는
+각 항목에 기록돼 있다.
 
 **사용법 (새 세션 진입 순서):**
 
@@ -63,16 +69,14 @@ evidence + raw explicit opt-in(§09-3 결정), 번들은
 `export_bundle_created` 기록. signal/lineage kind는 세션 번들이
 상위집합이라 필요 관측 시 추가. 04·05 spec·CLAUDE.md 예외 절 동기화.
 
-## B-5. implementation-notes 이원화 (우선순위 중)
+## B-5. implementation-notes 이원화 — 완료 (2026-07-04)
 
-- **무엇**: append-only 원장은 유지하되 ① 토픽별 "현재 진실" 인덱스,
-  ② 열린 질문만 모은 백로그 추출(→ 이 문서로 흡수 가능)을 분리.
-  마크다운 저작 + HTML 생성 방식도 검토.
-- **왜**: 텍스트 추출만 1만 줄의 단일 HTML — "에이전트가 소비하기 좋은
-  정보를 만드는 프로젝트의 설계 이력이 정작 에이전트가 소비하기 가장 비싼
-  형식"(2026-07-03 리뷰). 이 BACKLOG.md가 ②의 첫 걸음이다.
-- **참조**: CLAUDE.md "Implementation Notes (지속 유지 의무)" 절과의 정합
-  유지 필요.
+① 토픽별 "현재 진실" 인덱스 = `docs/notes-index.md`(마크다운 — 에이전트
+소비 비용 해소; 항목 추가 시 같은 PR에서 갱신). ② 열린 질문 분리 = 이
+BACKLOG.md(기수행). ③ 마크다운 저작+HTML 생성은 **기각** — 원장 재저작은
+기존 앵커(BACKLOG·커밋·스킬이 참조)를 깨고 파이프라인 유지비 대비 이득이
+없다. 원장은 append-only HTML 유지, 소비는 인덱스+앵커 추출로.
+CLAUDE.md Document Map에 인덱스 등재.
 
 ## B-6. Teammate 후속 묶음 — 완료 (2026-07-04)
 
@@ -137,25 +141,27 @@ CC 2.1.198 teammate 실행 모델 대응 잔여 전부 처리
 무인증 수신 노출. local-first 전제상 현재 무해하나 LAN 불허 확정과 정합
 (bind 변경은 사용자 explicit 설정 책임).
 
-## B-10. Detector 후보 졸업 경로 (관문 준수)
+## B-10. Detector 후보 졸업 경로 (관문 유지 — 2026-07-04 재확인)
 
 - 보류 중 후보: `re_edit_churn`, `duplicate_edit_stream`
   (session-retrospect workflow.md "판별→fixture 승격" 절).
-- **관문**: 같은 구조 패턴이 **서로 다른 세션 2개 이상**에서 확정되면 실
-  payload를 `tests/fixtures/**/real/`에 동결하고 invariant 테스트로 잠근
-  뒤에만 detector화. 표본 축적은 annotation이 아니라 fixture로
-  (no-annotation 원칙).
+- **2026-07-04 관문 확인**: 회고 LLM의 판별 확정 기록이 서로 다른 세션
+  2개 이상에서 존재하지 않는다(no-annotation 원칙상 판별 기록은 저장되지
+  않으므로, 확정은 회고 실행 시 fixture 동결 행위로만 성립). **관문 미충족
+  — 보류 유지.** 다음 회고에서 같은 구조 패턴을 확정하면 그 자리에서
+  payload를 `tests/fixtures/**/real/`에 동결하고 invariant로 잠근 뒤에만
+  detector화한다.
 - final_state_mismatch 제거(2026-07-03)로 lexical 의미 판별을 L1에 넣지
   않는 선례가 강화됨 — 후보 설계 시 참고
   (`#final-state-mismatch-removal-2026-07-03`).
 
-## B-11. 소형 정리
+## B-11. 소형 정리 — 완료 (2026-07-04)
 
-- `SessionMetrics`가 detector별 하드코딩 필드(`tool_failure_count`,
-  `context_bloat_count`)와 generic `detector_firing` map을 중복 유지
-  (`src/insight/metrics.rs`) — 소비자 정리 후 통합 검토 (API 필드 제거는
-  breaking).
-- unknown-verification의 "빈 출력" 클래스: 성공 시 transcript에 exit 0
-  신호가 없어 구조적 unknown — 코드 대상 아님. OTLP tool_result 수집이
-  있으면 measured로 해소되는 클래스라, doctor/문서에서 OTLP 수집을 안내하는
-  것이 실질 해법.
+- **① 검토 종결(유지 결정)**: 하드코딩 필드(`tool_failure_count`·
+  `context_bloat_count`)의 소비자 실측 — AnalysisPanel(비율 계산)·
+  대시보드 strip·API 계약 3곳. 제거는 breaking이고 소비자가 실재하므로
+  **유지**. 신규 detector는 `detector_firing` map으로만 노출(현행 구조
+  그대로) — 하드코딩 추가 금지.
+- **② doctor OTLP 안내 구현**: transcript는 있는데 OTLP 소스가 전부
+  no_data면 "성공 verification이 구조적 unknown으로 남는 클래스 — OTLP
+  수집이 measured로 해소" 권고를 출력(단위 테스트 2건).

@@ -93,6 +93,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   <p class="tocnote">Generated as self-contained HTML. No external JS/CSS dependency.</p>
 </aside>
 <main class="main">
+  <p><b>토픽별 "현재 진실" 인덱스:</b> <code>docs/notes-index.md</code> —
+  이 원장은 append-only 결정 이력(SSOT)이고, 지금 유효한 결정은 인덱스가
+  가리킨다 (B-5, 2026-07-04).</p>
   <header class="hero">
     <div class="kicker">What's in My Claude Code · Implementation Notes · 2026-05-19</div>
     <h1>Implementation Notes</h1>
@@ -5806,6 +5809,26 @@ vitest: 69 passed
     0.035s/500세션)라 저렴. 효과: warm 단일 세션 232ms→2ms(116배), series
     1.32s→0.19s(7배 — 잔여는 fingerprint 등 비캐시 경로). 테스트: cache_hits 카운터로
     적중 단언 + 신규 이벤트 ingest 후 스테일 불가 단언(tests/metrics_cache.rs).</p>
+  </section>
+
+  <section id="notes-index-cleanups-2026-07-04">
+    <h2>B-5 이원화 + B-10 관문 재확인 + B-11 소형 정리 (2026-07-04)</h2>
+    <p><b>B-5:</b> 토픽별 "현재 진실" 인덱스를 <code>docs/notes-index.md</code>(마크다운)로
+    신설 — 원장(이 파일)은 append-only 결정 이력 SSOT로 불변, 유효 결정 탐색은 인덱스가
+    담당. 열린 질문 분리는 BACKLOG.md(기수행). <b>마크다운 저작+HTML 생성은 기각</b>:
+    원장 재저작은 기존 앵커(BACKLOG·커밋 메시지·스킬이 참조)를 깨고 파이프라인 유지비
+    대비 이득이 없다 — 에이전트 소비 문제는 인덱스+앵커 추출로 해소된다. 인덱스는 항목
+    추가 시 같은 PR에서 갱신(CLAUDE.md Document Map 등재).</p>
+    <p><b>B-10:</b> re_edit_churn·duplicate_edit_stream 졸업 관문 재확인 — 서로 다른
+    세션 2개 이상의 확정 기록 없음(no-annotation 원칙상 판별은 저장되지 않고, 확정은
+    회고 시 fixture 동결 행위로만 성립). 관문 미충족 — 보류 유지.</p>
+    <p><b>B-11:</b> ① SessionMetrics 하드코딩 필드 vs detector_firing 중복 — 소비자
+    실측(AnalysisPanel 비율 계산·대시보드 strip·API 계약)으로 <b>유지</b> 결정; 신규
+    detector는 map으로만(하드코딩 추가 금지). ② doctor에 transcript-only 환경의
+    구조적-unknown 안내 추가 — OTLP 소스 전부 no_data + transcript 유데이터일 때
+    "성공 verification은 transcript에 exit-0 신호가 없어 unknown으로 남는다(2026-07-03
+    루프 실측) — OTLP 수집이 measured로 해소" 권고(build_recommendations, 단위 테스트
+    2건).</p>
   </section>
 
 </main>

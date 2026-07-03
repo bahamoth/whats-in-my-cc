@@ -30,6 +30,7 @@ transcript가 아닌 **execution replay**로 "무엇이·왜 그렇게 됐는가
 | HTTP / MCP endpoint 계약 | `docs/04_api_mcp_spec.html` |
 | Collection profile·redaction·export | `docs/05_security_governance_spec.html` |
 | 남은 작업·보류 백로그 (착수/완료 시 갱신) | `docs/BACKLOG.md` |
+| implementation-notes 토픽별 현재 진실 인덱스 | `docs/notes-index.md` |
 
 `docs/index.html`은 포털.
 
