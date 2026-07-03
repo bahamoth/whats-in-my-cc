@@ -5538,6 +5538,29 @@ vitest: 69 passed
     딥링크로 도달 가능(이번에 재확인 — "딥링크 없음"이라던 세션 중 발언은 오류였다).</p>
   </section>
 
+  <section id="tagging-loop-2026-07-03">
+    <h2>PR-전 개선 루프 실행 — 2026-07-03 (feat/mcp-parity-and-detector-config)</h2>
+    <p><b>untagged-bash (전 코퍼스 83건):</b> 보편 추가 — <code>exit</code>(Control builtin),
+    <code>time</code>·<code>command</code>(투명 wrapper; <code>command -v/-V</code>는 which의 의미
+    쌍둥이로 재작성), <code>base64</code>(read.file), cargo <code>metadata/tree</code>(read.deps —
+    6/29의 "verb 모호" 보류를 해소)·<code>clean</code>(delete.file)·<code>doc</code>(build.docs),
+    npm <code>list/ls</code>, <code>rustup</code>(신규 SUBS), <code>aws sts</code>(read.proc — 6/29
+    멀티플렉서 보류의 부분 해소; 그 외 서비스는 verb가 3단계 <code>aws &lt;svc&gt; &lt;op&gt;</code>라
+    미관측 보류), FILENAME_OBJECT <code>.gitattributes</code>·bare <code>config</code>.
+    <b>보류(사유):</b> <code>claude</code>(표본 'plugins --help' 1형태 — plugins install 오태깅 위험),
+    서브셸/파이프 내부 토큰 pr·rev-parse·status·ls-files·tr·log·read($() 토크나이저 — 기존 별도 작업),
+    회사 one-off(qmd), 멀티라인 파편(api·import·sdk·release 등), 무확장 디렉토리 Read(별도 규칙 필요).</p>
+    <p><b>unidentified-plugins (8건):</b> context7 커넥터 규칙 추가(도구 전부 문서 조회 → default
+    read.docs). optiflow-help 4건은 직접 설정 서버(비보편) 제외, serena activate_project/onboarding은
+    기결정(intentionally unmatched, 사전 주석 2026-06-25/26) 유지 — <em>이 항목은 매 루프 재표면화되므로
+    스크립트가 기결정 목록을 인지하게 하는 개선이 후속 후보다.</em></p>
+    <p><b>unknown-verification (15건):</b> 파서 추가 대상 없음 — piped 복구불가 7, cancelled 정상 2,
+    빈 출력 6(성공 시 transcript에 exit 0 신호가 없어 구조적 unknown; OTLP tool_result가 있으면 measured로
+    해소되는 클래스).</p>
+    <p><b>닫힘 확인 주의:</b> 재빌드 후 재확인은 이 프로젝트 코퍼스(스크래치 DB)로 수행 — 전 코퍼스
+    재확인은 운영 serve 재기동이 필요해 생략했고, 전 코퍼스 분류는 최초 실행 출력으로 판정했다.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
