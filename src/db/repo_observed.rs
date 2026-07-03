@@ -570,9 +570,39 @@ pub async fn backfill_session_summary(pool: &SqlitePool) -> Result<u64> {
     Ok(n)
 }
 
+/// Teammate 디스패치 래퍼 스트립 (B-6a, 2026-07-04) — 팀메이트 세션의 첫
+/// user 메시지는 `<teammate-message …>\n{본문}\n</teammate-message>` 형태다
+/// (real fixture: teammate_v01/teammate_session_head.jsonl, 세션 e8b4a11e).
+/// raw XML은 식별에 노이즈라 본문만 preview로 쓴다. 래퍼가 아니면 원문 그대로.
+/// 슬래시-커맨드 래퍼(`<command-%`)와 달리 메시지를 건너뛰지 않는 이유:
+/// 팀메이트 세션의 첫 실질 메시지가 곧 이 래퍼 안에 있다(스킵하면 preview가
+/// 사라진다).
+fn strip_teammate_wrapper(s: &str) -> &str {
+    let t = s.trim_start();
+    // 리드 쪽 relayed 형태 — 접두문 뒤에 같은 마커 (두 형태 모두 teammate_v01
+    // 실측; webui messageOrigin.ts와 동일한 마커 쌍).
+    let t = t
+        .strip_prefix("Another Claude session sent a message:")
+        .map(str::trim_start)
+        .unwrap_or(t);
+    if !t.starts_with("<teammate-message") {
+        return s;
+    }
+    let Some(open_end) = t.find('>') else {
+        return s;
+    };
+    let inner = &t[open_end + 1..];
+    let inner = inner
+        .trim_end()
+        .strip_suffix("</teammate-message>")
+        .unwrap_or(inner);
+    inner.trim()
+}
+
 /// Char-safe single-line preview: collapse whitespace runs, trim, and cap at
 /// `PREVIEW_MAX_CHARS` characters (never split a UTF-8 char).
 fn truncate_preview(s: &str) -> String {
+    let s = strip_teammate_wrapper(s);
     let collapsed = s.split_whitespace().collect::<Vec<_>>().join(" ");
     if collapsed.chars().count() <= PREVIEW_MAX_CHARS {
         collapsed
@@ -583,6 +613,19 @@ fn truncate_preview(s: &str) -> String {
             .collect::<String>()
             + "…"
     }
+}
+
+/// B-6c — teammate 세션의 agent 타입. session_state/agent_setting 이벤트의
+/// payload에서 MIN 집계(세션 상수 관측 — teammate_v01 fixture 표본 1).
+pub async fn session_agent_setting(pool: &SqlitePool, session_id: &str) -> Result<Option<String>> {
+    let row: (Option<String>,) = sqlx::query_as(
+        "SELECT MIN(json_extract(payload,'$.agentSetting')) FROM observed_event \
+         WHERE session_id = ? AND kind = 'session_state' AND subkind = 'agent_setting'",
+    )
+    .bind(session_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
 }
 
 /// Distinct `turn_id` count for a session = number of user turns (prompts).

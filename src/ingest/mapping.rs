@@ -25,6 +25,16 @@ pub fn map_record(
             "permission_mode",
             json!({"permissionMode": p.permission_mode}),
         )]),
+        // agent-setting — teammate 세션의 agent 타입 (B-6c, 2026-07-04).
+        // permission-mode와 동형의 session_state 승격.
+        ParsedRecord::AgentSetting(a) => Ok(vec![session_state(
+            meta,
+            raw_event_id,
+            gen,
+            &a.session_id,
+            "agent_setting",
+            json!({"agentSetting": a.agent_setting}),
+        )]),
         ParsedRecord::LastPrompt(l) => Ok(vec![session_state(
             meta,
             raw_event_id,

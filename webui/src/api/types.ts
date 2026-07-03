@@ -117,6 +117,8 @@ export type TurnRollupResponse = {
  *  cursor-paged window. See {@link SessionEventsResponse}. */
 export type SessionDetail = {
   session_id: string;
+  /** B-6c — teammate 세션의 agent 타입("Explore" 등). 비팀메이트는 부재. */
+  agent_setting?: string;
   summary: {
     event_count: number;
     by_kind: Record<string, number>;

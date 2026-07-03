@@ -453,10 +453,15 @@ pub async fn session_detail(
         .await
         .expect("db");
 
+    let agent_setting = repo_observed::session_agent_setting(&pool, &id)
+        .await
+        .expect("db");
+
     Ok(Json(Envelope {
         meta: ResponseMeta::now(),
         data: SessionDetail {
             session_id: id,
+            agent_setting,
             summary: SessionSummary {
                 event_count,
                 by_kind,

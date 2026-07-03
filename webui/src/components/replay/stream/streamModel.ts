@@ -81,6 +81,11 @@ export interface MessageItem {
    *  none. Drives the "서브에이전트 N개 동시 실행" marker — the subject is the
    *  OTHER agents, not this message (annotateConcurrency). */
   concurrentBackground?: number;
+  /** B-6b (2026-07-04) — teammate 응답의 북엔드 페어: 같은 이름의 직전
+   *  Agent 디스패치 tool_call event_id. 로드된 창에 없으면 null(링크 생략).
+   *  연속 레일은 그리지 않는다 — 실행 구간이 메시지 경계에서만 관측되는
+   *  estimated라 measured/estimated 구분을 흐린다. 이산 북엔드만. */
+  dispatchEventId?: string | null;
   /** Set on a `<task-notification>` message whose <tool-use-id> matched a
    *  dispatching tool_call that is NOT a workflow/subagent (e.g. a background
    *  Bash) — so the noti can render as a clean "what finished" card and jump to
@@ -1394,10 +1399,17 @@ export function buildStreamModel(
     }
   };
 
+  // B-6b — teammate 북엔드 페어링: 이름별 최신 Agent 디스패치 tool_call.
+  const lastAgentDispatchByName = new Map<string, string>();
+
   for (const e of events) {
     if (e.kind === 'tool_result') continue;
     const sc = !!e.is_sidechain;
     const agent = e.agent_id || null; // '' (NULL TEXT row mapping) → null
+    if (e.kind === 'tool_call' && e.tool_name === 'Agent') {
+      const nm = (asObj(asObj(e.payload).input) as Record<string, unknown>).name;
+      if (typeof nm === 'string' && nm) lastAgentDispatchByName.set(nm, e.event_id);
+    }
     const c = classify(e);
     if (sc && agent && !scRunByKey.has(agent)) {
       scRunByKey.set(agent, e.workflow_run_id ?? null);
@@ -1417,6 +1429,10 @@ export function buildStreamModel(
           origin: c.origin ?? 'human',
           commandName: c.commandName ?? null,
           teammateId: c.teammateId ?? null,
+          dispatchEventId:
+            c.origin === 'teammate' && c.teammateId
+              ? (lastAgentDispatchByName.get(c.teammateId) ?? null)
+              : null,
         },
         sc,
         agent,

@@ -24,6 +24,7 @@ pub enum ParsedRecord {
     Attachment(AttachmentRecord),
     SystemMsg(SystemRecord),
     PermissionMode(PermissionModeRecord),
+    AgentSetting(AgentSettingRecord),
     LastPrompt(LastPromptRecord),
     FileHistorySnapshot(FileHistorySnapshotRecord),
     Unknown(Value),
@@ -42,6 +43,7 @@ impl ParsedRecord {
             ParsedRecord::Attachment(r) => Some(&r.session_id),
             ParsedRecord::SystemMsg(r) => Some(&r.session_id),
             ParsedRecord::PermissionMode(r) => Some(&r.session_id),
+            ParsedRecord::AgentSetting(r) => Some(&r.session_id),
             ParsedRecord::LastPrompt(r) => Some(&r.session_id),
             ParsedRecord::FileHistorySnapshot(_) | ParsedRecord::Unknown(_) => None,
         }
@@ -190,6 +192,18 @@ pub struct PermissionModeRecord {
     pub permission_mode: String,
 }
 
+/// `agent-setting` — CC 2.1.198 teammate 세션 헤더 레코드 (B-6c, 2026-07-04).
+/// 값은 스폰된 agent 타입("Explore" 등). real fixture:
+/// teammate_v01/teammate_session_head.jsonl 첫 라인 (표본 1 세션 — 필드
+/// 확장은 표본 추가 후).
+#[derive(Debug, Deserialize)]
+pub struct AgentSettingRecord {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    #[serde(rename = "agentSetting")]
+    pub agent_setting: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct LastPromptRecord {
     #[serde(rename = "sessionId")]
@@ -277,6 +291,9 @@ fn dispatch(value: Value) -> Result<ParsedRecord, String> {
         }
         "permission-mode" => {
             ParsedRecord::PermissionMode(serde_json::from_value(value).map_err(|e| e.to_string())?)
+        }
+        "agent-setting" => {
+            ParsedRecord::AgentSetting(serde_json::from_value(value).map_err(|e| e.to_string())?)
         }
         "last-prompt" => {
             ParsedRecord::LastPrompt(serde_json::from_value(value).map_err(|e| e.to_string())?)

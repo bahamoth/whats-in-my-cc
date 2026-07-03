@@ -5677,6 +5677,36 @@ vitest: 69 passed
     "정직한 갭" 테스트(tsc 미탐지 단언)는 승격 단언으로 갱신. 패턴 수 16→17.</p>
   </section>
 
+  <section id="teammate-followups-2026-07-04">
+    <h2>Teammate 후속 묶음 — B-6 종결 (2026-07-04)</h2>
+    <p><b>B-6a preview:</b> <code>strip_teammate_wrapper</code>(repo_observed) — 직접 형태
+    (<code>&lt;teammate-message …&gt;\n본문\n&lt;/…&gt;</code>)와 리드 쪽 relayed 형태("Another
+    Claude session sent a message:" 접두) 모두 본문만 preview로. 슬래시-커맨드 래퍼처럼
+    메시지를 건너뛰지 않는 이유: 팀메이트 세션의 첫 실질 메시지가 곧 래퍼 안이다. 두 형태
+    모두 teammate_v01 실측(webui messageOrigin.ts와 동일 마커 쌍).</p>
+    <p><b>B-6b 이산 북엔드:</b> 백로그 설계 결정("연속 레일 금지 — estimated 구간이
+    measured/estimated 구분을 흐림")대로 북엔드만 구현: ① teammate 응답 카드의 아이콘·라벨과
+    Agent(named) 디스패치 tool_call 라벨을 같은 agentColor로 페어링, ② 응답 카드에
+    "↰ 디스패치" 점프(streamModel이 같은 이름의 직전 Agent tool_call event_id를
+    <code>dispatchEventId</code>로 페어링 — 로드 창에 없으면 null, 링크 생략:
+    task-notification callEventId 선례).</p>
+    <p><b>B-6c agent-setting 정규화:</b> permission-mode 동형으로
+    session_state/agent_setting 승격 + <code>SessionDetail.agent_setting</code> live 집계
+    필드(세션 상수 — migration 없이 조회) + TeamStrip 배지. 기존 행은 raw만 있으므로 재ingest
+    시 채워진다(observed 레벨 신규 산출 — init-db 불필요, raw 재파싱은 필요… 단 raw dedup
+    경로는 mapping을 재실행하지 않으므로 기존 세션 소급은 init-db+재ingest).</p>
+    <p><b>B-6e 표본 실측(이 세션이 직접 스폰):</b> CC 2.1.200에서 이름 없는 Agent 스폰 →
+    <b>사이드카 유지</b>(subagents/agent-*.jsonl, isSidechain=true, agentName/teamName 없음);
+    named 스폰 → 별도 세션 + agentName/teamName 세션 상수, teamName "session-&lt;리드
+    8자&gt;" <b>표본 2</b> 확보. agent-setting 값의 둘째 표본 "general-purpose"(타입
+    그대로). fixture <code>teammate_v02/</code> 동결(named_teammate_head +
+    classic_sidecar_head_2_1_200) + api_session_list_facts invariant. 2026-07-03 노트의
+    "스폰 방식에 따른 분기" 가설이 2.1.200에서 확정됐다.</p>
+    <p><b>B-6d 보류 확정:</b> system 레코드의 agentName/teamName은 표본 2에서도 실리지만
+    (stop_hook_summary·turn_duration 서브타입 확인) 대화 kind가 같은 값을 세션 상수로 이미
+    제공 — 승격은 정보 무추가라 보류 확정.</p>
+  </section>
+
 </main>
 </div>
 </body></html>

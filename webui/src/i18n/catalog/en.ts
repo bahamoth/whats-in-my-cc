@@ -243,7 +243,10 @@ export const en = {
   'stream.msg.openSession': 'open session →',
   'stream.msg.openTeammateSession': "Open this teammate session's replay",
   'team.lead': 'lead',
+  'team.agentType': 'agent type',
   'team.teammates': (n: number) => `${n} teammates`,
+  'stream.msg.jumpToDispatch': 'Jump to the Agent dispatch that spawned this teammate',
+  'stream.msg.dispatch': 'dispatch',
   'stream.msg.showMore': 'Show more',
   'stream.msg.collapse': 'Collapse',
 

@@ -229,8 +229,11 @@ export const ko: Messages = {
   'stream.msg.commandJump': '↳ 명령',
   'stream.msg.openSession': '세션 열기 →',
   'stream.msg.openTeammateSession': '이 팀메이트 세션의 replay로 이동',
+  'team.agentType': '에이전트 타입',
   'team.lead': '리드 세션',
   'team.teammates': (n: number) => `팀메이트 ${n}개`,
+  'stream.msg.jumpToDispatch': '이 팀메이트를 띄운 Agent 디스패치로 이동',
+  'stream.msg.dispatch': '디스패치',
   'stream.msg.showMore': '더 보기',
   'stream.msg.collapse': '접기',
 

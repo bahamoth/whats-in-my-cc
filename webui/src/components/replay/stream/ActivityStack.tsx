@@ -4,6 +4,7 @@ import { ChevronRight, ChevronDown, Wrench, AlertTriangle } from 'lucide-react';
 import { summarizeStack } from './activityGroup';
 import type { ActivityStackData } from './activityGroup';
 import { nodeLabel } from './nodeLabel';
+import { agentColor } from '../../../lib/colorHash';
 import { tagVerb, type Tag } from './eventTags';
 import { hookFacet } from './hookFacet';
 import { formatDuration, durationHeat } from './duration';
@@ -32,6 +33,16 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
 
   const renderItem = (ae: ActivityStackData['events'][number]) => {
     const label = nodeLabel({ node_kind: ae.event.kind, payload: ae.event.payload, telemetry: ae.event.telemetry, tag: ae.event.tag, is_meta: ae.event.is_meta }, t);
+    // B-6b — teammate 디스패치 북엔드: Agent(named) 호출 라벨을 그 팀메이트의
+    // agentColor로 칠해 응답 카드와 짝으로 읽히게 한다(연속 레일 없음).
+    const dispatchName = (() => {
+      if (ae.event.kind !== 'tool_call') return null;
+      const payload = ae.event.payload as Record<string, unknown> | null;
+      if (!payload || payload['tool_name'] !== 'Agent') return null;
+      const input = payload['input'] as Record<string, unknown> | undefined;
+      const nm = input?.['name'];
+      return typeof nm === 'string' && nm ? nm : null;
+    })();
     const isSelected = selectedEventId === ae.event.event_id;
     // hook_event carries its own success/duration in its payload (not a
     // matched tool_result), so derive the badge + duration from there.
@@ -52,7 +63,12 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
           }
         }}
       >
-        <span className={styles.itemPrimary}>{label.primary}</span>
+        <span
+          className={styles.itemPrimary}
+          style={dispatchName ? { color: agentColor(dispatchName) } : undefined}
+        >
+          {label.primary}
+        </span>
         {(() => { const tr = ae.event.tag; return tr && tr.disposition === 'tagged' && tr.value
           ? <span data-testid="event-tag-chip" className={styles.tagChip} data-verb={tagVerb(tr.value as Tag)}>{tr.value}</span> : null; })()}
         {label.secondary && (
