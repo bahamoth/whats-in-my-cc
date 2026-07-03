@@ -88,15 +88,16 @@ async fn dry_run_no_run_is_excluded() {
 }
 
 #[tokio::test]
-async fn tsc_typecheck_is_not_detected_honest_gap() {
-    // `tsc` is NOT on the Tier-1 allowlist and carries no test/spec keyword,
-    // so it is intentionally not detected. Promoting tsc to Tier-1 is a future
-    // change that needs its own fixture (DEV-S11-03). Document the gap here.
+async fn tsc_build_is_now_detected_pattern_17() {
+    // 종전에는 "정직한 갭"(미탐지)이었다 — B-2(2026-07-04)가 DEV-S11-03
+    // 절차대로 실 fixture(verification_tsc_v01.jsonl, 3세션)와 함께 tsc를
+    // Tier-1 패턴 17로 승격했다. 이 fixture의 `npx tsc -b …`(eb70234e 실
+    // 라인)는 이제 build로 탐지된다. --noEmit 형태의 build_check 분기는
+    // tests/verification_tsc.rs가 잠근다.
     let runs = load_runs().await;
-    assert!(
-        run_for_kind(&runs, "tsc").is_none(),
-        "tsc type-check is an honest detection gap, not a guard"
-    );
+    let r = run_for_kind(&runs, "tsc").expect("tsc run detected since pattern 17");
+    assert_eq!(r.command_kind, "build");
+    assert_eq!(r.detection_basis, "known_tool");
 }
 
 #[tokio::test]

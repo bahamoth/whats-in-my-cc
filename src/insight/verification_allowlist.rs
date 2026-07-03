@@ -8,7 +8,7 @@
 //! (`|`, `;`, `&&`) are handled by the extractor, which extracts the leading
 //! command before the first such token.
 //!
-//! Pattern count: 16 (locked by `tests/verification_bash_allowlist.rs`).
+//! Pattern count: 17 (locked by `tests/verification_bash_allowlist.rs`).
 //! parser_version: "verification_run@v1"
 
 use once_cell::sync::Lazy;
@@ -27,7 +27,7 @@ static COMPILED: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
         .collect()
 });
 
-/// Frozen allowlist: exactly 16 (regex, command_kind) pairs.
+/// Frozen allowlist: exactly 17 (regex, command_kind) pairs.
 ///
 /// Real-data anchoring: patterns 5 (`cargo (?:test|nextest)`) and 7
 /// (`cargo build`) were verified against
@@ -82,6 +82,14 @@ pub const PATTERNS: &[(&str, &str)] = &[
     (r"^cargo build --release(?:[: ][^|;&]+)?$", "build"),
     // 16. cargo fmt without --check (real-data anchor: `cargo fmt` form)
     (r"^cargo fmt$", "format_check"),
+    // 17. tsc — TypeScript 컴파일러 (B-2, 2026-07-04). 실 표본 3세션
+    //     (tests/fixtures/transcripts/real/verification_tsc_v01.jsonl):
+    //     `npx tsc --noEmit`(npx wrapper), `pnpm tsc --noEmit`(pnpm 스크립트
+    //     shorthand — 여기서 인라인 처리), `pnpm exec tsc -b`(wrapper 스트립).
+    //     kind는 기본 "build"이고 `--noEmit` 플래그가 있으면 classify()의
+    //     post-match 승격이 "build_check"로 바꾼다(cargo build --doc deny와
+    //     같은 post-match 기법 — regex crate는 look-around 미지원).
+    (r"^(?:pnpm )?tsc(?:[: ][^|;&]+)?$", "build"),
 ];
 
 /// Returns the full allowlist as `(regex_pattern, command_kind)` pairs.
@@ -104,10 +112,24 @@ pub fn classify(cmd: &str) -> Option<&'static str> {
     }
     for (re, kind) in COMPILED.iter() {
         if re.is_match(cmd) {
+            // Post-match promote (B-2): tsc with `--noEmit` is a check-only
+            // typecheck — build_check (cargo check 동형). Without it tsc
+            // emits, so plain "build" stands.
+            if *kind == "build" && is_tsc_no_emit(cmd) {
+                return Some("build_check");
+            }
             return Some(kind);
         }
     }
     None
+}
+
+/// `tsc`(또는 `pnpm tsc`) 명령에 `--noEmit` 플래그가 있는가.
+fn is_tsc_no_emit(cmd: &str) -> bool {
+    let mut toks = cmd.split_whitespace();
+    let first = toks.next().unwrap_or("");
+    let is_tsc = first == "tsc" || (first == "pnpm" && toks.next() == Some("tsc"));
+    is_tsc && cmd.split_whitespace().any(|t| t == "--noEmit")
 }
 
 /// Wrapper prefixes stripped from a segment before classify_segment matching.
@@ -118,6 +140,10 @@ pub fn classify(cmd: &str) -> Option<&'static str> {
 /// tokens) and is therefore NOT in this list.
 const WRAPPER_PREFIXES: &[&[&str]] = &[
     &["pnpm", "dlx"],
+    // `pnpm exec <cmd>` — 프로젝트 스코프에서 셸 명령 실행(pnpm docs
+    // /cli/exec). dlx와 같은 실행-wrapper 계열; 실 표본은
+    // verification_tsc_v01.jsonl의 `pnpm exec tsc -b` (B-2, 2026-07-04).
+    &["pnpm", "exec"],
     &["yarn", "dlx"],
     &["poetry", "run"],
     &["uv", "run"],

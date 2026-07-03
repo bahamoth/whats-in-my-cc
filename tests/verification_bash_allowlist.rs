@@ -15,7 +15,7 @@ fn allowlist_has_expected_pattern_count() {
     // Locked count — must be updated when patterns are added/removed.
     assert_eq!(
         allowlist_patterns().len(),
-        16,
+        17,
         "pattern count changed; if intentional, update this count AND provide samples"
     );
 }
