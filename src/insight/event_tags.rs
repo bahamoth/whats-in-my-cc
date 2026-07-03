@@ -184,6 +184,9 @@ pub static BASH_FIRST_TOKEN_TAGS: &[(&str, &str)] = &[
     ("pdfinfo", "read.docs"),   // PDF metadata / page info
     ("pdftoppm", "read.docs"),  // render PDF pages (reads the source PDF)
     ("serena", "run.code"),     // serena CLI (e.g. `serena project index`)
+    // tagging loop 2026-07-04
+    ("open", "run.proc"),      // macOS 앱/URL 실행 — 프로세스 기동
+    ("plutil", "read.config"), // plist(설정) 조회/변환 (관측 표본은 `-o -` 조회)
     // vcs (git 외)
     ("gh", "write.vcs"),
 ];
@@ -229,6 +232,9 @@ static GIT_SUBS: &[(&str, &str)] = &[
     ("revert", "write.vcs"),
     ("apply", "write.vcs"),
     ("worktree", "write.vcs"),
+    // tagging loop 2026-07-04: plumbing 조회.
+    ("cat-file", "read.vcs"),
+    ("for-each-ref", "read.vcs"),
 ];
 static CARGO_SUBS: &[(&str, &str)] = &[
     ("build", "build.code"),
@@ -277,6 +283,27 @@ static RUSTUP_SUBS: &[(&str, &str)] = &[
 /// 서비스 서브커맨드는 verb가 3단계(aws <svc> <op>)에 있어 미관측인 채로
 /// unmatched 유지 (tagging loop 2026-07-03).
 static AWS_SUBS: &[(&str, &str)] = &[("sts", "read.proc")];
+/// chezmoi — dotfile 관리자 (tagging loop 2026-07-04). diff/managed/source-path는
+/// 소스·타겟 상태 조회(read.config), apply는 타겟 반영(write.config). 미관측
+/// 서브커맨드(add·edit 등)는 unmatched로 남긴다.
+static CHEZMOI_SUBS: &[(&str, &str)] = &[
+    ("diff", "read.config"),
+    ("managed", "read.config"),
+    ("source-path", "read.config"),
+    ("apply", "write.config"),
+];
+/// volta — Node 툴체인 관리 (rustup install 동족, tagging loop 2026-07-04).
+static VOLTA_SUBS: &[(&str, &str)] = &[("install", "write.deps")];
+/// wimcc — 자기 CLI. 의미의 SSOT는 이 repo의 clap 정의(src/cli.rs):
+/// init-db/ingest는 DB 쓰기, serve는 서버 기동, doctor는 환경 진단 조회
+/// (tagging loop 2026-07-04; 보통 경로 실행 `./target/…/wimcc`(run.code)로
+/// 관측되고 bare `wimcc`는 설치본 사용 시에만 나타난다).
+static WIMCC_SUBS: &[(&str, &str)] = &[
+    ("init-db", "write.db"),
+    ("ingest", "write.db"),
+    ("serve", "run.proc"),
+    ("doctor", "read.proc"),
+];
 static PNPM_SUBS: &[(&str, &str)] = &[
     ("install", "write.deps"),
     ("i", "write.deps"),
@@ -286,6 +313,10 @@ static PNPM_SUBS: &[(&str, &str)] = &[
     ("build", "build.code"),
     ("start", "run.code"),
     ("run", "run.code"),
+    // tagging loop 2026-07-04: dev-server 관행 스크립트(Vite/Next 표준 템플릿).
+    // `exec`는 사전이 아니라 command_of의 투명 wrapper 처리, 그 외 미지 토큰은
+    // classify_command의 pnpm 폴백(내부 토큰 재분류)이 담당.
+    ("dev", "run.code"),
 ];
 static YARN_SUBS: &[(&str, &str)] = &[
     ("install", "write.deps"),
@@ -314,6 +345,9 @@ pub static TOOL_SUBCOMMAND_TAGS: &[(&str, &[(&str, &str)])] = &[
     ("go", GO_SUBS),
     ("rustup", RUSTUP_SUBS),
     ("aws", AWS_SUBS),
+    ("chezmoi", CHEZMOI_SUBS),
+    ("volta", VOLTA_SUBS),
+    ("wimcc", WIMCC_SUBS),
 ];
 
 /// MCP 도구 태깅. 도구 이름은 `mcp__[plugin_<plugin>_]<server>__<tool>`. server→tool
@@ -724,6 +758,19 @@ fn command_of(segment: &str) -> String {
             s = rest;
             continue;
         }
+        if ft == "pnpm" {
+            // `pnpm exec <cmd>` — 투명 wrapper (pnpm docs: 프로젝트 스코프에서
+            // node_modules/.bin 명령 실행) — 내부 명령을 재분류한다
+            // (tagging loop 2026-07-04). exec가 아니면 멀티플렉서 분류로 폴스루.
+            if let Some(inner) = s["pnpm".len()..].trim().strip_prefix("exec ") {
+                let inner = inner.trim().to_string();
+                if inner.is_empty() {
+                    return String::new();
+                }
+                s = inner;
+                continue;
+            }
+        }
         if ft == "timeout" {
             let mut rest = s["timeout".len()..].trim().to_string();
             while rest.starts_with('-') {
@@ -810,29 +857,45 @@ fn split_at_first_separator(s: &str) -> Option<(&str, &str)> {
 /// 멀티플렉서의 실제 서브커맨드 — 선행 글로벌 옵션(`-x`/`--x`, 인자 소비형
 /// `-C <dir>`)과 cargo `+toolchain`을 건너뛴다. 없으면 빈 문자열.
 fn resolve_subcommand(tool: &str, rest: &str) -> String {
-    let toks: Vec<&str> = rest.split_whitespace().collect();
+    resolve_subcommand_with_tail(tool, rest).0
+}
+
+/// `resolve_subcommand` + 서브커맨드 토큰부터 시작하는 tail — pnpm 폴백이
+/// 내부 명령(`<sub> <args…>`)을 재분류할 때 쓴다 (tagging loop 2026-07-04).
+fn resolve_subcommand_with_tail<'a>(tool: &str, rest: &'a str) -> (String, &'a str) {
     let arg_flags: Option<&[&str]> = SUBCOMMAND_ARG_FLAGS
         .iter()
         .find(|(t, _)| *t == tool)
         .map(|(_, f)| *f);
-    let mut i = 0usize;
-    while i < toks.len() {
-        let t = toks[i];
+    let mut skip_next = false;
+    let mut chars = rest.char_indices().peekable();
+    while let Some(&(start, c)) = chars.peek() {
+        if c.is_whitespace() {
+            chars.next();
+            continue;
+        }
+        let mut end = rest.len();
+        for (i, ch) in chars.by_ref() {
+            if ch.is_whitespace() {
+                end = i;
+                break;
+            }
+        }
+        let t = &rest[start..end];
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
         if t.starts_with('+') {
-            i += 1;
             continue;
         }
         if t.starts_with('-') {
-            i += if arg_flags.is_some_and(|f| f.contains(&t)) {
-                2
-            } else {
-                1
-            };
+            skip_next = arg_flags.is_some_and(|f| f.contains(&t));
             continue;
         }
-        break;
+        return (t.to_lowercase(), &rest[start..]);
     }
-    toks.get(i).map(|t| t.to_lowercase()).unwrap_or_default()
+    (String::new(), "")
 }
 
 /// 명령 위치의 슬래시 포함 토큰은 실행 파일 — `./x`, `/abs/x`, `a/b`, `*.sh`.
@@ -893,17 +956,35 @@ fn classify_command(cmd_str: &str) -> ClassifyResult {
         };
     }
     if let Some(subs) = lookup_multiplexer(&tok) {
-        let sub = resolve_subcommand(&tok, cmd_str[tok.len()..].trim_start());
+        let rest = cmd_str[tok.len()..].trim_start();
+        let (sub, sub_tail) = resolve_subcommand_with_tail(&tok, rest);
         let hit = subs.iter().find(|(k, _)| *k == sub).map(|(_, v)| *v);
-        return match hit {
-            Some(v) => ClassifyResult {
+        if let Some(v) = hit {
+            return ClassifyResult {
                 value: Some(v),
                 disposition: TagDisposition::Tagged,
-            },
-            None => ClassifyResult {
-                value: None,
-                disposition: TagDisposition::Unmatched,
-            },
+            };
+        }
+        // 서브커맨드 없이 `--version`만 — 도구 버전 조회는 시스템 상태 조회
+        // (read.proc, printenv/sysctl 동족) (tagging loop 2026-07-04).
+        if sub.is_empty() && rest.split_whitespace().any(|t| t == "--version") {
+            return ClassifyResult {
+                value: Some("read.proc"),
+                disposition: TagDisposition::Tagged,
+            };
+        }
+        // pnpm <script>/<binary> 폴백 (pnpm docs: built-in이 아닌 명령은
+        // 스크립트/바이너리로 실행) — 내부 토큰이 사전 분류되면 그 태그를
+        // 쓴다. 미분류면 기존대로 unmatched("pnpm <sub>"로 루프 표면화).
+        if tok == "pnpm" && !sub.is_empty() {
+            let inner = classify_command(sub_tail);
+            if inner.disposition == TagDisposition::Tagged {
+                return inner;
+            }
+        }
+        return ClassifyResult {
+            value: None,
+            disposition: TagDisposition::Unmatched,
         };
     }
     match lookup_first_token(&tok) {

@@ -15,15 +15,23 @@ import type { ObservedEventDto } from '../../../api/types';
 
 // ── Taxonomy: every tag is `verb.object` ──────────────────────────────────
 //   verbs   : read · write · delete · build · test · run · lint
-//   objects : code · docs · config · data · image · file · proc · vcs · db · web · deps
+//   objects : code · docs · config · data · image · file · proc · vcs · db
+//             · web · deps · chat · issue
 // The chip is coloured by the VERB (the part before the dot).
+// SSOT는 Rust 사전(src/insight/event_tags.rs) — 이 union은 그 전집의 미러다
+// (2026-07-04 동기화: 커넥터 태그 chat/issue/run.web/write.web 등이 빠져
+// 드리프트돼 있었다).
 export type Tag =
   | 'read.code' | 'read.docs' | 'read.config' | 'read.data' | 'read.image'
   | 'read.file' | 'read.proc' | 'read.vcs' | 'read.db' | 'read.web'
-  | 'write.file' | 'write.vcs' | 'write.deps'
+  | 'read.deps' | 'read.chat' | 'read.issue'
+  | 'write.file' | 'write.vcs' | 'write.deps' | 'write.db' | 'write.web'
   | 'write.code' | 'write.docs' | 'write.config' | 'write.data' | 'write.image'
+  | 'write.chat' | 'write.issue'
   | 'delete.file'
-  | 'build.code' | 'test.code' | 'run.code' | 'lint.code';
+  | 'build.code' | 'build.docs' | 'test.code'
+  | 'run.code' | 'run.proc' | 'run.web'
+  | 'lint.code';
 
 /** The verb (action) component of a tag — used for chip colouring/grouping. */
 export type TagVerb = 'read' | 'write' | 'delete' | 'build' | 'test' | 'run' | 'lint';
