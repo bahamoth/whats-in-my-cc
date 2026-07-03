@@ -18,33 +18,25 @@ final_state_mismatch L1 제거·태깅 루프 2026-07-03분. 식별자는 날짜
 
 ---
 
-## B-1. 프로젝트 대시보드 라우트 (우선순위 상)
+## B-1. 프로젝트 대시보드 라우트 — 완료 (2026-07-04)
 
-- **무엇**: 세션 횡단 트렌드를 사람에게 보여주는 세 번째 WebUI 라우트.
-  시간축에 세션별 지표(verification passed/failed, tool_failure,
-  context_bloat…)를 놓고 모델·CC 버전 변화 시점을 코호트 경계로 주석 표시.
-- **왜**: "개선됐는가"라는 질문에 UI가 답하지 못한다 — 데이터는
-  `/v1/metrics`(series)·fingerprint에 이미 있고 회고 LLM만 소비 중.
-  사람과 에이전트가 같은 것을 보게 하는 프로젝트 목표의 정면 구현.
-- **접근**: 기존 데이터 시각화만 — 백엔드 작업 거의 없음. 코호트 경계는
-  fingerprint의 `models`/`cc_versions` 변화 + 채택 커밋 시각(instruction
-  스냅샷 필드는 2026-06-19 제거됨 — git 이력이 대신한다).
-- **주의**: UI 변경 = 브라우저 smoke 필수. series는 on-demand 계산 + limit
-  200 cap(`src/insight/series.rs` `MAX_LIMIT`) — 캐싱은 §10.1 원칙(호출
-  빈도가 정당화할 때).
-- **참조**: implementation-notes `#mcp-parity-detector-config-2026-07-03`
-  "남은 개선점 ③".
+`/dashboard` 라우트로 구현(PR #82). 코호트 레일(모델·CC 버전) + verification
+outcome 스택 + 프로세스 strip 6종, 공유 세션 축, 모델 집합 변화만 관통 룰.
+브라우저 smoke(headless 2회) 완료. 설계 결정은 implementation-notes
+`#project-dashboard-2026-07-04`. (이 BACKLOG 갱신은 #82에 누락돼 후속 PR에서
+정정 — "같은 PR에서 갱신" 규칙 위반 1회 기록.)
 
-## B-2. verification allowlist 생태계 확장 (우선순위 상, fixture 선행)
+## B-2. verification allowlist 생태계 확장 (부분 완료 2026-07-04, 표본 게이트)
 
-- **무엇**: `src/insight/verification_allowlist.rs`의 정규식(현재 16개,
-  cargo 편중)에 make/bazel/tox/ruff/eslint/`tsc --noEmit`/ctest 등 추가.
-- **왜**: 비Rust 프로젝트에서 outcome 지표(verification passed/failed)가
-  unknown으로 쏠린다. 회고 루프의 핵심 규칙("process 지표 개선은 outcome
-  동반 확인")이 프로젝트 생태계에 종속되면 루프의 검증력이 무너진다.
-- **선행 조건**: 해당 도구의 실 payload를 `tests/fixtures/**/real/`에 동결
-  (DEV-S11-03 절차 — 새 패턴은 real-fixture 테스트 동반 슬라이스로만).
-  공식 docs 인용도 가능하나 출력 포맷 invariant는 실 표본이 안전.
+- **완료분**: `tsc` 승격(패턴 17) — 코퍼스 실 표본 3세션을
+  `verification_tsc_v01.jsonl`로 동결(DEV-S11-03). `--noEmit`→build_check
+  post-match 승격, `pnpm exec` wrapper, tsc 진단 포맷(`: error TS`) 실패
+  휴리스틱. implementation-notes `#verification-tsc-2026-07-04`.
+- **보류분**: make/bazel/tox/ruff/eslint/ctest — 2026-07-04 코퍼스 전수
+  스캔에서 실행 표본 0건(이 머신은 Rust+TS 코퍼스). real-data anchoring
+  원칙상 표본 없이 추가하지 않는다 — **해당 도구가 코퍼스에 관측되면 그
+  표본을 동결해 추가**(unknown-verification 루프가 표면화한다: allowlist
+  진입 후에만 run이 되므로, 관측 여부는 transcript 직접 스캔으로 확인).
 - **참조**: implementation-notes `#unknown-verification-loop`.
 
 ## B-3. MCP 응답 구조 개선 + 세션 다이제스트 (우선순위 중)

@@ -5632,6 +5632,51 @@ vitest: 69 passed
     재확인은 운영 serve 재기동이 필요해 생략, 최초 실행 출력으로 판정).</p>
   </section>
 
+  <section id="project-dashboard-2026-07-04">
+    <h2>프로젝트 대시보드 라우트 — B-1 (2026-07-04, PR #82)</h2>
+    <p><b>구현:</b> <code>/dashboard</code> — /v1/metrics series+fingerprint를 사람이 소비하는
+    세 번째 라우트. 모든 차트 블록(코호트 레일·verification outcome 스택·프로세스 strip 6종)이
+    같은 세션 축(등폭 트랙, <code>components/dashboard/columns.ts</code>)을 공유하고, 경계 룰은
+    단일 오버레이가 전 블록을 관통한다. 백엔드 변경 없음.</p>
+    <p><b>결정:</b> ① 코호트 경계는 <b>관측된 비어있지 않은 값이 달라질 때만</b> —
+    fingerprint가 빈 세션(요약-only 등)은 직전 코호트를 이어간다(가짜 경계 금지;
+    <code>lib/seriesView.ts</code> 테스트가 SSOT). ② 관통 룰은 <b>모델 집합 변화만</b> — CC
+    버전은 릴리스 주기상 거의 매 세션 바뀌어 전부 그리면 소음(레일 세그먼트가 담당). ③ 모델
+    밴드 categorical 슬롯은 빈도순 상위 4, 초과분은 중립 슬레이트 "Other" 접기(새 hue 생성
+    금지, 직접 라벨이 정체성 전달). 색은 dataviz validator 통과 세트. ④ '&lt;synthetic&gt;'
+    모델 값은 코호트 라벨에서 제외(CC 주입 합성 레코드 — 실측: 실제 모델과 병존).
+    ⑤ verification_not_executed는 outcome이 아니므로 미표시(01 스펙 분석 패널과 동일 원칙).
+    ⑥ 판단 문장 렌더 없음 — count·구간·경계만(측정/판별 분리).</p>
+    <p><b>smoke:</b> Chrome 확장 미연결이라 headless Chrome CLI 스크린샷으로 대체(2회 반복
+    — 1차에서 룰 z-order 텍스트 관통·라벨 overflow·슬롯 뭉개짐 발견, 수정 후 재확인). 발견된
+    프로세스 편차: 레일 라벨 표시를 바꾼 뒤 로컬 vitest 재실행을 누락해 CI가 잡음(수정 커밋
+    8795111) — "수정 후 전체 재실행" 리마인더. BACKLOG B-1 갱신은 #82에 누락돼 이 PR에서
+    정정(같은-PR 갱신 규칙 위반 1회).</p>
+  </section>
+
+  <section id="verification-tsc-2026-07-04">
+    <h2>verification allowlist — tsc 승격 (B-2 부분 완료, 2026-07-04)</h2>
+    <p><b>범위 판정:</b> B-2 후보(make/bazel/tox/ruff/eslint/tsc/ctest) 중 코퍼스 전수 스캔
+    (~/.claude/projects transcript 직접 grep — allowlist 밖 명령은 unknown-verification 루프에
+    잡히지 않으므로)에서 실행 표본이 있는 것은 <b>tsc 계열뿐</b>(40여 건, 3세션). 나머지는
+    이 머신에 미설치이거나 미사용 — real-data anchoring 원칙상 표본 없이 추가하지 않고 보류
+    (BACKLOG B-2 보류분).</p>
+    <p><b>동결(DEV-S11-03):</b> <code>verification_tsc_v01.jsonl</code> — GENUINE 3쌍:
+    190a23db <code>npx tsc --noEmit … | head</code>(error TS2345 실패), 178fae97 멀티라인 내부
+    <code>pnpm tsc --noEmit … | tail</code>(무출력 성공 — 사용자 echo만), 01fe9550
+    <code>pnpm exec tsc -b … | grep</code>(error TS2741, 파일은 CC가 정리했으나 raw_event에
+    보존된 레코드로 복원 — raw 보존 설계가 fixture 소스가 된 첫 사례).</p>
+    <p><b>결정:</b> ① kind는 기본 "build", <code>--noEmit</code>이면 post-match 승격
+    "build_check"(cargo check 동형; cargo build --doc deny와 같은 기법 — regex crate
+    look-around 미지원). ② bare <code>pnpm tsc</code>는 패턴 인라인(<code>^(?:pnpm )?tsc</code>
+    — bare pnpm을 wrapper로 두면 <code>pnpm test</code> 계열이 깨진다), <code>pnpm exec</code>는
+    WRAPPER_PREFIXES(pnpm docs /cli/exec — dlx 동족). ③ 실패 휴리스틱에 tsc 진단 포맷
+    <code>": error TS"</code> 추가(형식 <code>file(line,col): error TSxxxx:</code> — 기존
+    "error:" 패턴이 못 잡음, 실 표본 2건이 잠금). ④ tsc는 성공 시 무출력(공식 동작)이라
+    성공 패턴은 불가능 — 무출력 성공은 구조적 unknown 유지(OTLP 해소 클래스). 종전
+    "정직한 갭" 테스트(tsc 미탐지 단언)는 승격 단언으로 갱신. 패턴 수 16→17.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
