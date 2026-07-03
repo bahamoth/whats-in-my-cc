@@ -216,6 +216,11 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "turn_duration_ms_total": 19115218,  // system/turn_duration 레코드 durationMs 합
   "turn_duration_count": 51,           // 평균은 소비자가 합/count로 계산
   "api_error_count": 0,                // system/api_error 레코드 수 (예: 529 overloaded)
+  "api_rate_limit_count": 0,           // api_error 중 /error/status==429 (rate_limit_error) — 2026-07-04
+  "input_tokens": 0,                   // usage facet 세션 합계 4종 — 할당량(rate limit budget)은
+  "output_tokens": 0,                  //   로컬 관측면에 없어 사용량만 측정한다 (2026-07-04)
+  "cache_read_input_tokens": 0,
+  "cache_creation_input_tokens": 0,
   "compact_boundary_count": 5,         // system/compact_boundary — 컨텍스트 압축 횟수
   "tool_result_truncated_count": 0,    // "... [N characters truncated] ..." 마커 포함 tool_result 수
   "user_interruption_count": 11,       // "[Request interrupted by user"로 시작하는 user_message 수

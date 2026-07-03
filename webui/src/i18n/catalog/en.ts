@@ -290,31 +290,43 @@ export const en = {
   'dash.emptyHint': 'Ingest transcripts first: wimcc ingest --all',
   'dash.error': 'Failed to load the series.',
   'dash.loading': 'Loading series…',
-  'dash.cohort.title': 'Environment cohorts',
+  'dash.cohort.title': 'Model cohorts',
   'dash.cohort.tip':
-    'Sessions grouped by the model set and Claude Code version observed in their fingerprints. ' +
-    'A rule marks each observed change; sessions without a fingerprint extend the previous cohort.',
+    'Model-set cohorts observed in session fingerprints. Sessions without a fingerprint extend ' +
+    'the previous cohort; a dashed rule marks each observed change. CC version is in each bar tooltip.',
   'dash.cohort.models': 'model',
   'dash.cohort.cc': 'CC version',
   'dash.cohort.unknown': 'not observed yet',
   'dash.outcome.title': 'Verification outcomes',
   'dash.outcome.tip':
-    'Per-session verification runs by outcome. unknown = the command ran but its result was unreadable; ' +
-    'runs that never executed (rejected/blocked/cancelled/background) are not shown — they are not outcomes.',
+    'Per-session verification runs by outcome. unknown means the run executed but its result was ' +
+    'unreadable — not a failure. Runs that never executed (rejected, blocked, cancelled, backgrounded) ' +
+    'are not outcomes and are not counted here.',
   'dash.outcome.passed': 'passed',
   'dash.outcome.failed': 'failed',
   'dash.outcome.unknown': 'unknown',
   'dash.outcome.none': 'no verification runs in this window',
   'dash.multiples.title': 'Process signals',
   'dash.multiples.tip':
-    'Deterministic per-session counts. Judgement (better/worse) is yours — pair process moves with the outcome chart above.',
+    'Deterministic per-session counts, measured as-is. No judgement is rendered — read together ' +
+    'with the outcome chart above.',
   'dash.metric.tool_failure_count': 'tool failures',
   'dash.metric.context_bloat_count': 'context bloat signals',
   'dash.metric.api_error_count': 'API errors',
   'dash.metric.user_interruption_count': 'user interruptions',
   'dash.metric.compact_boundary_count': 'context compactions',
   'dash.metric.tool_result_truncated_count': 'truncated tool results',
-  'dash.axis.max': (n: number) => `max ${n}`,
+  'dash.metric.api_rate_limit_count': 'rate limits (429)',
+  'dash.tokens.title': 'Token usage',
+  'dash.tokens.tip':
+    'Session totals from assistant usage blocks: billed input, cache creation and output are stacked; ' +
+    'cache reads are the separate strip below (their scale dwarfs the rest). A token quota is not ' +
+    'observable locally — usage only.',
+  'dash.tokens.input': 'input',
+  'dash.tokens.output': 'output',
+  'dash.tokens.cacheCreation': 'cache write',
+  'dash.tokens.cacheRead': 'cache read',
+  'dash.axis.max': (n: number | string) => `max ${n}`,
   'dash.tab.charts': 'Charts',
   'dash.table.summary': 'Data table',
   'dash.table.session': 'session',

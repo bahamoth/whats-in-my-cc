@@ -335,6 +335,13 @@ export type SessionMetricsDto = {
   turn_duration_count: number;
   /** system/api_error 레코드 수 (예: 529 overloaded → retry). */
   api_error_count: number;
+  /** api_error 중 /error/status==429 — Anthropic API rate_limit_error (2026-07-04). */
+  api_rate_limit_count: number;
+  /** usage facet 세션 합계 — 할당량(rate limit budget)은 관측면에 없어 사용량만. */
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
   /** system/compact_boundary 레코드 수 — 컨텍스트 압축 횟수. */
   compact_boundary_count: number;
   /** `... [N characters truncated] ...` 잘림 마커를 포함한 tool_result 수 —
