@@ -5788,6 +5788,26 @@ vitest: 69 passed
     일치, raw opt-in 유무, 404/400, audit 기록.</p>
   </section>
 
+  <section id="metrics-cache-2026-07-04">
+    <h2>B-8 성능 부채 실측 + SessionMetrics 캐시 (2026-07-04)</h2>
+    <p><b>실측(§10.1 — 착수 전 실측 먼저):</b> 스크래치 DB(이 프로젝트 코퍼스 18세션,
+    최대 6003-이벤트 세션). ① compute_session_metrics 232ms/콜(5회 안정),
+    /v1/metrics series 1.2s. ② live tail 재해시: 최대 transcript 33.4MB sha256 ≈
+    10ms/flush — 무통. ③ recompute_session: 현 최대 세션 6k행(상한 10만) — 무통.
+    ②③은 게이트 유지.</p>
+    <p><b>게이트가 열린 이유:</b> 종전 series 소비자는 회고 LLM(온디맨드)뿐이었으나
+    B-1 대시보드가 /v1/metrics를 인터랙티브 로드 경로로 만들었다 — "호출 빈도가
+    정당화할 때"(§10.1) 조건 충족.</p>
+    <p><b>구현:</b> insight::metrics에 프로세스 수명 인메모리 캐시 — 키
+    (event_count, last_observed_at): append-only ingest에서 데이터 변화는 반드시 키를
+    바꾼다. detector 재구성만으로 signal이 바뀌는 경로(재ingest reconcile)는 새 이벤트
+    flush 또는 프로세스 재시작을 동반하므로 인메모리 캐시는 스테일을 내놓지 않는다
+    (재시작에 함께 사라짐). 키 조회는 covering-index 집계(perf 노트 2026-06-29 totals
+    0.035s/500세션)라 저렴. 효과: warm 단일 세션 232ms→2ms(116배), series
+    1.32s→0.19s(7배 — 잔여는 fingerprint 등 비캐시 경로). 테스트: cache_hits 카운터로
+    적중 단언 + 신규 이벤트 ingest 후 스테일 불가 단언(tests/metrics_cache.rs).</p>
+  </section>
+
 </main>
 </div>
 </body></html>
