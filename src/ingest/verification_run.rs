@@ -581,6 +581,11 @@ fn looks_like_success(content: &str) -> bool {
         || content.contains(" passed in ")
         // vitest / jest ("Test Files  5 passed (5)")
         || (content.contains("Test Files") && content.contains("passed"))
+        // vitest 요약의 Tests 줄만 남은 성공 형태 "Tests  37 passed (37)" —
+        // pipe/tail이 "Test Files" 줄을 잘라낸 경우 (2026-07-04 루프, 실 표본
+        // 8건). 실패 형태는 " passed |"/skipped 꼬리라 " passed ("와 불일치
+        // 하고, looks_like_failure가 먼저 검사돼(호출부) 이중 안전하다.
+        || (content.contains("Tests") && content.contains(" passed ("))
 }
 
 /// Tier-4 estimated lint(clippy) success heuristic: clippy emits no "test result: ok"
@@ -620,6 +625,10 @@ fn looks_like_failure(content: &str) -> bool {
         // (verification_tsc_v01.jsonl, error TS2345/TS2741). "error:" 콜론
         // 직결 형식이 아니라 위 패턴들이 놓친다 (B-2, 2026-07-04).
         || content.contains(": error TS")
+        // vitest 요약의 파이프 구분 실패 형태 "Tests  2 failed | 1 passed …"
+        // — FAILED(대문자)·"failed,"(pytest)·"Tests failed" 전부 불일치
+        // (2026-07-04 루프, 실 표본 12건: 이 프로젝트 vitest -t 필터 실행).
+        || content.contains(" failed | ")
 }
 
 /// Truncate a string to at most `max_bytes` bytes (UTF-8 safe).
@@ -834,6 +843,45 @@ mod tests {
         assert_eq!(runs[0].status, "failed", "piped failure summary → failed");
         assert_eq!(runs[0].status_provenance.as_deref(), Some("estimated"));
         assert_eq!(runs[0].status_basis, "piped");
+    }
+
+    #[test]
+    fn vitest_pipe_separated_failure_summary_is_failed_estimated() {
+        // 2026-07-04 unknown-verification 루프 — 실 표본(이 세션, vitest -t
+        // 필터 실행 12건): 요약이 "Tests  2 failed | 1 passed | 34 skipped
+        // (37)" 형태로 남는데 기존 패턴(FAILED·"failed,"·"Tests failed")이
+        // 전부 불일치해 unknown에 머물렀다. " failed | " 구분자 형태를 잠근다.
+        let evs = make_piped_run(
+            "toolu_piped_vitest_fail",
+            "npx vitest run src/x.test.ts -t 'BatchGroup' 2>&1",
+            " FAIL  src/x.test.ts > suite > case
+      Tests  2 failed | 1 passed | 34 skipped (37)",
+        );
+        let runs = extract_verification_runs(&evs);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(
+            runs[0].status, "failed",
+            "vitest pipe-separated summary → failed"
+        );
+        assert_eq!(runs[0].status_provenance.as_deref(), Some("estimated"));
+    }
+
+    #[test]
+    fn vitest_tests_passed_summary_without_test_files_line_is_passed_estimated() {
+        // 2026-07-04 루프 2차 — 실 표본 8건(이 세션): pipe/tail로 "Test Files"
+        // 줄이 잘리고 "      Tests  37 passed (37)"만 남는 성공 형태. 실패
+        // 형태("Tests  2 failed | 35 passed (37)")는 " passed ("가 아니라
+        // " passed |"/skipped 꼬리라 불일치하고, 설사 겹쳐도
+        // looks_like_failure가 먼저 검사돼 안전하다(6/11 라운드 가드).
+        let evs = make_piped_run(
+            "toolu_piped_vitest_pass",
+            "npx vitest run src/x.test.ts 2>&1",
+            "      Tests  37 passed (37)",
+        );
+        let runs = extract_verification_runs(&evs);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, "passed");
+        assert_eq!(runs[0].status_provenance.as_deref(), Some("estimated"));
     }
 
     #[test]
