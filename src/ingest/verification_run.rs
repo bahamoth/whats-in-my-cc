@@ -616,6 +616,10 @@ fn looks_like_failure(content: &str) -> bool {
         || content.contains("failed,")
         // cargo clippy
         || content.contains("aborting due to")
+        // tsc 진단 포맷 `file(line,col): error TSxxxx:` — 실 표본 2건이 잠금
+        // (verification_tsc_v01.jsonl, error TS2345/TS2741). "error:" 콜론
+        // 직결 형식이 아니라 위 패턴들이 놓친다 (B-2, 2026-07-04).
+        || content.contains(": error TS")
 }
 
 /// Truncate a string to at most `max_bytes` bytes (UTF-8 safe).
