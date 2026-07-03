@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupTeamRows, leadPrefixOf } from '../teamGrouping';
+import { groupTeamRows, leadPrefixOf, leadOf, teammatesOf } from '../teamGrouping';
 
 // team_name 실측 형태: "session-" + 리드 세션 id 앞 8자 — 표본 1
 // (tests/fixtures/transcripts/real/teammate_v01, CC 2.1.198). 형태가 바뀌면
@@ -40,5 +40,30 @@ describe('groupTeamRows', () => {
     const clash = { session_id: 'bebd8197-0000-0000-0000-000000000000', team_name: null };
     const out = groupTeamRows([lead, clash, mateA]);
     expect(out.every((r) => !r.child)).toBe(true);
+  });
+});
+
+// 세션 상세(리드/팀메이트 배지)용 방향별 조회 — groupTeamRows와 같은 조인
+// 규칙(표본 1 형태, 모호 시 포기)을 공유해야 한다.
+describe('teammatesOf / leadOf', () => {
+  const rows = [lead, mateA, mateB, other];
+
+  it('teammatesOf finds the sessions pointing at this lead', () => {
+    expect(teammatesOf(rows, lead.session_id).map((r) => r.session_id)).toEqual([
+      mateA.session_id,
+      mateB.session_id,
+    ]);
+    expect(teammatesOf(rows, other.session_id)).toEqual([]);
+  });
+
+  it('leadOf resolves a teammate back to its unique lead', () => {
+    expect(leadOf(rows, mateA.session_id)?.session_id).toBe(lead.session_id);
+    expect(leadOf(rows, lead.session_id)).toBeNull();
+    expect(leadOf(rows, other.session_id)).toBeNull();
+  });
+
+  it('leadOf gives up on ambiguity', () => {
+    const clash = { session_id: 'bebd8197-0000-0000-0000-000000000000', team_name: null };
+    expect(leadOf([...rows, clash], mateA.session_id)).toBeNull();
   });
 });

@@ -20,10 +20,14 @@ import {
   useUsageBaselineQuery,
   useSessionTurnsQuery,
   useSessionTasksQuery,
+  useSessionsListQuery,
   useEventRawQuery,
   useCorrelatedEventsQuery,
   useSessionMetricsQuery,
 } from '../lib/queries';
+import { teammatesOf } from '../lib/teamGrouping';
+import { TeamStrip } from '../components/replay/TeamStrip';
+import { TeamLinkProvider } from '../components/replay/stream/TeamLinkContext';
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
 import { UntaggedBashPanel } from '../components/replay/stream/UntaggedBashPanel';
@@ -53,6 +57,15 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
 
   const detail = useSessionDetailQuery(sessionId);
   const signals = useSignalsQuery(sessionId);
+  // 팀 관계(리드↔팀메이트) 조인 데이터 — TeamStrip 배지와 teammate 응답
+  // 카드의 세션 점프 링크가 공유한다 (2026-07-03).
+  const sessionsList = useSessionsListQuery();
+  const teammateSessionByName = useMemo(() => {
+    const mates = teammatesOf(sessionsList.data ?? [], sessionId);
+    return Object.fromEntries(
+      mates.filter((m) => m.agent_name).map((m) => [m.agent_name as string, m.session_id]),
+    );
+  }, [sessionsList.data, sessionId]);
   const verificationRuns = useVerificationRunsQuery(sessionId);
   const usage = useSessionUsageQuery(sessionId);
   const baseline = useUsageBaselineQuery();
@@ -366,6 +379,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               turns={turns.data?.turns}
             />
             <MetaStrip session={detail.data} events={window_.events} />
+            <TeamStrip sessionId={sessionId} />
             <div className={styles.toolbar}>
               <button
                 className={styles.toolBtn}
@@ -406,22 +420,24 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
                 {t('common.loadingEarlier')}
               </div>
             )}
-            <ConversationStream
-              items={streamItems}
-              selectedEventId={selectedStreamEventId}
-              findingEventIds={signalEventIds}
-              onSelect={selectStreamCard}
-              onLoadOlder={window_.loadOlder}
-              canLoadOlder={window_.oldest !== null}
-              onLoadNewer={window_.loadNewer}
-              canLoadNewer={!window_.atLiveTip}
-              onFollowingChange={handleFollowingChange}
-              initialFollow={!mountedOnDeepLink}
-              pendingNewCount={pendingNew}
-              footerExtra={
-                <UntaggedBashPanel events={window_.events} onJump={selectStreamCard} />
-              }
-            />
+            <TeamLinkProvider value={teammateSessionByName}>
+              <ConversationStream
+                items={streamItems}
+                selectedEventId={selectedStreamEventId}
+                findingEventIds={signalEventIds}
+                onSelect={selectStreamCard}
+                onLoadOlder={window_.loadOlder}
+                canLoadOlder={window_.oldest !== null}
+                onLoadNewer={window_.loadNewer}
+                canLoadNewer={!window_.atLiveTip}
+                onFollowingChange={handleFollowingChange}
+                initialFollow={!mountedOnDeepLink}
+                pendingNewCount={pendingNew}
+                footerExtra={
+                  <UntaggedBashPanel events={window_.events} onJump={selectStreamCard} />
+                }
+              />
+            </TeamLinkProvider>
           </div>
 
           <div className={styles.detail} data-slot="detail">

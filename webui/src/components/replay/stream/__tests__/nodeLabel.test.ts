@@ -58,6 +58,18 @@ describe('mcpOfficialIntegration', () => {
 });
 
 describe('nodeLabel', () => {
+  it('tool_call: Agent 디스패치는 teammate 이름을 앞세운다 (teammate_v01)', () => {
+    // named Agent 스폰의 정체성 앵커는 input.name — description보다 먼저 보여
+    // 스트림에서 어느 팀메이트를 띄웠는지 식별 가능해야 한다.
+    const r = L('tool_call', {
+      tool_name: 'Agent',
+      input: { name: 'explore-ingest', description: '백엔드 ingest 파이프라인 조사', prompt: '...' },
+    });
+    expect(r.primary).toBe('Agent');
+    expect(r.secondary.startsWith('explore-ingest')).toBe(true);
+    // 이름 없는 Agent 호출은 기존 동작(설명 우선) 유지.
+    expect(L('tool_call', { tool_name: 'Agent', input: { description: '조사', prompt: 'x' } }).secondary).toBe('조사');
+  });
   it('tool_call: tool name + key arg', () => {
     expect(L('tool_call', { tool_name: 'Read', input: { file_path: '/a/slide_logo-17.jpg' } }))
       .toEqual({ kind: 'tool', primary: 'Read', secondary: 'slide_logo-17.jpg' });

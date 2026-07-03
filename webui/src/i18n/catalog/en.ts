@@ -240,6 +240,10 @@ export const en = {
   'stream.msg.done': 'Done',
   'stream.msg.jumpToCommand': 'Jump to the original command',
   'stream.msg.commandJump': '↳ command',
+  'stream.msg.openSession': 'open session →',
+  'stream.msg.openTeammateSession': "Open this teammate session's replay",
+  'team.lead': 'lead',
+  'team.teammates': (n: number) => `${n} teammates`,
   'stream.msg.showMore': 'Show more',
   'stream.msg.collapse': 'Collapse',
 

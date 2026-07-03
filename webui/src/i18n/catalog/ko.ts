@@ -227,6 +227,10 @@ export const ko: Messages = {
   'stream.msg.done': '완료',
   'stream.msg.jumpToCommand': '원래 명령으로 이동',
   'stream.msg.commandJump': '↳ 명령',
+  'stream.msg.openSession': '세션 열기 →',
+  'stream.msg.openTeammateSession': '이 팀메이트 세션의 replay로 이동',
+  'team.lead': '리드 세션',
+  'team.teammates': (n: number) => `팀메이트 ${n}개`,
   'stream.msg.showMore': '더 보기',
   'stream.msg.collapse': '접기',
 

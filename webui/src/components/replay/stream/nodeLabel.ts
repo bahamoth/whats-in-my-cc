@@ -143,14 +143,23 @@ export function nodeLabel(
   switch (node.node_kind) {
     case 'tool_call': {
       const name = (p.tool_name as string) || 'tool';
+      // Agent 디스패치(named teammate 스폰, CC 2.1.198): 정체성 앵커는
+      // input.name — description보다 앞세워 어느 팀메이트인지 식별되게 한다.
+      const agentName = name === 'Agent' ? (asObj(p.input).name as string) : undefined;
+      const arg = toolArg(
+        p.input,
+        typeof node.tag?.display === 'string' ? node.tag.display : undefined,
+      );
       return {
         kind: 'tool',
         // MCP tools render as "server · tool" instead of the raw mcp__… string.
         primary: formatMcpToolName(name) ?? name,
-        secondary: toolArg(
-          p.input,
-          typeof node.tag?.display === 'string' ? node.tag.display : undefined,
-        ),
+        secondary:
+          typeof agentName === 'string' && agentName
+            ? arg
+              ? `${agentName} — ${arg}`
+              : agentName
+            : arg,
       };
     }
     case 'assistant_message':

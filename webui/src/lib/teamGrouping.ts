@@ -25,6 +25,27 @@ interface Groupable {
   team_name?: string | null;
 }
 
+/** sessionId를 리드로 가리키는 팀메이트 세션들 (목록 순서 유지). */
+export function teammatesOf<T extends Groupable>(rows: T[], sessionId: string): T[] {
+  return rows.filter((r) => {
+    if (r.session_id === sessionId) return false;
+    const p = r.team_name ? leadPrefixOf(r.team_name) : null;
+    return !!p && sessionId.startsWith(p);
+  });
+}
+
+/** 팀메이트 세션의 유일한 리드 세션 — 자신이 팀메이트가 아니거나, 리드가
+ *  부재·모호하면 null (groupTeamRows와 같은 포기 규칙). */
+export function leadOf<T extends Groupable>(rows: T[], sessionId: string): T | null {
+  const self = rows.find((r) => r.session_id === sessionId);
+  const p = self?.team_name ? leadPrefixOf(self.team_name) : null;
+  if (!p) return null;
+  const leads = rows.filter(
+    (x) => !x.team_name && x.session_id !== sessionId && x.session_id.startsWith(p),
+  );
+  return leads.length === 1 ? leads[0] : null;
+}
+
 /** 정렬·필터가 끝난 행 배열을 받아, 각 팀메이트 행을 리드 행 바로 아래로
  *  옮기고 child로 표시한다. 리드가 목록에 없거나 prefix가 목록 내에서
  *  모호(비-팀메이트 세션 2개 이상 매칭)하면 원래 자리에 남는다. */

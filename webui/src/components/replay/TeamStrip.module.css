@@ -1,0 +1,25 @@
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.icon { color: var(--wimcc-fg-muted); }
+.count { color: var(--wimcc-fg-muted); }
+.leadLink {
+  color: var(--wimcc-fg-muted);
+  text-decoration: none;
+}
+.leadLink:hover { color: var(--wimcc-fg); }
+.chip {
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 0 8px;
+  border: 1px solid;
+  border-radius: 999px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.chip:hover { filter: brightness(1.25); }
