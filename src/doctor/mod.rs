@@ -317,6 +317,30 @@ fn build_recommendations(report: &DoctorReport) -> Vec<String> {
                 no_data.join(", ")
             ));
         }
+        // B-11 (2026-07-04): transcript는 있는데 OTLP가 비어 있으면 verification
+        // outcome의 구조적 unknown 클래스를 안내한다 — 성공한 명령은 transcript에
+        // exit 0 신호를 남기지 않아(2026-07-03 루프 실측) transcript-only로는
+        // 영원히 unknown이고, OTLP tool_result 수집이 measured로 해소한다.
+        let transcript_has_data = report
+            .server
+            .sources
+            .iter()
+            .any(|s| s.label == "transcript" && (s.status == "recent" || s.status == "stale"));
+        let otlp_all_empty = report
+            .server
+            .sources
+            .iter()
+            .filter(|s| s.label.starts_with("otel-"))
+            .all(|s| s.status == "no_data");
+        if transcript_has_data && otlp_all_empty {
+            out.push(
+                "Transcript-only collection leaves successful verification runs at \
+                 outcome=unknown (transcripts carry no exit-0 signal). Enable Claude \
+                 Code OTLP export (env vars above) so tool results resolve to \
+                 measured outcomes."
+                    .into(),
+            );
+        }
     }
     out
 }
@@ -544,5 +568,77 @@ pub async fn run(opts: DoctorOpts) -> std::io::Result<i32> {
     } else {
         print_pretty(&mut stdout, &report)?;
         Ok(report.exit_code)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn src(label: &str, status: &'static str) -> SourceFreshness {
+        SourceFreshness {
+            label: label.into(),
+            last_ingested_at: None,
+            row_count_24h: 0,
+            total_rows: 0,
+            status,
+        }
+    }
+
+    fn report_with(sources: Vec<SourceFreshness>) -> DoctorReport {
+        DoctorReport {
+            envs: vec![],
+            endpoint: EnvCheck {
+                key: "OTEL_EXPORTER_OTLP_ENDPOINT".into(),
+                value: None,
+                expected: None,
+                status: "unset",
+                note: None,
+            },
+            server: ServerProbe {
+                reachable: true,
+                health_status_code: Some(200),
+                build_sha: None,
+                sources,
+                error: None,
+            },
+            recommendations: vec![],
+            exit_code: 0,
+            settings_scopes: vec![],
+            effective_env: Default::default(),
+            env_divergence: vec![],
+        }
+    }
+
+    /// B-11 (2026-07-04): transcript만 있고 OTLP가 비면 구조적-unknown 안내가 뜬다.
+    #[test]
+    fn recommends_otlp_when_transcript_only() {
+        let r = report_with(vec![
+            src("transcript", "recent"),
+            src("otel-traces", "no_data"),
+            src("otel-metrics", "no_data"),
+            src("otel-logs", "no_data"),
+        ]);
+        let recs = build_recommendations(&r);
+        assert!(
+            recs.iter().any(|m| m.contains("outcome=unknown")),
+            "OTLP 안내가 있어야 한다: {recs:?}"
+        );
+    }
+
+    /// OTLP가 이미 수집되면 안내가 뜨지 않는다.
+    #[test]
+    fn no_otlp_hint_when_otlp_flowing() {
+        let r = report_with(vec![
+            src("transcript", "recent"),
+            src("otel-traces", "recent"),
+            src("otel-metrics", "no_data"),
+            src("otel-logs", "no_data"),
+        ]);
+        let recs = build_recommendations(&r);
+        assert!(
+            !recs.iter().any(|m| m.contains("outcome=unknown")),
+            "OTLP가 흐르면 안내 불필요: {recs:?}"
+        );
     }
 }
