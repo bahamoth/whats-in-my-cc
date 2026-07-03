@@ -650,7 +650,31 @@ fn extract_command_subs(cmd: &str) -> (String, Vec<String>) {
 
 pub fn segment_command(cmd: &str) -> Vec<String> {
     let joined = join_continuations(cmd);
-    let (joined, inners) = extract_command_subs(&joined);
+    let (outer, inners) = extract_command_subs(&joined);
+    let outer_segs = split_separator_segments(&outer);
+    // 서브셸 내부는 그것을 담은 바깥 세그먼트 "직후"에 스플라이스한다 —
+    // 시간 순서 보존: `out=$(gh pr checks …)` 뒤의 `grep`보다 gh가 먼저
+    // 분류된다(게이트 실측 2026-07-04, 세션 00fae5d9). 자리표시자 수로
+    // 어느 세그먼트에서 나온 내부인지 순서 매핑한다.
+    let mut inner_iter = inners.into_iter();
+    let mut out: Vec<String> = Vec::new();
+    for seg in outer_segs {
+        let n = seg.matches("__cmdsub__").count();
+        out.push(seg);
+        for _ in 0..n {
+            if let Some(inner) = inner_iter.next() {
+                out.extend(segment_command(&inner));
+            }
+        }
+    }
+    for inner in inner_iter {
+        out.extend(segment_command(&inner));
+    }
+    out
+}
+
+/// `&& || | ; &`·개행 구분자로 단순 분할 (segment_command의 분할부).
+fn split_separator_segments(joined: &str) -> Vec<String> {
     let bytes = joined.as_bytes();
     let mut segments = Vec::new();
     let mut start = 0usize;
@@ -677,17 +701,11 @@ pub fn segment_command(cmd: &str) -> Vec<String> {
         }
     }
     segments.push(joined[start..].to_string());
-    let mut out: Vec<String> = segments
+    segments
         .into_iter()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-        .collect();
-    // 서브셸 내부는 바깥 세그먼트들 뒤에 붙는다 — 바깥 명령이 있으면 바깥이
-    // 먼저 분류되고, 바깥이 비면(할당 등) 내부가 분류된다.
-    for inner in inners {
-        out.extend(segment_command(&inner));
-    }
-    out
+        .collect()
 }
 
 fn is_assignment(s: &str) -> bool {

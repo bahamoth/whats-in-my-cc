@@ -860,3 +860,12 @@ fn seq_in_subshell_is_control() {
     let o = bash("for i in $(seq 1 10); do echo $i; done");
     assert_eq!(o.disposition, TagDisposition::Control);
 }
+
+/// B-7d 게이트 실측 재현(2026-07-04) — 실 명령(세션 00fae5d9): for-루프
+/// 본문 할당 우변의 `$(gh pr checks …)`가 분류돼야 한다.
+#[test]
+fn real_poll_loop_subshell_classifies_gh() {
+    let cmd = "cd /Users/bahamoth/projects/whats-in-my-cc\nsleep 10\nfor i in $(seq 1 12); do\n  out=$(gh pr checks 60 2>&1)\n  echo \"[poll $i]\"; echo \"$out\"\n  echo \"$out\" | grep -qi pending || { echo \"=== DONE ===\"; break; }\n  sleep 40\ndone";
+    let o = bash(cmd);
+    assert_eq!(tag(&o), Some("write.vcs"), "token={:?}", o.token);
+}
