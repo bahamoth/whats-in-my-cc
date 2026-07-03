@@ -101,8 +101,9 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 </tbody></table></section>
 <section id="metrics"><h2><span class="num">08</span>Success Metrics</h2>
 <div class="grid"><div class="card"><h4>Trace completeness</h4><div class="metric"><div class="top"><span>tool/result correlation</span><span>target ≥ 95%</span></div><div class="bar"><div class="fill" style="width:95%"></div></div></div><div class="metric"><div class="top"><span>OTel span linkage</span><span>target ≥ 90%</span></div><div class="bar"><div class="fill green" style="width:90%"></div></div></div></div><div class="card"><h4>Insight reliability</h4><div class="metric"><div class="top"><span>evidence-linked signal ratio</span><span>100%</span></div><div class="bar"><div class="fill green" style="width:100%"></div></div></div><div class="metric"><div class="top"><span>unsupported narrative</span><span>0%</span></div><div class="bar"><div class="fill red" style="width:4%"></div></div></div></div></div></section>
-<section id="open"><h2><span class="num">09</span>남은 피드백 포인트</h2>
-<ol><li><strong>raw API body</strong>를 local_full_evidence에 포함할지, 별도 explicit opt-in으로 둘지 결정 필요.</li><li>외부 MCP client가 같은 machine에서만 접근하는지, LAN 접근까지 허용할지 결정 필요.</li><li>export bundle이 raw payload를 포함할지, redacted normalized evidence만 기본으로 할지 결정 필요. (export bundle은 미구현 — owner-only local export action으로 계획된 항목.)</li></ol>
+<section id="open"><h2><span class="num">09</span>남은 피드백 포인트 — 결정 완료 (2026-07-04)</h2>
+<p>세 항목 모두 2026-07-04 사용자 결정으로 닫혔다. 결정 이력은 <code>docs/implementation-notes.html#prd-09-decisions-2026-07-04</code> 참조.</p>
+<ol><li><strong>raw API body</strong> — <strong>local_full_evidence에 기본 포함하기로 결정.</strong> 단 현재 raw API body의 수집원(collector)이 존재하지 않아 실수집은 없다 — 수집원을 도입하는 시점에 opt-in 게이트 없이 프로파일 기본 범위로 들어간다(05 §02 프로파일 표 동기화).</li><li>외부 MCP client는 <strong>localhost 전용 유지.</strong> LAN 접근은 허용하지 않는다 — Host allowlist 미들웨어·기본 bind <code>127.0.0.1</code> 현행 확정.</li><li>export bundle은 <strong>redacted normalized evidence 기본 + raw payload는 explicit opt-in으로 결정.</strong> (owner-only local export action — 구현 계약은 이 결정을 따른다.)</li></ol>
 </section>
 <div class="footer">What's in My Claude Code HTML Documentation Set · local-first · evidence-linked · OTel-first</div></main></div>
 <script>

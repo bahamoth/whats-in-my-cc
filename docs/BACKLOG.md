@@ -70,10 +70,10 @@ final_state_mismatch L1 제거·태깅 루프 2026-07-03분. 식별자는 날짜
   존재, 코드 없음). read-only 원칙의 유일한 예외로 이미 지정돼 있다.
 - **왜**: 회고 결과·evidence를 PR·이슈·팀 공유로 반출하는 유일한 경로.
   현재 인사이트는 로컬 브라우저와 LLM 컨텍스트 안에 갇혀 있다.
-- **선행 결정** (PRD §09, 사용자 판단 필요): bundle에 raw payload 포함
-  여부 — 권장안은 "redacted normalized evidence 기본 + raw는 explicit
-  opt-in".
-- **참조**: `docs/00_prd_revised.html` §09, CLAUDE.md Non-goals 예외 절.
+- **선행 결정 해소(2026-07-04)**: redacted normalized evidence 기본 +
+  raw는 explicit opt-in으로 사용자 결정 완료 — B-9 참조. 구현만 남음.
+- **참조**: `docs/00_prd_revised.html` §09, CLAUDE.md Non-goals 예외 절,
+  implementation-notes `#prd-09-decisions-2026-07-04`.
 
 ## B-5. implementation-notes 이원화 (우선순위 중)
 
@@ -138,15 +138,17 @@ CC 2.1.198의 teammate 실행 모델 대응(0026/0027 라운드)의 잔여:
   헤더에 의도 명시).
 - **원칙**: 캐싱·커서는 호출 빈도가 정당화할 때(§10.1). 착수 전 실측 먼저.
 
-## B-9. PRD §09 열린 결정 (사용자 판단 대기)
+## B-9. PRD §09 열린 결정 — 완료 (2026-07-04)
 
-1. raw API body를 local_full_evidence에 포함할지, explicit opt-in으로 둘지.
-2. 외부 MCP client의 LAN 접근 허용 여부(현재 localhost 전용 — Host
-   allowlist 미들웨어).
-3. export bundle의 redaction 기본값(B-4와 연동).
+세 건 모두 사용자 결정으로 종결. ① raw API body: local_full_evidence
+**기본 포함**(수집원 도입 시 — 현재 수집원 없어 실수집 변화 없음).
+② MCP LAN 접근 **불허**(localhost 전용 확정). ③ export bundle
+**redacted 기본 + raw explicit opt-in**(B-4 계약). PRD §09·05 spec
+동기화 완료 — implementation-notes `#prd-09-decisions-2026-07-04`.
 
 추가 유의(결정 아님): OTLP 수집기는 인증 예외 — `--bind 0.0.0.0` 설정 시
-무인증 수신 노출. local-first 전제상 현재 무해하나 §09-2 결정과 함께 검토.
+무인증 수신 노출. local-first 전제상 현재 무해하나 LAN 불허 확정과 정합
+(bind 변경은 사용자 explicit 설정 책임).
 
 ## B-10. Detector 후보 졸업 경로 (관문 준수)
 
