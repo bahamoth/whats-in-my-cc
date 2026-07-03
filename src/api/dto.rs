@@ -91,6 +91,11 @@ pub struct SessionListItem {
 #[derive(Serialize)]
 pub struct SessionDetail {
     pub session_id: String,
+    /// B-6c (2026-07-04) — teammate 세션의 agent 타입("Explore" 등).
+    /// session_state/agent_setting 이벤트에서 live 집계(세션 상수, 표본 1).
+    /// teammate가 아닌 세션은 null.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_setting: Option<String>,
     pub summary: SessionSummary,
 }
 

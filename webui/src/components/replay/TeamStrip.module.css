@@ -23,3 +23,14 @@
   white-space: nowrap;
 }
 .chip:hover { filter: brightness(1.25); }
+
+/* B-6c — agent 타입 배지 (agent-setting 레코드). */
+.typeChip {
+  padding: 1px 8px;
+  border: 1px solid var(--wimcc-border-strong);
+  border-radius: 10px;
+  font-family: var(--wimcc-mono);
+  font-size: 11px;
+  color: var(--wimcc-fg-muted);
+  background: var(--wimcc-surface-2);
+}

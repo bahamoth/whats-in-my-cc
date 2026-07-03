@@ -78,28 +78,24 @@ outcome 스택 + 프로세스 strip 6종, 공유 세션 축, 모델 집합 변�
 - **참조**: CLAUDE.md "Implementation Notes (지속 유지 의무)" 절과의 정합
   유지 필요.
 
-## B-6. Teammate 후속 묶음 (우선순위 중)
+## B-6. Teammate 후속 묶음 — 완료 (2026-07-04)
 
-CC 2.1.198의 teammate 실행 모델 대응(0026/0027 라운드)의 잔여:
+CC 2.1.198 teammate 실행 모델 대응 잔여 전부 처리
+(implementation-notes `#teammate-followups-2026-07-04`):
 
-- **B-6a. 목록 preview 정리**: 팀메이트 세션의 first_user_message_preview가
-  raw `<teammate-message …>` XML을 노출 — preview 계산(`session_facets`의
-  preview 쿼리, `src/db/repo_observed.rs`)에서 마커 처리.
-- **B-6b. 북엔드형 시간축 가시화**: 리드 replay에서 팀메이트 [시작→종료]
-  연속 레일은 **그리지 말 것** — 실행 구간이 메시지 경계(디스패치·응답·idle)
-  에서만 관측되는 estimated라 measured/estimated 구분을 흐린다. 이산
-  북엔드(디스패치/응답 노드) 중심으로 설계.
-- **B-6c. `agent-setting` 레코드 정규화**: `agentSetting: "Explore"`(agent
-  타입) — 현재 Unknown으로 raw 보존만. 배지 후보.
-- **B-6d. system 레코드의 agentName/teamName**: 실측상 붙지만 미승격
-  (SystemRecord가 serde flatten 구조). 대화 kind로 충분해 보류했음.
-- **B-6e. 표본 확인**: 2.1.198에서 클래식(이름 없는) 서브에이전트가 여전히
-  사이드카인지 미관측 — 표본 확보 시 notes 갱신. teamName의
-  "session-<리드 8자>" 형태는 **표본 1** — 조인 로직 확장 전 fixture 추가.
-- **참조**: implementation-notes `#teammate-observability-2026-07-03`,
-  `#teammate-in-session-2026-07-03`. fixture:
-  `tests/fixtures/transcripts/real/teammate_v01/`. 조인 SSOT:
-  `webui/src/lib/teamGrouping.ts`.
+- **B-6a 완료**: preview에서 `<teammate-message>` 래퍼 스트립(직접·relayed
+  두 형태 모두 본문 노출) — `strip_teammate_wrapper`.
+- **B-6b 완료**: 이산 북엔드 — teammate 응답 카드·Agent 디스패치 라벨을
+  agentColor로 페어링, 응답→디스패치 점프(`dispatchEventId`, 창에 없으면
+  생략). 연속 레일은 설계대로 그리지 않음.
+- **B-6c 완료**: `agent-setting` → session_state/agent_setting 정규화 +
+  `SessionDetail.agent_setting` live 필드 + TeamStrip 배지.
+- **B-6d 보류 확정(재확인)**: system 레코드 agentName/teamName — 표본 2에서도
+  실림 확인. 대화 kind가 세션 상수로 이미 제공하므로 승격은 정보 무추가.
+- **B-6e 완료**: 이 세션(CC 2.1.200)에서 직접 스폰해 실측 — **클래식(이름
+  없는) 서브에이전트는 여전히 사이드카**, named는 별도 세션(teamName
+  "session-<리드 8자>" **표본 2**). fixture `teammate_v02/` 동결 + invariant
+  테스트.
 
 ## B-7. 태깅 인프라 (우선순위 중하)
 

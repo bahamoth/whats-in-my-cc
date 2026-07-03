@@ -13,17 +13,28 @@ import { agentColor } from '../../lib/colorHash';
 import { useT } from '../../i18n';
 import styles from './TeamStrip.module.css';
 
-export function TeamStrip({ sessionId }: { sessionId: string }) {
+interface TeamStripProps {
+  sessionId: string;
+  /** B-6c — 이 세션의 agent 타입(teammate 세션의 agent-setting 레코드). */
+  agentSetting?: string;
+}
+
+export function TeamStrip({ sessionId, agentSetting }: TeamStripProps) {
   const t = useT();
   const sessions = useSessionsListQuery();
   const rows = sessions.data ?? [];
   const mates = teammatesOf(rows, sessionId);
   const lead = leadOf(rows, sessionId);
-  if (!mates.length && !lead) return null;
+  if (!mates.length && !lead && !agentSetting) return null;
 
   return (
     <div className={styles.strip} data-testid="team-strip">
       <Users size={13} aria-hidden className={styles.icon} />
+      {agentSetting && (
+        <span className={styles.typeChip} title={t('team.agentType')}>
+          {agentSetting}
+        </span>
+      )}
       {lead && (
         <Link className={styles.leadLink} to={`/sessions/${lead.session_id}`}>
           ← {t('team.lead')} {lead.slug ?? lead.session_id.slice(0, 8)}

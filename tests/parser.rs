@@ -15,6 +15,7 @@ async fn parses_five_record_types_in_minimal_fixture() {
             ParsedRecord::Attachment(_) => "attachment",
             ParsedRecord::SystemMsg(_) => "system",
             ParsedRecord::PermissionMode(_) => "permission-mode",
+            ParsedRecord::AgentSetting(_) => "agent-setting",
             ParsedRecord::LastPrompt(_) => "last-prompt",
             ParsedRecord::FileHistorySnapshot(_) => "file-history-snapshot",
             ParsedRecord::Unknown(_) => "unknown",

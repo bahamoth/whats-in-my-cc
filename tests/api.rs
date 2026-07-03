@@ -113,3 +113,37 @@ async fn telemetry_index_exists() {
     .unwrap();
     assert_eq!(row.0, 1);
 }
+
+/// B-6c (2026-07-04) — `agent-setting` 레코드 정규화. real fixture
+/// (teammate_v01/teammate_session_head.jsonl)의 첫 라인
+/// `{"type":"agent-setting","agentSetting":"Explore",…}`(세션 e8b4a11e)가
+/// session_state/agent_setting observed event로 승격되고, 세션 detail이
+/// `agent_setting` 필드로 노출한다(배지 소비용 — 세션 상수라 live 집계).
+#[tokio::test]
+async fn agent_setting_record_is_normalised_and_surfaced_in_detail() {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(2)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    migrate(&pool).await.unwrap();
+    store::ingest_file(
+        &pool,
+        std::path::Path::new(
+            "tests/fixtures/transcripts/real/teammate_v01/teammate_session_head.jsonl",
+        ),
+        &wimcc::live::NoopSink,
+    )
+    .await
+    .unwrap();
+    let app = wimcc::api::router(wimcc::api::AppState::new_for_tests(pool));
+    let s = TestServer::new(app).unwrap();
+    let detail: Value = s
+        .get("/v1/sessions/e8b4a11e-541d-4d64-9aae-52663c01c5cc")
+        .await
+        .json();
+    assert_eq!(
+        detail["data"]["agent_setting"], "Explore",
+        "agent-setting must be normalised and surfaced; got: {detail}"
+    );
+}

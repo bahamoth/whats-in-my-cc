@@ -379,7 +379,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               turns={turns.data?.turns}
             />
             <MetaStrip session={detail.data} events={window_.events} />
-            <TeamStrip sessionId={sessionId} />
+            <TeamStrip sessionId={sessionId} agentSetting={detail.data?.agent_setting} />
             <div className={styles.toolbar}>
               <button
                 className={styles.toolBtn}

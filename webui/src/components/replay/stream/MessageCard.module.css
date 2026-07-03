@@ -372,3 +372,14 @@
   white-space: nowrap;
 }
 .teammateOpen:hover { color: var(--wimcc-fg); border-color: var(--wimcc-fg-muted); }
+
+/* B-6b — teammate 응답 → 디스패치 북엔드 점프. */
+.dispatchJump {
+  border: none;
+  background: transparent;
+  color: var(--wimcc-fg-subtle);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.dispatchJump:hover { color: var(--wimcc-fg); }

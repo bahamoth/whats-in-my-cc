@@ -1407,3 +1407,40 @@ describe('buildTaskList', () => {
     expect(items.some((i) => i.type === 'message' && (i as MessageItem).eventId === 'wFar')).toBe(true);
   });
 });
+
+// B-6b (2026-07-04) — teammate 북엔드 페어링: 응답 카드가 같은 이름의
+// 직전 Agent 디스패치 tool_call을 가리킨다. 연속 레일은 그리지 않는다
+// (estimated 구간이 measured/estimated 구분을 흐림) — 이산 북엔드만.
+describe('teammate dispatch bookends', () => {
+  const dispatch = (id: string, name: string, at: string) =>
+    ev({
+      event_id: id, kind: 'tool_call', actor: 'assistant', tool_name: 'Agent',
+      observed_at: at,
+      payload: { tool_name: 'Agent', input: { name, prompt: 'do the thing' } },
+    });
+  const teammateMsg = (id: string, teammate: string, at: string) =>
+    ev({
+      event_id: id, kind: 'user_message', actor: 'user', observed_at: at,
+      payload: { content: `<teammate-message teammate_id="${teammate}">\n결과 요약\n</teammate-message>` },
+    });
+
+  it('links a teammate response to the latest preceding dispatch of the same name', () => {
+    const items = buildStreamModel([
+      dispatch('d1', 'explore-api', '2026-07-03T00:00:00Z'),
+      dispatch('d2', 'explore-api', '2026-07-03T00:05:00Z'),
+      teammateMsg('m1', 'explore-api', '2026-07-03T00:10:00Z'),
+    ]);
+    const msg = items.find((i): i is MessageItem => i.type === 'message' && i.role === 'user');
+    expect(msg?.origin).toBe('teammate');
+    expect(msg?.dispatchEventId).toBe('d2');
+  });
+
+  it('omits the link when no dispatch of that name is in the window', () => {
+    const items = buildStreamModel([
+      dispatch('d1', 'explore-ingest', '2026-07-03T00:00:00Z'),
+      teammateMsg('m1', 'explore-api', '2026-07-03T00:10:00Z'),
+    ]);
+    const msg = items.find((i): i is MessageItem => i.type === 'message' && i.role === 'user');
+    expect(msg?.dispatchEventId ?? null).toBeNull();
+  });
+});

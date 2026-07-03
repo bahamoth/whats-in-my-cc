@@ -184,3 +184,90 @@ async fn slug_comes_from_real_system_summary_payload() {
         "real system-summary slug must surface in the list; got: {item}"
     );
 }
+
+/// B-6a (2026-07-04) — teammate 세션의 preview는 raw `<teammate-message …>`
+/// 래퍼가 아니라 그 안의 실제 첫 메시지 본문이어야 한다. real fixture
+/// (teammate_v01/teammate_session_head.jsonl, 세션 e8b4a11e)의 첫 user
+/// 메시지는 `<teammate-message teammate_id="team-lead">\n{본문}\n</teammate-message>`
+/// 형태다 — 래퍼를 벗긴 본문으로 preview를 만든다.
+#[tokio::test]
+async fn preview_strips_teammate_message_wrapper() {
+    let pool = fresh_pool().await;
+    store::ingest_file(
+        &pool,
+        std::path::Path::new(
+            "tests/fixtures/transcripts/real/teammate_v01/teammate_session_head.jsonl",
+        ),
+        &NoopSink,
+    )
+    .await
+    .unwrap();
+    let server = build_server(pool);
+    let r = server.get("/v1/sessions").await;
+    r.assert_status_ok();
+    let body: Value = r.json();
+    let item = &body["data"][0];
+    let preview = item["first_user_message_preview"].as_str().unwrap_or("");
+    assert!(
+        !preview.starts_with("<teammate-message"),
+        "preview must not expose the raw teammate-message wrapper; got: {preview}"
+    );
+    assert!(
+        preview.starts_with("/Users/bahamoth/projects/whats-in-my-cc 저장소의"),
+        "preview must be the inner dispatch text; got: {preview}"
+    );
+}
+
+/// B-6a 보강 — 리드 세션 쪽 relayed 형태("Another Claude session sent a
+/// message: <teammate-message …>")도 raw XML을 preview에 노출하지 않는다.
+/// real fixture: teammate_v01/lead_teammate_messages.jsonl (관측 창이 relayed
+/// 메시지로 시작하는 리드 세션 — 두 마커 형태는 messageOrigin.ts와 동일 실측).
+#[tokio::test]
+async fn preview_strips_relayed_teammate_message_wrapper() {
+    let pool = fresh_pool().await;
+    store::ingest_file(
+        &pool,
+        std::path::Path::new(
+            "tests/fixtures/transcripts/real/teammate_v01/lead_teammate_messages.jsonl",
+        ),
+        &NoopSink,
+    )
+    .await
+    .unwrap();
+    let server = build_server(pool);
+    let r = server.get("/v1/sessions").await;
+    r.assert_status_ok();
+    let body: Value = r.json();
+    let item = &body["data"][0];
+    let preview = item["first_user_message_preview"].as_str().unwrap_or("");
+    assert!(
+        !preview.contains("<teammate-message"),
+        "relayed teammate wrapper must not leak into preview; got: {preview}"
+    );
+}
+
+/// B-6e (2026-07-04) — teamName "session-<리드 8자>" 형태 표본 2 확보.
+/// 이 세션(190a23db, CC 2.1.200)이 직접 스폰해 동결한 real fixture
+/// (teammate_v02/named_teammate_head.jsonl): agentName=sample-probe,
+/// teamName=session-190a23db, agent-setting=general-purpose(타입 그대로 —
+/// Explore 외 값의 첫 표본). 같은 라운드에 클래식(이름 없는) 서브에이전트가
+/// 2.1.200에서 여전히 사이드카임도 실측(classic_sidecar_head_2_1_200.jsonl).
+#[tokio::test]
+async fn teammate_v02_second_sample_locks_team_join_shape() {
+    let pool = fresh_pool().await;
+    store::ingest_file(
+        &pool,
+        std::path::Path::new(
+            "tests/fixtures/transcripts/real/teammate_v02/named_teammate_head.jsonl",
+        ),
+        &NoopSink,
+    )
+    .await
+    .unwrap();
+    let server = build_server(pool);
+    let r = server.get("/v1/sessions").await;
+    let body: Value = r.json();
+    let item = &body["data"][0];
+    assert_eq!(item["agent_name"], "sample-probe");
+    assert_eq!(item["team_name"], "session-190a23db");
+}

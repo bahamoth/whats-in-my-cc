@@ -9,6 +9,7 @@ import { useTeammateSessionId } from './TeamLinkContext';
 import { formatModel } from './nodeLabel';
 import { endStatusLabel } from './endStatus';
 import { useT } from '../../../i18n';
+import { agentColor } from '../../../lib/colorHash';
 import styles from './MessageCard.module.css';
 
 function timeLabel(iso: string): string {
@@ -172,8 +173,32 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
       }}
     >
       <div className={styles.head}>
-        <Icon size={14} aria-hidden className={styles.icon} />
-        <span className={styles.label}>{label}</span>
+        <Icon
+          size={14}
+          aria-hidden
+          className={styles.icon}
+          style={userOrigin === 'teammate' && item.teammateId ? { color: agentColor(item.teammateId) } : undefined}
+        />
+        <span
+          className={styles.label}
+          style={userOrigin === 'teammate' && item.teammateId ? { color: agentColor(item.teammateId) } : undefined}
+        >
+          {label}
+        </span>
+        {userOrigin === 'teammate' && item.dispatchEventId && (
+          <button
+            type="button"
+            data-testid="teammate-dispatch-jump"
+            className={styles.dispatchJump}
+            title={t('stream.msg.jumpToDispatch')}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(item.dispatchEventId!);
+            }}
+          >
+            ↰ {t('stream.msg.dispatch')}
+          </button>
+        )}
         <span data-testid="source-badge" className={styles.sourceBadge}>{sourceTag}</span>
         {teammateSessionId && (
           <a
