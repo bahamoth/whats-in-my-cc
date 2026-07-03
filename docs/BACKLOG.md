@@ -97,22 +97,24 @@ CC 2.1.198 teammate 실행 모델 대응 잔여 전부 처리
   "session-<리드 8자>" **표본 2**). fixture `teammate_v02/` 동결 + invariant
   테스트.
 
-## B-7. 태깅 인프라 (우선순위 중하)
+## B-7. 태깅 인프라 — 완료 (2026-07-04)
 
-- **B-7a. `$()` 서브셸 토크나이저**: untagged 잔존의 주원인(pr·rev-parse·
-  status·ls-files·tr·log·read — 파이프/서브셸 내부 토큰). 토크나이저가
-  `$()`·`< <()` 내부를 세그먼트로 인식해야 함.
-- **B-7b. `claude` 멀티플렉서**: 표본이 `plugins --help` 1형태뿐이라 보류
-  (오태깅 위험) — 표본 축적 시 TOOL_SUBCOMMAND_TAGS 추가.
-- **B-7c. 기결정 인지**: unidentified-plugins 스크립트가 intentionally
-  unmatched 항목(serena `activate_project`/`onboarding` —
-  `src/insight/event_tags.rs`의 SERENA_TOOLS 주석)을 매 루프 재표면화 —
-  스크립트에 기결정 목록 필터 추가.
-- **B-7d. PR-전 게이트 훅**: Noise disposition으로 untagged가 진짜 후보만
-  남게 됐으므로 "보편 후보 잔존 시 차단" 훅이 유의미해짐(6/30 노트 언급).
-- **참조**: implementation-notes `#tagging-loop-2026-07-03`,
-  `#noise-disposition-2026-06-30`, `#untagged-bash-loop`,
-  `#unidentified-plugins-loop`.
+(implementation-notes `#tagging-infra-2026-07-04`)
+
+- **B-7a 완료**: `$()`/`<()` 내부를 세그먼트로 편평화(`extract_command_subs`
+  — 바깥 우선, 자리표시자로 오염 차단, 이스케이프 제외, quote-naive 유지).
+  잔존 주원인(pr·rev-parse 등) 해소 + 서브셸에서 표면화된 `seq`는 Control.
+  같은 라운드에 **무확장 경로 규칙**(디렉토리/미지 무확장 → read.file/
+  write.file, Makefile은 FILENAME_OBJECT code)로 디렉토리 Read 클래스 종결.
+- **B-7b 보류 유지 확정**: 2026-07-04 코퍼스 재스캔에서 `claude` CLI 표본
+  0건(구 표본 transcript는 정리됨) — 표본 관측 시 추가.
+- **B-7c 완료**: 기결정 목록(`INTENTIONALLY_UNMATCHED_MCP`,
+  `webui/src/lib/taggingGate.ts` — 결정 SSOT는 Rust SERENA_TOOLS 주석)을
+  unidentified-plugins 스크립트가 필터.
+- **B-7d 완료**: `webui/scripts/tagging-gate.ts` — untagged count≥2(비
+  baseline)·community MCP 미태깅 시 exit 1. 보류는
+  `tagging-gate-baseline.json`(토큰→사유) 커밋으로. CLAUDE.md 개선 루프
+  절에 편입. CC hook이 아니라 repo 스크립트(Non-goal 준수).
 
 ## B-8. 성능 부채 (§10.1 게이트 — 아플 때 착수)
 

@@ -5716,6 +5716,35 @@ vitest: 69 passed
     잔여 unknown은 구조적 바닥(빈 출력·요약 소실)뿐.</p>
   </section>
 
+  <section id="tagging-infra-2026-07-04">
+    <h2>태깅 인프라 — B-7 종결 (2026-07-04)</h2>
+    <p><b>B-7a `$()`/`&lt;()` 편평화:</b> <code>extract_command_subs</code> — 명령/프로세스
+    치환 내부를 별도 세그먼트로 뽑고 바깥에서는 <code>__cmdsub__</code> 자리표시자로 대체
+    (유효 식별자 패턴 밖 → 통째 서브셸 세그먼트는 Noise 강등). 바깥 세그먼트가 먼저
+    분류되므로 인자 속 서브셸이 바깥 분류를 오염시키지 않고, 바깥이 비면(할당 우변 등)
+    내부가 분류된다. 이스케이프(<code>\$(</code>) 제외, 따옴표는 기존 토크나이저와 같은
+    수준으로 무시(quote-naive — 바깥 우선 순서가 오탐 표면화를 실질 차단). 중첩 재귀
+    편평화. 효과: 이 프로젝트 코퍼스 untagged 13건 → 2건(순수 문자열 파편만).
+    서브셸에서 새로 표면화된 <code>seq</code>는 루프 스캐폴딩이라 CONTROL_TOKENS.</p>
+    <p><b>무확장 경로 규칙:</b> 확장자도 알려진 파일명도 없는 Read/Edit 경로는 내용
+    유형을 특정할 수 없으므로 read.file/write.file(ls·find 동족)로 태깅 — 디렉토리 Read
+    클래스(src·common·model… 잔존 10건) 종결. 미지 <em>확장자</em>는 여전히 unmatched
+    (루프가 표면화). Makefile은 justfile 동족으로 FILENAME_OBJECT(code) 승격 — 종전
+    "무확장 미지는 Unmatched 유지"를 잠근 테스트 2건을 새 규칙 단언으로 갱신.</p>
+    <p><b>B-7c 기결정 인지:</b> <code>INTENTIONALLY_UNMATCHED_MCP</code>
+    (webui/src/lib/taggingGate.ts — 결정 SSOT는 Rust SERENA_TOOLS 주석)를
+    unidentified-plugins 스크립트가 필터해 serena activate_project/onboarding이 매 루프
+    재표면화되지 않는다.</p>
+    <p><b>B-7d PR-전 게이트:</b> <code>webui/scripts/tagging-gate.ts</code> — 세 루프와
+    같은 read-only 수집 후 순수 판정 <code>gateVerdict</code>(vitest 잠금): untagged
+    count≥2이고 baseline에 없으면 FAIL, official/public plugin의 unmatched MCP 도구가
+    있으면 FAIL. 보류는 <code>tagging-gate-baseline.json</code>(토큰→사유) 커밋 — 보류가
+    PR 리뷰에 보이는 편집이 된다. CC hook이 아니라 repo 스크립트(Non-goal 준수).
+    엔드투엔드 자가 검증: 구 바이너리 serve에 대해 seq를 정확히 잡았고(FAIL), 재빌드·
+    재ingest 후 PASS. CLAUDE.md 개선 루프 절에 편입. <b>B-7b:</b> claude CLI 표본
+    0건(재스캔) — 보류 유지.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
