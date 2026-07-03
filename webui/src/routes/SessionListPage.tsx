@@ -4,6 +4,8 @@ import { listSessions, ApiError } from '../api/client';
 import type { SessionListItem } from '../api/types';
 import { useLiveStream, type LiveEnvelope } from '../hooks/useLiveStream';
 import { relativeTime, formatModel } from '../lib/format';
+import { groupTeamRows } from '../lib/teamGrouping';
+import { agentColor } from '../lib/colorHash';
 import { useLocale, useT } from '../i18n';
 import styles from './SessionListPage.module.css';
 
@@ -102,7 +104,7 @@ function SortIndicator({ active, dir }: { active: boolean; dir: SortDir }) {
 function matchesQuery(r: SessionListItem, q: string): boolean {
   if (!q) return true;
   const needle = q.toLowerCase();
-  return [r.slug, r.project, r.session_id, r.first_user_message_preview, r.model]
+  return [r.slug, r.project, r.session_id, r.first_user_message_preview, r.model, r.agent_name, r.team_name]
     .some((f) => f?.toLowerCase().includes(needle));
 }
 
@@ -201,7 +203,9 @@ export default function SessionListPage() {
       const c = compare(a, b, sortKey);
       return sortDir === 'asc' ? c : -c;
     });
-    return copy;
+    // teammate 세션(team_name 보유)을 리드 세션 바로 아래로 — 정렬 뒤에
+    // 적용해 리드의 정렬 위치는 유지하고 팀메이트만 붙인다.
+    return groupTeamRows(copy);
   }, [state, sortKey, sortDir, query]);
 
   const onHeaderClick = (key: SortKey) => {
@@ -267,7 +271,7 @@ export default function SessionListPage() {
               </tr>
             </thead>
             <tbody>
-              {visibleRows.map((r) => {
+              {visibleRows.map(({ row: r, child }) => {
                 const mix = sourceMix(r.by_kind);
                 const otelOnly = mix.transcript === 0 && mix.hook === 0 && mix.otel > 0;
                 const live = isLive(envelopeAt.get(r.session_id), nowMs);
@@ -275,11 +279,21 @@ export default function SessionListPage() {
                 const proj = projectBasename(r.project);
                 return (
                   <tr key={r.session_id} className={otelOnly ? styles.otelOnly : undefined}>
-                    <td className={styles.sessionCell}>
+                    <td className={child ? `${styles.sessionCell} ${styles.teamChild}` : styles.sessionCell}>
                       <div className={styles.top}>
+                        {child && <span className={styles.childArrow} aria-hidden>↳</span>}
                         <Link to={`/sessions/${r.session_id}`} className={styles.slug} title={r.session_id}>
                           {label}
                         </Link>
+                        {r.agent_name && (
+                          <span
+                            className={styles.agentChip}
+                            style={{ color: agentColor(r.agent_name), borderColor: agentColor(r.agent_name) }}
+                            title={r.team_name ?? undefined}
+                          >
+                            {r.agent_name}
+                          </span>
+                        )}
                         {proj && (
                           <span className={styles.proj} title={r.project}>{proj}</span>
                         )}

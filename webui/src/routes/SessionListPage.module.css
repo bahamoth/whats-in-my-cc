@@ -170,3 +170,15 @@
   .eventsCell, .relCell { text-align: left; display: inline-block; margin-right: 14px; }
   .prev { max-width: 100%; white-space: normal; }
 }
+
+/* --- teammate 세션 그룹핑 (2026-07-03) — 리드 아래 들여쓰기 + agent 칩 --- */
+.teamChild { padding-left: 28px; }
+.childArrow { color: var(--wimcc-fg-muted); font-size: 12px; }
+.agentChip {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 0 6px;
+  border: 1px solid;
+  border-radius: 999px;
+  white-space: nowrap;
+}

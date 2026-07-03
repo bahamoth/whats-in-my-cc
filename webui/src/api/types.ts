@@ -15,6 +15,10 @@ export type SessionListItem = {
   model?: string;
   slug?: string;
   first_user_message_preview?: string;
+  /** Teammate 세션 식별 (2026-07-03) — named Agent 스폰이 만드는 별도 최상위
+   * 세션의 envelope 필드. 팀메이트가 아닌 세션·구버전 서버에는 없다. */
+  agent_name?: string | null;
+  team_name?: string | null;
 };
 
 /** The telemetry facet, extracted from an OTel span at ingest (`TelemetryFacet`

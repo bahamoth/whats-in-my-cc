@@ -73,6 +73,9 @@ export interface MessageItem {
   origin?: MessageOrigin;
   /** The invoked command (e.g. "/model") when origin==='command', else null. */
   commandName?: string | null;
+  /** The sending teammate session's agent name (teammate_id attr) when
+   *  origin==='teammate', else null/undefined. */
+  teammateId?: string | null;
   /** Number of background SUBAGENTS running concurrently while this MAIN message
    *  happened (their run span covers this message's timestamp). undefined/0 when
    *  none. Drives the "서브에이전트 N개 동시 실행" marker — the subject is the
@@ -426,6 +429,7 @@ function classify(
   sigLen?: number;
   origin?: MessageOrigin;
   commandName?: string | null;
+  teammateId?: string | null;
 } {
   const p = asObj(e.payload);
   if (e.kind === 'user_message') {
@@ -436,8 +440,8 @@ function classify(
     // message — never relocated to the agent/activity side. The origin only
     // drives how it's labelled and whether the body collapses (so an injected
     // skill body does not masquerade as the user's typed words).
-    const { origin, commandName } = messageOrigin(e);
-    return { cat: 'message', role: 'user', text: t, model: null, origin, commandName };
+    const { origin, commandName, teammateId } = messageOrigin(e);
+    return { cat: 'message', role: 'user', text: t, model: null, origin, commandName, teammateId };
   }
   if (e.kind === 'assistant_message') {
     const t = (typeof p.text === 'string' ? p.text : '').trim();
@@ -1412,6 +1416,7 @@ export function buildStreamModel(
           sidechain: sc,
           origin: c.origin ?? 'human',
           commandName: c.commandName ?? null,
+          teammateId: c.teammateId ?? null,
         },
         sc,
         agent,

@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { User, Bot, BrainCog, Lightbulb, CornerDownRight, Info, Code2, Type, Terminal, Sparkles, Bell } from 'lucide-react';
+import { User, Bot, BrainCog, Lightbulb, CornerDownRight, Info, Code2, Type, Terminal, Sparkles, Bell, Users } from 'lucide-react';
 import type { MessageItem } from './streamModel';
 import { userDisplayText } from './messageOrigin';
 import { formatModel } from './nodeLabel';
@@ -92,7 +92,7 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
       ? 'human'
       : userOrigin === 'command-output'
       ? 'command'
-      : userOrigin // 'command' | 'skill' | 'system' | 'notification'
+      : userOrigin // 'command' | 'skill' | 'system' | 'notification' | 'teammate'
     : item.role === 'system'
     ? 'system'
     : 'agent';
@@ -111,6 +111,8 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
         ? Info
         : userOrigin === 'notification'
         ? Bell
+        : userOrigin === 'teammate'
+        ? Users
         : Terminal;
     label =
       userOrigin === 'command'
@@ -121,6 +123,8 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
         ? 'Command output'
         : userOrigin === 'notification'
         ? t('stream.notification')
+        : userOrigin === 'teammate'
+        ? (item.teammateId ?? 'Teammate')
         : 'System';
     bubbleClass = styles.metaBubble;
   } else if (item.role === 'user') {

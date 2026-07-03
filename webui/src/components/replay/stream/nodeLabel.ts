@@ -172,8 +172,12 @@ export function nodeLabel(
       // activity stack is scaffolding, not human words — label it by origin so
       // it never reads as "You". (Genuine human input is a message bubble and
       // does not come through here.)
-      const { origin, commandName } = messageOrigin({ payload: node.payload, is_meta: node.is_meta });
+      const { origin, commandName, teammateId } = messageOrigin({ payload: node.payload, is_meta: node.is_meta });
       switch (origin) {
+        case 'teammate':
+          // Teammate 세션의 응답/알림이 리드에 접힌 레코드 — 발신자 이름으로
+          // 라벨해 "You"로 읽히지 않게 한다 (teammate_v01 fixture).
+          return { kind: 'user', primary: teammateId ?? 'teammate', secondary: txt.trim() };
         case 'command':
           return { kind: 'user', primary: 'command', secondary: commandName ?? 'scaffolding' };
         case 'command-output':
