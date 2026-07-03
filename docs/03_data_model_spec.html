@@ -193,8 +193,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "created_at": "…"
 }</code></pre>
 <p><code>provenance.version</code>은 항상 <code>"L1"</code>(deterministic). <code>rule_pack</code>은 코드 기본 detector면 <code>null</code>, TOML rule pack 로드 시 그 id. 외부에서 signal에 쓰는 API는 없다 (no annotation model).</p>
-<h3>Detector 5종 (deterministic L1)</h3>
-<table><thead><tr><th>detector</th><th>Evidence requirement</th></tr></thead><tbody><tr><td><code>tool_failure</code></td><td>failed tool result or OTel error event</td></tr><tr><td><code>risky_action</code></td><td>destructive command, sensitive file/path, <code>user_modified</code> hunk 등 관측 사실</td></tr><tr><td><code>context_bloat</code></td><td>대형/반복 출력 등 이벤트 기반 결정론 규칙</td></tr><tr><td><code>final_state_mismatch</code></td><td>final answer claim conflicts with file/verification state</td></tr><tr><td><code>re_read</code></td><td>동일 대상 반복 read 관측</td></tr></tbody></table>
+<h3>Detector 4종 (deterministic L1)</h3>
+<table><thead><tr><th>detector</th><th>Evidence requirement</th></tr></thead><tbody><tr><td><code>tool_failure</code></td><td>failed tool result or OTel error event</td></tr><tr><td><code>risky_action</code></td><td>destructive command, sensitive file/path, <code>user_modified</code> hunk 등 관측 사실</td></tr><tr><td><code>context_bloat</code></td><td>대형/반복 출력 등 이벤트 기반 결정론 규칙</td></tr><tr><td><code>re_read</code></td><td>동일 대상 반복 read 관측</td></tr></tbody></table>
 <p class="muted">detector manifest는 <code>/v1/detectors</code>와 MCP <code>whats_in_my_cc.list_detectors</code>로 노출된다.</p>
 </section>
 <section id="metrics"><h2><span class="num">07</span>SessionMetrics, Usage & Fingerprint</h2>

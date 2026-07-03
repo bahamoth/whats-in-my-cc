@@ -45,6 +45,14 @@ events 커서는 `data.prev_cursor` / `data.next_cursor` (URL 인코딩 필요).
    자가 회복 여부를 확인하고, 회복됐으면 심각도를 낮춰 보고한다.
    `context_bloat`의 `facts.tool_result.is_sidechain == true`는 Agent 위임
    패턴일 가능성이 높다 — 문제로 단정하지 않는다.
+5. **최종 상태 불일치** (구 `final_state_mismatch` detector — 2026-07-03
+   L1에서 제거, 판별이 여기로 이관됨): 마지막 턴의 user_message가 목표
+   (수정/구현/고침 요구)를 표현했고, `verification-runs`의 마지막 결과가
+   failed인데, 마지막 assistant 메시지가 완료를 선언했는지를 *언어 무관하게*
+   읽고 판단한다. 재료는 결정론 측정값 그대로다 — `get_session_turns`의
+   user_message 발췌 + `GET /v1/sessions/:id/verification-runs` +
+   SessionMetrics의 `verification_failed`. lexical 마커(영어 동사 목록)로
+   환원되지 않아 detector가 아니라 LLM 몫이 된 대표 사례.
 
 ## 전후 비교 절차 (Step 5)
 
@@ -82,8 +90,10 @@ events 커서는 `data.prev_cursor` / `data.next_cursor` (URL 인코딩 필요).
 - `/v1/detectors` manifest의 `metric_class`를 본다: `process`(행동 형태 —
   지표를 피하는 행동 변화로 게임 가능) vs `outcome`(최종 상태 결부 — 게임
   난도 높음).
-- process 지표만 개선되고 outcome 지표(verification 계열,
-  final_state_mismatch)가 정체·악화하면 "증거 회피" 가능성을 보고한다.
+- process 지표만 개선되고 outcome 지표(verification 계열)가 정체·악화하면
+  "증거 회피" 가능성을 보고한다. (outcome 축은 verification_run 측정면이
+  담당한다 — 유일한 outcome-class detector였던 final_state_mismatch는
+  2026-07-03 L1에서 제거되고 판별이 위 휴리스틱 5로 이관됐다.)
 - 제안을 낼 때 자문: 이 제안은 *신호를 없애는가*(예: 재읽기 신호를 피하려
   통파일 읽기 → context_bloat로 전이), *원인을 없애는가*?
 

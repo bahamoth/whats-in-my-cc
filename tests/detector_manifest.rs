@@ -6,7 +6,6 @@
 
 use wimcc::insight::extractor::Detector;
 use wimcc::insight::extractors::context_bloat::ContextBloat;
-use wimcc::insight::extractors::final_state_mismatch::FinalStateMismatch;
 use wimcc::insight::extractors::risky_action::RiskyAction;
 use wimcc::insight::extractors::tool_failure::ToolFailure;
 
@@ -90,28 +89,11 @@ fn context_bloat_manifest_is_self_describing() {
 }
 
 #[test]
-fn final_state_mismatch_manifest_is_self_describing() {
-    let m = FinalStateMismatch.manifest();
-    assert_eq!(m.id, "final_state_mismatch");
-    assert!(!m.intent.is_empty());
-    assert!(
-        m.inputs
-            .iter()
-            .any(|i| i.contains("user_message") || i.contains("goal")),
-        "inputs must reference user_message/goal; got: {:?}",
-        m.inputs
-    );
-    assert!(!m.rationale.is_empty());
-    assert!(!m.rule.is_empty());
-}
-
-#[test]
 fn all_manifests_have_stable_ids() {
     let detectors: Vec<(&str, Box<dyn wimcc::insight::extractor::Detector>)> = vec![
         ("tool_failure", Box::new(ToolFailure)),
         ("risky_action", Box::new(RiskyAction)),
         ("context_bloat", Box::new(ContextBloat)),
-        ("final_state_mismatch", Box::new(FinalStateMismatch)),
     ];
     for (expected_id, det) in detectors {
         let m = det.manifest();
@@ -130,7 +112,6 @@ fn all_manifests_are_serializable() {
         Box::new(ToolFailure),
         Box::new(RiskyAction),
         Box::new(ContextBloat),
-        Box::new(FinalStateMismatch),
     ];
     for det in detectors {
         let m = det.manifest();
@@ -154,7 +135,6 @@ fn every_manifest_declares_metric_class() {
         Box::new(ToolFailure),
         Box::new(RiskyAction),
         Box::new(ContextBloat),
-        Box::new(FinalStateMismatch),
         Box::new(ReRead),
     ];
     for det in detectors {
@@ -169,11 +149,12 @@ fn every_manifest_declares_metric_class() {
 }
 
 #[test]
-fn final_state_mismatch_is_outcome_class_others_process() {
+fn remaining_detectors_are_all_process_class() {
     // outcome = 최종 상태(verification 등)에 결부 — 게임 난도 높음.
-    // process = 행동 형태 — 지표가 목표가 되면 회피 가능. 소비자(LLM)가
-    // process 지표 개선 주장에 outcome 동반 확인을 하도록 근거를 제공한다.
-    assert_eq!(FinalStateMismatch.manifest().metric_class, "outcome");
+    // process = 행동 형태 — 지표가 목표가 되면 회피 가능.
+    // 유일한 outcome-class detector였던 final_state_mismatch는 2026-07-03
+    // 사용자 결정으로 L1 제거(영어 고정 lexical 어휘 — 의미 판별은 LLM 이관).
+    // outcome 축은 detector가 아니라 verification_run 측정면이 담당한다.
     assert_eq!(ToolFailure.manifest().metric_class, "process");
     assert_eq!(RiskyAction.manifest().metric_class, "process");
     assert_eq!(ContextBloat.manifest().metric_class, "process");

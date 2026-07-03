@@ -1,6 +1,7 @@
 //! Plan 4/5 — HTTP route tests for GET /v1/detectors (manifest catalog).
 //!
-//! The endpoint must return all 5 registered detectors with their manifests.
+//! The endpoint must return all 4 registered detectors with their manifests.
+//! (final_state_mismatch는 2026-07-03 사용자 결정으로 L1 제거 — LLM 이관.)
 //! Each manifest must include id, intent, inputs, rule, output, config_keys,
 //! and rationale — no judgment fields.
 
@@ -39,8 +40,8 @@ async fn detectors_returns_five_manifests() {
         .expect("response must have a 'data' array");
     assert_eq!(
         data.len(),
-        5,
-        "expected exactly 5 detector manifests, got {n}. data: {data:?}",
+        4,
+        "expected exactly 4 detector manifests, got {n}. data: {data:?}",
         n = data.len(),
     );
 }
@@ -54,16 +55,16 @@ async fn detectors_includes_expected_ids() {
     let data = body["data"].as_array().unwrap();
     let ids: Vec<&str> = data.iter().map(|m| m["id"].as_str().unwrap()).collect();
 
-    let expected = [
-        "tool_failure",
-        "risky_action",
-        "context_bloat",
-        "final_state_mismatch",
-        "re_read",
-    ];
+    let expected = ["tool_failure", "risky_action", "context_bloat", "re_read"];
     for exp in &expected {
         assert!(ids.contains(exp), "detectors missing '{exp}'; got: {ids:?}",);
     }
+    // 제거 회귀 가드 (episode_removed 선례): final_state_mismatch는 2026-07-03
+    // 사용자 결정으로 L1 제거 — 판별은 session-retrospect LLM 이관 (migration 0027).
+    assert!(
+        !ids.contains(&"final_state_mismatch"),
+        "final_state_mismatch must stay removed; got: {ids:?}"
+    );
 }
 
 #[tokio::test]
