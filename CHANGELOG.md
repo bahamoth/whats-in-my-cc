@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.0.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.12.0...v1.0.0) (2026-07-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **insight:** /v1/detectors·list_detectors가 4종을 반환하고 final_state_mismatch Signal이 더 이상 생성·보존되지 않는다.
+
+### Features
+
+* **ingest,api:** teammate 세션 필드 정규화 — agent_name/team_name 승격 ([3f6fa6f](https://github.com/bahamoth/whats-in-my-cc/commit/3f6fa6f6af4fc1e0968b387b4478dc7365970985))
+* **insight:** DetectorConfig 파일 로딩 wiring — 임계값 튜닝 가능화 ([4abce50](https://github.com/bahamoth/whats-in-my-cc/commit/4abce50fedb5f75771ad272d1d33bec33a58687d))
+* **insight:** final_state_mismatch detector 제거 — 판별을 회고 LLM으로 이관 ([4de9595](https://github.com/bahamoth/whats-in-my-cc/commit/4de959580e8a33fe711e18271d4cbae610860c35))
+* **insight:** Noise disposition — 셸 토크나이저 파편을 untagged에서 분리 ([41d73af](https://github.com/bahamoth/whats-in-my-cc/commit/41d73af296e166a458137144abc9abf7b53a63f7))
+* **insight:** PR-전 태깅 루프 2026-07-03 — 보편 토큰 해소 ([133617b](https://github.com/bahamoth/whats-in-my-cc/commit/133617b0d4eb20d2cc74044ddfe0becca14af6e0))
+* **mcp:** MCP 표면 완결 — 절단 노출 + 세션 단위 parity 툴 3종 ([7e1acc7](https://github.com/bahamoth/whats-in-my-cc/commit/7e1acc74c61b76faa77482a7c9d7ff791775cf70))
+* **webui:** 세션 내 팀 가시성 — TeamStrip 배지·teammate 카드 세션 링크·Agent 디스패치 이름 ([44bf6d1](https://github.com/bahamoth/whats-in-my-cc/commit/44bf6d10e9edc457e8607fb4c255e9159e5ee57f))
+
+
+### Bug Fixes
+
+* **db:** WAL 파일을 64MiB로 제한해 무한 유지 방지 ([65bd5b1](https://github.com/bahamoth/whats-in-my-cc/commit/65bd5b14c4503133b9679c24f562546e3cbb9d22))
+* **ingest:** teammate 컬럼 startup backfill — init-db 없이 기존 DB 복구 ([4794f64](https://github.com/bahamoth/whats-in-my-cc/commit/4794f64f675f313fc60e47cf8d4f2da1ac5eaa69))
+
+
+### Performance Improvements
+
+* **api:** /v1/sessions의 redaction_summary를 opt-in으로 전환 ([8025ac1](https://github.com/bahamoth/whats-in-my-cc/commit/8025ac119db940d155f867b2e55712774953205b))
+* **api:** 세션 리스트 facet을 session_summary 테이블로 materialize ([d759c2f](https://github.com/bahamoth/whats-in-my-cc/commit/d759c2f012f9fd5efe0cc3172a09dd95adfcc232))
+
 ## [0.12.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.11.0...v0.12.0) (2026-06-26)
 
 
