@@ -417,6 +417,8 @@ pub async fn list_sessions(
             model: r.model,
             slug: r.slug,
             first_user_message_preview: r.first_user_message_preview,
+            agent_name: r.agent_name,
+            team_name: r.team_name,
         })
         .collect();
     let mut meta = ResponseMeta::now();
@@ -1086,6 +1088,8 @@ fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Val
         "is_sidechain": e.is_sidechain,
         "agent_id": e.agent_id,
         "workflow_run_id": e.workflow_run_id,
+        "agent_name": e.agent_name,
+        "team_name": e.team_name,
         "is_meta": e.is_meta,
         "trace_id": e.trace_id,
         "span_id": e.span_id,

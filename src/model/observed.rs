@@ -157,6 +157,13 @@ pub struct ObservedEvent {
     /// deterministic group key for a workflow fan-out (turn_id drifts across the
     /// run; OTel parent_agent_id is null for workflow agents). None otherwise.
     pub workflow_run_id: Option<String>,
+    /// Teammate 세션(named Agent 스폰이 만드는 별도 최상위 세션, CC 2.1.198
+    /// 실측)의 envelope 필드. 세션 내 상수 — 세션 목록 그룹핑·리드 조인 키.
+    /// 리드 세션 이벤트와 사이드카 subagent 이벤트에는 None.
+    pub agent_name: Option<String>,
+    /// teammate 세션이 속한 팀 식별자. 실측 형태 "session-<리드 세션 id 앞
+    /// 8자>" (표본 1 — teammate_v01 fixture로 잠금).
+    pub team_name: Option<String>,
     pub is_meta: bool,
     pub cwd: Option<String>,
     pub git_branch: Option<String>,
