@@ -40,10 +40,12 @@
 .bubbleAbove {
   z-index: 10;
   width: max-content;
-  max-width: 280px;
+  max-width: 320px;
   padding: 8px 10px;
   font-size: 11px;
-  line-height: 1.5;
+  line-height: 1.6;
+  /* 대시보드 팁이 항목별 줄바꿈을 쓴다(2026-07-04) — \n 존중. */
+  white-space: pre-line;
   color: var(--wimcc-fg);
   background: var(--wimcc-surface-3);
   border: 1px solid var(--wimcc-border-strong);

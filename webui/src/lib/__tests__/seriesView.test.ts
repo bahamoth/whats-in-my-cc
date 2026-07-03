@@ -4,6 +4,8 @@ import {
   cohortModels,
   cohortSegments,
   cohortBoundaries,
+  shortModel,
+  shortModelSet,
   type CohortSegment,
 } from '../seriesView';
 import type { SessionSeriesRowDto } from '../../api/types';
@@ -151,5 +153,21 @@ describe('cohortBoundaries', () => {
       { start: 1, end: 2, label: 'fable-5', known: true },
     ];
     expect(cohortBoundaries(segments)).toEqual([]);
+  });
+});
+
+describe('shortModel / shortModelSet', () => {
+  it('abbreviates observed model name shapes deterministically', () => {
+    expect(shortModel('claude-haiku-4-5-20251001')).toBe('H4.5');
+    expect(shortModel('haiku-4-5-20251001')).toBe('H4.5');
+    expect(shortModel('claude-opus-4-8')).toBe('O4.8');
+    expect(shortModel('claude-fable-5')).toBe('F5');
+    expect(shortModel('claude-sonnet-4-6')).toBe('S4.6');
+  });
+  it('keeps unrecognised names verbatim (minus claude- prefix)', () => {
+    expect(shortModel('claude-something_odd')).toBe('something_odd');
+  });
+  it('abbreviates cohort set labels', () => {
+    expect(shortModelSet('claude-fable-5 + claude-haiku-4-5-20251001')).toBe('F5+H4.5');
   });
 });

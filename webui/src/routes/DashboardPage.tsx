@@ -23,6 +23,7 @@ import {
   cohortSegments,
   cohortBoundaries,
   cohortModels,
+  shortModelSet,
 } from '../lib/seriesView';
 import {
   ChartContainer,
@@ -73,11 +74,14 @@ const PLOT_RIGHT_PX = 8;
 const MODEL_SLOTS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)'];
 const MODEL_OVERFLOW = '#48536b';
 
+// api_rate_limit_count(HTTP 429)는 사용자가 말한 "Claude Code 사용량 한도"와
+// 다른 축이라 strip에서 뺐다(측정 필드는 API에 유지). CC 사용량 한도 도달은
+// 2026-07-04 전 코퍼스 스캔에서 transcript·OTLP 어디에도 신호가 없다 —
+// 관측되면 토큰 카드 위 마커로 얹는다.
 const STRIP_METRICS = [
   'tool_failure_count',
   'context_bloat_count',
   'api_error_count',
-  'api_rate_limit_count',
   'user_interruption_count',
   'compact_boundary_count',
   'tool_result_truncated_count',
@@ -196,6 +200,7 @@ export default function DashboardPage() {
     () => cohortSegments(rows, (r) => cohortModels(r.fingerprint)),
     [rows],
   );
+  const ccSegments = useMemo(() => cohortSegments(rows, (r) => r.fingerprint.cc_versions), [rows]);
   const boundaries = useMemo(() => cohortBoundaries(modelSegments), [modelSegments]);
   const slotOf = useMemo(() => {
     const weight = new Map<string, number>();
@@ -282,22 +287,41 @@ export default function DashboardPage() {
   const winEnd = brushWin?.e ?? Math.max(0, chartData.length - 1);
   const winLen = Math.max(1, winEnd - winStart + 1);
 
-  /* 모델 레일 세그먼트 — 현재 Brush 창으로 클리핑, 위치는 창 기준 %. */
-  const railSegments = modelSegments
-    .map((seg) => {
-      const s0 = Math.max(seg.start, winStart);
-      const e0 = Math.min(seg.end, winEnd);
-      if (s0 > e0) return null;
-      return {
-        key: `${seg.start}-${seg.label || 'unknown'}`,
-        label: seg.label,
-        known: seg.known,
-        leftPct: ((s0 - winStart) / winLen) * 100,
-        widthPct: ((e0 - s0 + 1) / winLen) * 100,
-        color: seg.known ? (slotOf.get(seg.label) ?? MODEL_OVERFLOW) : 'transparent',
-      };
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
+  /* 레일 세그먼트 — 현재 Brush 창으로 클리핑, 위치는 창 기준 %. 모델·CC
+   * 두 레일이 공용. */
+  const clipSegments = (
+    segs: ReturnType<typeof cohortSegments>,
+    colorOf: (label: string, index: number) => string,
+    display: (label: string) => string,
+  ) =>
+    segs
+      .map((seg, i) => {
+        const s0 = Math.max(seg.start, winStart);
+        const e0 = Math.min(seg.end, winEnd);
+        if (s0 > e0) return null;
+        return {
+          key: `${seg.start}-${seg.label || 'unknown'}`,
+          label: seg.label,
+          display: display(seg.label),
+          known: seg.known,
+          leftPct: ((s0 - winStart) / winLen) * 100,
+          widthPct: ((e0 - s0 + 1) / winLen) * 100,
+          color: seg.known ? colorOf(seg.label, i) : 'transparent',
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  const modelRail = clipSegments(
+    modelSegments,
+    (label) => slotOf.get(label) ?? MODEL_OVERFLOW,
+    (label) => shortModelSet(label),
+  );
+  /* CC 버전 — 순서 척도라 두 shade 교대(정체성은 라벨이 전달). */
+  const ccRail = clipSegments(
+    ccSegments,
+    (_label, i) => (i % 2 === 0 ? '#24407c' : '#3a5fb8'),
+    (label) => label,
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-7 py-6">
@@ -410,45 +434,48 @@ export default function DashboardPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                {/* 모델 레일 — 세그먼트에 이름을 직접 표기(초판 방식 복원).
-                    커스텀 HTML이지만 플롯 기하 상수를 공유해 차트와 정렬되고,
-                    Brush 창 상태로 같은 구간을 본다. */}
-                <div className="mb-1 flex items-center gap-1.5">
-                  <span className="w-fit text-[10px] uppercase tracking-wider text-muted-foreground/70">
-                    {t('dash.cohort.models')}
-                  </span>
-                  <InfoTip label={t('dash.cohort.title')} text={t('dash.cohort.tip')} />
-                </div>
-                <div
-                  className="relative mb-1.5 h-[22px]"
-                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
-                >
-                  {railSegments.map((seg) =>
-                    seg.known ? (
-                      <span
-                        key={seg.key}
-                        title={seg.label}
-                        className="absolute inset-y-0 flex items-center overflow-hidden rounded-[4px] px-1.5 font-mono text-[10px] whitespace-nowrap text-white"
-                        style={{
-                          left: `${seg.leftPct}%`,
-                          width: `calc(${seg.widthPct}% - 2px)`,
-                          background: seg.color,
-                        }}
-                      >
-                        {seg.label.replaceAll('claude-', '')}
-                      </span>
-                    ) : (
-                      <span
-                        key={seg.key}
-                        title={t('dash.cohort.unknown')}
-                        className="absolute inset-y-0 flex items-center overflow-hidden rounded-[4px] border border-dashed border-(--wimcc-border-strong) px-1.5 font-mono text-[10px] whitespace-nowrap text-muted-foreground"
-                        style={{ left: `${seg.leftPct}%`, width: `calc(${seg.widthPct}% - 2px)` }}
-                      >
-                        {t('dash.cohort.unknown')}
-                      </span>
-                    ),
-                  )}
-                </div>
+                {/* 코호트 레일 2단(모델·CC 버전) — 세그먼트에 약칭/버전을
+                    직접 표기, 좌측 라벨은 플롯 여백 폭에 정렬. Brush 창과
+                    동기. 전체 이름은 title 툴팁. */}
+                {[
+                  { name: t('dash.cohort.models'), tip: t('dash.cohort.tip'), segs: modelRail, mono: true },
+                  { name: 'CC', tip: t('dash.cohort.ccTip'), segs: ccRail, mono: true },
+                ].map((rail) => (
+                  <div key={rail.name} className="mb-1 flex items-center">
+                    <span
+                      className="flex shrink-0 items-center gap-1 pr-1 text-[10px] uppercase tracking-wider text-muted-foreground/70"
+                      style={{ width: PLOT_LEFT_PX }}
+                    >
+                      {rail.name}
+                      <InfoTip label={rail.name} text={rail.tip} />
+                    </span>
+                    <div className="relative h-[20px] min-w-0 flex-1" style={{ marginRight: PLOT_RIGHT_PX }}>
+                      {rail.segs.map((seg) =>
+                        seg.known ? (
+                          <span
+                            key={seg.key}
+                            title={seg.label}
+                            className="absolute inset-y-0 flex items-center overflow-hidden rounded-[4px] px-1 font-mono text-[10px] whitespace-nowrap text-white"
+                            style={{
+                              left: `${seg.leftPct}%`,
+                              width: `calc(${seg.widthPct}% - 2px)`,
+                              background: seg.color,
+                            }}
+                          >
+                            {seg.display}
+                          </span>
+                        ) : (
+                          <span
+                            key={seg.key}
+                            title={t('dash.cohort.unknown')}
+                            className="absolute inset-y-0 rounded-[4px] border border-dashed border-(--wimcc-border-strong)"
+                            style={{ left: `${seg.leftPct}%`, width: `calc(${seg.widthPct}% - 2px)` }}
+                          />
+                        ),
+                      )}
+                    </div>
+                  </div>
+                ))}
                 <ChartContainer config={outcomeConfig} className="h-64 w-full">
                   <BarChart
                     data={chartData}
@@ -506,6 +533,9 @@ export default function DashboardPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
+                {chartData.every((d) => d.input + d.output + d.cacheCreation + d.cacheRead === 0) && (
+                  <p className="text-xs text-muted-foreground">{t('dash.tokens.empty')}</p>
+                )}
                 <ChartContainer config={tokensConfig} className="h-36 w-full">
                   <BarChart
                     data={chartData}
