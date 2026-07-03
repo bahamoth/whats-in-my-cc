@@ -96,8 +96,10 @@ describe('DashboardPage', () => {
       matched_count: 2,
     });
     render(withRouter(<DashboardPage />));
-    await waitFor(() => expect(screen.getByText('claude-opus-4-7')).toBeInTheDocument());
-    expect(screen.getByText('claude-fable-5')).toBeInTheDocument();
+    // 레일 표시는 'claude-' 접두를 뗀다(전체 이름은 title 속성이 유지).
+    await waitFor(() => expect(screen.getByText('opus-4-7')).toBeInTheDocument());
+    expect(screen.getByText('fable-5')).toBeInTheDocument();
+    expect(screen.getByTitle('claude-opus-4-7')).toBeInTheDocument();
     expect(screen.getByText('2.1.198')).toBeInTheDocument();
     expect(screen.getByText('2.1.200')).toBeInTheDocument();
     // outcome 차트와 프로세스 strip이 세션당 클릭 타깃(딥링크)을 만든다:
