@@ -33,7 +33,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -420,26 +420,15 @@ export default function DashboardPage() {
             <TabsTrigger value="table">{t('dash.table.summary')}</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="charts" className="space-y-5">
+          <TabsContent value="charts">
+            {/* 하나의 연속 타임라인 — 레일·outcome·토큰·신호가 같은 세션
+                축 위에 쌓이고, 코호트 경계 룰이 전 구간을 관통한다. 섹션
+                라벨은 플롯 왼쪽 모서리에 정렬해 리듬을 만든다. */}
             <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="flex items-center gap-1.5">
-                    {t('dash.outcome.title')}
-                    <InfoTip label={t('dash.outcome.title')} text={t('dash.outcome.tip')} />
-                  </CardTitle>
-                  <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground">
-                    {outcomeMax > 0 ? t('dash.axis.max', outcomeMax) : t('dash.outcome.none')}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {/* 코호트 레일 2단(모델·CC 버전) — 세그먼트에 약칭/버전을
-                    직접 표기, 좌측 라벨은 플롯 여백 폭에 정렬. Brush 창과
-                    동기. 전체 이름은 title 툴팁. */}
+              <CardContent className="pt-5">
                 {[
-                  { name: t('dash.cohort.models'), tip: t('dash.cohort.tip'), segs: modelRail, mono: true },
-                  { name: 'CC', tip: t('dash.cohort.ccTip'), segs: ccRail, mono: true },
+                  { name: t('dash.cohort.models'), tip: t('dash.cohort.tip'), segs: modelRail },
+                  { name: 'CC', tip: t('dash.cohort.ccTip'), segs: ccRail },
                 ].map((rail) => (
                   <div key={rail.name} className="mb-1 flex items-center">
                     <span
@@ -476,12 +465,26 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ))}
-                <ChartContainer config={outcomeConfig} className="h-64 w-full">
+
+                {/* ── 검증 outcome ─────────────────────────────────── */}
+                <div
+                  className="mt-4 mb-1.5 flex items-center justify-between"
+                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
+                >
+                  <span className="flex items-center gap-1.5 text-xs font-semibold">
+                    {t('dash.outcome.title')}
+                    <InfoTip label={t('dash.outcome.title')} text={t('dash.outcome.tip')} />
+                  </span>
+                  <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground">
+                    {outcomeMax > 0 ? t('dash.axis.max', outcomeMax) : t('dash.outcome.none')}
+                  </Badge>
+                </div>
+                <ChartContainer config={outcomeConfig} className="h-56 w-full">
                   <BarChart
                     data={chartData}
                     syncId="dash"
                     onClick={openSession}
-                    margin={{ top: 18, right: 8, left: 8, bottom: 0 }}
+                    margin={{ top: 6, right: 8, left: 8, bottom: 0 }}
                     className="cursor-pointer"
                   >
                     <CartesianGrid vertical={false} stroke="var(--border)" />
@@ -517,26 +520,26 @@ export default function DashboardPage() {
                     />
                   </BarChart>
                 </ChartContainer>
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="flex items-center gap-1.5">
+                {/* ── 토큰 사용량 ──────────────────────────────────── */}
+                <div
+                  className="mt-5 mb-1.5 flex items-center justify-between"
+                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
+                >
+                  <span className="flex items-center gap-1.5 text-xs font-semibold">
                     {t('dash.tokens.title')}
                     <InfoTip label={t('dash.tokens.title')} text={t('dash.tokens.tip')} />
-                  </CardTitle>
+                  </span>
                   <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground">
                     {t('dash.axis.max', fmtCompact(Math.max(0, ...chartData.map((d) => d.input + d.output + d.cacheCreation))))}
                   </Badge>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
                 {chartData.every((d) => d.input + d.output + d.cacheCreation + d.cacheRead === 0) && (
-                  <p className="text-xs text-muted-foreground">{t('dash.tokens.empty')}</p>
+                  <p className="mb-2 text-xs text-muted-foreground" style={{ marginLeft: PLOT_LEFT_PX }}>
+                    {t('dash.tokens.empty')}
+                  </p>
                 )}
-                <ChartContainer config={tokensConfig} className="h-36 w-full">
+                <ChartContainer config={tokensConfig} className="h-32 w-full">
                   <BarChart
                     data={chartData}
                     syncId="dash"
@@ -561,76 +564,81 @@ export default function DashboardPage() {
                     <Bar dataKey="output" stackId="tok" fill="var(--color-output)" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ChartContainer>
-                <div>
-                  <div className="mb-1 flex items-baseline justify-between">
-                    <span className="text-xs text-muted-foreground">{t('dash.tokens.cacheRead')}</span>
-                    <span className="font-mono text-[10px] text-muted-foreground/70">
-                      {t('dash.axis.max', fmtCompact(Math.max(0, ...chartData.map((d) => d.cacheRead))))}
-                    </span>
-                  </div>
-                  <ChartContainer
-                    config={{ cacheRead: { label: t('dash.tokens.cacheRead'), color: 'var(--wimcc-info)' } }}
-                    className="h-14 w-full"
-                  >
-                    <BarChart
-                      data={chartData}
-                      syncId="dash"
-                      onClick={openSession}
-                      margin={{ top: 2, right: 8, left: 8, bottom: 0 }}
-                      className="cursor-pointer"
-                    >
-                      <XAxis dataKey="idx" hide />
-                      <YAxis hide width={36} />
-                      {cohortRefs()}
-                      <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
-                      <Bar dataKey="cacheRead" fill="var(--wimcc-info)" radius={[2, 2, 0, 0]} />
-                    </BarChart>
-                  </ChartContainer>
+                <div
+                  className="mt-2 mb-1 flex items-baseline justify-between"
+                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
+                >
+                  <span className="text-xs text-muted-foreground">{t('dash.tokens.cacheRead')}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground/70">
+                    {t('dash.axis.max', fmtCompact(Math.max(0, ...chartData.map((d) => d.cacheRead))))}
+                  </span>
                 </div>
-              </CardContent>
-            </Card>
+                <ChartContainer
+                  config={{ cacheRead: { label: t('dash.tokens.cacheRead'), color: 'var(--wimcc-info)' } }}
+                  className="h-12 w-full"
+                >
+                  <BarChart
+                    data={chartData}
+                    syncId="dash"
+                    onClick={openSession}
+                    margin={{ top: 2, right: 8, left: 8, bottom: 0 }}
+                    className="cursor-pointer"
+                  >
+                    <XAxis dataKey="idx" hide />
+                    <YAxis width={36} tick={false} tickLine={false} axisLine={false} />
+                    {cohortRefs()}
+                    <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
+                    <Bar dataKey="cacheRead" fill="var(--wimcc-info)" radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ChartContainer>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-1.5">
-                  {t('dash.multiples.title')}
-                  <InfoTip label={t('dash.multiples.title')} text={t('dash.multiples.tip')} />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {STRIP_METRICS.map((metric) => (
-                  <div key={metric}>
-                    <div className="mb-1 flex items-baseline justify-between">
-                      <span className="text-xs text-muted-foreground">
-                        {t(`dash.metric.${metric}`)}
-                      </span>
-                      <span className="font-mono text-[10px] text-muted-foreground/70">
-                        {t('dash.axis.max', maxOf(metric))}
-                      </span>
-                    </div>
-                    <ChartContainer
-                      config={{ [metric]: { label: t(`dash.metric.${metric}`), color: 'var(--wimcc-info)' } }}
-                      className="h-16 w-full"
-                    >
-                      <BarChart
-                        data={chartData}
-                        syncId="dash"
-                        onClick={openSession}
-                        margin={{ top: 2, right: 8, left: 8, bottom: 0 }}
-                        className="cursor-pointer"
+                {/* ── 프로세스 신호 ────────────────────────────────── */}
+                <div
+                  className="mt-5 mb-1 flex items-center"
+                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
+                >
+                  <span className="flex items-center gap-1.5 text-xs font-semibold">
+                    {t('dash.multiples.title')}
+                    <InfoTip label={t('dash.multiples.title')} text={t('dash.multiples.tip')} />
+                  </span>
+                </div>
+                <div className="space-y-2.5">
+                  {STRIP_METRICS.map((metric) => (
+                    <div key={metric}>
+                      <div
+                        className="mb-0.5 flex items-baseline justify-between"
+                        style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
                       >
-                        <XAxis dataKey="idx" hide />
-                        {/* 메인 차트와 플롯 영역 정렬 — 같은 폭의 숨은 YAxis. */}
-                        <YAxis hide width={36} />
-                        {cohortRefs()}
-                        <ChartTooltip
-                          content={<ChartTooltipContent labelFormatter={tooltipLabel} />}
-                        />
-                        <Bar dataKey={metric} fill="var(--wimcc-info)" radius={[2, 2, 0, 0]} />
-                      </BarChart>
-                    </ChartContainer>
-                  </div>
-                ))}
+                        <span className="text-[11px] text-muted-foreground">
+                          {t(`dash.metric.${metric}`)}
+                        </span>
+                        <span className="font-mono text-[10px] text-muted-foreground/70">
+                          {t('dash.axis.max', maxOf(metric))}
+                        </span>
+                      </div>
+                      <ChartContainer
+                        config={{ [metric]: { label: t(`dash.metric.${metric}`), color: 'var(--wimcc-info)' } }}
+                        className="h-12 w-full"
+                      >
+                        <BarChart
+                          data={chartData}
+                          syncId="dash"
+                          onClick={openSession}
+                          margin={{ top: 2, right: 8, left: 8, bottom: 0 }}
+                          className="cursor-pointer"
+                        >
+                          <XAxis dataKey="idx" hide />
+                          <YAxis width={36} tick={false} tickLine={false} axisLine={false} />
+                          {cohortRefs()}
+                          <ChartTooltip
+                            content={<ChartTooltipContent labelFormatter={tooltipLabel} />}
+                          />
+                          <Bar dataKey={metric} fill="var(--wimcc-info)" radius={[2, 2, 0, 0]} />
+                        </BarChart>
+                      </ChartContainer>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
