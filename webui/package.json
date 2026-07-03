@@ -15,19 +15,26 @@
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-scroll-area": "^1.2.0",
+    "@radix-ui/react-select": "^2.3.2",
+    "@radix-ui/react-toggle-group": "^1.1.14",
     "@tanstack/react-query": "^5.100.14",
     "@tanstack/react-virtual": "^3.13.26",
     "@xyflow/react": "^12.10.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "d3-scale": "^4.0.2",
     "d3-time": "^3.1.0",
     "dagre": "^0.8.5",
     "lucide-react": "^1.17.0",
+    "radix-ui": "^1.6.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-json-view-lite": "^1.5.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^6.26.2",
-    "remark-gfm": "^4.0.1"
+    "recharts": "^3.9.1",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.0",

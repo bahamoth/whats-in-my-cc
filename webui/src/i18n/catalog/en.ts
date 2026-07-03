@@ -315,10 +315,12 @@ export const en = {
   'dash.metric.compact_boundary_count': 'context compactions',
   'dash.metric.tool_result_truncated_count': 'truncated tool results',
   'dash.axis.max': (n: number) => `max ${n}`,
+  'dash.tab.charts': 'Charts',
   'dash.table.summary': 'Data table',
   'dash.table.session': 'session',
   'dash.table.date': 'first observed',
   'dash.table.events': 'events',
+  'dash.tooltip.events': (n: number) => `${n} events`,
   'dash.openSession': (id: string) => `Open session ${id}`,
 };
 

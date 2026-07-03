@@ -1,9 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import path from 'node:path';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    // shadcn/ui 관례 별칭 — 컴포넌트 레지스트리 소스가 @/를 쓴다.
+    alias: { '@': path.resolve(__dirname, 'src') },
+  },
   server: {
     // Bind the IPv4 loopback explicitly. The default (`localhost`) resolves to
     // `::1` (IPv6) on macOS, so `127.0.0.1:5173` is refused — which the

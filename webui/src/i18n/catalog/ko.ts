@@ -301,9 +301,11 @@ export const ko: Messages = {
   'dash.metric.compact_boundary_count': '컨텍스트 압축',
   'dash.metric.tool_result_truncated_count': '잘린 tool result',
   'dash.axis.max': (n: number) => `최대 ${n}`,
+  'dash.tab.charts': '차트',
   'dash.table.summary': '데이터 표',
   'dash.table.session': '세션',
   'dash.table.date': '최초 관측',
   'dash.table.events': '이벤트',
+  'dash.tooltip.events': (n: number) => `이벤트 ${n}개`,
   'dash.openSession': (id: string) => `세션 ${id} 열기`,
 };

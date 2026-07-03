@@ -5831,6 +5831,31 @@ vitest: 69 passed
     2건).</p>
   </section>
 
+  <section id="dashboard-shadcn-2026-07-04">
+    <h2>대시보드 UX 개편 — shadcn/ui + Recharts (2026-07-04)</h2>
+    <p><b>사용자 피드백:</b> 정보 구성·가로 시계열은 유지하되 UX·심미성 개선 — 전문 차트
+    라이브러리 + shadcn류 오픈소스 디자인 시스템 요청. <b>선택:</b> shadcn/ui(Tailwind v4는
+    redesign 라운드에 이미 배선돼 있었음 — 공식 레지스트리에서 chart·card·select·
+    toggle-group·tabs·table·badge·skeleton 도입, 통합 radix-ui 패키지) + Recharts 3.
+    Recharts를 고른 이유: <code>syncId</code>(전 차트 hover·Brush 동기 = 공유 세션 축의
+    "한 시선"), <code>ReferenceArea/Line</code>(코호트 밴드·경계), <code>Brush</code>(구간
+    줌)가 초판 설계와 1:1로 맞고, shadcn chart 레이어가 그 위의 시각 언어를 제공한다.</p>
+    <p><b>테마:</b> shadcn 시맨틱 변수(--background·--card·--chart-1..5 등)를 전부 기존
+    wimcc 다크 팔레트로 매핑(global.css @theme inline) — 제품이 한 시스템으로 읽힌다.
+    chart-1..4는 validator 통과 categorical, chart-5·#e66767은 검증 상태쌍(초판 결정
+    유지).</p>
+    <p><b>구조 변화:</b> 커스텀 코호트 레일/ColumnsChart 제거 → 모델 코호트는 메인 차트
+    안의 ReferenceArea 밴드(tint) + 경계 ReferenceLine(전 strip 관통) + 차트 하단 칩
+    범례(밴드 인라인 라벨은 좁은 구간에서 겹쳐 칩으로 이동 — smoke 1차에서 발견).
+    CC 버전은 hover 툴팁(세션id·날짜·모델·CC·이벤트 수)으로 이동 — 매 세션 바뀌는 값이라
+    상시 표시는 소음(초판 결정 계승). 표는 탭으로 분리(shadcn Tabs+Table). strip은 숨은
+    YAxis(동일 폭)로 메인 차트와 플롯 정렬. @/ 별칭(vite·vitest·tsconfig) 도입.</p>
+    <p><b>테스트/smoke:</b> Radix Tabs는 fireEvent.click 미반응 — userEvent로 전환.
+    jsdom에서 ResponsiveContainer 폭 0이라 SVG 마크는 미렌더 — 차트 로직은
+    lib/seriesView가 SSOT, 페이지 테스트는 골격·메타·표를 잠근다. CDP smoke 4장(개편 전후·
+    strip·목록 무회귀).</p>
+  </section>
+
 </main>
 </div>
 </body></html>
