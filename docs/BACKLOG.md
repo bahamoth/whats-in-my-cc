@@ -39,22 +39,20 @@ outcome 스택 + 프로세스 strip 6종, 공유 세션 축, 모델 집합 변�
   진입 후에만 run이 되므로, 관측 여부는 transcript 직접 스캔으로 확인).
 - **참조**: implementation-notes `#unknown-verification-loop`.
 
-## B-3. MCP 응답 구조 개선 + 세션 다이제스트 (우선순위 중)
+## B-3. MCP 응답 구조 개선 + 세션 다이제스트 — 완료 (2026-07-04)
 
-- **무엇**: ① MCP 툴 응답의 단일 text 블록 통 JSON 직렬화
-  (`src/api/mcp/tools/mod.rs` `tool_success`) → structured content 검토,
-  ② 대형 응답(get_session_turns·get_file_lineage) 페이지네이션,
-  ③ 원문 이벤트 창(events) MCP 툴 부재 — 순수 MCP 클라이언트는 raw 이벤트에
-  접근 불가, ④ **세션 다이제스트 툴**: 토큰 상한이 설계된 단일 콜
-  (집계+Signal 요약+드릴다운 링크) — 전용 스킬 없이도 임의 에이전트가
-  "방금 세션에서 뭐가 있었나"를 한 콜로.
-- **왜**: 에이전트 소비 목표의 다음 단계. parity(9종)는 완료됐으나 응답
-  구조가 토큰 비효율적.
-- **주의**: 다이제스트는 순수 집계 조합이어야 함(측정/판별 분리). 절단은
-  반드시 `matched_count`류로 노출(no silent truncation — get_otel_trace
-  선례).
-- **참조**: implementation-notes `#mcp-parity-detector-config-2026-07-03`
-  "미해소".
+(implementation-notes `#mcp-digest-events-2026-07-04`) 9종→11종:
+
+- **① structuredContent**: `tool_success`가 MCP 2025-06-18 구조화 출력
+  (`structuredContent`) + 하위호환 text 블록을 함께 싣는다.
+- **② 페이지네이션**: `get_session_turns`에 limit(기본 100)/offset —
+  절단은 `total_count`로 노출. (get_file_lineage는 소형 응답이라 보류.)
+- **③ `get_session_events`**: 원문 이벤트 창 — HTTP events와 같은 커서
+  계약(prev/next_cursor, tip이면 next=null).
+- **④ `get_session_digest`**: 토큰 상한 설계 단일 콜 — summary+fingerprint
+  +SessionMetrics+signal 절단 목록(total/returned) + 드릴다운 links. 순수
+  결정론 집계 조합(판단 문장 없음). 00/01/02/04 spec·회고 스킬 치트시트
+  동기화.
 
 ## B-4. export bundle 구현 (우선순위 중, §09 결정 포함)
 

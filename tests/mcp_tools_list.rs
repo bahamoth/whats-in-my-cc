@@ -57,8 +57,8 @@ async fn tools_list_returns_five_tools() {
         .expect("tools must be an array");
     assert_eq!(
         tools.len(),
-        9,
-        "expected exactly 9 tools (MCP parity 2026-07-03: +get_session_metrics/signals/fingerprint), got {}",
+        11,
+        "expected exactly 11 tools (B-3 2026-07-04: +get_session_events/get_session_digest), got {}",
         tools.len()
     );
 }

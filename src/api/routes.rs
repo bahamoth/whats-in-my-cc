@@ -1059,7 +1059,7 @@ fn clamp_limit(l: Option<i64>) -> i64 {
 }
 
 // Avoid coupling model::observed to serde details by hand-projecting.
-fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Value {
+pub(crate) fn observed_to_dto(e: &crate::model::observed::ObservedEvent) -> serde_json::Value {
     let telemetry = e
         .telemetry
         .as_ref()

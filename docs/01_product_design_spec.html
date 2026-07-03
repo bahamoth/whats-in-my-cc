@@ -88,11 +88,11 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
   "provenance": { "detector": "tool_failure@v1", "version": "L1", "rule_pack": null }
 }</code></pre></section>
 <section id="drawer"><h2><span class="num">08</span>Resource Access (Pull API / MCP)</h2>
-<p>resource 전용 UI 화면은 없다. 외부 접근은 <strong>read-only Pull API</strong>(<code>{meta:{schema_version, collection_profile, generated_at,…}, data:…}</code> 래핑)와 <strong>MCP Streamable HTTP</strong>(<code>/mcp</code>, 도구 9종)로 한다. 인증 기본값은 <code>--auth off</code>(단일 사용자 dev), 바인딩 기본값은 <code>127.0.0.1</code>.</p>
+<p>resource 전용 UI 화면은 없다. 외부 접근은 <strong>read-only Pull API</strong>(<code>{meta:{schema_version, collection_profile, generated_at,…}, data:…}</code> 래핑)와 <strong>MCP Streamable HTTP</strong>(<code>/mcp</code>, 도구 11종)로 한다. 인증 기본값은 <code>--auth off</code>(단일 사용자 dev), 바인딩 기본값은 <code>127.0.0.1</code>.</p>
 <table><thead><tr><th>Area</th><th>Content</th><th>Allowed action</th></tr></thead><tbody>
 <tr><td>Summary</td><td>signal summary · detector · provenance</td><td><code>GET /v1/sessions/:id/signals</code> · <code>GET /v1/signals/:id</code></td></tr>
 <tr><td>Evidence</td><td>evidence_refs가 가리키는 ObservedEvent와 그 raw 원본</td><td><code>GET /v1/sessions/:id/events</code> · <code>GET /v1/events/:event_id/raw</code></td></tr>
-<tr><td>Query (MCP)</td><td>도구 9종만: <code>whats_in_my_cc.search_sessions</code> · <code>get_file_lineage</code> · <code>get_otel_trace</code> · <code>get_session_turns</code> · <code>get_project_metrics</code> · <code>get_session_metrics</code> · <code>get_session_signals</code> · <code>get_session_fingerprint</code> · <code>list_detectors</code></td><td>read-only 호출</td></tr>
+<tr><td>Query (MCP)</td><td>도구 11종만: <code>whats_in_my_cc.search_sessions</code> · <code>get_file_lineage</code> · <code>get_otel_trace</code> · <code>get_session_turns</code> · <code>get_project_metrics</code> · <code>get_session_metrics</code> · <code>get_session_signals</code> · <code>get_session_fingerprint</code> · <code>list_detectors</code> · <code>get_session_events</code> · <code>get_session_digest</code></td><td>read-only 호출</td></tr>
 <tr><td>Export</td><td><span class="pill amber">미구현</span> <code>POST /v1/export-bundles</code> route와 UI export 버튼은 제공하지 않는다</td><td>—</td></tr>
 <tr><td>Forbidden</td><td>patch, install, write memory, update settings, signal/resource에 대한 외부 correction·label·status write</td><td>not shown / not defined</td></tr>
 </tbody></table></section>
