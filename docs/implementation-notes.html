@@ -5485,6 +5485,42 @@ vitest: 69 passed
     재해시·metrics 무캐시 — §10.1 원칙대로 호출 빈도가 정당화할 때).</p>
   </section>
 
+  <section id="teammate-observability-2026-07-03">
+    <h2>Teammate 세션 관측 — 실행 모델 변화 대응 (2026-07-03)</h2>
+    <p><b>발견:</b> CC 2.1.198부터 Agent 툴의 named 스폰은 사이드체인이 아니라 <em>별도 최상위 세션</em>
+    ("teammate")이 된다 — 자기 sessionId, envelope 필드 <code>agentName</code>/<code>teamName</code>,
+    새 레코드 타입 <code>agent-setting</code>/<code>mode</code>, <code>&lt;teammate-message&gt;</code> user
+    메시지로 통신. 이 저장소 자신의 리드 세션(bebd8197)이 스폰한 explore 세션 3개로 실측·동결
+    (<code>tests/fixtures/transcripts/real/teammate_v01</code>, 표본 1 세션). 사이드카 방식은
+    2.1.197(2026-07-01, lhh-liveops)에서 병존 관측 — <em>버전 전면 교체가 아니라 스폰 방식에 따른
+    분기</em>로 보인다(2.1.198의 클래식 서브에이전트는 미관측). 그 결과 wimcc에서 팀메이트가 별도
+    세션으로 흩어지고, 리드 replay에서 팀메이트 응답이 사람 "You" 버블로 렌더되던 두 갭을 이번
+    라운드가 닫았다.</p>
+    <h3>정규화 결정</h3>
+    <p><code>agent_name</code>/<code>team_name</code>을 observed_event correlation 컬럼 + session_summary
+    facet으로 승격(migration 0026, agent_id/workflow_run_id 선례). <b>backfill 없음</b> — envelope
+    필드라 observed payload에 없고, 신방식 첫 관측이 2026-07-03이라 기존 행 NULL이 정확하다.
+    실측 invariant: 두 필드는 팀메이트의 user/assistant/attachment/system 레코드 전부에 세션 상수,
+    리드 레코드에는 없음 — 조인은 팀메이트→리드 단방향(<code>team_name = "session-&lt;리드 id 앞
+    8자&gt;"</code>, 표본 1). system 레코드의 필드는 승격하지 않았다(serde flatten 구조라 별도 작업 —
+    대화 kind로 충분). <code>agent-setting</code> 레코드(값 "Explore" = agent 타입)는 Unknown으로
+    raw 보존만 — 배지 후보로 남긴다.</p>
+    <h3>표현 계층</h3>
+    <p>webui <code>messageOrigin</code>에 'teammate' origin: 접두문("Another Claude session sent a
+    message:") 유무 양쪽을 마커로 판정하고 teammate_id를 라벨로 쓴다(MessageCard·nodeLabel).
+    세션 목록은 <code>groupTeamRows</code>(순수 함수)가 팀메이트를 리드 바로 아래 들여쓰기+agentColor
+    칩으로 묶는다 — 리드 부재·prefix 모호 시 그룹핑을 <em>포기</em>하고 일반 행 유지(단정 불가한
+    매핑 금지). 브라우저 smoke: 실 DB에서 리드(async-knitting-barto) 아래 3행 그룹핑,
+    teammate 카드 "team-lead" 라벨 확인.</p>
+    <h3>남은 것</h3>
+    <p>① 세션 목록 preview가 팀메이트 세션에서 raw <code>&lt;teammate-message …&gt;</code> XML을
+    보여준다 — preview 정리 후보. ② 리드 replay에서 teammate 카드 → 그 세션 replay로 점프하는
+    링크(agent_name↔세션 조인 필요). ③ 북엔드/거터형 시간축 가시화는 보류 — 팀메이트 "실행 중"
+    구간은 리드 관점에서 메시지 경계에서만 관측돼(estimated) 사이드카 거터처럼 연속 레일을 그리면
+    measured/estimated 구분을 흐린다. ④ 2.1.198에서 클래식(이름 없는) 서브에이전트가 여전히
+    사이드카인지 표본 확보 시 노트 갱신.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
