@@ -106,6 +106,51 @@ pub async fn backfill_agent_id(pool: &SqlitePool) -> Result<u64> {
     Ok(res.rows_affected())
 }
 
+/// Backfill teammate 컬럼(`agent_name`/`team_name`)을 raw payload의 envelope
+/// 필드(`agentName`/`teamName`)로부터 채운다 — `backfill_agent_id`와 같은
+/// 패턴. 0026 이전에 ingest된 행(또는 init-db 없이 migration만 적용된 DB)이
+/// 대상: `init-db`는 데이터를 지우지 않으므로 재ingest가 raw UNIQUE dedup으로
+/// 전량 스킵돼 관측 행이 재생성되지 않는다(2026-07-03 실사용 확인). raw에는
+/// 원본 라인이 보존돼 있어 재ingest 없이 복구 가능하다. Idempotent — NULL
+/// 행만. 채운 세션의 session_summary facet도 갱신한다(목록이 그걸 읽는다).
+pub async fn backfill_team_fields(pool: &SqlitePool) -> Result<u64> {
+    let mut total = 0u64;
+    for (col, key) in [("agent_name", "$.agentName"), ("team_name", "$.teamName")] {
+        let sql = format!(
+            "UPDATE observed_event
+             SET {col} = json_extract(
+                 CAST(
+                     (SELECT r.payload FROM raw_event r WHERE r.raw_event_id = observed_event.raw_event_id)
+                     AS TEXT
+                 ),
+                 '{key}'
+             )
+             WHERE {col} IS NULL
+               AND (
+                 SELECT CASE
+                     WHEN json_valid(CAST(r.payload AS TEXT))
+                     THEN json_extract(CAST(r.payload AS TEXT), '{key}') IS NOT NULL
+                     ELSE 0
+                 END
+                 FROM raw_event r WHERE r.raw_event_id = observed_event.raw_event_id
+               ) = 1"
+        );
+        total += sqlx::query(&sql).execute(pool).await?.rows_affected();
+    }
+    if total > 0 {
+        // 목록 facet 복구 — 팀메이트 세션은 소수라 세션당 upsert가 저렴하다.
+        let sids: Vec<String> = sqlx::query_scalar(
+            "SELECT DISTINCT session_id FROM observed_event WHERE team_name IS NOT NULL",
+        )
+        .fetch_all(pool)
+        .await?;
+        for sid in &sids {
+            upsert_session_summary(pool, sid).await?;
+        }
+    }
+    Ok(total)
+}
+
 /// Backfill `workflow_run_id` on existing rows from the raw transcript file path.
 /// Workflow-tool subagents live under `…/subagents/workflows/<runId>/agent-*`, and
 /// the runId is the deterministic workflow group key — present only in the file
