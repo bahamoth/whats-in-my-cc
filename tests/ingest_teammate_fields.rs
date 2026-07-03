@@ -97,6 +97,51 @@ async fn events_dto_exposes_team_fields() {
     assert_eq!(ev["team_name"], "session-bebd8197");
 }
 
+/// 기존 DB 경로 (2026-07-03 실사용에서 발견): `init-db`는 데이터를 지우지
+/// 않으므로 0026 적용 후 `ingest --all`은 raw UNIQUE dedup으로 전량 스킵되고
+/// 기존 관측 행의 팀 컬럼은 NULL로 남는다. raw payload에는 원본 envelope
+/// 필드가 보존돼 있으므로 backfill_agent_id 선례대로 startup backfill이
+/// 컬럼과 session_summary facet을 채워야 한다.
+#[tokio::test]
+async fn backfill_fills_team_fields_from_raw() {
+    let pool = ingest_fixture().await;
+    // 0026 이전 ingest 상태 재현: 관측 컬럼·summary facet을 NULL로 되돌린다.
+    sqlx::query("UPDATE observed_event SET agent_name = NULL, team_name = NULL")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE session_summary SET agent_name = NULL, team_name = NULL")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let n = wimcc::db::repo_observed::backfill_team_fields(&pool)
+        .await
+        .unwrap();
+    assert!(n > 0, "backfill must touch the nulled rows");
+
+    let (agent, team): (Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT agent_name, team_name FROM observed_event \
+         WHERE session_id = ? AND kind = 'user_message' LIMIT 1",
+    )
+    .bind(TEAMMATE_SESSION)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(agent.as_deref(), Some("explore-api"));
+    assert_eq!(team.as_deref(), Some("session-bebd8197"));
+
+    // 목록이 읽는 session_summary facet까지 복구돼야 한다.
+    let (agent, team): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT agent_name, team_name FROM session_summary WHERE session_id = ?")
+            .bind(TEAMMATE_SESSION)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(agent.as_deref(), Some("explore-api"));
+    assert_eq!(team.as_deref(), Some("session-bebd8197"));
+}
+
 /// 리드 세션 쪽 실측 고정: 리드 transcript의 teammate 응답은 type:user +
 /// content 문자열이 "Another Claude session sent a message:\n<teammate-message …>"
 /// 형태이고 isMeta가 없다(사람 입력과 구조 신호로만 구분 가능 — webui

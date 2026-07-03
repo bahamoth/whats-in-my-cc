@@ -131,6 +131,13 @@ async fn serve_cmd(
         Ok(_) => {}
         Err(e) => tracing::warn!(error = ?e, "workflow_run_id backfill failed (non-fatal)"),
     }
+    // 0026 (raw payload → agent_name/team_name). Teammate 세션 식별 — raw에
+    // 원본 envelope 필드가 보존돼 있어 재ingest 없이 복구 가능. Idempotent.
+    match db::repo_observed::backfill_team_fields(&pool).await {
+        Ok(n) if n > 0 => tracing::info!(rows = n, "backfilled team fields from raw payload"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = ?e, "team fields backfill failed (non-fatal)"),
+    }
     // 0025 (perf-2026-06-29): materialize per-session transcript facets so
     // /v1/sessions reads them instead of re-scanning observed_event. Fills only
     // sessions missing from session_summary; new/updated ones refresh via
@@ -273,6 +280,13 @@ async fn ingest_cmd(
         Ok(n) if n > 0 => tracing::info!(rows = n, "backfilled workflow_run_id from source_uri"),
         Ok(_) => {}
         Err(e) => tracing::warn!(error = ?e, "workflow_run_id backfill failed (non-fatal)"),
+    }
+    // 0026 (raw payload → agent_name/team_name). Teammate 세션 식별 — raw에
+    // 원본 envelope 필드가 보존돼 있어 재ingest 없이 복구 가능. Idempotent.
+    match db::repo_observed::backfill_team_fields(&pool).await {
+        Ok(n) if n > 0 => tracing::info!(rows = n, "backfilled team fields from raw payload"),
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = ?e, "team fields backfill failed (non-fatal)"),
     }
     let files = collect_files(path, all)?;
     if files.is_empty() {
