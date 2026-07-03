@@ -81,6 +81,8 @@ fn map_user(
                 e.source_tool_use_id = u.source_tool_use_id.clone();
                 e.is_sidechain = u.is_sidechain;
                 e.agent_id = u.agent_id.clone();
+                e.agent_name = u.agent_name.clone();
+                e.team_name = u.team_name.clone();
                 e.is_meta = u.is_meta;
                 e.cwd = u.cwd.clone();
                 e.git_branch = u.git_branch.clone();
@@ -130,6 +132,8 @@ fn user_message(
     e.turn_id = u.prompt_id.clone();
     e.is_sidechain = u.is_sidechain;
     e.agent_id = u.agent_id.clone();
+    e.agent_name = u.agent_name.clone();
+    e.team_name = u.team_name.clone();
     e.is_meta = u.is_meta;
     e.cwd = u.cwd.clone();
     e.git_branch = u.git_branch.clone();
@@ -175,6 +179,8 @@ fn map_assistant(
         e.message_id = message_id.clone();
         e.is_sidechain = a.is_sidechain;
         e.agent_id = a.agent_id.clone();
+        e.agent_name = a.agent_name.clone();
+        e.team_name = a.team_name.clone();
         e.cwd = a.cwd.clone();
         e.git_branch = a.git_branch.clone();
         e.user_type = a.user_type.clone();
@@ -243,6 +249,8 @@ fn attachment_meta(
     e.observed_at = a.timestamp;
     e.is_sidechain = a.is_sidechain;
     e.agent_id = a.agent_id.clone();
+    e.agent_name = a.agent_name.clone();
+    e.team_name = a.team_name.clone();
     e.cwd = a.cwd.clone();
     e.git_branch = a.git_branch.clone();
     e.user_type = a.user_type.clone();

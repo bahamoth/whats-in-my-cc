@@ -22,19 +22,19 @@ async fn insert_inner(pool: &SqlitePool, e: &ObservedEvent, ignore: bool) -> Res
             event_id, raw_event_id, schema_version, session_id, event_uuid, parent_uuid,
             observed_at, actor, kind, subkind, tool_use_id, tool_name, request_id,
             message_id, turn_id, source_tool_assistant_uuid, source_tool_use_id,
-            is_sidechain, agent_id, workflow_run_id, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
+            is_sidechain, agent_id, workflow_run_id, agent_name, team_name, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
             trace_id, span_id, parent_span_id, latency_ms,
             payload, parser_version)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
     } else {
         "INSERT INTO observed_event(
             event_id, raw_event_id, schema_version, session_id, event_uuid, parent_uuid,
             observed_at, actor, kind, subkind, tool_use_id, tool_name, request_id,
             message_id, turn_id, source_tool_assistant_uuid, source_tool_use_id,
-            is_sidechain, agent_id, workflow_run_id, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
+            is_sidechain, agent_id, workflow_run_id, agent_name, team_name, is_meta, cwd, git_branch, user_type, entrypoint, cc_version,
             trace_id, span_id, parent_span_id, latency_ms,
             payload, parser_version)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
     };
     let res = sqlx::query(sql)
         .bind(&e.event_id)
@@ -57,6 +57,8 @@ async fn insert_inner(pool: &SqlitePool, e: &ObservedEvent, ignore: bool) -> Res
         .bind(e.is_sidechain as i64)
         .bind(&e.agent_id)
         .bind(&e.workflow_run_id)
+        .bind(&e.agent_name)
+        .bind(&e.team_name)
         .bind(e.is_meta as i64)
         .bind(&e.cwd)
         .bind(&e.git_branch)
@@ -171,6 +173,10 @@ pub struct SessionRow {
     pub slug: Option<String>,
     /// First non-empty user-message content, truncated server-side.
     pub first_user_message_preview: Option<String>,
+    /// Teammate 세션 식별 (2026-07-03) — named Agent 스폰의 envelope 필드.
+    /// 팀메이트가 아닌 세션은 None.
+    pub agent_name: Option<String>,
+    pub team_name: Option<String>,
 }
 
 pub async fn list_sessions(pool: &SqlitePool, limit: i64) -> Result<Vec<SessionRow>> {
@@ -276,6 +282,8 @@ pub async fn list_sessions_filtered(
                 model: f.model,
                 slug: f.slug,
                 first_user_message_preview: f.preview,
+                agent_name: f.agent_name,
+                team_name: f.team_name,
             }
         })
         .collect())
@@ -288,6 +296,10 @@ struct SessionFacets {
     model: Option<String>,
     slug: Option<String>,
     preview: Option<String>,
+    /// Teammate 세션 식별 (2026-07-03) — observed_event의 세션 상수 컬럼에서
+    /// MIN 집계. 팀메이트가 아닌 세션은 None.
+    agent_name: Option<String>,
+    team_name: Option<String>,
 }
 
 /// First user-message preview is truncated to this many characters
@@ -391,6 +403,26 @@ async fn session_facets(
         out.entry(sid).or_default().preview = content.map(|c| truncate_preview(&c));
     }
 
+    // teammate 식별 (2026-07-03) — agent_name/team_name은 세션 내 상수로
+    // 관측됐다(teammate_v01 fixture, 표본 1 세션). MIN은 상수 집계일 뿐
+    // 선택 로직이 아니다.
+    let team_sql = format!(
+        "SELECT session_id, MIN(agent_name) AS agent_name, MIN(team_name) AS team_name
+           FROM observed_event
+          WHERE session_id IN ({placeholders}) AND team_name IS NOT NULL
+          GROUP BY session_id"
+    );
+    let mut q = sqlx::query(&team_sql);
+    for id in ids {
+        q = q.bind(id);
+    }
+    for r in q.fetch_all(pool).await? {
+        let sid: String = r.get("session_id");
+        let f = out.entry(sid).or_default();
+        f.agent_name = r.try_get::<Option<String>, _>("agent_name").ok().flatten();
+        f.team_name = r.try_get::<Option<String>, _>("team_name").ok().flatten();
+    }
+
     Ok(out)
 }
 
@@ -407,7 +439,7 @@ async fn read_session_summaries(
 ) -> Result<std::collections::HashMap<String, SessionFacets>> {
     use sqlx::Row as _Row;
     let sql = format!(
-        "SELECT session_id, project, model, slug, first_user_message_preview
+        "SELECT session_id, project, model, slug, first_user_message_preview, agent_name, team_name
            FROM session_summary
           WHERE session_id IN ({placeholders})"
     );
@@ -428,6 +460,8 @@ async fn read_session_summaries(
                     .try_get::<Option<String>, _>("first_user_message_preview")
                     .ok()
                     .flatten(),
+                agent_name: r.try_get::<Option<String>, _>("agent_name").ok().flatten(),
+                team_name: r.try_get::<Option<String>, _>("team_name").ok().flatten(),
             },
         );
     }
@@ -446,13 +480,15 @@ pub async fn upsert_session_summary(pool: &SqlitePool, session_id: &str) -> Resu
     let now = chrono::Utc::now().to_rfc3339();
     sqlx::query(
         "INSERT INTO session_summary
-            (session_id, project, model, slug, first_user_message_preview, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)
+            (session_id, project, model, slug, first_user_message_preview, agent_name, team_name, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(session_id) DO UPDATE SET
             project = excluded.project,
             model = excluded.model,
             slug = excluded.slug,
             first_user_message_preview = excluded.first_user_message_preview,
+            agent_name = excluded.agent_name,
+            team_name = excluded.team_name,
             updated_at = excluded.updated_at",
     )
     .bind(session_id)
@@ -460,6 +496,8 @@ pub async fn upsert_session_summary(pool: &SqlitePool, session_id: &str) -> Resu
     .bind(f.model)
     .bind(f.slug)
     .bind(f.preview)
+    .bind(f.agent_name)
+    .bind(f.team_name)
     .bind(now)
     .execute(pool)
     .await?;
@@ -1015,6 +1053,8 @@ fn row_to_observed(r: sqlx::sqlite::SqliteRow) -> ObservedEvent {
         is_sidechain: r.get::<i64, _>("is_sidechain") != 0,
         agent_id: r.try_get("agent_id").ok(),
         workflow_run_id: r.try_get("workflow_run_id").ok(),
+        agent_name: r.try_get("agent_name").ok(),
+        team_name: r.try_get("team_name").ok(),
         is_meta: r.get::<i64, _>("is_meta") != 0,
         cwd: r.try_get("cwd").ok(),
         git_branch: r.try_get("git_branch").ok(),

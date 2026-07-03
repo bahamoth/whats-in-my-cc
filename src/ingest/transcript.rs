@@ -69,6 +69,15 @@ pub struct UserRecord {
     #[serde(rename = "agentId")]
     #[serde(default)]
     pub agent_id: Option<String>,
+    /// Teammate 세션 envelope 필드 (CC 2.1.198 실측, teammate_v01 fixture) —
+    /// named Agent 스폰이 만드는 별도 최상위 세션의 user/assistant/attachment
+    /// 레코드에 세션 상수로 붙는다. 리드 세션 레코드에는 없다.
+    #[serde(rename = "agentName")]
+    #[serde(default)]
+    pub agent_name: Option<String>,
+    #[serde(rename = "teamName")]
+    #[serde(default)]
+    pub team_name: Option<String>,
     #[serde(rename = "isMeta")]
     #[serde(default)]
     pub is_meta: bool,
@@ -115,6 +124,13 @@ pub struct AssistantRecord {
     #[serde(rename = "attributionAgent")]
     #[serde(default)]
     pub attribution_agent: Option<String>,
+    /// Teammate 세션 envelope 필드 — UserRecord의 동명 필드 참고.
+    #[serde(rename = "agentName")]
+    #[serde(default)]
+    pub agent_name: Option<String>,
+    #[serde(rename = "teamName")]
+    #[serde(default)]
+    pub team_name: Option<String>,
     #[serde(rename = "requestId")]
     pub request_id: Option<String>,
     pub message: Value,
@@ -141,6 +157,13 @@ pub struct AttachmentRecord {
     #[serde(rename = "agentId")]
     #[serde(default)]
     pub agent_id: Option<String>,
+    /// Teammate 세션 envelope 필드 — UserRecord의 동명 필드 참고.
+    #[serde(rename = "agentName")]
+    #[serde(default)]
+    pub agent_name: Option<String>,
+    #[serde(rename = "teamName")]
+    #[serde(default)]
+    pub team_name: Option<String>,
     pub attachment: Value,
 }
 

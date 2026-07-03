@@ -77,6 +77,12 @@ pub struct SessionListItem {
     pub slug: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub first_user_message_preview: Option<String>,
+    /// Teammate 세션 식별 (2026-07-03) — named Agent 스폰이 만드는 별도
+    /// 최상위 세션의 envelope 필드. WebUI가 팀 그룹핑·리드 조인에 쓴다.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub team_name: Option<String>,
 }
 
 /// Slice-9 — `events` field removed. Use `GET /v1/sessions/:id/events?...`
