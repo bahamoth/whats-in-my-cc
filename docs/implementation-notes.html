@@ -5521,6 +5521,23 @@ vitest: 69 passed
     사이드카인지 표본 확보 시 노트 갱신.</p>
   </section>
 
+  <section id="teammate-in-session-2026-07-03">
+    <h2>Teammate 후속 — startup backfill + 세션 내 팀 가시성 (2026-07-03)</h2>
+    <p><b>정정:</b> 0026 migration 주석의 "재ingest로만 채워진다"는 틀렸다 — observed payload에
+    없을 뿐 raw payload(원본 라인)에는 envelope 필드가 보존된다. 실사용에서 <code>init-db</code>(데이터
+    비삭제)+<code>ingest --all</code>(raw UNIQUE 전량 dedup)이 컬럼을 NULL로 남기는 것을 확인,
+    <code>backfill_agent_id</code> 선례대로 <b>startup backfill</b>(<code>backfill_team_fields</code>,
+    serve/ingest 시작 시)을 추가했다 — 채운 세션의 session_summary facet까지 갱신. 적용된 migration은
+    sqlx checksum 불변이라 주석 정정은 여기에 기록한다.</p>
+    <p><b>세션 내 팀 가시성</b> (목록에서만 보이던 갭): ① TeamStrip — 리드 세션엔 팀메이트 칩
+    (agentColor, 세션 링크), 팀메이트 세션엔 "← 리드 세션" 역링크. ② teammate 응답 카드 헤더에
+    "세션 열기 →" 링크(TeamLinkContext; agent_name→session_id 매핑 부재 시 조용히 생략).
+    ③ Agent 디스패치 tool_call 라벨이 input.name을 앞세움. 전부 <code>/v1/sessions</code>의 team
+    필드 클라이언트 조인 — API 추가 없음. 조인 규칙 SSOT는 <code>lib/teamGrouping</code>
+    (teammatesOf/leadOf). 리드 replay의 특정 카드는 기존 <code>?selected=&lt;event_id&gt;</code>
+    딥링크로 도달 가능(이번에 재확인 — "딥링크 없음"이라던 세션 중 발언은 오류였다).</p>
+  </section>
+
 </main>
 </div>
 </body></html>
