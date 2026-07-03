@@ -278,24 +278,32 @@ export const ko: Messages = {
   'dash.loading': 'series 불러오는 중…',
   'dash.cohort.title': '모델 코호트',
   'dash.cohort.tip':
-    'fingerprint에서 관측된 모델 집합 코호트. fingerprint가 없는 세션은 직전 코호트를 ' +
-    '이어가고, 세로 점선이 관측된 변화 지점이다. CC 버전은 각 막대 툴팁에서 확인한다.',
+    '각 세션에서 실제로 응답한 모델입니다. 한 세션에서 여러 모델을 썼으면 + 로 묶입니다.\n' +
+    '세로 점선 — 모델 구성이 바뀐 지점\n' +
+    '점선 상자 — 모델 기록이 없는 세션(직전 구성을 이어간 것으로 표시)',
   'dash.cohort.models': '모델',
+  'dash.cohort.ccTip':
+    '각 세션이 돌던 Claude Code 버전입니다.\n' +
+    '색 교대는 인접 버전 구간의 구분용이고, 버전 기록이 없는 세션은 직전 구간을 ' +
+    '이어갑니다(점선 상자).',
   'dash.cohort.cc': 'CC 버전',
   'dash.cohort.unknown': '미관측',
   'dash.outcome.title': '검증 outcome',
   'dash.outcome.tip':
-    '세션별 verification run의 outcome 분포. unknown은 실행됐으나 결과를 읽지 못한 run — ' +
-    '실패가 아니다. 실행되지 않은 run(거부·차단·취소·백그라운드)은 outcome이 아니므로 ' +
-    '세지 않는다.',
+    '세션마다 검증 명령(테스트·빌드·린트)이 몇 번 어떤 결과로 끝났는지 셉니다.\n' +
+    'passed — 통과를 확인한 실행\n' +
+    'failed — 실패를 확인한 실행\n' +
+    'unknown — 실행은 됐지만 출력이 잘려 결과를 읽지 못한 실행\n' +
+    '거부·취소 등으로 실행되지 않은 명령은 집계에서 빠집니다.',
   'dash.outcome.passed': 'passed',
   'dash.outcome.failed': 'failed',
   'dash.outcome.unknown': 'unknown',
   'dash.outcome.none': '이 기간에 verification run이 없습니다',
   'dash.multiples.title': '프로세스 신호',
   'dash.multiples.tip':
-    '세션별 결정론 count를 있는 그대로 측정한다. 판단은 표시하지 않는다 — 위 outcome ' +
-    '차트와 함께 읽는 것을 전제로 한 값이다.',
+    '세션 진행 중 벌어진 일들의 횟수입니다.\n' +
+    '예: 도구 실패가 늘었는데 위 outcome의 passed가 유지되면, 시행착오가 늘었지만 ' +
+    '결과는 지켜졌다고 읽을 수 있습니다.',
   'dash.metric.tool_failure_count': '도구 실패',
   'dash.metric.context_bloat_count': 'context bloat 신호',
   'dash.metric.api_error_count': 'API 오류',
@@ -305,9 +313,13 @@ export const ko: Messages = {
   'dash.metric.api_rate_limit_count': 'rate limit(429)',
   'dash.tokens.title': '토큰 사용량',
   'dash.tokens.tip':
-    'assistant 응답 usage 블록의 세션 합계. 과금 input·cache 생성·output을 스택으로, ' +
-    'cache 읽기는 규모가 압도적이라 아래 별도 strip으로 둔다. 토큰 할당량은 로컬 ' +
-    '관측면에 존재하지 않아 사용량만 측정한다.',
+    '세션이 쓴 토큰의 합계입니다.\n' +
+    'input — 새로 보낸 입력\n' +
+    'cache 생성 — 캐시에 새로 적재한 입력\n' +
+    'output — 모델 출력\n' +
+    'cache 읽기 — 캐시에서 재사용한 입력(양이 압도적이라 아래 별도 줄)\n' +
+    '구독 할당량 잔여치는 API가 알려주지 않아 사용량까지만 보여줍니다.',
+  'dash.tokens.empty': '토큰 데이터가 비어 있습니다 — 실행 중인 serve가 이 필드 이전 빌드거나(재시작 필요) usage facet 재수집 전입니다.',
   'dash.tokens.input': 'input',
   'dash.tokens.output': 'output',
   'dash.tokens.cacheCreation': 'cache 생성',

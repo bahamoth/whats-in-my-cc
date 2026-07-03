@@ -292,24 +292,32 @@ export const en = {
   'dash.loading': 'Loading series…',
   'dash.cohort.title': 'Model cohorts',
   'dash.cohort.tip':
-    'Model-set cohorts observed in session fingerprints. Sessions without a fingerprint extend ' +
-    'the previous cohort; a dashed rule marks each observed change. CC version is in each bar tooltip.',
+    'The models that actually responded in each session; multiple models join with +.\n' +
+    'Dashed rule — the model mix changed here\n' +
+    'Dashed box — sessions with no model record (shown as continuing the previous mix)',
   'dash.cohort.models': 'model',
+  'dash.cohort.ccTip':
+    'The Claude Code version each session ran on.\n' +
+    'Alternating shades separate adjacent version spans; sessions without a version record ' +
+    'continue the previous span (dashed box).',
   'dash.cohort.cc': 'CC version',
   'dash.cohort.unknown': 'not observed yet',
   'dash.outcome.title': 'Verification outcomes',
   'dash.outcome.tip':
-    'Per-session verification runs by outcome. unknown means the run executed but its result was ' +
-    'unreadable — not a failure. Runs that never executed (rejected, blocked, cancelled, backgrounded) ' +
-    'are not outcomes and are not counted here.',
+    'How each session\'s verification commands (tests, builds, lints) ended.\n' +
+    'passed — confirmed success\n' +
+    'failed — confirmed failure\n' +
+    'unknown — ran, but the output was cut before a result could be read\n' +
+    'Commands that never ran (rejected, cancelled) are excluded.',
   'dash.outcome.passed': 'passed',
   'dash.outcome.failed': 'failed',
   'dash.outcome.unknown': 'unknown',
   'dash.outcome.none': 'no verification runs in this window',
   'dash.multiples.title': 'Process signals',
   'dash.multiples.tip':
-    'Deterministic per-session counts, measured as-is. No judgement is rendered — read together ' +
-    'with the outcome chart above.',
+    'Counts of what happened during each session.\n' +
+    'Example: rising tool failures with steady passed outcomes above reads as more trial and ' +
+    'error that still landed.',
   'dash.metric.tool_failure_count': 'tool failures',
   'dash.metric.context_bloat_count': 'context bloat signals',
   'dash.metric.api_error_count': 'API errors',
@@ -319,9 +327,13 @@ export const en = {
   'dash.metric.api_rate_limit_count': 'rate limits (429)',
   'dash.tokens.title': 'Token usage',
   'dash.tokens.tip':
-    'Session totals from assistant usage blocks: billed input, cache creation and output are stacked; ' +
-    'cache reads are the separate strip below (their scale dwarfs the rest). A token quota is not ' +
-    'observable locally — usage only.',
+    'Tokens each session consumed.\n' +
+    'input — fresh input sent\n' +
+    'cache write — input newly stored in cache\n' +
+    'output — model output\n' +
+    'cache read — input reused from cache (dwarfs the rest, so it gets its own strip)\n' +
+    'The API does not report remaining quota, so this stops at usage.',
+  'dash.tokens.empty': 'usage data is empty — the running serve predates these fields (restart with the new build) or usage facets need re-ingest.',
   'dash.tokens.input': 'input',
   'dash.tokens.output': 'output',
   'dash.tokens.cacheCreation': 'cache write',

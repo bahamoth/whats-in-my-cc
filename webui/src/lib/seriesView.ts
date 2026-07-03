@@ -83,3 +83,23 @@ export function cohortBoundaries(segments: CohortSegment[]): CohortBoundary[] {
   }
   return out;
 }
+
+/** 모델 결정론 약칭 (2026-07-04 대시보드) — 좁은 레일 세그먼트에서도 읽히게.
+ *  'haiku-4-5-20251001' → 'H4.5', 'opus-4-8' → 'O4.8', 'fable-5' → 'F5'.
+ *  규칙: family 첫 글자 대문자 + major[.minor] (날짜 접미 제거). 패턴을
+ *  벗어나는 이름은 원문 유지 — 약칭은 표시용이고 전체 이름은 title/툴팁이
+ *  항상 보존한다. */
+export function shortModel(name: string): string {
+  const m = name.replace(/^claude-/, '').match(/^([a-z]+)-(\d+)(?:-(\d+))?(?:-\d{6,})?$/);
+  if (!m) return name.replace(/^claude-/, '');
+  const [, family, major, minor] = m;
+  return family.charAt(0).toUpperCase() + major + (minor ? `.${minor}` : '');
+}
+
+/** 모델 집합 라벨 약칭 — 'a + b' 코호트 라벨을 'A1+B2'로. */
+export function shortModelSet(label: string): string {
+  return label
+    .split(' + ')
+    .map((x) => shortModel(x))
+    .join('+');
+}
