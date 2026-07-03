@@ -222,8 +222,8 @@ async fn list_detectors_returns_four_manifests() {
         .expect("list_detectors data must be array");
     assert_eq!(
         data.len(),
-        5,
-        "list_detectors must return 5 manifests; got {}",
+        4,
+        "list_detectors must return 4 manifests; got {}",
         data.len()
     );
     // Verify each manifest has id and intent.

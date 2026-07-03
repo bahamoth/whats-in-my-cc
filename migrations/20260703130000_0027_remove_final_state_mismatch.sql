@@ -1,0 +1,15 @@
+-- final_state_mismatch detector 제거 (2026-07-03, 사용자 결정).
+--
+-- 영어 고정 lexical 어휘(GOAL_VERBS·COMPLETION_MARKERS)로 "목표 표현 +
+-- 마지막 verification 실패 + 완료 선언 부재"를 판별하던 유일한 lexical 의미
+-- 판별 detector였다 — "측정은 wimcc(결정론), 판별은 LLM" 원칙과 긴장했고
+-- 비영어(한국어) 세션에서는 발화하지 않았다. 판별은 session-retrospect
+-- 스킬(LLM)로 이관한다. 측정면은 불변: verification_run·SessionMetrics의
+-- verification_* count가 outcome 축을 계속 담당한다.
+--
+-- 기존 signal 행 정리: 제거된 detector는 run_detectors reconcile 패스에
+-- 나타나지 않아 재ingest에도 남는 zombie가 되고, /v1/detectors manifest에
+-- 없는 signal은 소비자(스킬의 metric_class 참조)가 해석할 수 없다.
+-- (episode 제거 0017과 같은 정리 선례. retention tombstone은 만들지 않는다 —
+-- 만료가 아니라 제품 결정에 의한 제거이므로 404가 정직하다.)
+DELETE FROM signal WHERE detector = 'final_state_mismatch';

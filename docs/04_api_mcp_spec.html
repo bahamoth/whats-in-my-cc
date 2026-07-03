@@ -65,7 +65,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <tr><td>GET</td><td><code>/v1/verification-runs/{run_id}</code></td><td>verification run 단건 상세</td><td>{meta, data}</td></tr>
 <tr><td>GET</td><td><code>/v1/usage/baseline</code></td><td>세션 횡단 baseline: <code>cache_hit_ratio</code>·<code>billed_tokens</code>·<code>assistant_events</code>·<code>output_tokens</code>의 p25/median/p75</td><td>{meta, data}</td></tr>
 <tr><td>GET</td><td><code>/v1/metrics</code></td><td>세션 횡단 metrics+fingerprint series (loop-foundations 2026-06-12). 쿼리: <code>project</code>·<code>from</code>·<code>to</code>(RFC3339, first_observed_at 기준 닫힌 구간)·<code>limit</code>(기본 50, 최대 200) — 미지원 파라미터는 400, 비RFC3339는 <code>400 INVALID_TIME</code>. 행 = 세션별 <code>SessionMetrics</code>+fingerprint(최신순), <code>matched_count</code>로 limit 절단을 노출. 개입 전후 비교의 측정면 — 판단 필드 없음</td><td>{meta, data}</td></tr>
-<tr><td>GET</td><td><code>/v1/detectors</code></td><td>detector manifest catalog 5종 (id, intent, inputs, rule, output, config_keys, rationale, metric_class — process|outcome Goodhart 가드 분류)</td><td>{data}</td></tr>
+<tr><td>GET</td><td><code>/v1/detectors</code></td><td>detector manifest catalog 4종 (id, intent, inputs, rule, output, config_keys, rationale, metric_class — process|outcome Goodhart 가드 분류)</td><td>{data}</td></tr>
 <tr><td>GET</td><td><code>/v1/events/{event_id}/raw</code></td><td>event의 raw source payload + source ref(file_path, line_no) + telemetry facet</td><td>{meta, data}</td></tr>
 <tr><td>GET</td><td><code>/v1/audit</code></td><td>최근 audit 행 200개 (retention sweep 기록 등)</td><td>{data}</td></tr>
 <tr><td>GET</td><td><code>/v1/stream</code></td><td>SSE live event stream — <a href="#streaming">§06</a></td><td>SSE frames</td></tr>

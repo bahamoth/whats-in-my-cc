@@ -109,14 +109,19 @@ fn build_signal_row(session_id: &str, c: &SignalCandidate, rule_pack: Option<&st
 /// `pub(crate)` so the API layer can collect manifests without duplicating the list.
 pub(crate) fn all_detectors() -> Vec<Box<dyn crate::insight::extractor::Detector>> {
     use crate::insight::extractors::{
-        context_bloat::ContextBloat, final_state_mismatch::FinalStateMismatch, re_read::ReRead,
-        risky_action::RiskyAction, tool_failure::ToolFailure,
+        context_bloat::ContextBloat, re_read::ReRead, risky_action::RiskyAction,
+        tool_failure::ToolFailure,
     };
+    // final_state_mismatch는 2026-07-03 사용자 결정으로 제거: 영어 고정 lexical
+    // 어휘(GOAL_VERBS·COMPLETION_MARKERS)가 "의미 판별은 LLM" 원칙과 긴장했고
+    // 비영어 세션에서 발화하지 않았다. 판별은 session-retrospect 스킬(LLM)로
+    // 이관 — 측정면(verification_run·SessionMetrics verification_*)은 불변.
+    // 기존 signal 행은 migration 0027이 정리(제거된 detector는 reconcile 패스에
+    // 안 나타나 zombie가 된다).
     vec![
         Box::new(ToolFailure),
         Box::new(RiskyAction),
         Box::new(ContextBloat),
-        Box::new(FinalStateMismatch),
         Box::new(ReRead),
     ]
 }
