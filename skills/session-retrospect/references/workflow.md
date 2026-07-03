@@ -9,17 +9,20 @@ SKILL.md의 Step 2–5를 수행할 때의 세부 가이드. 이 워크플로우
 
 | 목적 | MCP 도구 | HTTP |
 |------|---------|------|
+| **세션 한눈에 (시작점)** | `get_session_digest {session_id, signal_limit?}` — summary+fingerprint+metrics+signal 절단 목록 단일 콜 | — |
 | 프로젝트의 세션 찾기 | `search_sessions {project}` | `GET /v1/sessions?project=` |
-| 턴 집계 + 파일 churn | `get_session_turns {session_id}` | `GET /v1/sessions/:id/turns` |
+| 턴 집계 + 파일 churn | `get_session_turns {session_id, limit?, offset?}` (절단은 `total_count`) | `GET /v1/sessions/:id/turns` |
 | 세션 메트릭 | `get_session_metrics {session_id}` | `GET /v1/sessions/:id/metrics` |
 | 세션 fingerprint (모델·CC버전·branch·cwd·entrypoint) | `get_session_fingerprint {session_id}` | `GET /v1/sessions/:id/fingerprint` |
 | 세션 횡단 series (전후 비교) | `get_project_metrics {project?, from?, to?, limit?}` | `GET /v1/metrics?project=&from=&to=&limit=` |
 | Signal 목록 | `get_session_signals {session_id}` | `GET /v1/sessions/:id/signals` |
 | detector manifest (metric_class 포함) | `list_detectors` | `GET /v1/detectors` |
+| 원문 이벤트 창 (드릴다운) | `get_session_events {session_id, limit?, before?/after?}` | `GET /v1/sessions/:id/events` |
 | kind 필터 이벤트 | — | `GET /v1/sessions/:id/events?kind=a,b&limit=` |
 | 특정 tool_use 상관 조회 | — | `GET /v1/sessions/:id/events?tool_use_id=` |
 
-events 커서는 `data.prev_cursor` / `data.next_cursor` (URL 인코딩 필요).
+events 커서는 `data.prev_cursor` / `data.next_cursor` (URL 인코딩 필요; MCP
+`get_session_events`도 같은 커서 계약 — tip이면 next=null).
 `next_cursor: null` = 해당 스트림의 live tip. 미지원 쿼리 파라미터는 400으로
 거부되므로 silent-drop을 의심할 필요 없다. `/v1/metrics`의 `matched_count`가
 `session_count`보다 크면 limit 절단이 일어난 것이다 — 절단을 숨기지 말 것.

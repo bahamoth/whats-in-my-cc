@@ -65,6 +65,16 @@
           "session_id": {
             "type": "string",
             "description": "Session ID"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 100,
+            "description": "Max turns returned (1..500); truncation exposed via total_count"
+          },
+          "offset": {
+            "type": "integer",
+            "default": 0,
+            "description": "Skip this many turns from the start"
           }
         },
         "required": [
@@ -140,6 +150,56 @@
           "session_id": {
             "type": "string",
             "description": "Session ID"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      }
+    },
+    {
+      "name": "whats_in_my_cc.get_session_events",
+      "description": "Cursor-paged window of a session's raw observed events — the same contract as GET /v1/sessions/:id/events (prev_cursor/next_cursor, next=null at the live tip). Use for drill-down after get_session_digest/signals point at specific events.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "Session ID"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 50,
+            "description": "Window size (1..500)"
+          },
+          "before": {
+            "type": "string",
+            "description": "Page older than this cursor (`<rfc3339>|<event_id>`)"
+          },
+          "after": {
+            "type": "string",
+            "description": "Page newer than this cursor"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      }
+    },
+    {
+      "name": "whats_in_my_cc.get_session_digest",
+      "description": "Single-call, token-bounded session digest: summary counts, fingerprint, SessionMetrics, and a capped signal list (truncation exposed via total vs returned). Pure deterministic aggregation — judgement is the caller's. Start here, then drill down with get_session_events / get_session_signals.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "Session ID"
+          },
+          "signal_limit": {
+            "type": "integer",
+            "default": 20,
+            "description": "Max signals included (truncation exposed via signals.total)"
           }
         },
         "required": [

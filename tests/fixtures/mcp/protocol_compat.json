@@ -27,31 +27,220 @@
   "tools_list_result": {
     "tools": [
       {
-        "name": "whats_in_my_cc.search_sessions"
+        "name": "whats_in_my_cc.search_sessions",
+        "description": "List recent Claude Code sessions observed locally.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "default": 20,
+              "description": "Max sessions to return"
+            },
+            "project": {
+              "type": "string",
+              "description": "Project root path — only sessions with ≥1 event whose cwd equals this path (trailing slash ignored)"
+            }
+          },
+          "required": []
+        }
       },
       {
-        "name": "whats_in_my_cc.get_file_lineage"
+        "name": "whats_in_my_cc.get_file_lineage",
+        "description": "Return the diff-hunk lineage for a specific file in a session.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "description": "Session ID"
+            },
+            "file_path": {
+              "type": "string",
+              "description": "File path to trace lineage for"
+            }
+          },
+          "required": [
+            "session_id",
+            "file_path"
+          ]
+        }
       },
       {
-        "name": "whats_in_my_cc.get_otel_trace"
+        "name": "whats_in_my_cc.get_otel_trace",
+        "description": "Return OTel spans for a trace ID observed in this session. Returns at most 200 spans; matched_count reports the pre-truncation total.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "trace_id": {
+              "type": "string",
+              "description": "OTel trace ID (hex)"
+            }
+          },
+          "required": [
+            "trace_id"
+          ]
+        }
       },
       {
-        "name": "whats_in_my_cc.get_session_turns"
+        "name": "whats_in_my_cc.get_session_turns",
+        "description": "Turn-level deterministic rollup of a session: per-user-turn tool histogram, edited files, and cross-turn file churn. Counts and redacted excerpts only — judgments (e.g. rework classification) are the caller's.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "description": "Session ID"
+            },
+            "limit": {
+              "type": "integer",
+              "default": 100,
+              "description": "Max turns returned (1..500); truncation exposed via total_count"
+            },
+            "offset": {
+              "type": "integer",
+              "default": 0,
+              "description": "Skip this many turns from the start"
+            }
+          },
+          "required": [
+            "session_id"
+          ]
+        }
       },
       {
-        "name": "whats_in_my_cc.get_project_metrics"
+        "name": "whats_in_my_cc.get_project_metrics",
+        "description": "Cross-session deterministic metrics series: per-session behavioral counts (SessionMetrics) plus environment fingerprint (models, cc_versions, git_branches, cwds, entrypoints). Counts and observations only — rates and judgments are the caller's.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "project": {
+              "type": "string",
+              "description": "Project root path filter (same semantics as search_sessions.project)"
+            },
+            "from": {
+              "type": "string",
+              "description": "RFC3339 — only sessions whose first observed event is at or after this time"
+            },
+            "to": {
+              "type": "string",
+              "description": "RFC3339 — only sessions whose first observed event is at or before this time"
+            },
+            "limit": {
+              "type": "integer",
+              "default": 50,
+              "description": "Max sessions returned (newest first, max 200; matched_count reports pre-truncation total)"
+            }
+          },
+          "required": []
+        }
       },
       {
-        "name": "whats_in_my_cc.get_session_metrics"
+        "name": "whats_in_my_cc.get_session_metrics",
+        "description": "On-demand deterministic behavioral metrics for one session (SessionMetrics): tool/verification/disposition counts, session facts, and detector_firing. Counts only — rates and judgments are the caller's. Same data as GET /v1/sessions/:id/metrics.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "description": "Session ID"
+            }
+          },
+          "required": [
+            "session_id"
+          ]
+        }
       },
       {
-        "name": "whats_in_my_cc.get_session_signals"
+        "name": "whats_in_my_cc.get_session_signals",
+        "description": "Evidence-linked deterministic L1 signals for one session. Each signal carries detector id, factual summary, facts projection, and evidence_refs (event IDs) — no severity/confidence; judgments are the caller's. Same data as GET /v1/sessions/:id/signals.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "description": "Session ID"
+            }
+          },
+          "required": [
+            "session_id"
+          ]
+        }
       },
       {
-        "name": "whats_in_my_cc.get_session_fingerprint"
+        "name": "whats_in_my_cc.get_session_fingerprint",
+        "description": "Session environment fingerprint: distinct models, cc_versions, git_branches, cwds, entrypoints observed in the session. Observations only — the independent-variable surface for before/after cohort comparison. Same data as GET /v1/sessions/:id/fingerprint.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "description": "Session ID"
+            }
+          },
+          "required": [
+            "session_id"
+          ]
+        }
       },
       {
-        "name": "whats_in_my_cc.list_detectors"
+        "name": "whats_in_my_cc.get_session_events",
+        "description": "Cursor-paged window of a session's raw observed events — the same contract as GET /v1/sessions/:id/events (prev_cursor/next_cursor, next=null at the live tip). Use for drill-down after get_session_digest/signals point at specific events.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "description": "Session ID"
+            },
+            "limit": {
+              "type": "integer",
+              "default": 50,
+              "description": "Window size (1..500)"
+            },
+            "before": {
+              "type": "string",
+              "description": "Page older than this cursor (`<rfc3339>|<event_id>`)"
+            },
+            "after": {
+              "type": "string",
+              "description": "Page newer than this cursor"
+            }
+          },
+          "required": [
+            "session_id"
+          ]
+        }
+      },
+      {
+        "name": "whats_in_my_cc.get_session_digest",
+        "description": "Single-call, token-bounded session digest: summary counts, fingerprint, SessionMetrics, and a capped signal list (truncation exposed via total vs returned). Pure deterministic aggregation — judgement is the caller's. Start here, then drill down with get_session_events / get_session_signals.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "description": "Session ID"
+            },
+            "signal_limit": {
+              "type": "integer",
+              "default": 20,
+              "description": "Max signals included (truncation exposed via signals.total)"
+            }
+          },
+          "required": [
+            "session_id"
+          ]
+        }
+      },
+      {
+        "name": "whats_in_my_cc.list_detectors",
+        "description": "Return the manifest catalog for all registered detectors (spec §6.4). Each manifest describes what the detector detects, which raw payload fields it reads, by what rule, and why. Use this before proposing config changes or new detectors.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
       }
     ]
   },

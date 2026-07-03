@@ -5745,6 +5745,28 @@ vitest: 69 passed
     0건(재스캔) — 보류 유지.</p>
   </section>
 
+  <section id="mcp-digest-events-2026-07-04">
+    <h2>MCP 응답 구조 + 다이제스트 — B-3 종결 (2026-07-04, 9종→11종)</h2>
+    <p><b>structuredContent:</b> <code>tool_success</code>가 MCP 2025-06-18 spec의
+    구조화 출력(<code>structuredContent</code>)을 싣고, spec의 하위호환 권고("SHOULD also
+    return the serialized JSON in a TextContent block")대로 같은 JSON을 text 블록에도
+    유지한다 — 텍스트 소비자(LLM 컨텍스트)는 종전과 동일, 구조 소비자는 재파싱 불필요.</p>
+    <p><b>페이지네이션:</b> get_session_turns에 limit(기본 100, 최대 500)/offset —
+    절단은 <code>total_count</code>/<code>offset</code>으로 노출(get_otel_trace
+    matched_count 선례). get_file_lineage는 파일 단위 소형 응답이라 보류(필요 시 동일
+    기법).</p>
+    <p><b>get_session_events:</b> 순수 MCP 클라이언트의 원문 이벤트 접근 갭 종결 —
+    HTTP GET /v1/sessions/:id/events와 같은 커서 계약(prev/next_cursor,
+    <code>&lt;rfc3339&gt;|&lt;event_id&gt;</code>, 세션 tip이면 next=null). HTTP 쪽 kind
+    필터·around·correlation은 UI 전용이라 싣지 않음(창 계약만 1:1).
+    <code>observed_to_dto</code>를 pub(crate) 공유(signal_row_to_dto 선례).</p>
+    <p><b>get_session_digest:</b> 토큰 상한이 설계된 단일 콜 — summary(개수·기간·kind
+    분포)+fingerprint+SessionMetrics+signal 목록(기본 20, summary 문자열 200자 절단
+    표기, 절단은 total vs returned로 노출)+드릴다운 links. 순수 결정론 집계 조합만이며
+    판단 문장은 없다(측정/판별 분리). 00 SRV-3·01·02·04 spec 및 회고 스킬 치트시트
+    11종 동기화, tools/list 호환 fixture 재생성(tools_list_expected + protocol_compat).</p>
+  </section>
+
 </main>
 </div>
 </body></html>

@@ -14,6 +14,8 @@ use sqlx::SqlitePool;
 pub mod get_file_lineage;
 pub mod get_otel_trace;
 pub mod get_project_metrics;
+pub mod get_session_digest;
+pub mod get_session_events;
 pub mod get_session_fingerprint;
 pub mod get_session_metrics;
 pub mod get_session_signals;
@@ -22,10 +24,16 @@ pub mod list_detectors;
 pub mod search_sessions;
 
 /// Wrap a JSON value as an MCP `tools/call` success result.
+///
+/// B-3 (2026-07-04): MCP 2025-06-18 spec의 `structuredContent`를 함께 싣는다
+/// — "a tool that returns structured content SHOULD also return the
+/// serialized JSON in a TextContent block"(하위호환). 구조 소비자는
+/// structuredContent를, 텍스트 소비자(LLM 컨텍스트)는 text 블록을 쓴다.
 pub fn tool_success(data: Value) -> Value {
     let text = serde_json::to_string(&data).unwrap_or_else(|_| "{}".into());
     json!({
         "content": [{ "type": "text", "text": text }],
+        "structuredContent": data,
         "isError": false
     })
 }
@@ -75,7 +83,9 @@ fn get_session_turns_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "session_id": { "type": "string", "description": "Session ID" }
+            "session_id": { "type": "string", "description": "Session ID" },
+            "limit": { "type": "integer", "default": 100, "description": "Max turns returned (1..500); truncation exposed via total_count" },
+            "offset": { "type": "integer", "default": 0, "description": "Skip this many turns from the start" }
         },
         "required": ["session_id"]
     })
@@ -158,11 +168,45 @@ pub fn tools_list_response() -> Value {
                 "inputSchema": session_id_only_schema()
             },
             {
+                "name": "whats_in_my_cc.get_session_events",
+                "description": "Cursor-paged window of a session's raw observed events — the same contract as GET /v1/sessions/:id/events (prev_cursor/next_cursor, next=null at the live tip). Use for drill-down after get_session_digest/signals point at specific events.",
+                "inputSchema": get_session_events_schema()
+            },
+            {
+                "name": "whats_in_my_cc.get_session_digest",
+                "description": "Single-call, token-bounded session digest: summary counts, fingerprint, SessionMetrics, and a capped signal list (truncation exposed via total vs returned). Pure deterministic aggregation — judgement is the caller's. Start here, then drill down with get_session_events / get_session_signals.",
+                "inputSchema": get_session_digest_schema()
+            },
+            {
                 "name": "whats_in_my_cc.list_detectors",
                 "description": "Return the manifest catalog for all registered detectors (spec §6.4). Each manifest describes what the detector detects, which raw payload fields it reads, by what rule, and why. Use this before proposing config changes or new detectors.",
                 "inputSchema": list_detectors_schema()
             }
         ]
+    })
+}
+
+fn get_session_events_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "session_id": { "type": "string", "description": "Session ID" },
+            "limit": { "type": "integer", "default": 50, "description": "Window size (1..500)" },
+            "before": { "type": "string", "description": "Page older than this cursor (`<rfc3339>|<event_id>`)" },
+            "after": { "type": "string", "description": "Page newer than this cursor" }
+        },
+        "required": ["session_id"]
+    })
+}
+
+fn get_session_digest_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "session_id": { "type": "string", "description": "Session ID" },
+            "signal_limit": { "type": "integer", "default": 20, "description": "Max signals included (truncation exposed via signals.total)" }
+        },
+        "required": ["session_id"]
     })
 }
 
@@ -178,6 +222,8 @@ pub async fn dispatch(name: &str, args: &Value, pool: &SqlitePool) -> Value {
         "whats_in_my_cc.get_session_signals" => get_session_signals::call(args, pool).await,
         "whats_in_my_cc.get_session_fingerprint" => get_session_fingerprint::call(args, pool).await,
         "whats_in_my_cc.list_detectors" => list_detectors::call(args, pool).await,
+        "whats_in_my_cc.get_session_events" => get_session_events::call(args, pool).await,
+        "whats_in_my_cc.get_session_digest" => get_session_digest::call(args, pool).await,
         _ => tool_error(format!("unknown tool: {name}")),
     }
 }

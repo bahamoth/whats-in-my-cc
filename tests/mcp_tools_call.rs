@@ -399,3 +399,118 @@ async fn unknown_tool_name_returns_is_error_true() {
     let body: Value = r.json();
     assert_eq!(body["result"]["isError"], true);
 }
+
+// ── B-3 (2026-07-04): 응답 구조·페이지네이션·events 툴·다이제스트 ──────────
+
+/// ① structuredContent — MCP 2025-06-18 spec: 구조화 출력은
+/// `structuredContent`로 싣고, 하위호환으로 같은 JSON을 text 블록에도 담는다
+/// ("SHOULD also return the serialized JSON in a TextContent block").
+#[tokio::test]
+async fn tool_success_carries_structured_content() {
+    let (server, _pool) = make_server_with_session().await;
+    let sid = init_session(&server).await;
+    let (hk, hv) = sid_header(&sid);
+    let r = server
+        .post("/mcp")
+        .add_header(hk, hv)
+        .content_type("application/json")
+        .json(&json!({
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+            "params": {"name": "whats_in_my_cc.search_sessions", "arguments": {}}
+        }))
+        .await;
+    let body: Value = r.json();
+    let result = &body["result"];
+    assert!(
+        result["structuredContent"].is_object(),
+        "structuredContent must be present: {result}"
+    );
+    // text 블록과 structuredContent는 같은 JSON이다.
+    let text: Value = serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(&text, &result["structuredContent"]);
+}
+
+/// ② get_session_turns 페이지네이션 — limit/offset + 절단 노출(total_count).
+#[tokio::test]
+async fn get_session_turns_paginates_and_exposes_total() {
+    let (server, _pool) = make_server_with_session().await;
+    let sid = init_session(&server).await;
+    let (hk, hv) = sid_header(&sid);
+    let r = server
+        .post("/mcp")
+        .add_header(hk, hv)
+        .content_type("application/json")
+        .json(&json!({
+            "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+            "params": {"name": "whats_in_my_cc.get_session_turns",
+                       "arguments": {"session_id": "sess-A", "limit": 1, "offset": 0}}
+        }))
+        .await;
+    let body: Value = r.json();
+    let data: Value =
+        serde_json::from_str(body["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    let turns = data["data"]["turns"].as_array().unwrap();
+    assert_eq!(turns.len(), 1, "limit=1 must return one turn: {data}");
+    assert!(
+        data["data"]["total_count"].as_i64().unwrap() >= 1,
+        "truncation must be exposed via total_count: {data}"
+    );
+}
+
+/// ③ get_session_events — 순수 MCP 클라이언트의 원문 이벤트 창 접근.
+/// HTTP GET /v1/sessions/:id/events와 같은 커서 계약(prev/next_cursor).
+#[tokio::test]
+async fn get_session_events_returns_cursor_window() {
+    let (server, _pool) = make_server_with_session().await;
+    let sid = init_session(&server).await;
+    let (hk, hv) = sid_header(&sid);
+    let r = server
+        .post("/mcp")
+        .add_header(hk, hv)
+        .content_type("application/json")
+        .json(&json!({
+            "jsonrpc": "2.0", "id": 4, "method": "tools/call",
+            "params": {"name": "whats_in_my_cc.get_session_events",
+                       "arguments": {"session_id": "sess-A", "limit": 2}}
+        }))
+        .await;
+    let body: Value = r.json();
+    assert_eq!(body["result"]["isError"], false, "{body}");
+    let data: Value =
+        serde_json::from_str(body["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    let events = data["data"]["events"].as_array().unwrap();
+    assert_eq!(events.len(), 2, "limit=2 window: {data}");
+    assert!(data["data"].get("prev_cursor").is_some());
+    assert!(data["data"].get("next_cursor").is_some());
+}
+
+/// ④ get_session_digest — 토큰 상한이 설계된 단일 콜: 순수 집계 조합
+/// (summary+metrics+fingerprint+signals 절단 목록). 판단 문장 없음.
+#[tokio::test]
+async fn get_session_digest_composes_aggregates_with_caps() {
+    let (server, _pool) = make_server_with_session().await;
+    let sid = init_session(&server).await;
+    let (hk, hv) = sid_header(&sid);
+    let r = server
+        .post("/mcp")
+        .add_header(hk, hv)
+        .content_type("application/json")
+        .json(&json!({
+            "jsonrpc": "2.0", "id": 5, "method": "tools/call",
+            "params": {"name": "whats_in_my_cc.get_session_digest",
+                       "arguments": {"session_id": "sess-A"}}
+        }))
+        .await;
+    let body: Value = r.json();
+    assert_eq!(body["result"]["isError"], false, "{body}");
+    let data: Value =
+        serde_json::from_str(body["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    let d = &data["data"];
+    assert_eq!(d["session_id"], "sess-A");
+    assert!(d["summary"]["event_count"].as_i64().unwrap() >= 6, "{d}");
+    assert!(d["metrics"]["tool_call_total"].is_i64(), "{d}");
+    assert!(d["fingerprint"]["models"].is_array(), "{d}");
+    // signals: 절단 노출 — total과 returned가 분리돼 있다.
+    assert!(d["signals"]["total"].is_i64(), "{d}");
+    assert!(d["signals"]["items"].is_array(), "{d}");
+}
