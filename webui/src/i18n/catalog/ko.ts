@@ -257,4 +257,50 @@ export const ko: Messages = {
   // Stream — query source (who issued the LLM request)
   'stream.querySource.mainThread': '메인 스레드',
   'stream.querySource.subagent': (name: string) => `서브에이전트 · ${name}`,
+
+  // Project dashboard (B-1)
+  'nav.dashboard': '대시보드',
+  'dash.eyebrow': '프로젝트 대시보드',
+  'dash.allProjects': '전체 프로젝트',
+  'dash.projectLabel': '프로젝트',
+  'dash.windowLabel': '기간',
+  'dash.window.30d': '30일',
+  'dash.window.90d': '90일',
+  'dash.window.all': '전체',
+  'dash.sessionCount': (n: number) => `세션 ${n}개`,
+  'dash.truncated': (a: { n: number; m: number }) => `전체 ${a.m}개 중 최근 ${a.n}개 표시 (limit)`,
+  'dash.empty': '이 기간에 세션이 없습니다.',
+  'dash.emptyHint': '먼저 transcript를 수집하세요: wimcc ingest --all',
+  'dash.error': 'series를 불러오지 못했습니다.',
+  'dash.loading': 'series 불러오는 중…',
+  'dash.cohort.title': '환경 코호트',
+  'dash.cohort.tip':
+    'fingerprint에서 관측된 모델 집합·Claude Code 버전으로 세션을 묶습니다. ' +
+    '세로줄이 관측된 변화 지점이고, fingerprint가 없는 세션은 직전 코호트를 이어갑니다.',
+  'dash.cohort.models': '모델',
+  'dash.cohort.cc': 'CC 버전',
+  'dash.cohort.unknown': '미관측',
+  'dash.outcome.title': '검증 outcome',
+  'dash.outcome.tip':
+    '세션별 verification run의 outcome 분포입니다. unknown = 실행됐으나 결과를 읽지 못함. ' +
+    '실행되지 않은 run(거부/차단/취소/백그라운드)은 outcome이 아니므로 표시하지 않습니다.',
+  'dash.outcome.passed': 'passed',
+  'dash.outcome.failed': 'failed',
+  'dash.outcome.unknown': 'unknown',
+  'dash.outcome.none': '이 기간에 verification run이 없습니다',
+  'dash.multiples.title': '프로세스 신호',
+  'dash.multiples.tip':
+    '세션별 결정론 count입니다. 좋아졌는가의 판단은 사용자의 몫 — 위 outcome 차트와 함께 읽으세요.',
+  'dash.metric.tool_failure_count': '도구 실패',
+  'dash.metric.context_bloat_count': 'context bloat 신호',
+  'dash.metric.api_error_count': 'API 오류',
+  'dash.metric.user_interruption_count': '사용자 중단',
+  'dash.metric.compact_boundary_count': '컨텍스트 압축',
+  'dash.metric.tool_result_truncated_count': '잘린 tool result',
+  'dash.axis.max': (n: number) => `최대 ${n}`,
+  'dash.table.summary': '데이터 표',
+  'dash.table.session': '세션',
+  'dash.table.date': '최초 관측',
+  'dash.table.events': '이벤트',
+  'dash.openSession': (id: string) => `세션 ${id} 열기`,
 };

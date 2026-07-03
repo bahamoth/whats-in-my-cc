@@ -270,6 +270,53 @@ export const en = {
   // Stream — query source (who issued the LLM request)
   'stream.querySource.mainThread': 'Main thread',
   'stream.querySource.subagent': (name: string) => `Subagent · ${name}`,
+
+  // Project dashboard (B-1)
+  'nav.dashboard': 'Dashboard',
+  'dash.eyebrow': 'Project dashboard',
+  'dash.allProjects': 'All projects',
+  'dash.projectLabel': 'Project',
+  'dash.windowLabel': 'Window',
+  'dash.window.30d': '30d',
+  'dash.window.90d': '90d',
+  'dash.window.all': 'All',
+  'dash.sessionCount': (n: number) => `${n} sessions`,
+  'dash.truncated': (a: { n: number; m: number }) =>
+    `showing the latest ${a.n} of ${a.m} sessions (limit)`,
+  'dash.empty': 'No sessions in this window.',
+  'dash.emptyHint': 'Ingest transcripts first: wimcc ingest --all',
+  'dash.error': 'Failed to load the series.',
+  'dash.loading': 'Loading series…',
+  'dash.cohort.title': 'Environment cohorts',
+  'dash.cohort.tip':
+    'Sessions grouped by the model set and Claude Code version observed in their fingerprints. ' +
+    'A rule marks each observed change; sessions without a fingerprint extend the previous cohort.',
+  'dash.cohort.models': 'model',
+  'dash.cohort.cc': 'CC version',
+  'dash.cohort.unknown': 'not observed yet',
+  'dash.outcome.title': 'Verification outcomes',
+  'dash.outcome.tip':
+    'Per-session verification runs by outcome. unknown = the command ran but its result was unreadable; ' +
+    'runs that never executed (rejected/blocked/cancelled/background) are not shown — they are not outcomes.',
+  'dash.outcome.passed': 'passed',
+  'dash.outcome.failed': 'failed',
+  'dash.outcome.unknown': 'unknown',
+  'dash.outcome.none': 'no verification runs in this window',
+  'dash.multiples.title': 'Process signals',
+  'dash.multiples.tip':
+    'Deterministic per-session counts. Judgement (better/worse) is yours — pair process moves with the outcome chart above.',
+  'dash.metric.tool_failure_count': 'tool failures',
+  'dash.metric.context_bloat_count': 'context bloat signals',
+  'dash.metric.api_error_count': 'API errors',
+  'dash.metric.user_interruption_count': 'user interruptions',
+  'dash.metric.compact_boundary_count': 'context compactions',
+  'dash.metric.tool_result_truncated_count': 'truncated tool results',
+  'dash.axis.max': (n: number) => `max ${n}`,
+  'dash.table.summary': 'Data table',
+  'dash.table.session': 'session',
+  'dash.table.date': 'first observed',
+  'dash.table.events': 'events',
+  'dash.openSession': (id: string) => `Open session ${id}`,
 };
 
 export type Messages = typeof en;

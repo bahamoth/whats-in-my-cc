@@ -1,0 +1,61 @@
+.wrap {
+  position: relative;
+}
+
+.plot {
+  display: grid;
+  column-gap: 2px;
+  align-items: end;
+}
+
+/* 컬럼 전체가 클릭 타깃 — 마크보다 큰 hit target (interaction 규칙). */
+.col {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-start;
+  row-gap: 2px;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  /* 세션 존재 baseline — 값 0이어도 축 위의 세션임이 보인다. */
+  border-bottom: 1px solid var(--wimcc-border-strong);
+}
+
+.col:hover {
+  background: color-mix(in srgb, var(--wimcc-fg) 6%, transparent);
+}
+
+.col:focus-visible {
+  outline: 2px solid var(--wimcc-accent);
+  outline-offset: 1px;
+}
+
+/* 데이터-끝 라운드는 스택의 맨 위 세그먼트에만. */
+.seg {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+}
+
+.seg:last-child {
+  border-radius: 4px 4px 0 0;
+}
+
+.tip {
+  position: fixed;
+  z-index: 40;
+  max-width: 320px;
+  padding: 8px 10px;
+  border: 1px solid var(--wimcc-border-strong);
+  border-radius: 6px;
+  background: var(--wimcc-surface-3);
+  color: var(--wimcc-fg);
+  font-family: var(--wimcc-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: none;
+  white-space: pre-line;
+}
