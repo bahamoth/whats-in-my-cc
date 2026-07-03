@@ -110,6 +110,37 @@ pub async fn insert_dedup(pool: &SqlitePool, r: &NewRaw) -> Result<bool> {
 /// pagination window (the scan has no ORDER BY).
 ///
 /// If there are no raw events or no manifests, returns a zero-count summary.
+/// B-4 (2026-07-04) — 세션의 raw record 전체(export bundle의 raw opt-in용).
+/// raw_event에는 session_id 컬럼이 없다 — observed_event의 raw_event_id
+/// 조인으로 세션을 한정한다(같은 raw 라인이 여러 observed를 만들 수 있어
+/// DISTINCT). payload는 ingest 시점에 redaction 게이트를 통과한 상태다.
+pub async fn list_session_records(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<Vec<serde_json::Value>> {
+    use sqlx::Row as _;
+    let rows = sqlx::query(
+        "SELECT DISTINCT r.raw_event_id, r.source_line_no, r.payload
+           FROM raw_event r
+           JOIN observed_event o ON o.raw_event_id = r.raw_event_id
+          WHERE o.session_id = ?
+          ORDER BY r.source_line_no, r.raw_event_id",
+    )
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let bytes: Vec<u8> = r.get("payload");
+            std::str::from_utf8(&bytes)
+                .ok()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or(serde_json::Value::Null)
+        })
+        .collect())
+}
+
 pub async fn aggregate_session_summary(
     pool: &SqlitePool,
     session_id: &str,

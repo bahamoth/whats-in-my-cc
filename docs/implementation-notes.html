@@ -5767,6 +5767,27 @@ vitest: 69 passed
     11종 동기화, tools/list 호환 fixture 재생성(tools_list_expected + protocol_compat).</p>
   </section>
 
+  <section id="export-bundle-2026-07-04">
+    <h2>export bundle — B-4 구현 (2026-07-04)</h2>
+    <p><b>계약:</b> <code>POST /v1/export-bundles</code> body
+    <code>{kind:"session", id, include_raw?}</code> — read-only 원칙의 유일한 write 예외
+    (PRD·05 §06). 데이터가 로컬을 떠나는 전송이 아니라 owner가 반출을 선택하는 행위:
+    번들은 <code>$WIMCC_CONFIG_DIR/exports/wimcc-bundle-&lt;id8&gt;-&lt;ts&gt;.json</code>
+    (token 컨벤션 디렉토리 재사용)에 로컬 파일로 쓰이고 응답에 sha256·byte_size가 실린다.
+    §09-3 결정대로 기본은 redacted normalized evidence(observed 이벤트 — ingest 시점
+    redaction 게이트 통과분 + summary/fingerprint/metrics/signals/verification_runs DTO),
+    raw record는 <code>include_raw</code> explicit opt-in(observed 조인으로 세션 한정 —
+    raw_event에는 session_id가 없다). 모든 export는 audit에
+    <code>export_bundle_created</code>(actor=owner, 경로·해시·크기)로 남는다.</p>
+    <p><b>범위 결정:</b> kind는 우선 "session"만 — 05 §06의 select 후보(signal/lineage)는
+    세션 번들이 상위집합이라 필요가 관측되면 추가(400으로 명시 거절). out_dir 파라미터는
+    두지 않았다 — 고정 exports/ 디렉토리가 경로 남용 여지를 없앤다. "must not include"
+    (patch·hook 스크립트·설정 변경)는 내용이 데이터 전용이라 구조적으로 만족.</p>
+    <p><b>테스트:</b> 전용 바이너리(tests/api_export_bundle.rs — WIMCC_CONFIG_DIR 설정,
+    프로세스 격리 관행; 병렬 테스트 경합을 피해 바이너리 전역 공유 tempdir) 5건: 파일+해시
+    일치, raw opt-in 유무, 404/400, audit 기록.</p>
+  </section>
+
 </main>
 </div>
 </body></html>

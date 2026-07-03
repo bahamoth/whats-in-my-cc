@@ -43,7 +43,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <div class="callout"><strong>용어:</strong> MCP 공식 명칭은 <em>Streamable HTTP transport</em>다. 본 문서에서는 사용자의 표현인 “MCP streaming http”를 이 transport로 해석한다.</div>
 </section>
 <section id="surface"><h2><span class="num">02</span>Serving Surface</h2>
-<div class="grid three"><div class="card"><h4>Local WebUI</h4><p>브라우저 기반 React SPA (rust-embed로 서버에 내장). 같은 Pull API + SSE를 소비해 event-first replay와 insight strip을 렌더링한다.</p></div><div class="card"><h4>Pull API</h4><p>HTTP JSON API. <strong>전부 GET</strong> read-only. write endpoint 없음.</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p><code>/mcp</code> 단일 endpoint. AI client가 resources와 read-only tools 11종으로 insight를 조회한다.</p></div></div>
+<div class="grid three"><div class="card"><h4>Local WebUI</h4><p>브라우저 기반 React SPA (rust-embed로 서버에 내장). 같은 Pull API + SSE를 소비해 event-first replay와 insight strip을 렌더링한다.</p></div><div class="card"><h4>Pull API</h4><p>HTTP JSON API. <strong>GET read-only</strong>. 유일한 write 예외는 <code>POST /v1/export-bundles</code>(owner-only local export — 로컬 파일 생성뿐, domain write 아님. B-4 2026-07-04).</p></div><div class="card"><h4>MCP Streamable HTTP</h4><p><code>/mcp</code> 단일 endpoint. AI client가 resources와 read-only tools 11종으로 insight를 조회한다.</p></div></div>
 <div class="callout"><strong>Collectors (입력면):</strong> 같은 서버가 OTLP/HTTP receiver(<code>POST /otel/v1/traces|metrics|logs</code>)를 연다. 이는 telemetry <em>수집</em>이며 read-only 원칙의 예외가 아니다 — domain resource를 외부에서 수정하는 경로가 아니다. (hook receiver <code>/hooks/v1/events</code>는 2026-06 제거 — hook은 transcript에서 관측한다.)</div>
 </section>
 <section id="api"><h2><span class="num">03</span>Pull API Contract</h2>
@@ -67,7 +67,8 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <tr><td>GET</td><td><code>/v1/metrics</code></td><td>세션 횡단 metrics+fingerprint series (loop-foundations 2026-06-12). 쿼리: <code>project</code>·<code>from</code>·<code>to</code>(RFC3339, first_observed_at 기준 닫힌 구간)·<code>limit</code>(기본 50, 최대 200) — 미지원 파라미터는 400, 비RFC3339는 <code>400 INVALID_TIME</code>. 행 = 세션별 <code>SessionMetrics</code>+fingerprint(최신순), <code>matched_count</code>로 limit 절단을 노출. 개입 전후 비교의 측정면 — 판단 필드 없음</td><td>{meta, data}</td></tr>
 <tr><td>GET</td><td><code>/v1/detectors</code></td><td>detector manifest catalog 4종 (id, intent, inputs, rule, output, config_keys, rationale, metric_class — process|outcome Goodhart 가드 분류)</td><td>{data}</td></tr>
 <tr><td>GET</td><td><code>/v1/events/{event_id}/raw</code></td><td>event의 raw source payload + source ref(file_path, line_no) + telemetry facet</td><td>{meta, data}</td></tr>
-<tr><td>GET</td><td><code>/v1/audit</code></td><td>최근 audit 행 200개 (retention sweep 기록 등)</td><td>{data}</td></tr>
+<tr><td>GET</td><td><code>/v1/audit</code></td><td>최근 audit 행 200개 (retention sweep·export 기록 등)</td><td>{data}</td></tr>
+<tr><td>POST</td><td><code>/v1/export-bundles</code></td><td>owner-only local export (B-4, 2026-07-04) — body <code>{kind:"session", id, include_raw?}</code>. 번들은 <code>$WIMCC_CONFIG_DIR/exports/</code> 로컬 JSON 파일; 응답에 <code>bundle_path·sha256·byte_size</code>. 기본 redacted normalized evidence, raw는 opt-in(§09-3). audit에 <code>export_bundle_created</code> 기록. read-only 원칙의 유일한 write 예외(05 §06)</td><td>{meta, data}</td></tr>
 <tr><td>GET</td><td><code>/v1/stream</code></td><td>SSE live event stream — <a href="#streaming">§06</a></td><td>SSE frames</td></tr>
 <tr><td>POST</td><td><code>/otel/v1/traces</code> · <code>/otel/v1/metrics</code> · <code>/otel/v1/logs</code></td><td>OTLP/HTTP collector receivers (loopback, 무인증)</td><td>accept counters</td></tr>
 </tbody></table>

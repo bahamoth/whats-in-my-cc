@@ -1384,3 +1384,189 @@ pub async fn list_audit(State(pool): State<SqlitePool>) -> impl IntoResponse {
         }
     }
 }
+
+// ── B-4 (2026-07-04): POST /v1/export-bundles — owner-only local export ────
+
+/// read-only 원칙의 유일한 write 예외(PRD·05 §06). 데이터가 로컬을 떠나는
+/// 경로가 아니라 owner가 반출을 선택하는 행위다: 번들은
+/// `$WIMCC_CONFIG_DIR/exports/`(token 컨벤션 재사용)에 로컬 파일로 쓰이고
+/// sha256이 응답에 실린다. 계약(§09-3, 2026-07-04 사용자 결정): 기본은
+/// redacted normalized evidence(observed — ingest 시점 redaction 게이트
+/// 통과분)만, raw record는 explicit opt-in. 05 §06 "must not include"
+/// (patch·hook 스크립트·설정 변경 류)는 내용이 데이터 전용이라 구조적으로
+/// 만족한다. kind는 우선 "session"만 — signal/lineage 반출은 세션 번들이
+/// 상위집합이라 필요가 관측되면 추가한다.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExportBundleRequest {
+    pub kind: String,
+    pub id: String,
+    #[serde(default)]
+    pub include_raw: bool,
+}
+
+fn exports_dir() -> std::path::PathBuf {
+    let base = if let Ok(v) = std::env::var("WIMCC_CONFIG_DIR") {
+        std::path::PathBuf::from(v)
+    } else {
+        dirs::config_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("wimcc")
+    };
+    base.join("exports")
+}
+
+pub async fn create_export_bundle(
+    State(pool): State<SqlitePool>,
+    Json(req): Json<ExportBundleRequest>,
+) -> Result<Json<Envelope<serde_json::Value>>, (StatusCode, Json<serde_json::Value>)> {
+    if req.kind != "session" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "type": "about:blank",
+                "title": "INVALID_KIND",
+                "detail": format!("unsupported bundle kind: {} (only \"session\")", req.kind),
+            })),
+        ));
+    }
+    let session_id = req.id.as_str();
+    let Some((event_count, first_observed_at, last_observed_at)) =
+        repo_observed::session_summary(&pool, session_id)
+            .await
+            .expect("db")
+    else {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "type": "about:blank",
+                "title": "RESOURCE_NOT_FOUND",
+                "detail": format!("session {session_id} not found"),
+            })),
+        ));
+    };
+
+    let by_kind = repo_observed::session_kind_counts(&pool, session_id)
+        .await
+        .expect("db");
+    let fingerprint = crate::insight::fingerprint::compute_session_fingerprint(&pool, session_id)
+        .await
+        .expect("fingerprint");
+    let metrics = crate::insight::metrics::compute_session_metrics(&pool, session_id)
+        .await
+        .expect("metrics");
+    let signals: Vec<crate::api::dto::SignalDto> =
+        crate::db::repo_signal::list_by_session(&pool, session_id)
+            .await
+            .expect("db")
+            .into_iter()
+            .map(signal_row_to_dto)
+            .collect();
+    let runs = repo_verification_run::list_session(&pool, session_id)
+        .await
+        .expect("db");
+    let hunks = repo_diff_hunk::list_session(&pool, session_id)
+        .await
+        .expect("db");
+    let verification_runs: Vec<VerificationRunDto> = runs
+        .into_iter()
+        .map(|r| {
+            let covered = covered_hunk_ids_for_run(&r, &hunks);
+            run_to_dto(r, covered)
+        })
+        .collect();
+    let events: Vec<serde_json::Value> = repo_observed::list_session(&pool, session_id, 100_000)
+        .await
+        .expect("db")
+        .iter()
+        .map(observed_to_dto)
+        .collect();
+
+    let mut bundle = json!({
+        "meta": {
+            "schema_version": SCHEMA_VERSION,
+            "collection_profile": crate::model::meta::COLLECTION_PROFILE,
+            "redaction_policy": crate::model::meta::RedactionPolicy::standard(),
+            "include_raw": req.include_raw,
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+        },
+        "session": {
+            "session_id": session_id,
+            "summary": {
+                "event_count": event_count,
+                "first_observed_at": first_observed_at,
+                "last_observed_at": last_observed_at,
+                "by_kind": by_kind,
+            },
+            "fingerprint": fingerprint,
+            "metrics": metrics,
+        },
+        "signals": signals,
+        "verification_runs": verification_runs,
+        "events": events,
+    });
+    if req.include_raw {
+        let raw = crate::db::repo_raw::list_session_records(&pool, session_id)
+            .await
+            .expect("db");
+        bundle["raw_events"] = json!(raw);
+    }
+
+    let dir = exports_dir();
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("cannot create exports dir: {e}")})),
+        ));
+    }
+    let short: String = session_id.chars().take(8).collect();
+    let fname = format!(
+        "wimcc-bundle-{short}-{}.json",
+        chrono::Utc::now().format("%Y%m%dT%H%M%S%fZ")
+    );
+    let path = dir.join(fname);
+    let bytes = serde_json::to_vec_pretty(&bundle).unwrap_or_default();
+    if let Err(e) = std::fs::write(&path, &bytes) {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("cannot write bundle: {e}")})),
+        ));
+    }
+    let sha256 = {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(&bytes);
+        format!("{:x}", h.finalize())
+    };
+
+    // owner action 가시성 — audit 원장에 남긴다(§06 traceability).
+    let audit_payload = json!({
+        "session_id": session_id,
+        "include_raw": req.include_raw,
+        "bundle_path": path.to_string_lossy(),
+        "sha256": sha256,
+        "byte_size": bytes.len(),
+    });
+    let _ = crate::db::repo_audit::insert(
+        &pool,
+        &ulid::Ulid::new().to_string(),
+        "export_bundle_created",
+        Some("owner"),
+        &audit_payload.to_string(),
+    )
+    .await;
+
+    Ok(Json(Envelope {
+        meta: ResponseMeta::now(),
+        data: json!({
+            "bundle_path": path.to_string_lossy(),
+            "sha256": sha256,
+            "byte_size": bytes.len(),
+            "resource": {"kind": "session", "id": session_id},
+            "include_raw": req.include_raw,
+            "event_count": events.len(),
+            "signal_count": bundle["signals"].as_array().map(|a| a.len()).unwrap_or(0),
+            "created_at": chrono::Utc::now().to_rfc3339(),
+        }),
+    }))
+}
