@@ -5561,6 +5561,25 @@ vitest: 69 passed
     재확인은 운영 serve 재기동이 필요해 생략했고, 전 코퍼스 분류는 최초 실행 출력으로 판정했다.</p>
   </section>
 
+  <section id="final-state-mismatch-removal-2026-07-03">
+    <h2>final_state_mismatch L1 제거 — 판별을 회고 LLM으로 이관 (2026-07-03)</h2>
+    <p><b>결정(사용자):</b> 2026-07-03 리뷰에서 표면화된 원칙 긴장 — 유일한 lexical 의미 판별
+    detector로, 영어 고정 어휘(GOAL_VERBS 12·COMPLETION_MARKERS 9)가 "측정은 wimcc(결정론),
+    판별은 LLM"과 긴장했고 비영어(한국어) 세션에서는 발화하지 않았다(주 사용자 세션이 한국어 —
+    실질 무동작). 선택지는 제거 vs 언어 한계 명시 유지였고 <b>제거</b>로 결정.</p>
+    <p><b>이관:</b> 판별은 session-retrospect workflow.md 판별 휴리스틱 5번으로 — 재료는 결정론
+    측정값 그대로(get_session_turns의 user_message 발췌 + verification-runs + SessionMetrics
+    verification_failed), 판정만 LLM이 언어 무관 수행. <b>측정면 불변:</b> outcome 축은
+    verification_run이 계속 담당한다(Goodhart 가드 문구도 그리 정정). L1은 4종(전부
+    process-class)이 된다 — metric_class의 outcome 값은 detector로는 당분간 공집합이며 enum은
+    유지(측정면·향후 detector 여지).</p>
+    <p><b>정리:</b> migration 0027이 기존 signal 행을 삭제 — 제거된 detector는 reconcile 패스에
+    나타나지 않아 재ingest에도 남는 zombie가 되고, /v1/detectors manifest에 없는 signal은
+    소비자(스킬의 metric_class 참조)가 해석할 수 없다. episode 0017 정리 선례; 만료가 아닌 제품
+    결정이므로 retention tombstone은 만들지 않는다(404가 정직). 회귀 가드는 api_detectors의
+    부재 단언(episode_removed 선례). 사양 00/01/02/03/04의 5종 나열·표·JSON 예시 동기화.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
