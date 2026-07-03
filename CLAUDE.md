@@ -96,7 +96,12 @@ PR 전 반드시 세 루프를 실행해 이번 세션의 미분류를 해소한
 cd webui && node scripts/untagged-bash.ts --all         # Bash/Read 미분류 → 사전 src/insight/event_tags.rs
 cd webui && node scripts/unknown-verification.ts --all   # 검증 outcome=unknown → 파서 src/ingest/verification_run.rs
 cd webui && node scripts/unidentified-plugins.ts --all    # MCP 미식별 → 사전 src/insight/event_tags.rs
+cd webui && node scripts/tagging-gate.ts                  # PR-전 게이트: 보편 후보 잔존 시 exit 1 (B-7d)
 ```
+
+게이트가 실패하면 사전 추가(원칙) 또는 `scripts/tagging-gate-baseline.json`에
+토큰→사유로 보류를 커밋한다 — 보류가 PR 리뷰에 보이는 편집이 되게. 게이트는
+새 규칙이 반영된 바이너리 기준으로 판정해야 하므로 재빌드·재ingest 후 실행.
 
 상세·hint 분류·false-positive 주의는 `docs/implementation-notes.html`
 (`#untagged-bash-loop`·`#unknown-verification-loop`·`#unidentified-plugins-loop`).

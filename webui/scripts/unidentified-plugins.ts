@@ -32,6 +32,7 @@
  *   [{ token, server, tool, count, provenance, plugin, sessionId, hint }]
  */
 import type { ObservedEventDto, PluginDto } from '../src/api/types.ts';
+import { INTENTIONALLY_UNMATCHED_MCP } from '../src/lib/taggingGate.ts';
 
 interface EventsPage {
   events: ObservedEventDto[];
@@ -130,6 +131,10 @@ async function main() {
       const tag = e.tag;
       if (!tag || tag.disposition !== 'unmatched' || !tag.token) continue;
       const token = tag.token; // "server:tool"
+      // B-7c (2026-07-04): 기결정(intentionally unmatched) 항목은 매 루프
+      // 재표면화하지 않는다 — 결정 SSOT는 Rust SERENA_TOOLS 주석, 목록은
+      // src/lib/taggingGate.ts.
+      if (INTENTIONALLY_UNMATCHED_MCP.has(token)) continue;
       const cur = byToken.get(token);
       if (cur) {
         cur.count += 1;

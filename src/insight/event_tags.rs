@@ -68,6 +68,8 @@ pub static FILENAME_OBJECT: &[(&str, &str)] = &[
     // `config`는 ~/.ssh/config·.git/config류의 보편 무확장 설정 파일명.
     (".gitattributes", "config"),
     ("config", "config"),
+    // B-7 (2026-07-04): Makefile은 justfile 동족(빌드 스크립트 = code).
+    ("Makefile", "code"),
 ];
 
 fn read_tag_for_object(object: &str) -> Option<&'static str> {
@@ -469,6 +471,9 @@ static CONTROL_TOKENS: &[&str] = &[
     "cd", "echo", "printf", "sleep", "for", "export", "source", "set", "pgrep", "kill", "pkill",
     "wait", "true", ":", "while", "until", "if", "case", "esac", "done", "fi", "[", "[[", "test",
     "break", "continue", "exit",
+    // B-7a 후속 (2026-07-04): `$(seq 1 N)` 루프 스캐폴딩 — 서브셸 내부가
+    // 분류되면서 표면화된 순수 생성기. 작업 명령이 아니라 제어 반열.
+    "seq",
 ];
 static PREFIX_KEYWORDS: &[&str] = &["do", "then", "else", "elif"];
 /// `timeout`의 값-소비 플래그 (공백 분리형 — `--signal=KILL`은 해당 없음).
@@ -599,8 +604,53 @@ fn strip_comment_lines(cmd: &str) -> String {
 
 /// 시퀀서(&& · || · ; · | · 개행)로 복합 명령을 분할. 단독 `&`로는 나누지
 /// 않는다(`2>&1` 보호).
+/// B-7a (2026-07-04) — `$( … )`/`<( … )` 명령 치환·프로세스 치환의 내부를
+/// 별도 세그먼트로 뽑고, 바깥 명령에서는 자리표시자로 대체한다(내부 토큰
+/// pr·rev-parse 류가 바깥 첫-토큰 분류를 오염시키지 않게). 중첩은 재귀
+/// 편평화. 이스케이프(`\$(`)는 치환으로 보지 않는다. 따옴표는 기존
+/// 토크나이저와 같은 수준으로 무시한다(quote-naive — 바깥 세그먼트가 먼저
+/// 분류되므로 따옴표 안 오탐 내부는 실질적으로 표면화되지 않는다).
+fn extract_command_subs(cmd: &str) -> (String, Vec<String>) {
+    let chars: Vec<char> = cmd.chars().collect();
+    let mut outer = String::new();
+    let mut inners = Vec::new();
+    let mut i = 0usize;
+    while i < chars.len() {
+        let escaped = i > 0 && chars[i - 1] == '\\';
+        let opens = !escaped
+            && i + 1 < chars.len()
+            && chars[i + 1] == '('
+            && (chars[i] == '$' || chars[i] == '<');
+        if opens {
+            let mut depth = 1usize;
+            let mut j = i + 2;
+            while j < chars.len() && depth > 0 {
+                match chars[j] {
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    _ => {}
+                }
+                j += 1;
+            }
+            if depth == 0 {
+                let inner: String = chars[i + 2..j - 1].iter().collect();
+                inners.push(inner);
+                // 유효 식별자 패턴 밖의 자리표시자 — 통째 서브셸 세그먼트는
+                // Noise로 강등되고, 인자 위치에선 무해하다.
+                outer.push_str("__cmdsub__");
+                i = j;
+                continue;
+            }
+        }
+        outer.push(chars[i]);
+        i += 1;
+    }
+    (outer, inners)
+}
+
 pub fn segment_command(cmd: &str) -> Vec<String> {
     let joined = join_continuations(cmd);
+    let (joined, inners) = extract_command_subs(&joined);
     let bytes = joined.as_bytes();
     let mut segments = Vec::new();
     let mut start = 0usize;
@@ -627,11 +677,17 @@ pub fn segment_command(cmd: &str) -> Vec<String> {
         }
     }
     segments.push(joined[start..].to_string());
-    segments
+    let mut out: Vec<String> = segments
         .into_iter()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-        .collect()
+        .collect();
+    // 서브셸 내부는 바깥 세그먼트들 뒤에 붙는다 — 바깥 명령이 있으면 바깥이
+    // 먼저 분류되고, 바깥이 비면(할당 등) 내부가 분류된다.
+    for inner in inners {
+        out.extend(segment_command(&inner));
+    }
+    out
 }
 
 fn is_assignment(s: &str) -> bool {
@@ -1047,13 +1103,29 @@ pub fn classify_tool_call(tool_name: Option<&str>, payload: &serde_json::Value) 
         Some("Read") => {
             let fp = str_field("file_path");
             let e = ext_of(&fp);
-            let value = read_tag_for_object(object_for_path(&fp, &e));
+            // B-7 (2026-07-04): 확장자도 알려진 파일명도 없으면 내용 유형을
+            // 특정할 수 없다 — 디렉터리/무확장 파일 탐색으로 보고 read.file
+            // (ls/find 동족). 미지 "확장자"는 계속 unmatched(루프가 표면화).
+            let value = read_tag_for_object(object_for_path(&fp, &e)).or(
+                if e.is_empty() && !fp.is_empty() {
+                    Some("read.file")
+                } else {
+                    None
+                },
+            );
             file_outcome(value, &fp, &e)
         }
         Some("Edit") | Some("Write") | Some("MultiEdit") => {
             let fp = str_field("file_path");
             let e = ext_of(&fp);
-            let value = write_tag_for_object(object_for_path(&fp, &e));
+            // Read와 동형 — 무확장·미지 파일명 쓰기는 write.file.
+            let value = write_tag_for_object(object_for_path(&fp, &e)).or(
+                if e.is_empty() && !fp.is_empty() {
+                    Some("write.file")
+                } else {
+                    None
+                },
+            );
             file_outcome(value, &fp, &e)
         }
         Some("Bash") | Some("bash") => {

@@ -234,7 +234,10 @@ fn edit_write_by_extension_and_unmatched() {
     assert_eq!(tag(&write_t("out/data.json")), Some("write.data"));
     assert_eq!(tag(&write_t("tasks/run.output")), Some("write.data"));
     assert_eq!(tag(&edit("scripts/fetch.py")), Some("write.code"));
-    assert_eq!(edit("Makefile").disposition, TagDisposition::Unmatched);
+    // B-7 (2026-07-04): Makefile은 FILENAME_OBJECT(code)로 승격 —
+    // justfile 동족. 무확장 미지 경로의 일반 규칙은 아래
+    // extensionless_path_read_is_read_file가 잠근다.
+    assert_eq!(tag(&edit("Makefile")), Some("write.code"));
 }
 
 #[test]
@@ -316,11 +319,14 @@ fn token_for_read_is_extension_or_basename() {
     assert_eq!(diff.disposition, TagDisposition::Tagged);
     assert_eq!(tag(&diff), Some("read.data"));
     assert_eq!(diff.token.as_deref(), Some("diff"));
-    // A no-extension file NOT in FILENAME_OBJECT stays Unmatched, token=basename.
-    // (`.gitignore`/`justfile` now tag via FILENAME_OBJECT — see the 2026-06-23 block.)
-    let unknown = read("/repo/Makefile");
-    assert_eq!(unknown.disposition, TagDisposition::Unmatched);
-    assert_eq!(unknown.token.as_deref(), Some("Makefile"));
+    // B-7 (2026-07-04): 무확장 경로는 더 이상 Unmatched로 남지 않는다 —
+    // FILENAME_OBJECT 매치는 구체 매핑(Makefile→code), 그 외는 read.file
+    // (extensionless_path_read_is_read_file). token은 여전히 basename이라
+    // 루프 집계 형태는 불변.
+    let makefile = read("/repo/Makefile");
+    assert_eq!(makefile.disposition, TagDisposition::Tagged);
+    assert_eq!(tag(&makefile), Some("read.code"));
+    assert_eq!(makefile.token.as_deref(), Some("Makefile"));
 }
 
 // 2026-06-16 tagging hygiene loop — rules added from surfaced untagged tokens.
@@ -800,4 +806,57 @@ fn tagging_loop_2026_07_04_additions() {
     assert_eq!(tag(&bash("wimcc init-db")), Some("write.db"));
     assert_eq!(tag(&bash("wimcc ingest --all")), Some("write.db"));
     assert_eq!(tag(&bash("wimcc serve --port 7878")), Some("run.proc"));
+}
+
+/// B-7a (2026-07-04) — `$()`/`<()` 내부를 세그먼트로 인식. 실 표본:
+/// `out=$(gh pr checks 60 2>&1)`(00fae5d9)·`cur=$(git rev-parse --short
+/// HEAD)`(653ea169) — 서브셸 내부 토큰(pr·rev-parse)이 바깥 첫-토큰 분류를
+/// 오염시켜 untagged로 남던 주원인. 바깥 세그먼트가 우선 분류되고, 바깥이
+/// 비면(할당 등) 내부가 분류된다.
+#[test]
+fn subshell_interior_is_classified() {
+    // 할당 우변 서브셸 — 바깥은 명령이 없으므로 내부가 분류된다.
+    assert_eq!(
+        tag(&bash("out=$(gh pr checks 60 2>&1)\necho \"$out\"")),
+        Some("write.vcs")
+    );
+    assert_eq!(
+        tag(&bash("cur=$(git rev-parse --short HEAD)")),
+        Some("read.vcs")
+    );
+    // 프로세스 치환 — 바깥 명령(diff)이 우선한다.
+    assert_eq!(tag(&bash("diff <(sort a) <(sort b)")), Some("read.file"));
+    // 바깥 명령이 있으면 바깥이 이긴다(인자 속 서브셸이 오염시키지 않음).
+    assert_eq!(
+        tag(&bash("ls $(git rev-parse --show-toplevel)")),
+        Some("read.file")
+    );
+    // 중첩: 내부의 내부도 편평화된다 — dirname은 미등재라 unmatched 후보로
+    // 남고(오늘과 같은 클래스), 토큰은 dirname이다.
+    let o = bash("v=$(dirname $(realpath x))");
+    assert_eq!(o.token.as_deref(), Some("dirname"));
+}
+
+/// B-7 (2026-07-04) — 무확장 디렉토리/파일 Read 규칙: 확장자도 알려진
+/// 파일명도 없으면 내용 유형을 특정할 수 없으므로 read.file(파일·디렉터리
+/// 탐색과 동족)로 태깅한다. 실 표본: src·common·model·ingest·extractors·
+/// mcp·transcripts·__tests__ 디렉토리 Read(루프 잔존 10건).
+#[test]
+fn extensionless_path_read_is_read_file() {
+    assert_eq!(tag(&read("/Users/x/proj/src/ingest")), Some("read.file"));
+    assert_eq!(
+        tag(&read("/Users/x/proj/webui/src/components/__tests__")),
+        Some("read.file")
+    );
+    // 알려진 무확장 파일명(FILENAME_OBJECT)은 여전히 구체 매핑이 이긴다.
+    assert_eq!(tag(&read("/repo/.gitignore")), Some("read.config"));
+    // 확장자가 있으면 기존 EXT_OBJECT 경로 그대로.
+    assert_eq!(tag(&read("/repo/a.rs")), Some("read.code"));
+}
+
+/// B-7a 후속 — `$(seq …)`는 루프 스캐폴딩(Control)이라 태깅 후보가 아니다.
+#[test]
+fn seq_in_subshell_is_control() {
+    let o = bash("for i in $(seq 1 10); do echo $i; done");
+    assert_eq!(o.disposition, TagDisposition::Control);
 }
