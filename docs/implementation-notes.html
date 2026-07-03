@@ -5705,6 +5705,15 @@ vitest: 69 passed
     <p><b>B-6d 보류 확정:</b> system 레코드의 agentName/teamName은 표본 2에서도 실리지만
     (stop_hook_summary·turn_duration 서브타입 확인) 대화 kind가 같은 값을 세션 상수로 이미
     제공 — 승격은 정보 무추가라 보류 확정.</p>
+    <p><b>PR-전 루프 (이 PR, 새 바이너리 스크래치 serve로 재확인):</b> untagged 13건 전부
+    보류 클래스(B-7a 서브셸·무확장 디렉토리·파편), unidentified-plugins 0건.
+    <b>unknown-verification에서 vitest 요약 2형태 승격:</b> ① 파이프 구분 실패 요약
+    <code>"Tests  2 failed | 1 passed …"</code>(실 표본 12건 — FAILED·"failed,"·"Tests
+    failed" 전부 불일치) → looks_like_failure에 <code>" failed | "</code>, ② "Test Files"
+    줄이 pipe/tail로 잘린 성공 요약 <code>"Tests  37 passed (37)"</code>(실 표본 8건) →
+    looks_like_success에 <code>Tests + " passed ("</code>(실패 형태와 불일치 + 실패 우선
+    검사의 이중 안전, 6/11 라운드 가드 준수). 재빌드·재ingest 후 actionable 0으로 닫힘 확인.
+    잔여 unknown은 구조적 바닥(빈 출력·요약 소실)뿐.</p>
   </section>
 
 </main>
