@@ -422,12 +422,9 @@ fn tagging_loop_2026_06_29_additions() {
     assert_eq!(tag(&bash("git rev-list --count HEAD")), Some("read.vcs"));
     // pnpm build subcommand.
     assert_eq!(tag(&bash("pnpm build")), Some("build.code"));
-    // Deferred multiplexers stay unmatched (surfaced for a future loop, not
-    // force-tagged): aws/claude need per-subcommand mapping.
-    assert_eq!(
-        bash("aws sts get-caller-identity").disposition,
-        TagDisposition::Unmatched
-    );
+    // 2026-07-03 loop에서 aws는 sts 한정으로 해소(read.proc) — 그 외 서비스
+    // 서브커맨드와 claude는 여전히 보류(verb가 3단계·표본 부족).
+    assert_eq!(bash("aws s3 ls").disposition, TagDisposition::Unmatched);
     assert_eq!(
         bash("claude mcp list").disposition,
         TagDisposition::Unmatched
@@ -470,7 +467,7 @@ fn noise_disposition_for_tokenizer_fragments() {
         TagDisposition::Unmatched
     );
     assert_eq!(
-        bash("aws sts get-caller-identity").disposition,
+        bash("aws lambda invoke").disposition,
         TagDisposition::Unmatched
     );
     // Tagged / Control commands are unaffected.
@@ -700,4 +697,53 @@ fn mcp_dictionary_keys_well_formed() {
             assert!(!t.contains('/') && !t.contains("__"), "{server} {t}");
         }
     }
+}
+
+#[test]
+fn tagging_loop_2026_07_03_additions() {
+    // PR-전 개선 루프 (2026-07-03) — 보편 항목 사전 추가분.
+    // `exit`는 셸 builtin 제어 흐름 (cd/true/break와 동족) → Control.
+    assert_eq!(bash("exit 0").disposition, TagDisposition::Control);
+    // `time`은 nohup/timeout과 동형의 투명 wrapper — 내부 명령을 재분류.
+    assert_eq!(tag(&bash("time curl -s http://x")), Some("read.web"));
+    assert_eq!(tag(&bash("time cargo build")), Some("build.code"));
+    // `base64`는 jq/sed/awk와 같은 stdin 변환 계열 → read.file.
+    assert_eq!(tag(&bash("base64 -d")), Some("read.file"));
+    // cargo 조회·정리 서브커맨드: metadata/tree는 의존성 조회, clean은
+    // 빌드 산출물 삭제(rm 동족), doc은 문서 생성.
+    assert_eq!(
+        tag(&bash("cargo metadata --format-version=1 --no-deps")),
+        Some("read.deps")
+    );
+    assert_eq!(tag(&bash("cargo tree -p ulid")), Some("read.deps"));
+    assert_eq!(tag(&bash("cargo clean")), Some("delete.file"));
+    assert_eq!(tag(&bash("cargo doc --no-deps")), Some("build.docs"));
+    // npm 의존성 조회.
+    assert_eq!(tag(&bash("npm list -g pptxgenjs")), Some("read.deps"));
+    assert_eq!(tag(&bash("npm ls")), Some("read.deps"));
+    // rustup 툴체인 관리 — 설치·갱신은 write.deps, show는 read.deps.
+    assert_eq!(
+        tag(&bash("rustup toolchain install 1.86.0")),
+        Some("write.deps")
+    );
+    assert_eq!(tag(&bash("rustup update")), Some("write.deps"));
+    assert_eq!(tag(&bash("rustup show")), Some("read.deps"));
+    // aws sts — 자격 신원 조회 (printenv/sysctl의 read.proc 동족).
+    assert_eq!(tag(&bash("aws sts get-caller-identity")), Some("read.proc"));
+    // 확장자 없는 보편 파일명: .gitattributes(.gitignore 동족)·bare `config`
+    // (~/.ssh/config, .git/config).
+    assert_eq!(tag(&read("/repo/.gitattributes")), Some("read.config"));
+    assert_eq!(tag(&read("/Users/x/.ssh/config")), Some("read.config"));
+    // `command` builtin: `-v/-V`는 which 동족(lookup), 그 외는 투명 wrapper.
+    assert_eq!(tag(&bash("command -v actionlint")), Some("read.file"));
+    assert_eq!(tag(&bash("command git status")), Some("read.vcs"));
+    // context7 (공식 plugin) — 두 도구 모두 라이브러리 문서 조회.
+    assert_eq!(
+        tag(&mcp("mcp__plugin_context7_context7__query-docs")),
+        Some("read.docs")
+    );
+    assert_eq!(
+        tag(&mcp("mcp__plugin_context7_context7__resolve-library-id")),
+        Some("read.docs")
+    );
 }
