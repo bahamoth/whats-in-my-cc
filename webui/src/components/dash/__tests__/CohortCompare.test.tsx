@@ -53,7 +53,7 @@ describe('CohortCompareCards', () => {
   });
   it('동시 CC 변경 각주', () => {
     mount({ ...base, alsoCcChanged: true });
-    expect(screen.getByText(/cc version also changed/i)).toBeInTheDocument();
+    expect(screen.getByText(/claude code version also changed/i)).toBeInTheDocument();
   });
   it('경계 없으면 미렌더', () => {
     const { container } = mount(null);

@@ -38,7 +38,10 @@ describe('buildVerOption', () => {
   it('x축 = 일자, 코호트 markLine 라벨 보존', () => {
     expect(o.xAxis.data).toEqual(daily.dates);
     const ml = o.series[2].markLine.data;
-    expect(ml).toEqual([{ name: 'Fable 5 첫 관측', xAxis: 2 }]);
+    expect(ml[0].name).toBe('Fable 5 첫 관측');
+    expect(ml[0].xAxis).toBe(2);
+    // dayIdx 2/2 = 우측 60% 초과 — 라벨은 선 왼쪽 정렬(클리핑 방지)
+    expect(ml[0].label.align).toBe('right');
   });
 });
 
@@ -51,9 +54,8 @@ describe('buildCostOption', () => {
     expect(bars[2].itemStyle.color).toBe(rampColor(2 / 8));
     expect(bars[0].value).toBe(100);
   });
-  it('dataZoom slider는 비용 차트에만 있고 markLine을 공유한다', () => {
-    const kinds = (o.dataZoom as any[]).map((z) => z.type);
-    expect(kinds).toContain('slider');
+  it('차트 내 레인지 컨트롤(dataZoom)은 없다 — 기간은 상단 컨트롤 전담', () => {
+    expect(o.dataZoom).toBeUndefined();
     expect(o.series[0].markLine.data[0].name).toBe('Fable 5 첫 관측');
   });
 });
