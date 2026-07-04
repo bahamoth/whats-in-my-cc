@@ -24,6 +24,7 @@ import {
   cohortBoundaries,
   cohortModels,
   shortModel,
+  usageRatios,
 } from '../lib/seriesView';
 import {
   ChartContainer,
@@ -98,6 +99,41 @@ const STRIP_COLORS: Record<StripMetric, string> = {
   compact_boundary_count: '#2bd0d0',
   tool_result_truncated_count: '#8b93a7',
 };
+
+/* 효율 히트 행 — 셀 진하기(opacity)가 값. hit은 자연 도메인 0–100%,
+ * 나머지는 창 내 최대값 기준 상대 스케일(배지에 최대값 표기). */
+type UsageRatioView = { cacheHitPct: number; outSharePct: number; unitRatePerM: number };
+const EFF_ROWS: Array<{
+  key: 'hit' | 'out' | 'rate';
+  color: string;
+  absMax?: number;
+  value: (r: UsageRatioView) => number;
+  fmt: (v: number) => string;
+  badge: (max: number) => string;
+}> = [
+  {
+    key: 'hit',
+    color: 'var(--wimcc-info)',
+    absMax: 100,
+    value: (r) => r.cacheHitPct,
+    fmt: (v) => `${v}%`,
+    badge: () => '0–100%',
+  },
+  {
+    key: 'out',
+    color: 'var(--chart-2)',
+    value: (r) => r.outSharePct,
+    fmt: (v) => `${v}%`,
+    badge: (max) => `≤${Math.round(max * 10) / 10}%`,
+  },
+  {
+    key: 'rate',
+    color: '#5cbf8a',
+    value: (r) => r.unitRatePerM,
+    fmt: (v) => `$${v.toFixed(2)}/1M`,
+    badge: (max) => `≤$${Math.round(max * 100) / 100}/1M`,
+  },
+];
 
 function basename(path: string): string {
   const parts = path.split('/').filter(Boolean);
@@ -202,13 +238,7 @@ export default function DashboardPage() {
         cost: r.metrics.estimated_cost_usd ?? 0,
         one: 1,
         events: r.event_count,
-        cacheHit: (() => {
-          const denom =
-            (r.metrics.input_tokens ?? 0) +
-            (r.metrics.cache_creation_input_tokens ?? 0) +
-            (r.metrics.cache_read_input_tokens ?? 0);
-          return denom > 0 ? Math.round(((r.metrics.cache_read_input_tokens ?? 0) / denom) * 1000) / 10 : 0;
-        })(),
+        ratios: usageRatios(r.metrics),
         models: cohortModels(r.fingerprint).join(' + ').replaceAll('claude-', '') || '—',
         cc: r.fingerprint.cc_versions.join(' + ') || '—',
       })),
@@ -619,33 +649,65 @@ export default function DashboardPage() {
                     <Bar dataKey="output" stackId="tok" fill="var(--color-output)" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ChartContainer>
+                {/* ── 효율 히트 매트릭스 — 셀 진하기 = 값. 모델 매트릭스와
+                    같은 시각 언어로, 낮은 적중률·비싼 단가가 옅은/짙은 셀로
+                    한눈에 튄다. usage 미측정 세션은 셀을 그리지 않는다. */}
                 <div
-                  className="mt-2 mb-1 flex items-baseline justify-between"
+                  className="mt-3 mb-1 flex items-baseline justify-between"
                   style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
                 >
-                  <span className="text-xs text-muted-foreground">{t('dash.tokens.cacheRead')}</span>
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {t('dash.eff.title')}
+                    <InfoTip label={t('dash.eff.title')} text={t('dash.eff.tip')} />
+                  </span>
                   <span className="font-mono text-[10px] text-muted-foreground/70">
-                    {t('dash.axis.max', fmtCompact(Math.max(0, ...chartData.map((d) => d.cacheRead))))}
+                    {EFF_ROWS.filter((r) => r.absMax === undefined)
+                      .map((r) => {
+                        const max = Math.max(
+                          1e-9,
+                          ...chartData.map((d) => (d.ratios.measured ? r.value(d.ratios) : 0)),
+                        );
+                        return `${t(`dash.eff.${r.key}.short`)} ${r.badge(max)}`;
+                      })
+                      .join(' · ')}
                   </span>
                 </div>
-                <ChartContainer
-                  config={{ cacheRead: { label: t('dash.tokens.cacheRead'), color: 'var(--wimcc-info)' } }}
-                  className="h-12 w-full"
-                >
-                  <BarChart
-                    data={chartData}
-                    syncId="dash"
-                    onClick={openSession}
-                    margin={{ top: 2, right: 8, left: 8, bottom: 0 }}
-                    className="cursor-pointer"
-                  >
-                    <XAxis dataKey="idx" hide />
-                    <YAxis width={36} tick={false} tickLine={false} axisLine={false} />
-                    {cohortRefs()}
-                    <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
-                    <Bar dataKey="cacheRead" fill="var(--wimcc-info)" radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ChartContainer>
+                {EFF_ROWS.map((row) => {
+                  const vals = chartData.map((d) => (d.ratios.measured ? row.value(d.ratios) : null));
+                  const maxVal = row.absMax ?? Math.max(1e-9, ...vals.map((v) => v ?? 0));
+                  return (
+                    <div key={row.key} className="mb-[3px] flex items-center">
+                      <span
+                        className="shrink-0 truncate pr-2 text-right font-mono text-[10px] text-muted-foreground"
+                        style={{ width: PLOT_LEFT_PX }}
+                        title={t(`dash.eff.${row.key}.name`)}
+                      >
+                        {t(`dash.eff.${row.key}.short`)}
+                      </span>
+                      <div className="relative h-[14px] min-w-0 flex-1" style={{ marginRight: PLOT_RIGHT_PX }}>
+                        {chartData.map((d, i) => {
+                          const v = vals[i];
+                          if (v === null || i < winStart || i > winEnd) return null;
+                          const alpha = 0.14 + 0.86 * Math.min(1, v / maxVal);
+                          return (
+                            <span
+                              key={d.sid}
+                              title={`${d.sid8} · ${d.date}\n${t(`dash.eff.${row.key}.name`)}: ${row.fmt(v)}`}
+                              className="absolute inset-y-0 cursor-pointer rounded-[2px]"
+                              style={{
+                                left: `${((i - winStart) / winLen) * 100}%`,
+                                width: `calc(${(1 / winLen) * 100}% - 2px)`,
+                                background: row.color,
+                                opacity: alpha,
+                              }}
+                              onClick={() => navigate(`/sessions/${d.sid}`)}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
 
                 <div
                   className="mt-3 mb-1 flex items-baseline justify-between"
@@ -681,41 +743,6 @@ export default function DashboardPage() {
                     {cohortRefs()}
                     <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
                     <Bar dataKey="cost" fill="#5cbf8a" fillOpacity={0.85} radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ChartContainer>
-                <div
-                  className="mt-2 mb-1 flex items-baseline justify-between"
-                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
-                >
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    {t('dash.cacheHit.title')}
-                    <InfoTip label={t('dash.cacheHit.title')} text={t('dash.cacheHit.tip')} />
-                  </span>
-                </div>
-                <ChartContainer
-                  config={{ cacheHit: { label: t('dash.cacheHit.title'), color: 'var(--wimcc-info)' } }}
-                  className="h-12 w-full"
-                >
-                  <BarChart
-                    data={chartData}
-                    syncId="dash"
-                    onClick={openSession}
-                    margin={{ top: 2, right: 8, left: 8, bottom: 0 }}
-                    className="cursor-pointer"
-                  >
-                    <XAxis dataKey="idx" hide />
-                    <YAxis
-                      width={36}
-                      domain={[0, 100]}
-                      ticks={[0, 50, 100]}
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={10}
-                      tickFormatter={(v: number) => `${v}%`}
-                    />
-                    {cohortRefs()}
-                    <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
-                    <Bar dataKey="cacheHit" fill="var(--wimcc-info)" fillOpacity={0.85} radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ChartContainer>
 

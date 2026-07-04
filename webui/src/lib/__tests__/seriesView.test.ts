@@ -6,6 +6,7 @@ import {
   cohortBoundaries,
   shortModel,
   shortModelSet,
+  usageRatios,
   type CohortSegment,
 } from '../seriesView';
 import type { SessionSeriesRowDto } from '../../api/types';
@@ -170,5 +171,43 @@ describe('shortModel / shortModelSet', () => {
   });
   it('abbreviates cohort set labels', () => {
     expect(shortModelSet('claude-fable-5 + claude-haiku-4-5-20251001')).toBe('F5+H4.5');
+  });
+});
+
+describe('usageRatios', () => {
+  it('derives cache-hit %, output share %, and blended $/1M billed', () => {
+    const r = usageRatios({
+      input_tokens: 100_000,
+      cache_creation_input_tokens: 400_000,
+      cache_read_input_tokens: 9_500_000,
+      output_tokens: 500_000,
+      estimated_cost_usd: 5,
+    });
+    // hit = 9.5M / (0.1M + 0.4M + 9.5M) = 95.0
+    expect(r.cacheHitPct).toBe(95);
+    // outShare = 0.5M / (0.1M + 0.4M + 0.5M) = 50.0
+    expect(r.outSharePct).toBe(50);
+    // unitRate = 5 / 1M billed × 1M = $5.00 per 1M billed tokens
+    expect(r.unitRatePerM).toBe(5);
+    expect(r.measured).toBe(true);
+  });
+
+  it('flags sessions without usage data instead of fabricating zeros', () => {
+    const r = usageRatios({
+      input_tokens: 0,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+      output_tokens: 0,
+      estimated_cost_usd: 0,
+    });
+    expect(r.measured).toBe(false);
+    expect(r.cacheHitPct).toBe(0);
+    expect(r.outSharePct).toBe(0);
+    expect(r.unitRatePerM).toBe(0);
+  });
+
+  it('tolerates missing fields from pre-migration serve binaries', () => {
+    const r = usageRatios({});
+    expect(r.measured).toBe(false);
   });
 });

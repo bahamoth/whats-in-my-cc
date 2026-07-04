@@ -103,3 +103,31 @@ export function shortModelSet(label: string): string {
     .map((x) => shortModel(x))
     .join('+');
 }
+
+/** 세션 usage 비율 파생 — 대시보드 효율 매트릭스의 SSOT.
+ * cacheHitPct  = cache_read / (input + cache_creation + cache_read)
+ * outSharePct  = output / 과금 토큰(input + cache_creation + output)
+ * unitRatePerM = 추정 비용 ÷ 과금 토큰 × 1M (블렌디드 단가 — 비싼 모델 믹스일수록 높다)
+ * usage facet이 아직 없는 세션은 measured=false로 구분한다(0과 미측정은 다르다). */
+export function usageRatios(m: {
+  input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  output_tokens?: number;
+  estimated_cost_usd?: number;
+}): { cacheHitPct: number; outSharePct: number; unitRatePerM: number; measured: boolean } {
+  const input = m.input_tokens ?? 0;
+  const creation = m.cache_creation_input_tokens ?? 0;
+  const read = m.cache_read_input_tokens ?? 0;
+  const output = m.output_tokens ?? 0;
+  const cost = m.estimated_cost_usd ?? 0;
+  const billed = input + creation + output;
+  const contextDenom = input + creation + read;
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  return {
+    cacheHitPct: contextDenom > 0 ? round1((read / contextDenom) * 100) : 0,
+    outSharePct: billed > 0 ? round1((output / billed) * 100) : 0,
+    unitRatePerM: billed > 0 ? Math.round((cost / billed) * 1e6 * 100) / 100 : 0,
+    measured: billed + read > 0,
+  };
+}

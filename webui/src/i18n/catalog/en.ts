@@ -334,16 +334,25 @@ export const en = {
     'cache read — input reused from cache (dwarfs the rest, so it gets its own strip)\n' +
     'The API does not report remaining quota, so this stops at usage.',
   'dash.tokens.empty': 'usage data is empty — the running serve predates these fields (restart with the new build) or usage facets need re-ingest.',
+  'dash.eff.title': 'Efficiency',
+  'dash.eff.tip':
+    'Per-session usage ratios — darker cell = higher value.\n' +
+    'cache%: share of input context served from cache (cache read ÷ input + cache write + cache read). Higher is cheaper.\n' +
+    'out%: output share of billed tokens (output ÷ input + cache write + output). How much of the spend became output.\n' +
+    '$/1M: blended cost per 1M billed tokens — rises with expensive-model mix.\n' +
+    'Sessions without usage data draw no cell.',
+  'dash.eff.hit.name': 'Cache hit ratio',
+  'dash.eff.hit.short': 'hit%',
+  'dash.eff.out.name': 'Output share of billed tokens',
+  'dash.eff.out.short': 'out%',
+  'dash.eff.rate.name': 'Blended cost per 1M billed tokens',
+  'dash.eff.rate.short': '$/1M',
   'dash.cost.title': 'Estimated cost (≈$)',
   'dash.cost.tip':
     'Per-session cost estimated from the public price list.\n' +
     'Not a bill — subscription discounts and service tiers are not visible locally, and models ' +
     'missing from the price list are excluded, so this is a floor.',
   'dash.cost.total': (v: string) => `total ≈$${v}`,
-  'dash.cacheHit.title': 'Cache hit ratio',
-  'dash.cacheHit.tip':
-    'Share of input tokens served from cache: cache read ÷ (input + cache write + cache read).\n' +
-    'Higher means cheaper turns — cached input costs a fraction of fresh input.',
   'dash.tokens.input': 'input',
   'dash.tokens.output': 'output',
   'dash.tokens.cacheCreation': 'cache write',
