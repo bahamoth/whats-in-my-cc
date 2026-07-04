@@ -320,16 +320,25 @@ export const ko: Messages = {
     'cache 읽기 — 캐시에서 재사용한 입력(양이 압도적이라 아래 별도 줄)\n' +
     '구독 할당량 잔여치는 API가 알려주지 않아 사용량까지만 보여줍니다.',
   'dash.tokens.empty': '토큰 데이터가 비어 있습니다 — 실행 중인 serve가 이 필드 이전 빌드거나(재시작 필요) usage facet 재수집 전입니다.',
+  'dash.eff.title': '효율',
+  'dash.eff.tip':
+    '세션별 usage 비율 — 셀이 진할수록 값이 높습니다.\n' +
+    'cache%: 입력 컨텍스트 중 캐시 재사용 비율(cache 읽기 ÷ input + cache 생성 + cache 읽기). 높을수록 쌉니다.\n' +
+    'out%: 과금 토큰 중 output 비율(output ÷ input + cache 생성 + output). 쓴 토큰이 얼마나 산출로 이어졌는지.\n' +
+    '$/1M: 과금 토큰 100만 개당 블렌디드 비용 — 비싼 모델 믹스일수록 높습니다.\n' +
+    'usage 데이터가 없는 세션은 셀을 그리지 않습니다.',
+  'dash.eff.hit.name': '캐시 적중률',
+  'dash.eff.hit.short': 'hit%',
+  'dash.eff.out.name': '과금 토큰 중 output 비율',
+  'dash.eff.out.short': 'out%',
+  'dash.eff.rate.name': '과금 토큰 1M당 블렌디드 비용',
+  'dash.eff.rate.short': '$/1M',
   'dash.cost.title': '추정 비용(≈$)',
   'dash.cost.tip':
     '공개 가격표로 계산한 세션별 추정 비용입니다.\n' +
     '청구서가 아닙니다 — 구독 할인·서비스 티어는 로컬에서 보이지 않고, 가격표에 없는 ' +
     '모델은 제외되므로 하한값입니다.',
   'dash.cost.total': (v: string) => `합계 ≈$${v}`,
-  'dash.cacheHit.title': '캐시 적중률',
-  'dash.cacheHit.tip':
-    '입력 토큰 중 캐시에서 재사용된 비율: cache 읽기 ÷ (input + cache 생성 + cache 읽기).\n' +
-    '높을수록 같은 작업을 싸게 돌린 것입니다 — 캐시 입력은 신규 입력 대비 소액입니다.',
   'dash.tokens.input': 'input',
   'dash.tokens.output': 'output',
   'dash.tokens.cacheCreation': 'cache 생성',
