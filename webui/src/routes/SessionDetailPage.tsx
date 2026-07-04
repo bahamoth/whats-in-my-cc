@@ -33,6 +33,9 @@ import { useSessionWindow } from '../hooks/useSessionWindow';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
 import { UntaggedBashPanel } from '../components/replay/stream/UntaggedBashPanel';
 import { buildStreamModel } from '../components/replay/stream/streamModel';
+import { insertInstructionMarkers } from '../components/replay/stream/streamInstructionMarkers';
+import { getSessionInstructions } from '../api/client';
+import type { InstructionObservationDto } from '../api/types';
 import { stepEventId, nextErrorEventId } from '../components/replay/stream/streamKeyboard';
 import { StreamLegend } from '../components/replay/stream/StreamLegend';
 import { buildLlmRequestMetrics } from '../components/replay/stream/llmRequestMetrics';
@@ -188,10 +191,27 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     [window_.events],
   );
 
-  const streamItems = useMemo(
-    () => buildStreamModel(window_.events, metricsByReq, tasksQuery.data ?? []),
-    [window_.events, metricsByReq, tasksQuery.data],
-  );
+  // 지시문 변경 관측(B-12) — 마커 삽입용. 실패/구서버는 빈 배열(마커 없음).
+  const [instructionObs, setInstructionObs] = useState<InstructionObservationDto[]>([]);
+  useEffect(() => {
+    let alive = true;
+    setInstructionObs([]);
+    getSessionInstructions(sessionId)
+      .then((rows) => {
+        if (alive) setInstructionObs(rows);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [sessionId]);
+
+  const streamItems = useMemo(() => {
+    const base = buildStreamModel(window_.events, metricsByReq, tasksQuery.data ?? []);
+    if (instructionObs.length === 0) return base;
+    const timeByEvent = new Map(window_.events.map((e) => [e.event_id, e.observed_at]));
+    return insertInstructionMarkers(base, instructionObs, (id) => timeByEvent.get(id));
+  }, [window_.events, metricsByReq, tasksQuery.data, instructionObs]);
 
   // event ids that have a signal. evidence_refs are event ids (bare-string
   // ULID or { event_id }) — resolved directly, no graph node mapping.

@@ -318,7 +318,20 @@ export interface TaskListItem {
   anchorMs: number | null;
 }
 
+/** 지시문 변경 관측 마커 (스펙 §2 4차, B-12) — wimcc 파생 항목.
+ *  "이 지점 아래의 행동은 새 지시문 아래에서 일어났다"를 서사에 표시한다.
+ *  시각은 관측 시각(실제 편집 시각이 아님 — 문구도 '관측'으로 쓴다). */
+export interface InstructionMarkerItem {
+  type: 'instruction-marker';
+  id: string;
+  observedAt: string;
+  source: string;
+  beforeHash: string | null;
+  afterHash: string;
+}
+
 export type StreamItem =
+  | InstructionMarkerItem
   | MessageItem
   | ActivityRun
   | SidechainGroup
@@ -758,6 +771,7 @@ export function rowTimeMs(it: StreamItem): number | null {
   if (it.type === 'thinking') return it.events.length ? t(it.events[0].timestamp) : null;
   if (it.type === 'scaffold-group') return it.items.length ? t(it.items[0].timestamp) : null;
   if (it.type === 'task-list') return it.anchorMs;
+  if (it.type === 'instruction-marker') return t(it.observedAt);
   // group containers: earliest child event
   const groups = it.type === 'sidechain-group' ? [it] : it.agentGroups;
   let min = Infinity;

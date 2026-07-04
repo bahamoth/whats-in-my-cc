@@ -432,6 +432,10 @@ export const ko: Messages = {
   'dash.ver.cov.tip':
     '세션별 [green]커버[/green] / [amber]미커버[/amber] diff hunk.\n' +
     '**미커버가 많은 세션**부터 확인할 가치가 있습니다.',
+  'instr.marker.label': (a: { source: string; time: string }) =>
+    `지시문 변경 관측 · ${a.source} · ${a.time}`,
+  'instr.marker.show': 'diff 보기',
+  'instr.marker.hide': '닫기',
   'instr.diff.counts': (a: { add: number; del: number }) => `+${a.add} −${a.del} 줄`,
   'instr.diff.error': '스냅샷을 불러오지 못했습니다.',
   'instr.card.title': '지시문',
