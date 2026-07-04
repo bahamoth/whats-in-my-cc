@@ -25,6 +25,7 @@ import { DailyCostSignals } from '../components/dash/DailyCostSignals';
 import type { CohortMarker, DayDetail } from '../components/dash/dailyOptions';
 import { CohortCompareCards } from '../components/dash/CohortCompare';
 import { SessionCardLane } from '../components/dash/SessionCardLane';
+import { SessionScatter } from '../components/dash/SessionScatter';
 import {
   Select,
   SelectContent,
@@ -332,7 +333,11 @@ export default function DashboardPage() {
               nameOf={nameOf}
               onOpen={(sid) => navigate(`/sessions/${sid}`)}
             />
-            {/* 모듈 6: 세션 분포 — Task 8 */}
+            <SessionScatter
+              rows={rows}
+              nameOf={nameOf}
+              onOpen={(sid) => navigate(`/sessions/${sid}`)}
+            />
           </TabsContent>
 
           <TabsContent value="verification">
