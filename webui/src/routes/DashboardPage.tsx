@@ -341,6 +341,7 @@ export default function DashboardPage() {
               rows={rows}
               nameOf={nameOf}
               onOpen={(sid) => navigate(`/sessions/${sid}`)}
+              markers={markers}
             />
             <SessionScatter
               rows={rows}

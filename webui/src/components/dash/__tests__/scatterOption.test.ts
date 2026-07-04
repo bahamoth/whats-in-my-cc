@@ -89,6 +89,18 @@ describe('buildScatterOption', () => {
     expect(byName['noisy']).toBe('noisy');
     expect(byName['cheap']).toBe('');
   });
+  it('점 크기 하한 10·상한 52, 밝은 테두리·탄성 마운트 애니메이션', () => {
+    const { option } = buildScatterOption({
+      rows: [row('a', ['claude-opus-4-8'], { cost: 0 }), row('b', ['claude-opus-4-8'], { cost: 10000 })],
+      nameOf: (sid) => sid,
+      labels,
+    });
+    const s0 = (option as Record<string, any>).series[0];
+    expect(s0.symbolSize([1, 1, 0])).toBe(10);
+    expect(s0.symbolSize([1, 1, 1e9])).toBe(52);
+    expect(s0.itemStyle.borderWidth).toBeGreaterThanOrEqual(1.5);
+    expect((option as Record<string, any>).animationEasing).toBe('elasticOut');
+  });
   it('중앙값 점선 markLine 존재', () => {
     const { option } = buildScatterOption({
       rows: [row('a', ['claude-opus-4-8']), row('b', ['claude-opus-4-8'], { billedM: 4 })],

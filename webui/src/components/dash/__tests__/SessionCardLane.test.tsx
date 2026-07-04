@@ -9,9 +9,9 @@ import type { SessionSeriesRowDto } from '../../../api/types';
 afterEach(cleanup);
 
 function row(id: string, date: string, models: string[], over: Partial<{
-  cost: number; signals: number; events: number; billed: boolean;
+  cost: number; signals: number; events: number; billed: boolean; guards: number;
 }> = {}): SessionSeriesRowDto {
-  const o = { cost: 50, signals: 2, events: 1000, billed: true, ...over };
+  const o = { cost: 50, signals: 2, events: 1000, billed: true, guards: 12, ...over };
   return {
     session_id: id,
     first_observed_at: `2026-${date}T04:00:00+00:00`,
@@ -21,9 +21,9 @@ function row(id: string, date: string, models: string[], over: Partial<{
       session_id: id,
       tool_call_total: 10,
       tool_failure_count: o.signals,
-      verification_total: 12,
-      verification_passed: 10,
-      verification_failed: 2,
+      verification_total: o.guards,
+      verification_passed: o.guards > 0 ? 10 : 0,
+      verification_failed: o.guards > 0 ? 2 : 0,
       verification_unknown: 0,
       verification_not_executed: 0,
       context_bloat_count: 0,
@@ -84,9 +84,24 @@ describe('SessionCardLane', () => {
     fireEvent.click(screen.getByText('name-a'));
     expect(onOpen).toHaveBeenCalledWith('a');
   });
-  it('usage 미측정 세션은 — 로 표기(0 위장 금지)', () => {
+  it('usage 미측정이지만 활동(신호/가드)이 있으면 정상 카드에 — 표기', () => {
     mount([row('a', '06-05', [], { billed: false, cost: 0 })]);
     const line = screen.getByText(/2 signals/).closest('div');
     expect(line?.textContent).toContain('— ·');
+  });
+  it('무활동 세션(미측정·신호 0·가드 0)은 고스트 칩으로 강등', () => {
+    mount([
+      row('a', '06-05', ['claude-opus-4-8']),
+      row('ghost', '06-06', [], { billed: false, cost: 0, signals: 0, guards: 0 }),
+    ]);
+    const g = screen.getByText('name-ghost').closest('[role="button"]') as HTMLElement;
+    expect(g.dataset.ghost).toBe('true');
+    // 고스트에는 지표 줄이 없다 — 0 나열로 고장처럼 보이지 않게.
+    expect(g.textContent).not.toContain('signals');
+  });
+  it('시간축 틱 라벨이 렌더된다', () => {
+    mount([row('a', '06-05', []), row('b', '06-20', [])]);
+    expect(screen.getByText('06-05')).toBeInTheDocument();
+    expect(screen.getAllByText(/06-\d\d/).length).toBeGreaterThan(2);
   });
 });
