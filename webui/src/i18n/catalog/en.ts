@@ -276,6 +276,28 @@ export const en = {
 
   // Project dashboard (B-1)
   'nav.dashboard': 'Dashboard',
+  'dash.tab.overview': 'Overview',
+  'dash.tab.verification': 'Verification',
+  'dash.head.pass': 'Verification pass',
+  'dash.head.cost': 'Estimated cost',
+  'dash.head.rate': 'Blended unit rate',
+  'dash.head.hit': 'Cache hit',
+  'dash.head.toolfail': 'Tool failure rate',
+  'dash.head.prevWindow': (v: string) => `previous window ${v}`,
+  'dash.head.noCompare': 'no comparison (all window)',
+  'dash.head.costBasis': 'public price list ≈ · floor',
+  'dash.head.ratePer': 'per 1M billed tokens',
+  'dash.head.hitBasis': 'window total of input context',
+  'dash.head.toolfailOf': (a: { fails: number; calls: string }) => `${a.fails} / ${a.calls} calls`,
+  'dash.head.guards': (n: number) => `${n} guards in window`,
+  'dash.observed': 'Observed changes',
+  'dash.observed.modelFirst': (a: { date: string; model: string }) =>
+    `${a.date} ${a.model} first observed`,
+  'dash.observed.ccChange': (a: { date: string; from: string; to: string }) =>
+    `${a.date} CC ${a.from} → ${a.to}`,
+  'dash.observed.topSignals': (a: { name: string; n: number }) => `most signals ${a.name} (${a.n})`,
+  'dash.ver.loading': 'Loading verification summary…',
+  'dash.ver.error': 'Failed to load the verification summary.',
   'dash.eyebrow': 'Project dashboard',
   'dash.allProjects': 'All projects',
   'dash.projectLabel': 'Project',
