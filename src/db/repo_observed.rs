@@ -953,6 +953,167 @@ pub async fn list_session_window_kinds(
     Ok(events)
 }
 
+const SCAN_CHUNK: i64 = 1000;
+
+fn scan_sql(
+    sql_kinds: Option<&[String]>,
+    sql_tools: Option<&[String]>,
+    before: bool,
+    after: bool,
+    desc: bool,
+) -> String {
+    let mut sql = String::from("SELECT * FROM observed_event WHERE session_id = ?");
+    if let Some(ks) = sql_kinds {
+        let ph = (0..ks.len()).map(|_| "?").collect::<Vec<_>>().join(",");
+        sql.push_str(&format!(" AND kind IN ({ph})"));
+    }
+    if let Some(ts) = sql_tools {
+        let ph = (0..ts.len()).map(|_| "?").collect::<Vec<_>>().join(",");
+        sql.push_str(&format!(" AND tool_name IN ({ph})"));
+    }
+    if after {
+        sql.push_str(" AND (observed_at > ? OR (observed_at = ? AND event_id > ?))");
+    }
+    if before {
+        sql.push_str(" AND (observed_at < ? OR (observed_at = ? AND event_id < ?))");
+    }
+    sql.push_str(if desc {
+        " ORDER BY observed_at DESC, event_id DESC LIMIT ?"
+    } else {
+        " ORDER BY observed_at ASC, event_id ASC LIMIT ?"
+    });
+    sql
+}
+
+/// 필터 창(§1.2 실행 전략): kind/tool은 SQL WHERE 푸시다운, 나머지는 호출자
+/// 술어. 커서 순서로 CHUNK(1000)행씩 스캔하며 술어 통과분을 모으고 limit
+/// 충족 시 중단. 반환 순서는 다른 창과 동일하게 ASC.
+#[allow(clippy::too_many_arguments)]
+pub async fn list_session_window_scan(
+    pool: &SqlitePool,
+    session_id: &str,
+    sql_kinds: Option<&[String]>,
+    sql_tools: Option<&[String]>,
+    pred: &dyn Fn(&ObservedEvent) -> bool,
+    before: Option<&Cursor>,
+    after: Option<&Cursor>,
+    limit: i64,
+) -> Result<Vec<ObservedEvent>> {
+    let limit = limit.clamp(1, 1000);
+    // 방향: after-only는 ASC 전진, 그 외(무커서·before·양쪽)는 기존 창 계약과
+    // 동일 — before/무커서는 최신 앵커 DESC, 양쪽은 ASC(상한 = before).
+    let desc = after.is_none();
+    let mut matched: Vec<ObservedEvent> = Vec::new();
+    // 스캔 재개 커서: DESC면 상한(before 자리), ASC면 하한(after 자리)을 전진.
+    let mut resume: Option<Cursor> = None;
+    loop {
+        let eff_before = if desc {
+            resume.as_ref().or(before)
+        } else {
+            before
+        };
+        let eff_after = if desc {
+            after
+        } else {
+            resume.as_ref().or(after)
+        };
+        let sql = scan_sql(
+            sql_kinds,
+            sql_tools,
+            eff_before.is_some(),
+            eff_after.is_some(),
+            desc,
+        );
+        let mut q = sqlx::query(&sql).bind(session_id);
+        if let Some(ks) = sql_kinds {
+            for k in ks {
+                q = q.bind(k);
+            }
+        }
+        if let Some(ts) = sql_tools {
+            for t in ts {
+                q = q.bind(t);
+            }
+        }
+        if let Some(a) = eff_after {
+            let ts = a.observed_at.to_rfc3339();
+            q = q.bind(ts.clone()).bind(ts).bind(a.event_id.clone());
+        }
+        if let Some(b) = eff_before {
+            let ts = b.observed_at.to_rfc3339();
+            q = q.bind(ts.clone()).bind(ts).bind(b.event_id.clone());
+        }
+        let rows = q.bind(SCAN_CHUNK).fetch_all(pool).await?;
+        let chunk_len = rows.len() as i64;
+        let events: Vec<ObservedEvent> = rows.into_iter().map(row_to_observed).collect();
+        if let Some(last) = events.last() {
+            resume = Some(Cursor {
+                observed_at: last.observed_at,
+                event_id: last.event_id.clone(),
+            });
+        }
+        for e in events {
+            if pred(&e) {
+                matched.push(e);
+                if matched.len() as i64 >= limit {
+                    break;
+                }
+            }
+        }
+        if matched.len() as i64 >= limit || chunk_len < SCAN_CHUNK {
+            break;
+        }
+    }
+    if desc {
+        matched.reverse(); // 와이어는 항상 ASC
+    }
+    Ok(matched)
+}
+
+/// matched_count(§1.2): 같은 푸시다운+술어로 세션 전체 매칭 수를 센다.
+pub async fn count_session_scan(
+    pool: &SqlitePool,
+    session_id: &str,
+    sql_kinds: Option<&[String]>,
+    sql_tools: Option<&[String]>,
+    pred: &dyn Fn(&ObservedEvent) -> bool,
+) -> Result<i64> {
+    let mut count = 0i64;
+    let mut resume: Option<Cursor> = None;
+    loop {
+        let sql = scan_sql(sql_kinds, sql_tools, false, resume.is_some(), false);
+        let mut q = sqlx::query(&sql).bind(session_id);
+        if let Some(ks) = sql_kinds {
+            for k in ks {
+                q = q.bind(k);
+            }
+        }
+        if let Some(ts) = sql_tools {
+            for t in ts {
+                q = q.bind(t);
+            }
+        }
+        if let Some(a) = &resume {
+            let ts = a.observed_at.to_rfc3339();
+            q = q.bind(ts.clone()).bind(ts).bind(a.event_id.clone());
+        }
+        let rows = q.bind(SCAN_CHUNK).fetch_all(pool).await?;
+        let chunk_len = rows.len() as i64;
+        let events: Vec<ObservedEvent> = rows.into_iter().map(row_to_observed).collect();
+        if let Some(last) = events.last() {
+            resume = Some(Cursor {
+                observed_at: last.observed_at,
+                event_id: last.event_id.clone(),
+            });
+        }
+        count += events.iter().filter(|e| pred(e)).count() as i64;
+        if chunk_len < SCAN_CHUNK {
+            break;
+        }
+    }
+    Ok(count)
+}
+
 /// Deep-link window — the events around (and including) `event_id`, ordered
 /// ASC like every window. Used by `?around=<event_id>`: a replay deep link
 /// (`/sessions/:id?selected=<event_id>`) carries only the event_id, so the
@@ -1155,5 +1316,228 @@ fn row_to_observed(r: sqlx::sqlite::SqliteRow) -> ObservedEvent {
         latency_ms: r.try_get("latency_ms").ok(),
         telemetry,
         payload,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{migrate, repo_raw, repo_runs};
+    use chrono::{Duration, TimeZone};
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn test_pool() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(4)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        migrate(&pool).await.unwrap();
+        pool
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn seed_scan_row(
+        pool: &SqlitePool,
+        run_id: &str,
+        session_id: &str,
+        idx: usize,
+        at: chrono::DateTime<chrono::Utc>,
+        kind: EventKind,
+        tool_name: Option<String>,
+        payload: serde_json::Value,
+    ) {
+        let raw_id = format!("rawscan-{idx:04}");
+        repo_raw::insert_dedup(
+            pool,
+            &repo_raw::NewRaw {
+                raw_event_id: raw_id.clone(),
+                ingest_run_id: run_id.into(),
+                source_type: "test".into(),
+                source_uri: format!("test://scan/{idx}"),
+                source_line_no: idx as i64,
+                source_byte_offset: 0,
+                payload_sha256: format!("shascan-{idx:04}"),
+                payload: b"{}".to_vec(),
+                parse_error: None,
+                captured_at: chrono::Utc::now(),
+                redaction_state: "not_applicable".into(),
+                redaction_manifest: None,
+            },
+        )
+        .await
+        .unwrap();
+        let ev = ObservedEvent {
+            event_id: format!("evscan-{idx:04}"),
+            raw_event_id: raw_id,
+            schema_version: "0.5.0".into(),
+            session_id: session_id.into(),
+            observed_at: at,
+            actor: Actor::User,
+            kind,
+            tool_name,
+            parser_version: "test".into(),
+            payload,
+            ..Default::default()
+        };
+        insert(pool, &ev).await.unwrap();
+    }
+
+    /// 60행: user_message 20(그중 절반 payload에 "deploy") + tool_call 20
+    /// (Bash/Edit 교차) + metric_sample 20, 초 간격 타임스탬프.
+    /// `tests/session_events_kind_filter.rs`의 `seed_pool` 삽입 패턴(raw
+    /// insert_dedup + ObservedEvent insert)을 축약 이식.
+    async fn seed_scan_session(pool: &SqlitePool, session_id: &str) {
+        let run_id = repo_runs::start(pool).await.unwrap();
+        let base = chrono::Utc.with_ymd_and_hms(2026, 7, 5, 0, 0, 0).unwrap();
+        let mut idx = 0usize;
+        for j in 0..20 {
+            let content = if j % 2 == 0 {
+                format!("deploy {j}")
+            } else {
+                format!("chat {j}")
+            };
+            seed_scan_row(
+                pool,
+                &run_id,
+                session_id,
+                idx,
+                base + Duration::seconds(idx as i64),
+                EventKind::UserMessage,
+                None,
+                serde_json::json!({ "content": content }),
+            )
+            .await;
+            idx += 1;
+        }
+        for j in 0..20 {
+            let tool = if j % 2 == 0 { "Bash" } else { "Edit" };
+            seed_scan_row(
+                pool,
+                &run_id,
+                session_id,
+                idx,
+                base + Duration::seconds(idx as i64),
+                EventKind::ToolCall,
+                Some(tool.into()),
+                serde_json::json!({}),
+            )
+            .await;
+            idx += 1;
+        }
+        for _ in 0..20 {
+            seed_scan_row(
+                pool,
+                &run_id,
+                session_id,
+                idx,
+                base + Duration::seconds(idx as i64),
+                EventKind::MetricSample,
+                None,
+                serde_json::json!({}),
+            )
+            .await;
+            idx += 1;
+        }
+    }
+
+    #[tokio::test]
+    async fn window_scan_pushdown_predicate_and_pagination() {
+        let pool = test_pool().await;
+        seed_scan_session(&pool, "sess-scan").await;
+        let deploy = |e: &ObservedEvent| {
+            e.payload
+                .get("content")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| s.contains("deploy"))
+        };
+        // (1) 술어만: user_message 중 deploy 10건, limit 4 → 최신 4건 ASC
+        let evs = list_session_window_scan(
+            &pool,
+            "sess-scan",
+            Some(&["user_message".into()]),
+            None,
+            &deploy,
+            None,
+            None,
+            4,
+        )
+        .await
+        .unwrap();
+        assert_eq!(evs.len(), 4);
+        assert!(evs.windows(2).all(|w| w[0].observed_at <= w[1].observed_at));
+        assert!(evs.iter().all(deploy));
+        // (2) before 커서로 과거 페이지: 누락·중복 없이 나머지 6건
+        let c = Cursor {
+            observed_at: evs[0].observed_at,
+            event_id: evs[0].event_id.clone(),
+        };
+        let older = list_session_window_scan(
+            &pool,
+            "sess-scan",
+            Some(&["user_message".into()]),
+            None,
+            &deploy,
+            Some(&c),
+            None,
+            100,
+        )
+        .await
+        .unwrap();
+        assert_eq!(older.len(), 6);
+        let mut all: Vec<&str> = older
+            .iter()
+            .chain(evs.iter())
+            .map(|e| e.event_id.as_str())
+            .collect();
+        let n = all.len();
+        all.dedup();
+        assert_eq!(n, all.len(), "no dup across page boundary");
+        // (3) after 커서 전진: 소진 시 요청 미만 반환
+        let last = evs.last().unwrap();
+        let c2 = Cursor {
+            observed_at: last.observed_at,
+            event_id: last.event_id.clone(),
+        };
+        let newer = list_session_window_scan(
+            &pool,
+            "sess-scan",
+            Some(&["user_message".into()]),
+            None,
+            &deploy,
+            None,
+            Some(&c2),
+            100,
+        )
+        .await
+        .unwrap();
+        assert!(newer.is_empty());
+        // (4) tool 푸시다운
+        let any = |_: &ObservedEvent| true;
+        let bash = list_session_window_scan(
+            &pool,
+            "sess-scan",
+            None,
+            Some(&["Bash".into()]),
+            &any,
+            None,
+            None,
+            100,
+        )
+        .await
+        .unwrap();
+        assert_eq!(bash.len(), 10);
+        assert!(bash.iter().all(|e| e.tool_name.as_deref() == Some("Bash")));
+        // (5) count
+        let cnt = count_session_scan(
+            &pool,
+            "sess-scan",
+            Some(&["user_message".into()]),
+            None,
+            &deploy,
+        )
+        .await
+        .unwrap();
+        assert_eq!(cnt, 10);
     }
 }
