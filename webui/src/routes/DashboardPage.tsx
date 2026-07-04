@@ -1,40 +1,18 @@
-// B-1 프로젝트 대시보드 — 세션 횡단 트렌드 (2026-07-04 shadcn/Recharts 개편).
+// 프로젝트 대시보드 — 2026-07-04 전면 개편 (스펙 docs/specs/2026-07-04-dashboard-redesign.md,
+// 승인 목업 docs/mockups/dash-full-mockup.html · dash-verification-mockup.html).
 //
-// 정보 구성·가로 시계열은 초판과 동일: 모든 차트가 같은 세션 축을 공유하고
-// (Recharts syncId — hover·Brush 구간이 전 차트 동기), 모델 코호트는
-// ReferenceArea 밴드 + 경계 ReferenceLine으로 표시한다. 코호트 원칙(경계는
-// 관측된 비어있지 않은 값이 달라질 때만)의 SSOT는 lib/seriesView.ts.
-// 판단 문장은 렌더하지 않는다(측정/판별 분리) — count·구간·경계만.
+// 위계: 결정론 지표의 문자 헤드라인(이전 동일 창 delta) → 하위 시각화.
+// 개요 탭: 일별 검증 → 일별 비용·신호 → 코호트 비교 → 세션 타임라인 → 세션 분포.
+// 검증 탭: /v1/verification/summary 집계(측정률·행방·리듬·커버리지).
+// 판정 문장은 렌더하지 않는다 — 숫자·delta·관측 사실만(측정/판별 분리).
+// 파생의 SSOT는 lib/dashDerive(vitest), 집계의 SSOT는 백엔드 insight::verification_summary.
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  Bar,
-  BarChart,
-  Brush,
-  CartesianGrid,
-  ReferenceLine,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import { getMetricsSeries, listSessions, ApiError } from '../api/client';
-import type { MetricsSeriesDto, SessionListItem } from '../api/types';
-import {
-  sortSeriesAscending,
-  cohortSegments,
-  cohortBoundaries,
-  cohortModels,
-  shortModel,
-  usageRatios,
-} from '../lib/seriesView';
-import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from '@/components/ui/chart';
-import { Card, CardContent } from '@/components/ui/card';
+import { useSearchParams } from 'react-router-dom';
+import { getMetricsSeries, getVerificationSummary, listSessions, ApiError } from '../api/client';
+import type { MetricsSeriesDto, SessionListItem, VerificationSummaryDto } from '../api/types';
+import { sortSeriesAscending } from '../lib/seriesView';
+import { headline, headlineDelta, observedChanges } from '../lib/dashDerive';
+import { HeadlineStats } from '../components/dash/HeadlineStats';
 import {
   Select,
   SelectContent,
@@ -44,17 +22,7 @@ import {
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InfoTip } from '../components/replay/insight-strip/InfoTip';
 import { useT } from '../i18n';
 
 type SeriesState =
@@ -62,102 +30,31 @@ type SeriesState =
   | { kind: 'ok'; data: MetricsSeriesDto }
   | { kind: 'error'; message: string };
 
+type VsumState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ok'; data: VerificationSummaryDto }
+  | { kind: 'error' };
+
 type WindowKey = '30d' | '90d' | 'all';
 const WINDOW_DAYS: Record<Exclude<WindowKey, 'all'>, number> = { '30d': 30, '90d': 90 };
-
-/* 모든 차트가 공유하는 플롯 기하 — 커스텀 모델 레일이 같은 값으로 정렬한다
- * (margin.left/right + YAxis 폭을 우리가 고정 지정하므로 픽셀 정렬 가능). */
-const PLOT_LEFT_PX = 8 + 36; // margin.left + YAxis width
-const PLOT_RIGHT_PX = 8;
-
-/* 코호트 밴드 — dataviz validator 통과 categorical 세트(빈도순 슬롯,
- * 초과분은 중립 슬레이트 "Other" 접기). */
-const MODEL_SLOTS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)'];
-const MODEL_OVERFLOW = '#48536b';
-
-// api_rate_limit_count(HTTP 429)는 사용자가 말한 "Claude Code 사용량 한도"와
-// 다른 축이라 strip에서 뺐다(측정 필드는 API에 유지). CC 사용량 한도 도달은
-// 2026-07-04 전 코퍼스 스캔에서 transcript·OTLP 어디에도 신호가 없다 —
-// 관측되면 토큰 카드 위 마커로 얹는다.
-const STRIP_METRICS = [
-  'tool_failure_count',
-  'context_bloat_count',
-  'api_error_count',
-  'user_interruption_count',
-  'compact_boundary_count',
-  'tool_result_truncated_count',
-] as const;
-type StripMetric = (typeof STRIP_METRICS)[number];
-
-/* 신호별 고유 색 — 제목 스와치와 바가 같은 색을 공유해 strip 구분감을 만든다.
- * (단일-시리즈 소형 다중이라 정체성은 제목이 전달하고 색은 보조.) */
-const STRIP_COLORS: Record<StripMetric, string> = {
-  tool_failure_count: '#e66767',
-  context_bloat_count: '#c98500',
-  api_error_count: '#d95926',
-  user_interruption_count: '#9085e9',
-  compact_boundary_count: '#2bd0d0',
-  tool_result_truncated_count: '#8b93a7',
-};
-
-/* 효율 히트 행 — 셀 진하기(opacity)가 값. hit은 자연 도메인 0–100%,
- * 나머지는 창 내 최대값 기준 상대 스케일(배지에 최대값 표기). */
-type UsageRatioView = { cacheHitPct: number; outSharePct: number; unitRatePerM: number };
-const EFF_ROWS: Array<{
-  key: 'hit' | 'out' | 'rate';
-  color: string;
-  absMax?: number;
-  value: (r: UsageRatioView) => number;
-  fmt: (v: number) => string;
-  badge: (max: number) => string;
-}> = [
-  {
-    key: 'hit',
-    color: 'var(--wimcc-info)',
-    absMax: 100,
-    value: (r) => r.cacheHitPct,
-    fmt: (v) => `${v}%`,
-    badge: () => '0–100%',
-  },
-  {
-    key: 'out',
-    color: 'var(--chart-2)',
-    value: (r) => r.outSharePct,
-    fmt: (v) => `${v}%`,
-    badge: (max) => `≤${Math.round(max * 10) / 10}%`,
-  },
-  {
-    key: 'rate',
-    color: '#5cbf8a',
-    value: (r) => r.unitRatePerM,
-    fmt: (v) => `$${v.toFixed(2)}/1M`,
-    badge: (max) => `≤$${Math.round(max * 100) / 100}/1M`,
-  },
-];
 
 function basename(path: string): string {
   const parts = path.split('/').filter(Boolean);
   return parts[parts.length - 1] ?? path;
 }
-const shortId = (id: string) => id.slice(0, 8);
-const fmtDate = (iso: string) => iso.slice(5, 10);
-/** 토큰 수 축약 — 1_600_000 → 1.6M, 12_300 → 12.3k. */
-const fmtCompact = (v: number): string =>
-  v >= 1_000_000
-    ? `${(v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 1)}M`
-    : v >= 1_000
-      ? `${(v / 1_000).toFixed(v >= 10_000 ? 0 : 1)}k`
-      : String(v);
 
 export default function DashboardPage() {
   const t = useT();
-  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [series, setSeries] = useState<SeriesState>({ kind: 'loading' });
+  const [prevSeries, setPrevSeries] = useState<MetricsSeriesDto | null>(null);
+  const [vsum, setVsum] = useState<VsumState>({ kind: 'idle' });
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
 
   const windowKey = (params.get('w') as WindowKey | null) ?? 'all';
   const projectParam = params.get('project');
+  const tab = params.get('tab') === 'verification' ? 'verification' : 'overview';
 
   useEffect(() => {
     let alive = true;
@@ -166,7 +63,7 @@ export default function DashboardPage() {
         if (alive) setSessions(rows);
       })
       .catch(() => {
-        /* 선택지는 부가 기능 — series 오류가 본 오류를 보여준다 */
+        /* 선택지·이름 해석은 부가 기능 — series 오류가 본 오류를 보여준다 */
       });
     return () => {
       alive = false;
@@ -186,14 +83,16 @@ export default function DashboardPage() {
   const effectiveProject =
     projectParam === 'all' ? undefined : (projectParam ?? projects[0] ?? undefined);
 
+  /** 현재 창 + (창이 유한하면) 직전 동일 창 — 헤드라인 delta의 기준. */
   useEffect(() => {
     if (projectParam === null && sessions.length === 0) return;
     let alive = true;
     setSeries({ kind: 'loading' });
-    const from =
-      windowKey === 'all'
-        ? undefined
-        : new Date(Date.now() - WINDOW_DAYS[windowKey] * 86_400_000).toISOString();
+    setPrevSeries(null);
+    setVsum({ kind: 'idle' });
+    const spanMs = windowKey === 'all' ? null : WINDOW_DAYS[windowKey] * 86_400_000;
+    const now = Date.now();
+    const from = spanMs ? new Date(now - spanMs).toISOString() : undefined;
     getMetricsSeries({ project: effectiveProject, from, limit: 200 })
       .then((data) => {
         if (alive) setSeries({ kind: 'ok', data });
@@ -202,82 +101,66 @@ export default function DashboardPage() {
         if (alive)
           setSeries({ kind: 'error', message: e instanceof ApiError ? e.detail : String(e) });
       });
+    if (spanMs) {
+      getMetricsSeries({
+        project: effectiveProject,
+        from: new Date(now - 2 * spanMs).toISOString(),
+        to: new Date(now - spanMs).toISOString(),
+        limit: 200,
+      })
+        .then((data) => {
+          if (alive) setPrevSeries(data);
+        })
+        .catch(() => {
+          /* 비교 창 실패 → delta 없음(fnote '비교 없음') — 본 데이터는 무관 */
+        });
+    }
     return () => {
       alive = false;
     };
   }, [effectiveProject, windowKey, projectParam, sessions.length]);
 
+  /** 검증 탭 lazy fetch — 같은 프로젝트·창 컨텍스트. */
+  useEffect(() => {
+    if (tab !== 'verification' || vsum.kind !== 'idle' || series.kind !== 'ok') return;
+    let alive = true;
+    setVsum({ kind: 'loading' });
+    const spanMs = windowKey === 'all' ? null : WINDOW_DAYS[windowKey] * 86_400_000;
+    getVerificationSummary({
+      project: effectiveProject,
+      from: spanMs ? new Date(Date.now() - spanMs).toISOString() : undefined,
+    })
+      .then((data) => {
+        if (alive) setVsum({ kind: 'ok', data });
+      })
+      .catch(() => {
+        if (alive) setVsum({ kind: 'error' });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tab, vsum.kind, series.kind, effectiveProject, windowKey]);
+
   const rows = useMemo(
     () => (series.kind === 'ok' ? sortSeriesAscending(series.data.sessions) : []),
     [series],
   );
-
-  /* Recharts 데이터 — 세션 = 카테고리 축의 한 칸(등폭, 초판과 동일 의미). */
-  const chartData = useMemo(
-    () =>
-      rows.map((r, i) => ({
-        idx: i,
-        sid: r.session_id,
-        sid8: shortId(r.session_id),
-        date: fmtDate(r.first_observed_at),
-        passed: r.metrics.verification_passed,
-        failed: r.metrics.verification_failed,
-        unknown: r.metrics.verification_unknown,
-        tool_failure_count: r.metrics.tool_failure_count,
-        context_bloat_count: r.metrics.context_bloat_count,
-        api_error_count: r.metrics.api_error_count,
-        user_interruption_count: r.metrics.user_interruption_count,
-        compact_boundary_count: r.metrics.compact_boundary_count,
-        tool_result_truncated_count: r.metrics.tool_result_truncated_count,
-        // `?? 0`: 구버전 serve(필드 이전 바이너리) 응답에도 견딘다.
-        api_rate_limit_count: r.metrics.api_rate_limit_count ?? 0,
-        input: r.metrics.input_tokens ?? 0,
-        output: r.metrics.output_tokens ?? 0,
-        cacheCreation: r.metrics.cache_creation_input_tokens ?? 0,
-        cacheRead: r.metrics.cache_read_input_tokens ?? 0,
-        cost: r.metrics.estimated_cost_usd ?? 0,
-        one: 1,
-        events: r.event_count,
-        ratios: usageRatios(r.metrics),
-        models: cohortModels(r.fingerprint).join(' + ').replaceAll('claude-', '') || '—',
-        cc: r.fingerprint.cc_versions.join(' + ') || '—',
-      })),
-    [rows],
+  const prevRows = useMemo(
+    () => (prevSeries ? sortSeriesAscending(prevSeries.sessions) : null),
+    [prevSeries],
   );
 
-  const modelSegments = useMemo(
-    () => cohortSegments(rows, (r) => cohortModels(r.fingerprint)),
-    [rows],
+  const nameOf = useMemo(() => {
+    const bySid = new Map(sessions.map((s) => [s.session_id, s.slug ?? s.session_id.slice(0, 8)]));
+    return (sid: string) => bySid.get(sid) ?? sid.slice(0, 8);
+  }, [sessions]);
+
+  const h = useMemo(() => headline(rows), [rows]);
+  const delta = useMemo(
+    () => (prevRows && prevRows.length > 0 ? headlineDelta(h, headline(prevRows)) : null),
+    [h, prevRows],
   );
-  const ccSegments = useMemo(() => cohortSegments(rows, (r) => r.fingerprint.cc_versions), [rows]);
-  const boundaries = useMemo(() => cohortBoundaries(modelSegments), [modelSegments]);
-  /* 모델 매트릭스 — 조합 레일 대신 모델별 row. 모델당 1색(1:1 매핑)이라
-   * 조합 폭발·라벨 겹침이 원천 소멸한다. row는 빈도순, 상한 초과분은
-   * 마지막에 접힌다. */
-  const matrixModels = useMemo(() => {
-    const freq = new Map<string, number>();
-    for (const r of rows) for (const m of cohortModels(r.fingerprint)) freq.set(m, (freq.get(m) ?? 0) + 1);
-    return [...freq.entries()]
-      .sort((a, b) => (b[1] !== a[1] ? b[1] - a[1] : a[0].localeCompare(b[0])))
-      .map(([m]) => m)
-      .slice(0, 6);
-  }, [rows]);
-  const modelColor = (m: string) =>
-    matrixModels.indexOf(m) >= 0 && matrixModels.indexOf(m) < MODEL_SLOTS.length
-      ? MODEL_SLOTS[matrixModels.indexOf(m)]
-      : MODEL_OVERFLOW;
-
-  const outcomeConfig = {
-    passed: { label: t('dash.outcome.passed'), color: 'var(--chart-5)' },
-    failed: { label: t('dash.outcome.failed'), color: '#e66767' },
-    unknown: { label: t('dash.outcome.unknown'), color: '#6a7180' },
-  } satisfies ChartConfig;
-
-  const tokensConfig = {
-    input: { label: t('dash.tokens.input'), color: 'var(--chart-1)' },
-    cacheCreation: { label: t('dash.tokens.cacheCreation'), color: 'var(--chart-3)' },
-    output: { label: t('dash.tokens.output'), color: 'var(--chart-2)' },
-  } satisfies ChartConfig;
+  const changes = useMemo(() => observedChanges(rows), [rows]);
 
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(params);
@@ -286,131 +169,35 @@ export default function DashboardPage() {
     setParams(next, { replace: true });
   };
 
-  /* 차트 클릭 → 세션 replay 딥링크. recharts v3 onClick 파라미터의 활성
-   * 인덱스만 쓴다(activeTooltipIndex — 카테고리 축이라 곧 chartData 인덱스). */
-  const openSession = (state: unknown, e?: unknown) => {
-    // Brush(범위 조절 바) 위의 클릭/드래그는 탐색이지 선택이 아니다 —
-    // 세션 이동을 트리거하지 않는다 (2026-07-04 피드백).
-    const target = (e as { target?: EventTarget } | undefined)?.target;
-    if (target instanceof Element && target.closest('.recharts-brush')) return;
-    const raw = (state as { activeTooltipIndex?: number | string } | null)?.activeTooltipIndex;
-    const idx = typeof raw === 'string' ? Number(raw) : raw;
-    const sid = typeof idx === 'number' && Number.isFinite(idx) ? chartData[idx]?.sid : undefined;
-    if (sid) navigate(`/sessions/${encodeURIComponent(sid)}`);
-  };
-
-  /* 툴팁 라벨: 세션id · 날짜 · 모델 · CC — fingerprint를 hover에서 바로. */
-  const tooltipLabel = (_: unknown, payload: readonly { payload?: (typeof chartData)[number] }[]) => {
-    const p = payload?.[0]?.payload;
-    if (!p) return null;
-    return (
-      <div className="space-y-0.5">
-        <div className="font-mono">{p.sid8} · {p.date}</div>
-        <div className="text-muted-foreground font-normal">
-          {p.models} · CC {p.cc} · {t('dash.tooltip.events', p.events)}
-        </div>
-      </div>
-    );
-  };
-
-  const maxOf = (metric: StripMetric) => Math.max(0, ...chartData.map((d) => d[metric]));
-  const outcomeMax = Math.max(0, ...chartData.map((d) => d.passed + d.failed + d.unknown));
-
-  const cohortRefs = () => (
-    <>
-      {boundaries.map((b) => (
-        <ReferenceLine
-          key={`rule-${b.index}`}
-          x={b.index}
-          stroke="var(--wimcc-warning)"
-          strokeOpacity={0.5}
-          strokeDasharray="4 3"
-        />
-      ))}
-    </>
-  );
-
-  /* Brush 창 — 커스텀 모델 레일이 차트와 같은 구간을 보이게 상태로 끈다.
-   * (레일은 Recharts가 잘 못 그리는 "라벨 있는 구간 밴드"라 커스텀 HTML —
-   * 차트가 잘하는 것은 차트로, 아닌 것은 다른 방법으로.) */
-  const [brushWin, setBrushWin] = useState<{ s: number; e: number } | null>(null);
-  const winStart = brushWin?.s ?? 0;
-  const winEnd = brushWin?.e ?? Math.max(0, chartData.length - 1);
-  const winLen = Math.max(1, winEnd - winStart + 1);
-
-  /* 레일 세그먼트 — 현재 Brush 창으로 클리핑, 위치는 창 기준 %. 모델·CC
-   * 두 레일이 공용. */
-  const clipSegments = (
-    segs: ReturnType<typeof cohortSegments>,
-    colorOf: (label: string, index: number) => string,
-    display: (label: string) => string,
-  ) =>
-    segs
-      .map((seg, i) => {
-        const s0 = Math.max(seg.start, winStart);
-        const e0 = Math.min(seg.end, winEnd);
-        if (s0 > e0) return null;
-        return {
-          key: `${seg.start}-${seg.label || 'unknown'}`,
-          label: seg.label,
-          display: display(seg.label),
-          known: seg.known,
-          leftPct: ((s0 - winStart) / winLen) * 100,
-          widthPct: ((e0 - s0 + 1) / winLen) * 100,
-          color: seg.known ? colorOf(seg.label, i) : 'transparent',
-        };
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null);
-
-  /* CC 버전 트랙 — 단색 배경 위 변화점 라벨만(교대색·라벨 반복 제거). */
-  const ccRail = clipSegments(
-    ccSegments,
-    () => 'transparent',
-    (label) => label,
-  );
-
-  /* 모델 매트릭스 셀 — 현재 Brush 창의 세션 중 그 모델을 쓴 인덱스. */
-  const matrixCells = useMemo(() => {
-    const cells = new Map<string, number[]>();
-    for (const m of matrixModels) cells.set(m, []);
-    for (let i = winStart; i <= winEnd && i < rows.length; i++) {
-      for (const m of cohortModels(rows[i].fingerprint)) {
-        cells.get(m)?.push(i);
-      }
-    }
-    return cells;
-  }, [rows, matrixModels, winStart, winEnd]);
-
   return (
-    <div className="mx-auto max-w-6xl space-y-5 px-7 py-6">
-      <header className="space-y-3">
+    <div className="px-8 py-6">
+      {/* ── 상단: 타이틀 · 프로젝트 · 창 ─────────────────── */}
+      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          <p className="text-[10.5px] font-semibold tracking-[.09em] uppercase text-(--wimcc-fg-subtle)">
             {t('dash.eyebrow')}
           </p>
-          <h1 className="font-mono text-2xl font-semibold tracking-tight">
+          <h1 className="text-lg font-semibold tracking-tight">
             {effectiveProject ? basename(effectiveProject) : t('dash.allProjects')}
+            {series.kind === 'ok' && (
+              <span className="ml-2 text-sm font-medium text-(--wimcc-fg-muted)">
+                · {t('dash.sessionCount', rows.length)} · {h.events.toLocaleString()} events
+              </span>
+            )}
           </h1>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-3">
           <Select
-            value={projectParam ?? ''}
-            onValueChange={(v) => setParam('project', v === '__auto__' ? null : v)}
+            value={projectParam ?? effectiveProject ?? 'all'}
+            onValueChange={(v) => setParam('project', v)}
           >
-            <SelectTrigger size="sm" className="w-56 font-mono text-xs" aria-label={t('dash.projectLabel')}>
-              <SelectValue placeholder={projects[0] ? `${basename(projects[0])} (auto)` : t('dash.allProjects')} />
+            <SelectTrigger className="w-56" aria-label={t('dash.projectLabel')}>
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {projects[0] && (
-                <SelectItem value="__auto__" className="font-mono text-xs">
-                  {basename(projects[0])} (auto)
-                </SelectItem>
-              )}
-              <SelectItem value="all" className="font-mono text-xs">
-                {t('dash.allProjects')}
-              </SelectItem>
+              <SelectItem value="all">{t('dash.allProjects')}</SelectItem>
               {projects.map((p) => (
-                <SelectItem key={p} value={p} className="font-mono text-xs">
+                <SelectItem key={p} value={p}>
                   {basename(p)}
                 </SelectItem>
               ))}
@@ -418,440 +205,83 @@ export default function DashboardPage() {
           </Select>
           <ToggleGroup
             type="single"
-            variant="outline"
-            size="sm"
             value={windowKey}
-            onValueChange={(v) => v && setParam('w', v === 'all' ? null : v)}
+            onValueChange={(v) => v && setParam('w', v)}
             aria-label={t('dash.windowLabel')}
           >
-            <ToggleGroupItem value="30d" className="px-3 text-xs">{t('dash.window.30d')}</ToggleGroupItem>
-            <ToggleGroupItem value="90d" className="px-3 text-xs">{t('dash.window.90d')}</ToggleGroupItem>
-            <ToggleGroupItem value="all" className="px-3 text-xs">{t('dash.window.all')}</ToggleGroupItem>
+            <ToggleGroupItem value="30d">{t('dash.window.30d')}</ToggleGroupItem>
+            <ToggleGroupItem value="90d">{t('dash.window.90d')}</ToggleGroupItem>
+            <ToggleGroupItem value="all">{t('dash.window.all')}</ToggleGroupItem>
           </ToggleGroup>
-          {series.kind === 'ok' && (
-            <span className="ml-auto font-mono text-xs text-muted-foreground">
-              {t('dash.sessionCount', series.data.session_count)}
-              {series.data.matched_count > series.data.session_count && (
-                <span className="text-(--wimcc-warning)">
-                  {' · '}
-                  {t('dash.truncated', {
-                    n: series.data.session_count,
-                    m: series.data.matched_count,
-                  })}
-                </span>
-              )}
-            </span>
-          )}
         </div>
-      </header>
+      </div>
 
       {series.kind === 'loading' && (
-        <div className="space-y-5">
-          <Skeleton className="h-72 w-full rounded-xl" />
-          <Skeleton className="h-96 w-full rounded-xl" />
+        <div className="space-y-4" aria-label={t('dash.loading')}>
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-64 w-full" />
         </div>
       )}
+
       {series.kind === 'error' && (
-        <Card role="alert" className="border-destructive/40">
-          <CardContent className="py-6 text-sm text-destructive">
-            {t('dash.error')} — {series.message}
-          </CardContent>
-        </Card>
+        <p role="alert" className="text-sm text-(--wimcc-danger)">
+          {t('dash.error')} {series.message}
+        </p>
       )}
+
       {series.kind === 'ok' && rows.length === 0 && (
-        <Card>
-          <CardContent className="space-y-2 py-10 text-center text-sm text-muted-foreground">
-            <p>{t('dash.empty')}</p>
-            <p>
-              <code className="rounded bg-muted px-2 py-1 font-mono text-xs">
-                {t('dash.emptyHint')}
-              </code>
-            </p>
-          </CardContent>
-        </Card>
+        <div className="py-16 text-center text-sm text-(--wimcc-fg-muted)">
+          <p>{t('dash.empty')}</p>
+          <p className="mt-1 font-mono text-xs text-(--wimcc-fg-subtle)">{t('dash.emptyHint')}</p>
+        </div>
       )}
 
       {series.kind === 'ok' && rows.length > 0 && (
-        <Tabs defaultValue="charts">
+        <Tabs value={tab} onValueChange={(v) => setParam('tab', v === 'overview' ? null : v)}>
           <TabsList>
-            <TabsTrigger value="charts">{t('dash.tab.charts')}</TabsTrigger>
-            <TabsTrigger value="table">{t('dash.table.summary')}</TabsTrigger>
+            <TabsTrigger value="overview">{t('dash.tab.overview')}</TabsTrigger>
+            <TabsTrigger value="verification">{t('dash.tab.verification')}</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="charts">
-            {/* 하나의 연속 타임라인 — 레일·outcome·토큰·신호가 같은 세션
-                축 위에 쌓이고, 코호트 경계 룰이 전 구간을 관통한다. 섹션
-                라벨은 플롯 왼쪽 모서리에 정렬해 리듬을 만든다. */}
-            <Card>
-              <CardContent className="pt-5">
-                {/* 모델 매트릭스 — 모델당 한 줄·한 색. 세션이 그 모델을
-                    썼으면 셀이 칠해진다(집합 조합·라벨 겹침 원천 소멸). */}
-                <div className="mb-0.5 flex items-center gap-1" style={{ width: PLOT_LEFT_PX + 120 }}>
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
-                    {t('dash.cohort.models')}
+          <TabsContent value="overview">
+            {series.data.matched_count > series.data.session_count && (
+              <p className="mb-2 text-xs text-(--wimcc-fg-subtle)">
+                {t('dash.truncated', { n: series.data.session_count, m: series.data.matched_count })}
+              </p>
+            )}
+            <HeadlineStats h={h} d={delta} />
+            {changes.length > 0 && (
+              <p className="mt-3 mb-1 text-[12.5px] text-(--wimcc-fg-muted)">
+                <span className="mr-2 text-[10.5px] font-semibold tracking-[.09em] uppercase text-(--wimcc-fg-subtle)">
+                  {t('dash.observed')}
+                </span>
+                {changes.map((c, i) => (
+                  <span key={i} className="mr-3.5 font-mono text-[11.5px] text-[#b07dff]">
+                    {c.kind === 'model_first' && t('dash.observed.modelFirst', c)}
+                    {c.kind === 'cc_change' && t('dash.observed.ccChange', c)}
+                    {c.kind === 'top_signals' &&
+                      t('dash.observed.topSignals', { name: nameOf(c.sessionId), n: c.n })}
                   </span>
-                  <InfoTip label={t('dash.cohort.title')} text={t('dash.cohort.tip')} />
-                </div>
-                {matrixModels.map((m) => (
-                  <div key={m} className="mb-[3px] flex items-center">
-                    <span
-                      className="shrink-0 truncate pr-2 text-right font-mono text-[10px] text-muted-foreground"
-                      style={{ width: PLOT_LEFT_PX }}
-                      title={m}
-                    >
-                      {shortModel(m)}
-                    </span>
-                    <div className="relative h-[12px] min-w-0 flex-1" style={{ marginRight: PLOT_RIGHT_PX }}>
-                      {(matrixCells.get(m) ?? []).map((i) => (
-                        <span
-                          key={i}
-                          className="absolute inset-y-0 rounded-[2px]"
-                          style={{
-                            left: `${((i - winStart) / winLen) * 100}%`,
-                            width: `calc(${(1 / winLen) * 100}% - 2px)`,
-                            background: modelColor(m),
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
                 ))}
-                {/* CC 버전 트랙 — 단색 배경, 변화점에만 버전 라벨. */}
-                <div className="mt-1.5 mb-1 flex items-center">
-                  <span
-                    className="flex shrink-0 items-center gap-1 pr-1 text-[10px] uppercase tracking-wider text-muted-foreground/70"
-                    style={{ width: PLOT_LEFT_PX }}
-                  >
-                    CC
-                    <InfoTip label="CC" text={t('dash.cohort.ccTip')} />
-                  </span>
-                  <div
-                    className="relative h-[18px] min-w-0 flex-1 rounded-[4px] bg-(--wimcc-surface-2)"
-                    style={{ marginRight: PLOT_RIGHT_PX }}
-                  >
-                    {ccRail.map((seg) =>
-                      seg.known ? (
-                        <span
-                          key={seg.key}
-                          title={seg.label}
-                          className="absolute inset-y-0 flex items-center overflow-hidden border-l border-(--wimcc-border-strong) pl-1 font-mono text-[10px] whitespace-nowrap text-muted-foreground first:border-l-0"
-                          style={{ left: `${seg.leftPct}%`, width: `${seg.widthPct}%` }}
-                        >
-                          {seg.display}
-                        </span>
-                      ) : (
-                        <span
-                          key={seg.key}
-                          title={t('dash.cohort.unknown')}
-                          className="absolute inset-y-0 rounded-[3px] border border-dashed border-(--wimcc-border-strong)"
-                          style={{ left: `${seg.leftPct}%`, width: `${seg.widthPct}%` }}
-                        />
-                      ),
-                    )}
-                  </div>
-                </div>
-
-                {/* ── 검증 outcome ─────────────────────────────────── */}
-                <div
-                  className="mt-4 mb-1.5 flex items-center justify-between"
-                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
-                >
-                  <span className="flex items-center gap-1.5 text-xs font-semibold">
-                    {t('dash.outcome.title')}
-                    <InfoTip label={t('dash.outcome.title')} text={t('dash.outcome.tip')} />
-                  </span>
-                  <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground">
-                    {outcomeMax > 0 ? t('dash.axis.max', outcomeMax) : t('dash.outcome.none')}
-                  </Badge>
-                </div>
-                <ChartContainer config={outcomeConfig} className="h-56 w-full">
-                  <BarChart
-                    data={chartData}
-                    syncId="dash"
-                    onClick={openSession}
-                    margin={{ top: 6, right: 8, left: 8, bottom: 0 }}
-                    className="cursor-pointer"
-                  >
-                    <CartesianGrid vertical={false} stroke="var(--border)" />
-                    <XAxis
-                      dataKey="idx"
-                      tickFormatter={(v: number) => chartData[v]?.date ?? ''}
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      minTickGap={40}
-                      fontSize={10}
-                    />
-                    <YAxis width={36} tickLine={false} axisLine={false} fontSize={10} allowDecimals={false} />
-                    {cohortRefs()}
-                    <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    <Bar dataKey="passed" stackId="v" fill="var(--color-passed)" />
-                    <Bar dataKey="failed" stackId="v" fill="var(--color-failed)" />
-                    <Bar dataKey="unknown" stackId="v" fill="var(--color-unknown)" radius={[3, 3, 0, 0]} />
-                    <Brush
-                      dataKey="idx"
-                      height={22}
-                      travellerWidth={8}
-                      stroke="var(--wimcc-border-strong)"
-                      fill="var(--card)"
-                      tickFormatter={(v: number) => chartData[v]?.date ?? ''}
-                      onChange={(r) =>
-                        setBrushWin({
-                          s: (r as { startIndex?: number }).startIndex ?? 0,
-                          e: (r as { endIndex?: number }).endIndex ?? Math.max(0, chartData.length - 1),
-                        })
-                      }
-                    />
-                  </BarChart>
-                </ChartContainer>
-
-                {/* ── 토큰 사용량 ──────────────────────────────────── */}
-                <div
-                  className="mt-5 mb-1.5 flex items-center justify-between"
-                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
-                >
-                  <span className="flex items-center gap-1.5 text-xs font-semibold">
-                    {t('dash.tokens.title')}
-                    <InfoTip label={t('dash.tokens.title')} text={t('dash.tokens.tip')} />
-                  </span>
-                  <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground">
-                    {t('dash.axis.max', fmtCompact(Math.max(0, ...chartData.map((d) => d.input + d.output + d.cacheCreation))))}
-                  </Badge>
-                </div>
-                {chartData.every((d) => d.input + d.output + d.cacheCreation + d.cacheRead === 0) && (
-                  <p className="mb-2 text-xs text-muted-foreground" style={{ marginLeft: PLOT_LEFT_PX }}>
-                    {t('dash.tokens.empty')}
-                  </p>
-                )}
-                <ChartContainer config={tokensConfig} className="h-32 w-full">
-                  <BarChart
-                    data={chartData}
-                    syncId="dash"
-                    onClick={openSession}
-                    margin={{ top: 4, right: 8, left: 8, bottom: 0 }}
-                    className="cursor-pointer"
-                  >
-                    <CartesianGrid vertical={false} stroke="var(--border)" />
-                    <XAxis dataKey="idx" hide />
-                    <YAxis
-                      width={36}
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={10}
-                      tickFormatter={(v: number) => fmtCompact(v)}
-                    />
-                    {cohortRefs()}
-                    <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    <Bar dataKey="input" stackId="tok" fill="var(--color-input)" />
-                    <Bar dataKey="cacheCreation" stackId="tok" fill="var(--color-cacheCreation)" />
-                    <Bar dataKey="output" stackId="tok" fill="var(--color-output)" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ChartContainer>
-                {/* ── 효율 히트 매트릭스 — 셀 진하기 = 값. 모델 매트릭스와
-                    같은 시각 언어로, 낮은 적중률·비싼 단가가 옅은/짙은 셀로
-                    한눈에 튄다. usage 미측정 세션은 셀을 그리지 않는다. */}
-                <div
-                  className="mt-3 mb-1 flex items-baseline justify-between"
-                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
-                >
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    {t('dash.eff.title')}
-                    <InfoTip label={t('dash.eff.title')} text={t('dash.eff.tip')} />
-                  </span>
-                  <span className="font-mono text-[10px] text-muted-foreground/70">
-                    {EFF_ROWS.filter((r) => r.absMax === undefined)
-                      .map((r) => {
-                        const max = Math.max(
-                          1e-9,
-                          ...chartData.map((d) => (d.ratios.measured ? r.value(d.ratios) : 0)),
-                        );
-                        return `${t(`dash.eff.${r.key}.short`)} ${r.badge(max)}`;
-                      })
-                      .join(' · ')}
-                  </span>
-                </div>
-                {EFF_ROWS.map((row) => {
-                  const vals = chartData.map((d) => (d.ratios.measured ? row.value(d.ratios) : null));
-                  const maxVal = row.absMax ?? Math.max(1e-9, ...vals.map((v) => v ?? 0));
-                  return (
-                    <div key={row.key} className="mb-[3px] flex items-center">
-                      <span
-                        className="shrink-0 truncate pr-2 text-right font-mono text-[10px] text-muted-foreground"
-                        style={{ width: PLOT_LEFT_PX }}
-                        title={t(`dash.eff.${row.key}.name`)}
-                      >
-                        {t(`dash.eff.${row.key}.short`)}
-                      </span>
-                      <div className="relative h-[14px] min-w-0 flex-1" style={{ marginRight: PLOT_RIGHT_PX }}>
-                        {chartData.map((d, i) => {
-                          const v = vals[i];
-                          if (v === null || i < winStart || i > winEnd) return null;
-                          const alpha = 0.14 + 0.86 * Math.min(1, v / maxVal);
-                          return (
-                            <span
-                              key={d.sid}
-                              title={`${d.sid8} · ${d.date}\n${t(`dash.eff.${row.key}.name`)}: ${row.fmt(v)}`}
-                              className="absolute inset-y-0 cursor-pointer rounded-[2px]"
-                              style={{
-                                left: `${((i - winStart) / winLen) * 100}%`,
-                                width: `calc(${(1 / winLen) * 100}% - 2px)`,
-                                background: row.color,
-                                opacity: alpha,
-                              }}
-                              onClick={() => navigate(`/sessions/${d.sid}`)}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                <div
-                  className="mt-3 mb-1 flex items-baseline justify-between"
-                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
-                >
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    {t('dash.cost.title')}
-                    <InfoTip label={t('dash.cost.title')} text={t('dash.cost.tip')} />
-                  </span>
-                  <span className="font-mono text-[10px] text-muted-foreground/70">
-                    {t('dash.cost.total', chartData.reduce((a, d) => a + d.cost, 0).toFixed(2))}
-                  </span>
-                </div>
-                <ChartContainer
-                  config={{ cost: { label: t('dash.cost.title'), color: '#5cbf8a' } }}
-                  className="h-14 w-full"
-                >
-                  <BarChart
-                    data={chartData}
-                    syncId="dash"
-                    onClick={openSession}
-                    margin={{ top: 2, right: 8, left: 8, bottom: 0 }}
-                    className="cursor-pointer"
-                  >
-                    <XAxis dataKey="idx" hide />
-                    <YAxis
-                      width={36}
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={10}
-                      tickFormatter={(v: number) => `$${v}`}
-                    />
-                    {cohortRefs()}
-                    <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
-                    <Bar dataKey="cost" fill="#5cbf8a" fillOpacity={0.85} radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ChartContainer>
-
-                {/* ── 프로세스 신호 ────────────────────────────────── */}
-                <div
-                  className="mt-5 mb-1 flex items-center"
-                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
-                >
-                  <span className="flex items-center gap-1.5 text-xs font-semibold">
-                    {t('dash.multiples.title')}
-                    <InfoTip label={t('dash.multiples.title')} text={t('dash.multiples.tip')} />
-                  </span>
-                </div>
-                <div>
-                  {STRIP_METRICS.map((metric, i) => (
-                    <div key={metric} className={i > 0 ? 'mt-2 border-t border-border/60 pt-2' : ''}>
-                      <div
-                        className="mb-0.5 flex items-baseline justify-between"
-                        style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
-                      >
-                        <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                          <span
-                            className="inline-block size-2 rounded-[2px]"
-                            style={{ background: STRIP_COLORS[metric] }}
-                          />
-                          {t(`dash.metric.${metric}`)}
-                        </span>
-                        <span className="font-mono text-[10px] text-muted-foreground/70">
-                          {t('dash.axis.max', maxOf(metric))}
-                        </span>
-                      </div>
-                      <ChartContainer
-                        config={{ [metric]: { label: t(`dash.metric.${metric}`), color: STRIP_COLORS[metric] } }}
-                        className="h-12 w-full"
-                      >
-                        <BarChart
-                          data={chartData}
-                          syncId="dash"
-                          onClick={openSession}
-                          margin={{ top: 2, right: 8, left: 8, bottom: 0 }}
-                          className="cursor-pointer"
-                        >
-                          <XAxis dataKey="idx" hide />
-                          <YAxis width={36} tick={false} tickLine={false} axisLine={false} />
-                          {cohortRefs()}
-                          <ChartTooltip
-                            content={<ChartTooltipContent labelFormatter={tooltipLabel} />}
-                          />
-                          <Bar dataKey={metric} fill={STRIP_COLORS[metric]} fillOpacity={0.85} radius={[2, 2, 0, 0]} />
-                        </BarChart>
-                      </ChartContainer>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+              </p>
+            )}
+            {/* 모듈 2~6: 일별 검증 / 일별 비용·신호 / 코호트 비교 / 세션
+                타임라인 / 세션 분포 — Task 5~8에서 장착 */}
           </TabsContent>
 
-          <TabsContent value="table">
-            <Card>
-              <CardContent className="overflow-x-auto pt-6">
-                <Table className="font-mono text-xs">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t('dash.table.session')}</TableHead>
-                      <TableHead>{t('dash.table.date')}</TableHead>
-                      <TableHead className="text-right">{t('dash.table.events')}</TableHead>
-                      <TableHead className="text-right">{t('dash.outcome.passed')}</TableHead>
-                      <TableHead className="text-right">{t('dash.outcome.failed')}</TableHead>
-                      <TableHead className="text-right">{t('dash.outcome.unknown')}</TableHead>
-                      {STRIP_METRICS.map((m) => (
-                        <TableHead key={m} className="text-right">
-                          {t(`dash.metric.${m}`)}
-                        </TableHead>
-                      ))}
-                      <TableHead className="text-right">{t('dash.tokens.input')}</TableHead>
-                      <TableHead className="text-right">{t('dash.tokens.output')}</TableHead>
-                      <TableHead className="text-right">{t('dash.cost.title')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {chartData.map((d) => (
-                      <TableRow
-                        key={d.sid}
-                        className="cursor-pointer"
-                        onClick={() => navigate(`/sessions/${encodeURIComponent(d.sid)}`)}
-                      >
-                        <TableCell>{d.sid8}</TableCell>
-                        <TableCell>{d.date}</TableCell>
-                        <TableCell className="text-right">{d.events}</TableCell>
-                        <TableCell className="text-right">{d.passed}</TableCell>
-                        <TableCell className="text-right">{d.failed}</TableCell>
-                        <TableCell className="text-right">{d.unknown}</TableCell>
-                        {STRIP_METRICS.map((m) => (
-                          <TableCell key={m} className="text-right">
-                            {d[m]}
-                          </TableCell>
-                        ))}
-                        <TableCell className="text-right">{d.input.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">{d.output.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">
-                          {d.cost > 0 ? `$${d.cost.toFixed(2)}` : '—'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+          <TabsContent value="verification">
+            {vsum.kind === 'loading' && <Skeleton className="h-40 w-full" />}
+            {vsum.kind === 'error' && (
+              <p role="alert" className="text-sm text-(--wimcc-danger)">
+                {t('dash.ver.error')}
+              </p>
+            )}
+            {vsum.kind === 'ok' && (
+              /* Task 9에서 VerificationTab 모듈로 대체 */
+              <p className="font-mono text-sm text-(--wimcc-fg-muted)">
+                {t('dash.head.guards', vsum.data.total)}
+              </p>
+            )}
           </TabsContent>
         </Tabs>
       )}

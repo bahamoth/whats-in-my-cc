@@ -134,32 +134,40 @@ export function headlineDelta(cur: Headline, prev: Headline | null): HeadlineDel
   };
 }
 
-/** "관측된 변화" — 전부 결정론: 창 내 첫 관측 모델("MM-DD {name} 첫 관측"),
- *  CC 전환("MM-DD CC a → b"), 신호 최다 세션. nameOf는 session_id → 표시명. */
-export function observedChanges(
-  rows: SessionSeriesRowDto[],
-  nameOf: (sid: string) => string,
-): string[] {
-  const out: string[] = [];
+export type ObservedChange =
+  | { kind: 'model_first'; date: string; model: string }
+  | { kind: 'cc_change'; date: string; from: string; to: string }
+  | { kind: 'top_signals'; sessionId: string; n: number };
+
+/** "관측된 변화" — 전부 결정론: 창 내 첫 관측 모델, CC 전환, 신호 최다 세션.
+ *  문구는 만들지 않는다 — 구조만 반환하고 번역은 i18n 카탈로그가 한다. */
+export function observedChanges(rows: SessionSeriesRowDto[]): ObservedChange[] {
+  const out: ObservedChange[] = [];
   const seen = new Set<string>();
   rows.forEach((r, i) => {
     for (const m of cohortModels(r.fingerprint)) {
       if (!seen.has(m)) {
         seen.add(m);
-        if (i > 0) out.push(`${dayKey(r.first_observed_at)} ${displayModel(m)} 첫 관측`);
+        if (i > 0)
+          out.push({ kind: 'model_first', date: dayKey(r.first_observed_at), model: displayModel(m) });
       }
     }
   });
   const ccSegs = cohortSegments(rows, (r) => r.fingerprint.cc_versions);
   for (const b of cohortBoundaries(ccSegs)) {
-    out.push(`${dayKey(rows[b.index].first_observed_at)} CC ${b.from} → ${b.to}`);
+    out.push({ kind: 'cc_change', date: dayKey(rows[b.index].first_observed_at), from: b.from, to: b.to });
   }
-  let maxI = -1, maxV = 0;
+  let maxI = -1;
+  let maxV = 0;
   rows.forEach((r, i) => {
     const s = signalsOf(r.metrics);
-    if (s > maxV) { maxV = s; maxI = i; }
+    if (s > maxV) {
+      maxV = s;
+      maxI = i;
+    }
   });
-  if (maxI >= 0 && maxV > 0) out.push(`신호 최다 ${nameOf(rows[maxI].session_id)} (${maxV})`);
+  if (maxI >= 0 && maxV > 0)
+    out.push({ kind: 'top_signals', sessionId: rows[maxI].session_id, n: maxV });
   return out;
 }
 

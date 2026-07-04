@@ -146,10 +146,10 @@ describe('observedChanges', () => {
       row('b', '06-12', ['claude-opus-4-8', 'claude-fable-5'], { cc: ['2.1.198'] }),
       row('c', '07-02', ['claude-fable-5'], { cc: ['2.1.200'], toolFails: 30 }),
     ];
-    const out = observedChanges(rows, (sid) => sid);
-    expect(out).toContain('06-12 Fable 5 첫 관측');
-    expect(out).toContain('07-02 CC 2.1.198 → 2.1.200');
-    expect(out.find((s) => s.startsWith('신호 최다 c'))).toBeTruthy();
+    const out = observedChanges(rows);
+    expect(out).toContainEqual({ kind: 'model_first', date: '06-12', model: 'Fable 5' });
+    expect(out).toContainEqual({ kind: 'cc_change', date: '07-02', from: '2.1.198', to: '2.1.200' });
+    expect(out).toContainEqual({ kind: 'top_signals', sessionId: 'c', n: 32 });
   });
 });
 
