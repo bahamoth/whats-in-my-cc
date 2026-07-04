@@ -135,10 +135,15 @@ export default function DashboardPage() {
     };
   }, [effectiveProject, windowKey, projectParam, sessions.length]);
 
-  /** 검증 탭 lazy fetch — 같은 프로젝트·창 컨텍스트. */
+  /** 검증 탭 lazy fetch — 같은 프로젝트·창 컨텍스트.
+   *  주의: vsum.kind를 deps에 넣으면 setVsum(loading)이 effect를 재실행시켜
+   *  cleanup이 자기 fetch를 취소한다(loading 고착 버그 — 페이지 테스트가
+   *  잠금). 재진입 가드는 deps 밖에서 읽고, cleanup은 진행 중이던 loading을
+   *  idle로 되돌려 탭 재진입 시 재요청되게 한다. */
   useEffect(() => {
-    if (tab !== 'verification' || vsum.kind !== 'idle' || series.kind !== 'ok') return;
-    let alive = true;
+    if (tab !== 'verification' || series.kind !== 'ok') return;
+    if (vsum.kind !== 'idle') return;
+    let cancelled = false;
     setVsum({ kind: 'loading' });
     const spanMs = windowKey === 'all' ? null : WINDOW_DAYS[windowKey] * 86_400_000;
     getVerificationSummary({
@@ -146,15 +151,18 @@ export default function DashboardPage() {
       from: spanMs ? new Date(Date.now() - spanMs).toISOString() : undefined,
     })
       .then((data) => {
-        if (alive) setVsum({ kind: 'ok', data });
+        if (!cancelled) setVsum({ kind: 'ok', data });
       })
       .catch(() => {
-        if (alive) setVsum({ kind: 'error' });
+        if (!cancelled) setVsum({ kind: 'error' });
       });
     return () => {
-      alive = false;
+      cancelled = true;
+      setVsum((p) => (p.kind === 'loading' ? { kind: 'idle' } : p));
     };
-  }, [tab, vsum.kind, series.kind, effectiveProject, windowKey]);
+    // vsum.kind는 재진입 가드로만 읽는다 — deps에 넣으면 자기취소 루프.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, series.kind, effectiveProject, windowKey]);
 
   const rows = useMemo(
     () => (series.kind === 'ok' ? sortSeriesAscending(series.data.sessions) : []),
