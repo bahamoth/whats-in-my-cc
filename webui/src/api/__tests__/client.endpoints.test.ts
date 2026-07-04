@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getDiffHunks,
+  getVerificationSummary,
   getSessionMetrics,
   getSignals,
   getSessionUsage,
@@ -143,6 +144,24 @@ describe('getSessionMetrics', () => {
     fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
     const out = await getSessionMetrics('s1');
     expect(fetchSpy).toHaveBeenCalledWith('/v1/sessions/s1/metrics', expect.any(Object));
+    expect(out).toEqual(expected);
+  });
+});
+
+describe('getVerificationSummary', () => {
+  it('hits GET /v1/verification/summary with query and unwraps `data`', async () => {
+    const expected = {
+      total: 1, measured: 1, passed: 1, failed: 0, unknown: 0,
+      unknown_piped: 0, unknown_other: 0, not_executed: 0,
+      by_kind: [], failures: { recovered: 0, abandoned: 0 },
+      rhythm: [], coverage: { covered: 0, total: 0, by_session: [] },
+    };
+    fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
+    const out = await getVerificationSummary({ from: '2026-06-01T00:00:00Z' });
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/v1/verification/summary?from=2026-06-01T00%3A00%3A00Z',
+      expect.any(Object),
+    );
     expect(out).toEqual(expected);
   });
 });

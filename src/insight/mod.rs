@@ -15,4 +15,5 @@ pub mod task_summary;
 pub mod turn_rollup;
 pub mod types;
 pub mod verification_allowlist;
+pub mod verification_summary;
 pub mod view;
