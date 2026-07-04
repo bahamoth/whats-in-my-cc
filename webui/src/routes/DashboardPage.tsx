@@ -11,11 +11,19 @@ import { useSearchParams } from 'react-router-dom';
 import { getMetricsSeries, getVerificationSummary, listSessions, ApiError } from '../api/client';
 import type { MetricsSeriesDto, SessionListItem, VerificationSummaryDto } from '../api/types';
 import { sortSeriesAscending } from '../lib/seriesView';
-import { buildDaily, headline, headlineDelta, observedChanges, signalsOf } from '../lib/dashDerive';
+import {
+  buildDaily,
+  cohortCompare,
+  headline,
+  headlineDelta,
+  observedChanges,
+  signalsOf,
+} from '../lib/dashDerive';
 import { HeadlineStats } from '../components/dash/HeadlineStats';
 import { DailyVerification } from '../components/dash/DailyVerification';
 import { DailyCostSignals } from '../components/dash/DailyCostSignals';
 import type { CohortMarker, DayDetail } from '../components/dash/dailyOptions';
+import { CohortCompareCards } from '../components/dash/CohortCompare';
 import {
   Select,
   SelectContent,
@@ -198,6 +206,7 @@ export default function DashboardPage() {
       ),
     [daily, rows, nameOf],
   );
+  const cohort = useMemo(() => cohortCompare(rows), [rows]);
   const zeroGuards = useMemo(
     () => rows.filter((r) => r.metrics.verification_total === 0).length,
     [rows],
@@ -315,7 +324,8 @@ export default function DashboardPage() {
               passed={rows.reduce((a, r) => a + r.metrics.verification_passed, 0)}
             />
             <DailyCostSignals daily={daily} markers={markers} details={dayDetails} />
-            {/* 모듈 4~6: 코호트 비교 / 세션 타임라인 / 세션 분포 — Task 6~8 */}
+            <CohortCompareCards c={cohort} />
+            {/* 모듈 5~6: 세션 타임라인 / 세션 분포 — Task 7~8 */}
           </TabsContent>
 
           <TabsContent value="verification">

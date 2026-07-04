@@ -164,7 +164,8 @@ describe('cohortCompare', () => {
   ];
   it('최신 경계의 인접 세그먼트를 전/후로 집계, 라벨은 diff에서 파생', () => {
     const c = cohortCompare(rows)!;
-    expect(c.label).toBe('Fable 5 유입');
+    expect(c.added).toEqual(['Fable 5']);
+    expect(c.removed).toEqual([]);
     expect(c.boundaryIdx).toBe(3);
     expect(c.before.n).toBe(3);
     expect(c.after.n).toBe(3);
@@ -183,7 +184,8 @@ describe('cohortCompare', () => {
     const c = cohortCompare(r2)!;
     expect(c.lowSample).toBe(true);
     expect(c.alsoCcChanged).toBe(true);
-    expect(c.label).toBe('Opus 4.8 → Fable 5');
+    expect(c.added).toEqual(['Fable 5']);
+    expect(c.removed).toEqual(['Opus 4.8']);
   });
 });
 
