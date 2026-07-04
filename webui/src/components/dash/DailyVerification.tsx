@@ -6,6 +6,7 @@ import { EChart } from './EChart';
 import { buildVerOption, type CohortMarker, type DayDetail } from './dailyOptions';
 import { OUTCOME_COLORS } from './echartsBase';
 import { useT } from '../../i18n';
+import { InfoTip } from '../replay/insight-strip/InfoTip';
 
 export function DailyVerification({
   daily,
@@ -43,6 +44,7 @@ export function DailyVerification({
       <div className="mb-2.5 flex items-baseline justify-between">
         <span className="text-[13.5px] font-semibold">
           {t('dash.daily.ver.title')}
+          <InfoTip label={t('dash.daily.ver.title')} text={t('dash.daily.ver.tip')} />
           <small className="ml-2 text-[11.5px] font-medium text-(--wimcc-fg-subtle)">
             <b style={{ color: OUTCOME_COLORS.passed }}>{t('dash.outcome.passed')}</b>
             {' · '}

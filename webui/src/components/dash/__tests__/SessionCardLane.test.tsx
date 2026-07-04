@@ -74,7 +74,8 @@ describe('SessionCardLane', () => {
   });
   it('같은 날 두 세션은 다른 레인(top)으로 스택', () => {
     mount([row('a', '06-05', []), row('b', '06-05', []), row('c', '06-20', [])]);
-    const cards = screen.getAllByRole('button');
+    // InfoTip('?')도 button이라 제외 — 카드만(top 스타일 보유) 고른다.
+    const cards = screen.getAllByRole('button').filter((c) => (c as HTMLElement).style.top !== '');
     const tops = cards.map((c) => (c as HTMLElement).style.top);
     expect(tops[0]).not.toBe(tops[1]);
     expect(tops[2]).toBe(tops[0]);

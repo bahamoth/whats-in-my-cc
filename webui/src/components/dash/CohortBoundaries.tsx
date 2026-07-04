@@ -14,6 +14,7 @@ import {
 } from '../../lib/dashDerive';
 import { EChart } from './EChart';
 import { useT } from '../../i18n';
+import { InfoTip } from '../replay/insight-strip/InfoTip';
 
 const trim1 = (v: number) => String(Math.round(v * 10) / 10);
 
@@ -65,6 +66,7 @@ export function buildSlopeOption(
 type MetricDef = {
   key: CohortMetric;
   name: string;
+  tip: string;
   before: number | null;
   after: number | null;
   fmt: (v: number) => string;
@@ -88,7 +90,10 @@ function SlopeCard({
   const worse = d !== null && (d > 0 ? m.upIsWorse : d < 0 ? !m.upIsWorse : false);
   return (
     <div className="rounded-[13px] border border-(--wimcc-border) bg-(--wimcc-surface-1) px-4 pt-3.5 pb-1">
-      <span className="text-[11.5px] font-semibold text-(--wimcc-fg-muted)">{m.name}</span>
+      <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-(--wimcc-fg-muted)">
+        {m.name}
+        <InfoTip label={m.name} text={m.tip} />
+      </span>
       <div className="my-1 font-mono text-[24px] font-semibold">
         {m.after !== null ? m.fmt(m.after) : '—'}
         {d !== null && !lowSample && (
@@ -168,6 +173,7 @@ export function CohortBoundaries({ rows }: { rows: SessionSeriesRowDto[] }) {
   const metrics = (b: RankedBoundary): MetricDef[] => [
     {
       key: 'unitRate',
+      tip: t('dash.head.rate.tip'),
       name: metricName.unitRate,
       before: b.before.unitRatePerM,
       after: b.after.unitRatePerM,
@@ -177,6 +183,7 @@ export function CohortBoundaries({ rows }: { rows: SessionSeriesRowDto[] }) {
     },
     {
       key: 'passRate',
+      tip: t('dash.head.pass.tip'),
       name: metricName.passRate,
       before: b.before.passRatePct,
       after: b.after.passRatePct,
@@ -186,6 +193,7 @@ export function CohortBoundaries({ rows }: { rows: SessionSeriesRowDto[] }) {
     },
     {
       key: 'signals',
+      tip: t('dash.cohort.sig.tip'),
       name: metricName.signals,
       before: b.before.signalsPerSession,
       after: b.after.signalsPerSession,
@@ -195,6 +203,7 @@ export function CohortBoundaries({ rows }: { rows: SessionSeriesRowDto[] }) {
     },
     {
       key: 'cacheHit',
+      tip: t('dash.head.hit.tip'),
       name: metricName.cacheHit,
       before: b.before.cacheHitPct,
       after: b.after.cacheHitPct,
@@ -209,6 +218,7 @@ export function CohortBoundaries({ rows }: { rows: SessionSeriesRowDto[] }) {
       <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-[13.5px] font-semibold">
           {t('dash.cohort.secTitle')}
+          <InfoTip label={t('dash.cohort.secTitle')} text={t('dash.cohort.tip')} />
           <small className="ml-2 text-[11.5px] font-medium text-(--wimcc-fg-subtle)">
             {t('dash.cohort.prefixNote')}
           </small>

@@ -8,9 +8,11 @@ import { GuardRhythm } from './GuardRhythm';
 import { ChangeCoverage } from './ChangeCoverage';
 import { OUTCOME_COLORS } from './echartsBase';
 import { useT } from '../../i18n';
+import { InfoTip } from '../replay/insight-strip/InfoTip';
 
 function Stat({
   label,
+  tip,
   value,
   unit,
   chip,
@@ -18,6 +20,7 @@ function Stat({
   fnote,
 }: {
   label: string;
+  tip: string;
   value: string;
   unit?: string;
   chip?: string;
@@ -32,8 +35,9 @@ function Stat({
         : 'bg-[#f0b429]/10 text-[#f0b429]';
   return (
     <div className="border-r border-(--wimcc-border) px-5 pt-4 pb-3.5 last:border-r-0">
-      <div className="text-[10.5px] font-semibold tracking-[.09em] uppercase text-(--wimcc-fg-subtle)">
+      <div className="flex items-center gap-1 text-[10.5px] font-semibold tracking-[.09em] uppercase text-(--wimcc-fg-subtle)">
         {label}
+        <InfoTip label={label} text={tip} />
       </div>
       <div className="my-1.5 font-mono text-[29px] leading-none font-semibold tracking-tight">
         {value}
@@ -94,9 +98,10 @@ export function VerificationTab({
   return (
     <div>
       <div className="grid grid-cols-5 border-y border-(--wimcc-border)">
-        <Stat label={t('dash.ver.head.guards')} value={String(sum.total)} fnote={kindsNote} />
+        <Stat label={t('dash.ver.head.guards')} tip={t('dash.ver.head.guards.tip')} value={String(sum.total)} fnote={kindsNote} />
         <Stat
           label={t('dash.ver.head.measured')}
+          tip={t('dash.ver.head.measured.tip')}
           value={String(sum.measured)}
           unit={` · ${measuredPct}%`}
           chip={t('dash.ver.head.unknownChip', sum.unknown)}
@@ -105,11 +110,13 @@ export function VerificationTab({
         />
         <Stat
           label={t('dash.ver.head.passed')}
+          tip={t('dash.ver.head.passed.tip')}
           value={passPct !== null ? String(sum.passed) : '—'}
           unit={passPct !== null ? ` · ${passPct}%` : undefined}
         />
         <Stat
           label={t('dash.ver.head.abandoned')}
+          tip={t('dash.ver.head.abandoned.tip')}
           value={String(sum.failures.abandoned)}
           chip={t('dash.ver.head.abandonedOf', sum.failed)}
           chipTone="bad"
@@ -117,6 +124,7 @@ export function VerificationTab({
         />
         <Stat
           label={t('dash.ver.head.coverage')}
+          tip={t('dash.ver.head.coverage.tip')}
           value={covPct !== null ? String(covPct) : '—'}
           unit={covPct !== null ? '%' : undefined}
           chip={
@@ -134,6 +142,7 @@ export function VerificationTab({
           <div className="mb-2.5 flex items-baseline justify-between">
             <span className="text-[13.5px] font-semibold">
               {t('dash.ver.kind.title')}
+              <InfoTip label={t('dash.ver.kind.title')} text={t('dash.ver.kind.tip')} />
               <small className="ml-2 text-[11.5px] font-medium text-(--wimcc-fg-subtle)">
                 {t('dash.ver.kind.desc')}
               </small>
@@ -147,6 +156,7 @@ export function VerificationTab({
           <div className="mb-2.5 flex items-baseline justify-between">
             <span className="text-[13.5px] font-semibold">
               {t('dash.ver.flow.title', sum.total)}
+              <InfoTip label={t('dash.ver.flow.title', sum.total)} text={t('dash.ver.flow.tip')} />
               <small className="ml-2 text-[11.5px] font-medium text-(--wimcc-fg-subtle)">
                 {t('dash.ver.flow.desc')}
               </small>

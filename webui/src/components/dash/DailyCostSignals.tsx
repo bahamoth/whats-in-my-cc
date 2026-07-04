@@ -5,6 +5,7 @@ import type { Daily } from '../../lib/dashDerive';
 import { EChart } from './EChart';
 import { buildCostOption, type CohortMarker, type DayDetail } from './dailyOptions';
 import { useT } from '../../i18n';
+import { InfoTip } from '../replay/insight-strip/InfoTip';
 
 export function DailyCostSignals({
   daily,
@@ -33,6 +34,7 @@ export function DailyCostSignals({
       <div className="mb-2.5 flex items-baseline justify-between">
         <span className="text-[13.5px] font-semibold">
           {t('dash.daily.cost.title')}
+          <InfoTip label={t('dash.daily.cost.title')} text={t('dash.daily.cost.tip')} />
           <small className="ml-2 text-[11.5px] font-medium text-(--wimcc-fg-subtle)">
             {t('dash.daily.cost.desc')}
             <span

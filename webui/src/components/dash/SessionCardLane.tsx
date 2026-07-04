@@ -8,6 +8,7 @@ import { laneLayout, modelColors, signalsOf, MODEL_OVERFLOW_COLOR } from '../../
 import type { CohortMarker } from './dailyOptions';
 import { cohortModels, displayModel, usageRatios } from '../../lib/seriesView';
 import { useT } from '../../i18n';
+import { InfoTip } from '../replay/insight-strip/InfoTip';
 
 const CARD_W_PCT = 14.7;
 const LANE_H = 78;
@@ -98,6 +99,7 @@ export function SessionCardLane({
       <div className="mb-2.5 flex items-baseline justify-between">
         <span className="text-[13.5px] font-semibold">
           {t('dash.lane.title')}
+          <InfoTip label={t('dash.lane.title')} text={t('dash.lane.tip')} />
           <small className="ml-2 text-[11.5px] font-medium text-(--wimcc-fg-subtle)">
             {t('dash.lane.desc')}
           </small>

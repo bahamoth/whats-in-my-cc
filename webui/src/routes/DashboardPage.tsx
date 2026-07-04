@@ -30,6 +30,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DateRangeControl, type WindowSel } from '../components/dash/DateRangeControl';
+import { InfoTip } from '../components/replay/insight-strip/InfoTip';
 import { useT } from '../i18n';
 
 type SeriesState =
@@ -355,8 +356,9 @@ export default function DashboardPage() {
             <HeadlineStats h={h} d={delta} />
             {changes.length > 0 && (
               <p className="mt-3 mb-1 text-[12.5px] text-(--wimcc-fg-muted)">
-                <span className="mr-2 text-[10.5px] font-semibold tracking-[.09em] uppercase text-(--wimcc-fg-subtle)">
+                <span className="mr-2 inline-flex items-center gap-1 text-[10.5px] font-semibold tracking-[.09em] uppercase text-(--wimcc-fg-subtle)">
                   {t('dash.observed')}
+                  <InfoTip label={t('dash.observed')} text={t('dash.observed.tip')} />
                 </span>
                 {changes.map((c, i) => (
                   <span key={i} className="mr-3.5 font-mono text-[11.5px] text-[#b07dff]">

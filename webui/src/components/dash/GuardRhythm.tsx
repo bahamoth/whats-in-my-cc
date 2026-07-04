@@ -3,6 +3,7 @@
 import type { VerificationSummaryDto } from '../../api/types';
 import { OUTCOME_COLORS } from './echartsBase';
 import { useT } from '../../i18n';
+import { InfoTip } from '../replay/insight-strip/InfoTip';
 
 const DOT: Record<string, string> = {
   passed: OUTCOME_COLORS.passed,
@@ -25,6 +26,7 @@ export function GuardRhythm({
       <div className="mb-2.5 flex items-baseline justify-between">
         <span className="text-[13.5px] font-semibold">
           {t('dash.ver.rhythm.title')}
+          <InfoTip label={t('dash.ver.rhythm.title')} text={t('dash.ver.rhythm.tip')} />
           <small className="ml-2 text-[11.5px] font-medium text-(--wimcc-fg-subtle)">
             {t('dash.ver.rhythm.desc')}
           </small>
