@@ -222,6 +222,22 @@ export const ko: Messages = {
   'stream.legend.close': '범례 닫기',
   'stream.legend.show': '범례',
 
+  // Stream — filter bar (Task 10, 스펙 §1.4)
+  'filter.title': '필터',
+  'filter.axis.kind': '종류',
+  'filter.axis.origin': '출처',
+  'filter.axis.outcome': '실행 결과',
+  'filter.axis.content': '도구·모델·텍스트',
+  'filter.outcome.error': '에러난 도구',
+  'filter.outcome.signal': '시그널 있음',
+  'filter.outcome.verification': '검증',
+  'filter.content.toolPlaceholder': '도구명…',
+  'filter.content.modelPlaceholder': '모델 ID…',
+  'filter.qPlaceholder': '텍스트 검색…',
+  'filter.matched': (n: number) => `${n}건 매칭`,
+  'filter.clearAll': '전체 해제',
+  'filter.cleared.byJump': '이벤트로 이동하며 필터를 해제했습니다',
+
   // Stream — message card
   'stream.msg.summary': '요약',
   'stream.msg.viewRaw': '원본 보기',
