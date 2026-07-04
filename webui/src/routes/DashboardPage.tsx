@@ -7,7 +7,7 @@
 // 판정 문장은 렌더하지 않는다 — 숫자·delta·관측 사실만(측정/판별 분리).
 // 파생의 SSOT는 lib/dashDerive(vitest), 집계의 SSOT는 백엔드 insight::verification_summary.
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getMetricsSeries, getVerificationSummary, listSessions, ApiError } from '../api/client';
 import type { MetricsSeriesDto, SessionListItem, VerificationSummaryDto } from '../api/types';
 import { sortSeriesAscending } from '../lib/seriesView';
@@ -24,6 +24,7 @@ import { DailyVerification } from '../components/dash/DailyVerification';
 import { DailyCostSignals } from '../components/dash/DailyCostSignals';
 import type { CohortMarker, DayDetail } from '../components/dash/dailyOptions';
 import { CohortCompareCards } from '../components/dash/CohortCompare';
+import { SessionCardLane } from '../components/dash/SessionCardLane';
 import {
   Select,
   SelectContent,
@@ -57,6 +58,7 @@ function basename(path: string): string {
 
 export default function DashboardPage() {
   const t = useT();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [series, setSeries] = useState<SeriesState>({ kind: 'loading' });
   const [prevSeries, setPrevSeries] = useState<MetricsSeriesDto | null>(null);
@@ -325,7 +327,12 @@ export default function DashboardPage() {
             />
             <DailyCostSignals daily={daily} markers={markers} details={dayDetails} />
             <CohortCompareCards c={cohort} />
-            {/* 모듈 5~6: 세션 타임라인 / 세션 분포 — Task 7~8 */}
+            <SessionCardLane
+              rows={rows}
+              nameOf={nameOf}
+              onOpen={(sid) => navigate(`/sessions/${sid}`)}
+            />
+            {/* 모듈 6: 세션 분포 — Task 8 */}
           </TabsContent>
 
           <TabsContent value="verification">

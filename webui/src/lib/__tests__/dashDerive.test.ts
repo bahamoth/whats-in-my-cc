@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { SessionSeriesRowDto } from '../../api/types';
 import {
   buildDaily,
+  modelColors,
   cohortCompare,
   headline,
   headlineDelta,
@@ -186,6 +187,18 @@ describe('cohortCompare', () => {
     expect(c.alsoCcChanged).toBe(true);
     expect(c.added).toEqual(['Fable 5']);
     expect(c.removed).toEqual(['Opus 4.8']);
+  });
+});
+
+describe('modelColors', () => {
+  it('최초 관측순으로 팔레트를 고정 배정한다(창 변경에도 안정)', () => {
+    const rows = [
+      row('a', '06-05', ['claude-opus-4-8']),
+      row('b', '06-06', ['claude-fable-5', 'claude-opus-4-8']),
+    ];
+    const m = modelColors(rows);
+    expect(m.get('claude-opus-4-8')).toBe('#7da7ff');
+    expect(m.get('claude-fable-5')).toBe('#f0b429');
   });
 });
 

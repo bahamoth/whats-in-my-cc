@@ -266,3 +266,20 @@ export function laneLayout(items: Array<{ x: number }>, cardWidthPct: number): n
     return li;
   });
 }
+
+/** 모델 → 색 SSOT — 카드 레인·스캐터가 공유. 최초 관측순 고정 배정이라
+ *  창을 바꿔도 살아남은 모델의 색이 흔들리지 않는다(색은 정체성을 따른다). */
+const MODEL_PALETTE = ['#7da7ff', '#f0b429', '#b07dff', '#ff8a4c', '#2bd0d0', '#d97aff'];
+export const MODEL_OVERFLOW_COLOR = '#48536b';
+
+export function modelColors(rows: SessionSeriesRowDto[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const r of rows) {
+    for (const m of cohortModels(r.fingerprint)) {
+      if (!map.has(m)) {
+        map.set(m, MODEL_PALETTE[map.size] ?? MODEL_OVERFLOW_COLOR);
+      }
+    }
+  }
+  return map;
+}
