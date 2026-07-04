@@ -85,9 +85,12 @@ pub async fn compute_session_fingerprint(
         .into_iter()
         .collect();
 
+    // Tier1(project/user)만 — Tier2/3(import/tree)은 존재 기록일 뿐 코호트
+    // 키가 아니다(스펙 §2 4차: 로드 무주장).
     let instr_rows = sqlx::query(
         "SELECT DISTINCT source, content_sha256 FROM instruction_observation \
-         WHERE session_id = ? ORDER BY source, content_sha256",
+         WHERE session_id = ? AND source IN ('project','user') \
+         ORDER BY source, content_sha256",
     )
     .bind(session_id)
     .fetch_all(pool)
