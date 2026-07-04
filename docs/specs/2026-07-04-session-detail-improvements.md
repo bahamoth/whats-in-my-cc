@@ -26,7 +26,7 @@
 | 파라미터 | 형식 | 의미 |
 |---|---|---|
 | `kind` | CSV (기존) | EventKind snake_case |
-| `role` | CSV | 메시지 payload role: `user`,`assistant`,`system` |
+| `role` | CSV | `user`,`assistant`,`system` — ingest가 role을 EventKind로 분해 저장하므로 kind 매핑(`user_message`/`assistant_message`/`system_summary`)으로 구현 |
 | `origin` | CSV | `human`,`command`,`command-output`,`skill`,`system`,`notification`,`teammate` |
 | `error` | `true` | `tool_result`의 `is_error=true`인 이벤트. 다른 에러 표현을 추가로 포함하려면 real fixture 앵커가 선행되어야 한다 |
 | `signal` | `true` | 시그널 evidence로 연결된 이벤트만 (signals 조인) |
@@ -39,8 +39,9 @@
 json_extract)은 WHERE로, payload 파생이 필요한 축(origin·error·q)은 **커서
 순서로 행을 스캔하며 Rust 술어로 평가하고 limit 충족 시 중단**한다. 세션
 단위 행 수(현 코퍼스 최대 6k행)에서 스캔 비용은 무시 가능(§G-3 실측 관례
-준용 — 아프면 재실측). `signal=true`는 시그널 evidence event_id 서브쿼리
-IN으로 처리한다.
+준용 — 아프면 재실측). `signal=true`는 시그널 `evidence_refs`가 이질 JSON
+(bare string·객체 혼재)이라 SQL `json_each` 대신 **evidence event_id 집합을
+사전 조회해 Rust 술어로 판정**한다(기능 동치, 2026-07-04 계획 수립 시 정정).
 
 응답 `SessionEventsResponse`에 **`matched_count`**(필터 매칭 총수, 필터
 파라미터가 하나라도 있을 때만 계산·포함)를 추가한다.
@@ -171,7 +172,8 @@ red가 나게).
   delta 표기에 적용한다.
 - **프로젝트 중앙값 대비 위치**: `/usage/baseline` 엔드포인트를 확장해
   5카드 지표별(캐시 적중률 · 과금 토큰 · 검증 통과율 · 도구 실패 수 · 추정
-  비용) **프로젝트 스코프 중앙값 + 표본 수 n**을 내려준다. 카드에
+  비용) **프로젝트 스코프 중앙값 + 지표별 표본 수 n**(분모 게이트가 지표마다
+  달라 n도 지표별)을 내려준다. 카드에
   "프로젝트 중앙값의 x.x×" 위치와 n을 병기하고, n<3이면 "표본 부족"으로
   강조를 해제한다(대시보드 §0 표본 정직성 준용).
 - **블렌디드 단가 부제**: 비용 카드 부제에 $/1M billed(세션 추정 비용 ÷
@@ -180,7 +182,10 @@ red가 나게).
 ### 3b. 검증 리듬 스트립 (GuardRhythm 세션판)
 
 대시보드 `GuardRhythm`의 렌더를 세션 단위로 재사용해 **AnalysisPanel**에
-추가한다: 세션 진행률(이벤트 순서 기준 %) 축 위에 검증 run의 outcome 점
+추가한다: 세션 진행률(시간 기준 % — run `started_at`을 세션 첫·마지막 관측
+시각 구간에 사영, 대시보드 GuardRhythm과 동일 정의. 이벤트 서수 기준은
+클라이언트 윈도우 버퍼 밖을 알 수 없어 기각 — 2026-07-04 정정) 축 위에
+검증 run의 outcome 점
 (통과/실패/판정불가 — 대시보드와 동일 색)을 찍고, 점 클릭 시 해당 이벤트로
 점프(`onSelectEvent`, §1.4 점프 규칙 적용). 데이터는 기존
 `/v1/sessions/:id/verification-runs`를 재사용하며 신규 엔드포인트 없음.
@@ -196,8 +201,15 @@ hunk 0건이면 섹션 자체에 `—`(미측정 ≠ 0)를 표기한다.
 
 - `SessionMetrics`에 **요청 메트릭 p50** 필드를 추가한다:
   `llm_request_p50 = { ttft_ms, duration_ms, output_tokens, cost_usd }`
-  (api_request_log 상관 이벤트 전수 기준, 결정론 계산, 기존 메트릭 인메모리
-  캐시 경로 편승, 미측정 항목은 null).
+  (전수 기준·결정론 계산·기존 메트릭 인메모리 캐시 경로 편승·미측정 null.
+  소스는 두 갈래 — timing·토큰은 `claude_code.llm_request` otel_span
+  telemetry facet, `cost_usd`는 `api_request` log_record. `request_id` 최초
+  1건 dedup. 2026-07-04 정정).
+  p50은 count가 아닌 분포 통계라 `docs/03_data_model_spec.html`의
+  "SessionMetrics는 합성 가능한 count만 반환" 원칙(F1)의 **명시적 예외**다 —
+  전수 이벤트 없이 소비자가 재계산할 수 없으므로 서버가 반환하며, 같은
+  PR에서 03 스펙에 예외 각주를 동기화하고 implementation-notes에 의도적
+  편차로 기록한다.
 - DetailPanel의 LLM 요청 메트릭 행(TTFT·소요시간·출력 토큰·실측 비용)에
   "세션 중앙값의 x.x×" 배지를 표시한다. 표본(세션 내 측정 요청 수) n<3이면
   배지 대신 "표본 부족". 로드된 윈도우 근사가 아니라 백엔드 전수 계산이므로
