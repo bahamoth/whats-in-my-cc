@@ -80,3 +80,80 @@ async fn fingerprint_endpoint_empty_session_returns_empty_observation() {
     let body: Value = r.json();
     assert!(body["data"]["models"].as_array().unwrap().is_empty());
 }
+
+/// 4차 개정 — plugins(관측된 MCP server_key 집합)와 instructions(전향 관측)
+/// 노출. plugins는 tool_call payload의 tool_name에서 파생, instructions는
+/// instruction_observation 테이블에서 읽는다.
+#[tokio::test]
+async fn fingerprint_exposes_plugins_and_instructions() {
+    let pool = test_pool().await;
+    let run = repo_runs::start(&pool).await.unwrap();
+    seed_assistant(&pool, &run, "sess_fp2", "ev_fp2_a", "claude-opus-4-8").await;
+    // tool_call: plugin 접두 서버와 일반 서버 — server_key로 접힌다.
+    for (eid, tool) in [
+        ("ev_fp2_t1", "mcp__plugin_serena_serena__find_symbol"),
+        ("ev_fp2_t2", "mcp__claude-in-chrome__navigate"),
+        ("ev_fp2_t3", "mcp__plugin_serena_serena__read_file"),
+    ] {
+        seed_tool_call(&pool, &run, "sess_fp2", eid, tool).await;
+    }
+    sqlx::query(
+        "INSERT INTO instruction_snapshot (content_sha256, content, first_observed_at)
+         VALUES ('aabbccdd', '# CLAUDE.md', '2026-07-04T00:00:00+00:00')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO instruction_observation (observation_id, session_id, source, path, content_sha256, observed_at)
+         VALUES ('obs1', 'sess_fp2', 'project', '/w/CLAUDE.md', 'aabbccdd', '2026-07-04T00:00:01+00:00')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let f = wimcc::insight::fingerprint::compute_session_fingerprint(&pool, "sess_fp2")
+        .await
+        .unwrap();
+    let v: Value = serde_json::to_value(&f).unwrap();
+    assert_eq!(v["plugins"], json!(["claude-in-chrome", "serena"]));
+    assert_eq!(v["instructions"][0]["source"], "project");
+    assert_eq!(v["instructions"][0]["hash"], "aabbccdd");
+}
+
+async fn seed_tool_call(pool: &sqlx::SqlitePool, run_id: &str, sid: &str, eid: &str, tool: &str) {
+    let raw_id = format!("raw_{eid}");
+    repo_raw::insert_dedup(
+        pool,
+        &repo_raw::NewRaw {
+            raw_event_id: raw_id.clone(),
+            ingest_run_id: run_id.into(),
+            source_type: "claude_transcript".into(),
+            source_uri: "/tmp/fpapi.jsonl".into(),
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: format!("sha_{eid}"),
+            payload: b"{}".to_vec(),
+            parse_error: None,
+            captured_at: chrono::Utc::now(),
+            redaction_state: "not_applicable".into(),
+            redaction_manifest: None,
+        },
+    )
+    .await
+    .unwrap();
+    let e = ObservedEvent {
+        event_id: eid.into(),
+        raw_event_id: raw_id,
+        schema_version: "observed_event.v1".into(),
+        session_id: sid.into(),
+        observed_at: chrono::Utc::now(),
+        actor: Actor::Assistant,
+        kind: EventKind::ToolCall,
+        payload: json!({"tool_name": tool}),
+        cc_version: Some("2.1.0".into()),
+        parser_version: "test@v0".into(),
+        ..Default::default()
+    };
+    repo_observed::insert(pool, &e).await.unwrap();
+}

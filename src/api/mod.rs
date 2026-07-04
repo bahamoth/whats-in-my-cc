@@ -114,6 +114,11 @@ pub fn router(state: AppState) -> Router {
             "/v1/verification/summary",
             get(routes::verification_summary),
         )
+        .route("/v1/instructions/:sha", get(routes::instruction_snapshot))
+        .route(
+            "/v1/sessions/:id/instructions",
+            get(routes::session_instructions),
+        )
         .route(
             "/v1/verification-runs/:id",
             get(routes::verification_run_detail),

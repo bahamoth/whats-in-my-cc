@@ -1095,7 +1095,7 @@ fn untagged_token(cmd_str: &str) -> String {
 /// `mcp__[plugin_<plugin>_]<server>__<tool>` → (server_key, tool).
 /// server_key = server-id의 마지막 `_` 세그먼트(plugin 접두의 밑줄 모호성 회피):
 /// `plugin_serena_serena`→`serena`, `claude_ai_Slack`→`Slack`, `claude-in-chrome`→그대로.
-fn parse_mcp_tool(name: &str) -> Option<(&str, &str)> {
+pub(crate) fn parse_mcp_tool(name: &str) -> Option<(&str, &str)> {
     let rest = name.strip_prefix("mcp__")?;
     let idx = rest.find("__")?;
     let server_id = &rest[..idx];

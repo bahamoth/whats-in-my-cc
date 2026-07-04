@@ -1271,6 +1271,76 @@ pub async fn verification_summary(
     }
 }
 
+/// 4차 개정 — `GET /v1/instructions/:sha` 스냅샷 내용(경계 diff의 원료).
+pub async fn instruction_snapshot(
+    State(pool): State<SqlitePool>,
+    Path(sha): Path<String>,
+) -> impl IntoResponse {
+    let row = sqlx::query(
+        "SELECT content, first_observed_at FROM instruction_snapshot WHERE content_sha256 = ?",
+    )
+    .bind(&sha)
+    .fetch_optional(&pool)
+    .await
+    .expect("db");
+    match row {
+        Some(r) => {
+            use sqlx::Row as _;
+            Json(Envelope {
+                meta: ResponseMeta::now(),
+                data: json!({
+                    "content_sha256": sha,
+                    "content": r.get::<String, _>("content"),
+                    "first_observed_at": r.get::<String, _>("first_observed_at"),
+                }),
+            })
+            .into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "type": "about:blank",
+                "title": "RESOURCE_NOT_FOUND",
+                "detail": format!("instruction snapshot {sha} not found"),
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// 4차 개정 — `GET /v1/sessions/:id/instructions` 세션의 지시문 관측 목록
+/// (시간순 — 세션 중 변경의 서사가 그대로 드러난다).
+pub async fn session_instructions(
+    State(pool): State<SqlitePool>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    use sqlx::Row as _;
+    let rows = sqlx::query(
+        "SELECT source, path, content_sha256, observed_at FROM instruction_observation
+         WHERE session_id = ? ORDER BY observed_at, source",
+    )
+    .bind(&id)
+    .fetch_all(&pool)
+    .await
+    .expect("db");
+    let data: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            json!({
+                "source": r.get::<String, _>("source"),
+                "path": r.get::<String, _>("path"),
+                "content_sha256": r.get::<String, _>("content_sha256"),
+                "observed_at": r.get::<String, _>("observed_at"),
+            })
+        })
+        .collect();
+    Json(Envelope {
+        meta: ResponseMeta::now(),
+        data,
+    })
+    .into_response()
+}
+
 /// `GET /v1/sessions/:id/fingerprint` — 세션 환경 fingerprint (on-demand).
 ///
 /// 자기개선 루프의 독립변수 표면: 이 세션이 어떤 모델·CC 버전·branch·
