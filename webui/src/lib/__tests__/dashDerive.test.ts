@@ -148,7 +148,7 @@ describe('observedChanges', () => {
     ];
     const out = observedChanges(rows);
     expect(out).toContainEqual({ kind: 'model_first', date: '06-12', model: 'Fable 5' });
-    expect(out).toContainEqual({ kind: 'cc_change', date: '07-02', from: '2.1.198', to: '2.1.200' });
+    expect(out).toContainEqual({ kind: 'cc_span', from: '2.1.198', to: '2.1.200', count: 1, lastDate: '07-02' });
     expect(out).toContainEqual({ kind: 'top_signals', sessionId: 'c', n: 32 });
   });
 });

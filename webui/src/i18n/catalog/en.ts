@@ -293,11 +293,20 @@ export const en = {
   'dash.observed': 'Observed changes',
   'dash.observed.modelFirst': (a: { date: string; model: string }) =>
     `${a.date} ${a.model} first observed`,
-  'dash.observed.ccChange': (a: { date: string; from: string; to: string }) =>
-    `${a.date} CC ${a.from} → ${a.to}`,
+  'dash.observed.ccSpan': (a: { from: string; to: string; count: number }) =>
+    a.count > 1 ? `CC ${a.from} → ${a.to} · ${a.count} transitions` : `CC ${a.from} → ${a.to}`,
   'dash.observed.topSignals': (a: { name: string; n: number }) => `most signals ${a.name} (${a.n})`,
   'dash.ver.loading': 'Loading verification summary…',
   'dash.ver.error': 'Failed to load the verification summary.',
+  'dash.daily.ver.title': 'Verification — daily',
+  'dash.daily.ver.zeroGuards': (n: number) => `sessions with 0 guards: ${n}`,
+  'dash.daily.ver.badge': (a: { n: number; m: number }) => `${a.n} guards · ${a.m} passed`,
+  'dash.daily.cost.title': 'Daily cost · signals',
+  'dash.daily.cost.desc': 'bar height = estimated cost · bar color = signals that day',
+  'dash.tt.noSessions': 'no sessions',
+  'dash.tt.noGuards': 'no guards observed',
+  'dash.tt.signals': 'signals',
+  'dash.marker.first': (m: string) => `${m} first observed`,
   'dash.eyebrow': 'Project dashboard',
   'dash.allProjects': 'All projects',
   'dash.projectLabel': 'Project',

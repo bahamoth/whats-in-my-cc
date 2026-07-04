@@ -136,7 +136,10 @@ export function headlineDelta(cur: Headline, prev: Headline | null): HeadlineDel
 
 export type ObservedChange =
   | { kind: 'model_first'; date: string; model: string }
-  | { kind: 'cc_change'; date: string; from: string; to: string }
+  /** CC 전환 요약 — 실데이터에서 CC는 자주 바뀌므로(창 내 수 회) 항목을
+   *  나열하지 않고 처음→마지막 + 전환 횟수로 압축한다. lastDate는 마지막
+   *  전환 세션의 날짜(시간축 마커 위치). */
+  | { kind: 'cc_span'; from: string; to: string; count: number; lastDate: string }
   | { kind: 'top_signals'; sessionId: string; n: number };
 
 /** "관측된 변화" — 전부 결정론: 창 내 첫 관측 모델, CC 전환, 신호 최다 세션.
@@ -154,8 +157,16 @@ export function observedChanges(rows: SessionSeriesRowDto[]): ObservedChange[] {
     }
   });
   const ccSegs = cohortSegments(rows, (r) => r.fingerprint.cc_versions);
-  for (const b of cohortBoundaries(ccSegs)) {
-    out.push({ kind: 'cc_change', date: dayKey(rows[b.index].first_observed_at), from: b.from, to: b.to });
+  const ccKnown = ccSegs.filter((s) => s.known);
+  const ccBs = cohortBoundaries(ccSegs);
+  if (ccBs.length > 0) {
+    out.push({
+      kind: 'cc_span',
+      from: ccKnown[0].label.split(' + ')[0],
+      to: ccKnown[ccKnown.length - 1].label.split(' + ').at(-1)!,
+      count: ccBs.length,
+      lastDate: dayKey(rows[ccBs[ccBs.length - 1].index].first_observed_at),
+    });
   }
   let maxI = -1;
   let maxV = 0;
