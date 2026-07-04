@@ -34,7 +34,29 @@
 
 정확한 값 훑기·정렬은 대시보드가 하지 않는다(→ §4 /sessions).
 
-## 2. 코호트 경계 — 결정론 규칙 (2026-07-04 3차 개정)
+## 2. 코호트 경계 — 결정론 규칙 (2026-07-04 4차 개정)
+
+**4차 개정 — 차원 재편 + instruction 전향 관측:**
+- **개입 차원**(비교·랭킹): 모델 · Claude Code · entrypoint · **plugins**(관측
+  MCP server_key 집합) · **instructions**((source, CLAUDE.md sha256) 집합).
+  근거 = fingerprint 설계 의도("자기개선 루프의 독립변수 표면").
+- **맥락 차원**(각주 전용): branch · cwd — branch 전환은 작업 시작이지 환경
+  변화가 아니고, cwd는 프로젝트 필터와 중복. 직교하지 않는 차원이 같은 사건을
+  중복 등재하던 문제(06-13 3중 등재)의 해소.
+- **instruction 전향 관측**: serve tail이 라이브 활동 수신 시 세션 cwd 루트
+  CLAUDE.md(project)와 `~/.claude/CLAUDE.md`(user)를 직접 읽어 내용 주소화
+  스냅샷 + 관측 행으로 기록(measured). `@path` 참조는 source='import'로 존재만
+  기록 — **로드 여부를 주장하지 않는다**(CC 로딩 규칙 재구현 금지). 신선도
+  가드 10분. 소급 backfill 없음 — git 추정은 dirty tree·시점 추론이 가짜
+  경계를 만들므로 미측정(`—`)이 낫다. transcript에는 CLAUDE.md가 기록되지
+  않음을 2026-07-04 전 transcript 스캔으로 실측 확인.
+- 경계 diff: instructions 경계는 해시가 아니라 **스냅샷 내용 diff**를 렌더
+  (`GET /v1/instructions/:sha`). 세션 디테일에는 지시문 카드
+  (`GET /v1/sessions/:id/instructions`, 시간순).
+- 후속(명시적 보류): cwd 트리 하위 CLAUDE.md 스캔(Tier3), 리플레이 스트림
+  인라인 변경 마커(그룹핑 파이프라인 확장 필요).
+
+### (3차 개정 원문 — 랭킹 규칙, 유효)
 
 > 1·2차의 "모델 차원 고정 + 최신 경계" 규칙은 폐기 — 차원 선택 자체가 근거 없는
 > 편집 판단이었고(사용자 지적), 최신-우선은 프로브 세션이 만든 무의미한 경계를
