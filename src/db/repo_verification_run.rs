@@ -108,6 +108,27 @@ pub async fn get(
     Ok(row.map(map_row))
 }
 
+/// §1.2 verification 축 — trigger_event_id → 최신 run status.
+/// 같은 trigger의 재실행은 started_at 최신이 이긴다(마지막 판정이 현재 상태).
+pub async fn status_by_trigger(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<std::collections::HashMap<String, String>> {
+    let rows = sqlx::query(
+        "SELECT trigger_event_id, status FROM verification_run \
+         WHERE session_id = ? ORDER BY started_at ASC",
+    )
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+    let mut out = std::collections::HashMap::new();
+    for r in rows {
+        // ASC 순회 + insert 덮어쓰기 = 최신 started_at 승리.
+        out.insert(r.get("trigger_event_id"), r.get("status"));
+    }
+    Ok(out)
+}
+
 fn map_row(r: sqlx::sqlite::SqliteRow) -> VerificationRunRow {
     VerificationRunRow {
         verification_run_id: r.get("verification_run_id"),
@@ -217,5 +238,46 @@ mod tests {
         insert(&pool, &row).await.unwrap();
         let out = list_session(&pool, "sess_vr_test").await.unwrap();
         assert_eq!(out.len(), 1, "INSERT OR REPLACE must deduplicate by PK");
+    }
+
+    async fn insert_run(
+        pool: &SqlitePool,
+        session_id: &str,
+        trigger: &str,
+        status: &str,
+        started_at: &str,
+    ) {
+        sqlx::query(
+            "INSERT INTO verification_run (verification_run_id, session_id, source, command, \
+             command_kind, trigger_event_id, status, started_at, raw_event_id, parser_version) \
+             VALUES (?, ?, 'bash', 'cargo test', 'test_suite_rust', ?, ?, ?, 'raw_x', 'verification_run@v1')",
+        )
+        // session_id도 PK에 포함 — 브리프 원안(vr_{trigger}_{started_at})은 다른 세션의
+        // 동일 trigger+started_at 조합에서 PK가 충돌해 UNIQUE constraint 위반이 났다.
+        .bind(format!("vr_{session_id}_{trigger}_{started_at}"))
+        .bind(session_id)
+        .bind(trigger)
+        .bind(status)
+        .bind(started_at)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn status_by_trigger_latest_run_wins() {
+        let pool = SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        migrate(&pool).await.unwrap();
+        insert_run(&pool, "sess-f", "EV1", "failed", "2026-07-04T00:00:00Z").await;
+        insert_run(&pool, "sess-f", "EV1", "passed", "2026-07-04T00:05:00Z").await; // 재실행 성공
+        insert_run(&pool, "sess-f", "EV2", "unknown", "2026-07-04T00:01:00Z").await;
+        insert_run(&pool, "sess-other", "EV1", "failed", "2026-07-04T00:00:00Z").await;
+        let m = status_by_trigger(&pool, "sess-f").await.unwrap();
+        assert_eq!(m.get("EV1").map(String::as_str), Some("passed"));
+        assert_eq!(m.get("EV2").map(String::as_str), Some("unknown"));
+        assert_eq!(m.len(), 2, "다른 세션 run은 제외");
     }
 }

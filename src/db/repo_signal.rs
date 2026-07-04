@@ -118,3 +118,80 @@ fn map_row(r: sqlx::sqlite::SqliteRow) -> SignalRow {
         created_at: r.get("created_at"),
     }
 }
+
+/// §1.2 signal=true 축 — 이 세션 시그널들의 evidence event_id 전체 집합.
+/// evidence_refs는 JSON 배열(bare event_id string 또는 {event_id} 객체 혼재) —
+/// webui/src/routes/SessionDetailPage.tsx 216~227행과 동일 계약.
+pub async fn evidence_event_ids(
+    pool: &SqlitePool,
+    session_id: &str,
+) -> Result<std::collections::HashSet<String>> {
+    let rows = sqlx::query("SELECT evidence_refs FROM signal WHERE session_id = ?")
+        .bind(session_id)
+        .fetch_all(pool)
+        .await?;
+    let mut out = std::collections::HashSet::new();
+    for r in rows {
+        let raw: String = r.get("evidence_refs");
+        let Ok(refs) = serde_json::from_str::<Vec<serde_json::Value>>(&raw) else {
+            continue;
+        };
+        for v in refs {
+            match v {
+                serde_json::Value::String(s) => {
+                    out.insert(s);
+                }
+                serde_json::Value::Object(o) => {
+                    if let Some(id) = o.get("event_id").and_then(|x| x.as_str()) {
+                        out.insert(id.to_string());
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::migrate;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn mem_pool() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(2)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        migrate(&pool).await.unwrap();
+        pool
+    }
+
+    async fn insert_signal_row(pool: &SqlitePool, session_id: &str, evidence_refs: &str) {
+        let row = SignalRow {
+            signal_id: format!("sig_{session_id}_{}", evidence_refs.len()),
+            schema_version: "signal.v1".into(),
+            session_id: session_id.into(),
+            detector: "tool_failure".into(),
+            subkind: None,
+            summary: "test signal".into(),
+            evidence_refs: evidence_refs.into(),
+            facts: "{}".into(),
+            provenance: "l1_detector".into(),
+            created_at: "2026-07-04T00:00:00Z".into(),
+        };
+        insert(pool, &row).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn evidence_event_ids_parses_both_ref_shapes() {
+        let pool = mem_pool().await;
+        // evidence_refs: bare string + {event_id} 혼합 (SessionDetailPage와 동일 계약)
+        insert_signal_row(&pool, "sess-f", r#"["EVA",{"event_id":"EVB"}]"#).await;
+        insert_signal_row(&pool, "sess-other", r#"["EVX"]"#).await;
+        let ids = evidence_event_ids(&pool, "sess-f").await.unwrap();
+        assert_eq!(ids, ["EVA", "EVB"].into_iter().map(String::from).collect());
+    }
+}
