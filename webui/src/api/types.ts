@@ -342,6 +342,8 @@ export type SessionMetricsDto = {
   output_tokens: number;
   cache_read_input_tokens: number;
   cache_creation_input_tokens: number;
+  /** 공개 가격표 추정 비용(USD, ≈) — 실비 아님·하한 추정(가격표 밖 모델 제외). */
+  estimated_cost_usd: number;
   /** system/compact_boundary 레코드 수 — 컨텍스트 압축 횟수. */
   compact_boundary_count: number;
   /** `... [N characters truncated] ...` 잘림 마커를 포함한 tool_result 수 —

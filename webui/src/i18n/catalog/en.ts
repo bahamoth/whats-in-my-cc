@@ -334,6 +334,16 @@ export const en = {
     'cache read — input reused from cache (dwarfs the rest, so it gets its own strip)\n' +
     'The API does not report remaining quota, so this stops at usage.',
   'dash.tokens.empty': 'usage data is empty — the running serve predates these fields (restart with the new build) or usage facets need re-ingest.',
+  'dash.cost.title': 'Estimated cost (≈$)',
+  'dash.cost.tip':
+    'Per-session cost estimated from the public price list.\n' +
+    'Not a bill — subscription discounts and service tiers are not visible locally, and models ' +
+    'missing from the price list are excluded, so this is a floor.',
+  'dash.cost.total': (v: string) => `total ≈$${v}`,
+  'dash.cacheHit.title': 'Cache hit ratio',
+  'dash.cacheHit.tip':
+    'Share of input tokens served from cache: cache read ÷ (input + cache write + cache read).\n' +
+    'Higher means cheaper turns — cached input costs a fraction of fresh input.',
   'dash.tokens.input': 'input',
   'dash.tokens.output': 'output',
   'dash.tokens.cacheCreation': 'cache write',

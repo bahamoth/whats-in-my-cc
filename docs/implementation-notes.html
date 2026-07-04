@@ -5896,6 +5896,21 @@ vitest: 69 passed
     (레일→outcome→토큰→cache 읽기→신호 6종)로 통합, 섹션 라벨을 플롯 왼쪽 모서리에 정렬.
     경계 룰이 카드 전체를 관통해 초판의 "한 시선"이 복원됐다. 모델 약칭(H4.5+O4.8)은
     lib/seriesView shortModel(결정론, vitest 잠금)이 SSOT.</p>
+    <p><b>5차 — 비용 효율 + 모델 매트릭스 + 신호 색 분리(2026-07-04):</b>
+    ① SessionMetrics에 <code>estimated_cost_usd</code> 추가(기존
+    <code>insight::pricing::estimate_session_cost</code> 재사용 — 공개 가격표 추정·하한,
+    실비 아님; usage facet by_model 기반, TDD로 잠금). 대시보드에 <b>추정 비용 strip</b>
+    (합계 ≈$ 배지)과 <b>캐시 적중률 strip</b>(cache_read ÷ (input+creation+read), domain
+    0–100%) 추가 — 토큰 규모와 나란히 "얼마나 싸게 돌렸나"를 본다. 표에도 비용 컬럼.
+    ② 모델 가시화 최종형: 약칭 조합 레일(세션당 1셀에 "H4.5+O4.8")을 폐기하고
+    <b>모델별 row 매트릭스</b>로 — 모델당 1행·1색, 세션이 그 모델을 쓰면 해당 열 셀을
+    채운다. 조합 폭발이 사라지고 "어느 모델이 언제부터/까지 쓰였나"가 행 단위로 읽힌다
+    (행은 빈도순 cap 6). CC 버전은 매트릭스가 아니라 <b>단색 트랙 + 변화점 라벨</b> —
+    버전은 단조 증가라 행 낭비 없이 전환점만 보이면 된다. ③ 프로세스 신호 6종이 전부
+    같은 색·무구분이라 식별 불가였다 — strip마다 고유색(STRIP_COLORS)+라벨 스와치+
+    구분선(border-t). 비용은 초록(#5cbf8a, 돈), 적중률은 cache 읽기와 같은
+    <code>--wimcc-info</code> 파랑(의미 묶음) — 신호 팔레트와 충돌하는 색은 피했다
+    (스크린샷 자기비평에서 amber·teal 중복을 발견해 교정).</p>
   </section>
 
 </main>
