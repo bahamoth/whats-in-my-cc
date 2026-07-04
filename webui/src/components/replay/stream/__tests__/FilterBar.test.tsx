@@ -1,11 +1,21 @@
 // FilterBar — Task 10 (스펙 §1.4). Controlled component: 축별 칩 드롭다운 +
 // 텍스트 검색(디바운스) + 활성 조건 제거형 칩 + "N건 매칭" + 점프-해제 알림.
+import { useState } from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, screen } from '@testing-library/react';
 import { renderWithI18n as render } from '../../../../test/i18nRender';
 import '@testing-library/jest-dom/vitest';
 import { FilterBar } from '../FilterBar';
-import { EMPTY_FILTER } from '../filterState';
+import { EMPTY_FILTER, type FilterState } from '../filterState';
+
+// 실제 부모처럼 onChange를 state로 반영하는 controlled 하네스 — stale-closure
+// race는 mid-debounce onChange가 새 filter로 재렌더될 때만 재현되므로, spy
+// onChange(무재렌더)로는 잡히지 않는다. 최신 filter를 `seen`으로 노출한다.
+function StatefulFilterBar({ initial, seen }: { initial: FilterState; seen: (f: FilterState) => void }) {
+  const [filter, setFilter] = useState(initial);
+  seen(filter);
+  return <FilterBar filter={filter} onChange={setFilter} matchedCount={null} notice={null} />;
+}
 
 describe('FilterBar', () => {
   beforeEach(() => {
@@ -39,6 +49,49 @@ describe('FilterBar', () => {
     fireEvent.change(screen.getByPlaceholderText(/텍스트 검색|search text/), { target: { value: 'oom' } });
     expect(onChange).not.toHaveBeenCalled();
     await act(() => vi.advanceTimersByTime(320));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ q: 'oom' }));
+    vi.useRealTimers();
+  });
+
+  it('preserves a mid-debounce filter change (stale-closure race regression)', async () => {
+    // 사용자가 검색창에 타이핑(300ms 타이머 예약) → 만료 전 다른 축을 토글하면
+    // (Bash 칩 제거) → 만료 시 debounce 콜백이 stale한 pre-click filter로
+    // onChange를 발화해 그 토글을 조용히 되돌리던 데이터 손실(coordinator
+    // Important). 콜백이 ref로 최신 filter를 읽으면 토글이 보존된다.
+    vi.useFakeTimers();
+    let current: FilterState = EMPTY_FILTER;
+    render(
+      <StatefulFilterBar
+        initial={{ ...EMPTY_FILTER, tools: ['Bash'] }}
+        seen={(f) => {
+          current = f;
+        }}
+      />,
+    );
+    // 1) q 타이핑 → 300ms 타이머 예약(이 시점 filter.tools=['Bash'] 캡처).
+    fireEvent.change(screen.getByPlaceholderText(/텍스트 검색|search text/), { target: { value: 'oom' } });
+    // 2) 만료 전(150ms 경과) Bash 칩 제거 → onChange로 filter.tools=[] 반영.
+    await act(() => vi.advanceTimersByTime(150));
+    fireEvent.click(screen.getByRole('button', { name: /Bash/ }));
+    expect(current.tools).toEqual([]);
+    // 3) 타이머 만료 → debounce 콜백 발화.
+    await act(() => vi.advanceTimersByTime(200));
+    // 토글(Bash 제거)이 보존되고 q가 얹혀야 한다 — 되돌려지면 안 됨.
+    expect(current.tools).toEqual([]);
+    expect(current.q).toBe('oom');
+    vi.useRealTimers();
+  });
+
+  it('collapses multiple keystrokes into one debounced onChange', async () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    render(<FilterBar filter={EMPTY_FILTER} onChange={onChange} matchedCount={null} notice={null} />);
+    const input = screen.getByPlaceholderText(/텍스트 검색|search text/);
+    fireEvent.change(input, { target: { value: 'o' } });
+    fireEvent.change(input, { target: { value: 'oo' } });
+    fireEvent.change(input, { target: { value: 'oom' } });
+    await act(() => vi.advanceTimersByTime(320));
+    expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ q: 'oom' }));
     vi.useRealTimers();
   });

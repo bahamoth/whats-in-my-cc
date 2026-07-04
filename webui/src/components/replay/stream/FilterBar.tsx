@@ -9,7 +9,7 @@
 // 참조 대상으로 언급됨)는 tailwind 유틸리티 클래스 전제라 이 디렉터리 관례와
 // 어긋나 채택하지 않았다 — 값 다중 선택은 CohortBoundaries의 토글 버튼
 // 패턴(aria-pressed)을 그대로 재사용한다(2026-07-05 편차 기록, Task 10).
-import { useEffect, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useT } from '../../../i18n';
 import type { FilterState } from './filterState';
 import { EMPTY_FILTER, isFilterActive } from './filterState';
@@ -46,14 +46,23 @@ export function FilterBar({ filter, onChange, matchedCount, notice }: FilterBarP
   // 외부에서 filter.q가 바뀌면(예: URL 복원, 전체 해제) 드래프트를 동기화한다.
   useEffect(() => setQDraft(filter.q), [filter.q]);
 
-  // 디바운스 300ms — filter/onChange를 의도적으로 deps에서 제외한다: 포함하면
-  // 매 렌더(부모가 onChange를 새 함수로 넘기거나 filter가 바뀔 때)마다 타이머가
-  // 재시작되어 사용자가 타이핑을 멈추지 않는 한 절대 발화하지 않는 버그가 된다.
+  // 디바운스 콜백이 읽을 최신 filter/onChange를 ref로 잡아둔다 — deps에 넣지
+  // 않아도(=타이머 재시작 없이) 항상 최신값을 읽게 한다. 매 렌더 갱신.
+  const filterRef = useRef(filter);
+  const onChangeRef = useRef(onChange);
+  filterRef.current = filter;
+  onChangeRef.current = onChange;
+
+  // 디바운스 300ms — deps는 [qDraft]만. filter/onChange를 deps에 넣으면 매
+  // 렌더마다 타이머가 재시작돼 타이핑을 멈추기 전엔 발화하지 않는 버그가 된다.
+  // 대신 콜백은 ref.current로 최신 filter를 읽는다: 타이머 예약 시점의 filter를
+  // 클로저로 캡처하면, 300ms 안에 칩/토글 클릭으로 filter가 바뀌었을 때 stale한
+  // pre-click filter로 onChange가 발화해 그 토글을 조용히 되돌리는 데이터 손실이
+  // 난다(coordinator 리뷰 Important). ref로 읽으면 최신 filter 위에 q만 얹는다.
   useEffect(() => {
-    if (qDraft === filter.q) return;
-    const id = setTimeout(() => onChange({ ...filter, q: qDraft }), 300);
+    if (qDraft === filterRef.current.q) return;
+    const id = setTimeout(() => onChangeRef.current({ ...filterRef.current, q: qDraft }), 300);
     return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qDraft]);
 
   const [toolDraft, setToolDraft] = useState('');
