@@ -172,14 +172,20 @@ export function useSessionWindow(
   }, [sessionId, initialLimit, filter, filterKey, setLoadingBoth]);
 
   const doInitial = useCallback(async () => {
-    // Non-deep-link mount: the tail IS the initial window.
-    if (!initialAround) {
+    // Non-deep-link mount, OR an ACTIVE filter: the (filtered) tail IS the
+    // initial window. around×filter is unsupported (the backend 400s, §1.2), so
+    // an active filter always wins over the deep-link around-window — we discard
+    // `initialAround` and load the FILTERED tail instead. Otherwise we'd fetch an
+    // UNFILTERED around window while the page has already switched the stream to
+    // flat/filter mode (Task 11 defence). Once the reader clears the filter,
+    // this effect re-runs (filterKey change) and falls into the around branch.
+    if (!initialAround || filter) {
       await loadTail();
       return;
     }
-    // Deep-link mount: load AROUND the target so it is in the buffer from the
-    // first load (no tail load to race/overwrite it). `reload` (loadTail) takes
-    // over once the reader resumes following.
+    // Deep-link mount (no active filter): load AROUND the target so it is in the
+    // buffer from the first load (no tail load to race/overwrite it). `reload`
+    // (loadTail) takes over once the reader resumes following.
     setLoadingBoth('initial');
     setError(null);
     try {
@@ -193,11 +199,10 @@ export function useSessionWindow(
       setError(e instanceof Error ? e.message : String(e));
       setLoadingBoth('error');
     }
-    // `filterKey` dep: even though this branch's fetch doesn't carry `filter`
-    // (around×filter unsupported, §1.2), a filterKey change must still
-    // re-trigger `doInitial` via the effect below so the page can react
-    // (e.g. clear the deep-link around-window once the caller drops `around`).
-  }, [sessionId, initialLimit, initialAround, loadTail, filterKey, setLoadingBoth]);
+    // `filter`/`filterKey` deps: a filterKey change must re-trigger `doInitial`
+    // via the effect below — so clearing the filter drops from the tail branch
+    // back into the around branch (and vice versa), and the page can react.
+  }, [sessionId, initialLimit, initialAround, filter, loadTail, filterKey, setLoadingBoth]);
 
   useEffect(() => {
     void doInitial();

@@ -93,8 +93,29 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   );
   // Transient notice shown in the FilterBar when a jump (signal evidence, etc.)
   // forces the filter to clear because its target isn't in the filtered
-  // buffer (§1.4) — auto-dismissed after 4s.
+  // buffer (§1.4) — auto-dismissed after 4s. The dismiss timer lives in a ref
+  // (mirrors `backfillTimerRef`) so a re-jump clears the prior timer instead of
+  // stacking them, and unmount cancels a pending dismiss (no setState-after-
+  // unmount warning).
   const [jumpNotice, setJumpNotice] = useState<string | null>(null);
+  const jumpNoticeTimerRef = useRef<number | null>(null);
+  const showJumpNotice = useCallback((msg: string) => {
+    if (jumpNoticeTimerRef.current !== null) clearTimeout(jumpNoticeTimerRef.current);
+    setJumpNotice(msg);
+    jumpNoticeTimerRef.current = setTimeout(() => {
+      jumpNoticeTimerRef.current = null;
+      setJumpNotice(null);
+    }, 4000) as unknown as number;
+  }, []);
+  useEffect(
+    () => () => {
+      if (jumpNoticeTimerRef.current !== null) {
+        clearTimeout(jumpNoticeTimerRef.current);
+        jumpNoticeTimerRef.current = null;
+      }
+    },
+    [],
+  );
 
   const detail = useSessionDetailQuery(sessionId);
   const signals = useSignalsQuery(sessionId);
@@ -146,10 +167,22 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   // stays stable as the user later selects other events). Drives the initial
   // around-window + detached follow so a live-session deep-link actually lands.
   const [initialDeepLinkId] = useState(() => sel.selectedNodeId);
+  // MEMOIZE the filter params: `filter` is already memoized on `searchParams`,
+  // but `toEventFilterParams(filter)` would build a NEW object every render —
+  // and `useSessionWindow` keys its initial-fetch effect off `filter` identity
+  // (via loadTail/doInitial deps). An unstable identity would re-run the fetch
+  // on every render while a filter is active → infinite refetch loop. The
+  // stable `windowFilterKey` string gates the memo recompute.
+  const windowFilterKey = filterKey(filter);
+  const windowFilterParams = useMemo(
+    () => (filterActive ? toEventFilterParams(filter) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filterActive, windowFilterKey],
+  );
   const window_ = useSessionWindow(sessionId, {
     initialAround: initialDeepLinkId,
-    filter: filterActive ? toEventFilterParams(filter) : null,
-    filterKey: filterKey(filter),
+    filter: windowFilterParams,
+    filterKey: windowFilterKey,
   });
 
   // SSE envelopes are lightweight notifications WITHOUT a payload — appending
@@ -330,14 +363,13 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     // falls through to `loadAround`.
     if (jumpNeedsFilterClear(filterActive, targetInBuffer)) {
       applyFilter(EMPTY_FILTER);
-      setJumpNotice(t('filter.cleared.byJump'));
-      setTimeout(() => setJumpNotice(null), 4000);
+      showJumpNotice(t('filter.cleared.byJump'));
       return;
     }
     if (triedAroundRef.current === selectedEventId) return;
     triedAroundRef.current = selectedEventId;
     void loadAround(selectedEventId);
-  }, [selectedEventId, windowLoading, windowEvents, loadAround, filterActive, applyFilter, t]);
+  }, [selectedEventId, windowLoading, windowEvents, loadAround, filterActive, applyFilter, showJumpNotice, t]);
 
   // --- DetailPanel inputs (all event-derived; no graph) ---
   const selectedEvent = useMemo(
