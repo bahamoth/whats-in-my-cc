@@ -1,4 +1,7 @@
 {
   "_readme": "tagging-gate(B-7d)의 보류 토큰 목록 — 토큰: 보류 사유. 여기 추가하는 것이 곧 '보류'이며 PR 리뷰에 보이는 편집이다. 보편 CLI/확장자는 보류 금지(사전 추가가 원칙).",
-  "tokens": {}
+  "tokens": {
+    "vite": "실행 아님 — pgrep -f \"vite|npm run dev\" 패턴 문자열의 토크나이저 파편 (2026-07-04)",
+    "splitrunbyphase": "실행 아님 — grep -rn \"phaseOf\\|splitRunByPhase\\|…\" 패턴 문자열의 토크나이저 파편 (2026-07-04)"
+  }
 }
