@@ -133,6 +133,8 @@ export type SessionEventsResponse = {
   events: ObservedEventDto[];
   prev_cursor: string | null;
   next_cursor: string | null;
+  /** 필터 매칭 총수 — 필터 파라미터가 하나라도 있을 때만 포함(§1.2). */
+  matched_count?: number;
 };
 
 /** Backend serialises evidence refs as bare ULID `event_id` strings — the
