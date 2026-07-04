@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>대시보드 전면 개편 — 방향 비교</title>
+<style>
+  :root{
+    --bg:#0b0d12; --s1:#11141b; --s2:#161a23; --s3:#1b202a;
+    --bd:#1d212c; --bds:#2a3040;
+    --fg:#e6e8ee; --fgm:#aab0bd; --fgs:#6a7180;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --acc:#4f8cff; --ok:#41c285; --warn:#f0b429; --dng:#ef4747; --info:#7da7ff;
+    --teal:#2bd0d0; --orange:#ff8a4c; --violet:#b07dff; --green:#41c285; --magenta:#d97aff;
+    --elev:0 1px 0 rgba(255,255,255,.025), 0 10px 30px -22px rgba(0,0,0,.9);
+    --r-sm:7px; --r-md:11px; --r-lg:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;
+    -webkit-font-smoothing:antialiased}
+  .page{max-width:1240px;margin:0 auto;padding:26px 22px 140px}
+  h1{font-size:20px;font-weight:650;letter-spacing:-.01em;margin:0 0 4px}
+  .sub{color:var(--fgm);font-size:12.5px;margin:0 0 6px;max-width:920px;line-height:1.55}
+  .sub b{color:var(--fg)}
+  code{font-family:var(--mono);font-size:.9em;background:var(--s2);padding:1px 5px;border-radius:4px;color:var(--fgm)}
+  .seclabel{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--fgs);margin:34px 0 6px;font-weight:650}
+  .dirhead{display:flex;align-items:baseline;gap:10px;margin:40px 0 8px}
+  .dirhead h2{font-size:16px;font-weight:650;margin:0}
+  .dirhead .tag{font-size:11px;color:var(--fgs)}
+  .pros{color:var(--fgm);font-size:12px;margin:0 0 10px;line-height:1.5}
+  .pros b{color:var(--fg);font-weight:600}
+
+  .app{border:1px solid var(--bd);border-radius:var(--r-lg);overflow:hidden;background:var(--bg);box-shadow:var(--elev)}
+  .apad{padding:20px 24px 26px}
+
+  /* ── 공통 마이크로 요소 ─────────────────────────── */
+  .micro{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--fgs);font-weight:650}
+  .mono{font-family:var(--mono)}
+  .delta{font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:5px;white-space:nowrap}
+  .delta.up-good{color:var(--ok);background:rgba(65,194,133,.09)}
+  .delta.up-bad{color:var(--warn);background:rgba(240,180,41,.09)}
+  .delta.down-good{color:var(--ok);background:rgba(65,194,133,.09)}
+  .delta.down-bad{color:var(--dng);background:rgba(239,71,71,.09)}
+  .delta.flat{color:var(--fgs);background:var(--s2)}
+  .fnote{font-size:11px;color:var(--fgs)}
+
+  /* ── 방향 1: 에디토리얼 브리핑 ───────────────────── */
+  .brief-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+  .brief-title{font-size:15px;font-weight:650}
+  .brief-title .proj{color:var(--fgm);font-weight:500}
+  .win{display:flex;gap:2px;background:var(--s1);border:1px solid var(--bd);border-radius:8px;padding:2px}
+  .win span{font-size:11.5px;color:var(--fgm);padding:3px 10px;border-radius:6px}
+  .win span.on{background:var(--s3);color:var(--fg)}
+
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:0;border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
+  .stat{padding:16px 18px 14px;border-right:1px solid var(--bd)}
+  .stat:last-child{border-right:0}
+  .stat .v{font-size:26px;font-weight:650;letter-spacing:-.02em;font-family:var(--mono);margin:6px 0 4px}
+  .stat .v small{font-size:14px;color:var(--fgm);font-weight:500}
+  .stat .row{display:flex;align-items:center;gap:8px}
+  .headline-note{margin:12px 2px 0;font-size:12.5px;color:var(--fgm)}
+  .headline-note b{color:var(--fg);font-weight:600}
+  .headline-note .chg{font-family:var(--mono);font-size:11.5px;color:var(--violet)}
+
+  .trends{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}
+  .trend{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r-md);padding:12px 14px 8px}
+  .trend .th{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .trend .tv{font-family:var(--mono);font-size:12px;color:var(--fgm)}
+  .trend svg{display:block;width:100%;height:52px}
+
+  .sess-block{margin-top:20px}
+  .sess-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .grid-lab{width:52px;flex:none;text-align:right;padding-right:8px;font-family:var(--mono);font-size:10px;color:var(--fgs);line-height:1}
+  .hm-row{display:flex;align-items:center;margin-bottom:3px}
+  .hm-cells{display:flex;gap:2px;flex:1}
+  .hm-cells i{flex:1;height:13px;border-radius:2.5px;background:var(--s2)}
+  .hm-cells i.click:hover{outline:1px solid var(--bds);cursor:pointer}
+  .hm-dates{display:flex;gap:2px;flex:1}
+  .hm-dates i{flex:1;font-family:var(--mono);font-size:9px;color:var(--fgs);text-align:center;font-style:normal}
+  .rule{border:0;border-top:1px solid var(--bd);margin:14px 0}
+
+  /* outcome 미니 스택 */
+  .oc{display:flex;flex-direction:column-reverse;gap:1px;height:26px}
+  .oc i{border-radius:1.5px}
+
+  /* ── 방향 2: 관제 콘솔 ──────────────────────────── */
+  .console{display:grid;grid-template-columns:230px 1fr;min-height:520px}
+  .con-side{background:var(--s1);border-right:1px solid var(--bd);padding:18px 16px}
+  .con-side .stat{border:0;padding:12px 2px;border-bottom:1px solid var(--bd)}
+  .con-side .stat .v{font-size:20px}
+  .con-side svg{display:block;width:100%;height:26px;margin-top:4px}
+  .con-main{padding:18px 20px}
+
+  /* ── 방향 3: 질문 카드 ──────────────────────────── */
+  .qcard{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r-md);padding:16px 18px;margin-bottom:14px}
+  .qcard .qh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .qcard .q{font-size:13px;font-weight:650}
+  .qcard .ans{font-size:13px;color:var(--fgm);margin:2px 0 12px}
+  .qcard .ans b{color:var(--fg);font-family:var(--mono);font-weight:600}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>대시보드 전면 개편 — 방향 비교</h1>
+  <p class="sub">확정 위계: <b>① 결정론 지표의 문자 요약(색·굵기·크기로 추이 전달) → ② 그 하위에 직관 시각화</b>.
+  세 방향 모두 이 위계를 따르고, 리플레이 화면과 같은 quiet-editorial 언어(같은 토큰·타이포·색)를 사용한다.
+  데이터는 실제 30일 창(17세션)과 같은 스케일의 목업. 판정 문장은 없다 — 숫자·delta·관측 사실만.</p>
+
+  <!-- ═══════════ 방향 1 ═══════════ -->
+  <div class="dirhead"><h2>방향 1 · 에디토리얼 브리핑</h2><span class="tag">문자 헤드라인 밴드 → 시간축 추이 → 세션 히트 타임라인 (추천)</span></div>
+  <p class="pros"><b>장점</b> 위계가 세로 한 흐름(요약→추이→상세)·추이가 진짜 시간축이라 읽힘 · <b>단점</b> 세로 스크롤 김</p>
+  <div class="app"><div class="apad">
+    <div class="brief-top">
+      <div class="brief-title">전체 프로젝트 <span class="proj">· 17 세션 · 41.2k 이벤트</span></div>
+      <div class="win"><span>30일</span><span class="on">90일</span><span>전체</span></div>
+    </div>
+
+    <!-- ① 문자 헤드라인 -->
+    <div class="stats">
+      <div class="stat">
+        <div class="micro">검증 통과</div>
+        <div class="v">69<small>%</small></div>
+        <div class="row"><span class="delta up-good">▲ 6.2%p</span><span class="fnote">이전 창 63%</span></div>
+      </div>
+      <div class="stat">
+        <div class="micro">추정 비용</div>
+        <div class="v">$3,485</div>
+        <div class="row"><span class="delta up-bad">▲ $1,120</span><span class="fnote">공개 가격표 ≈</span></div>
+      </div>
+      <div class="stat">
+        <div class="micro">블렌디드 단가</div>
+        <div class="v">$12.4<small>/1M</small></div>
+        <div class="row"><span class="delta up-bad">▲ $2.1</span><span class="fnote">F5 첫 관측 07-02</span></div>
+      </div>
+      <div class="stat">
+        <div class="micro">캐시 적중</div>
+        <div class="v">96.2<small>%</small></div>
+        <div class="row"><span class="delta up-good">▲ 1.1%p</span><span class="fnote">중앙값</span></div>
+      </div>
+      <div class="stat">
+        <div class="micro">도구 실패율</div>
+        <div class="v">2.1<small>%</small></div>
+        <div class="row"><span class="delta flat">▬ 0.0</span><span class="fnote">118 / 5.6k 호출</span></div>
+      </div>
+    </div>
+    <p class="headline-note">관측된 변화 — <span class="chg">07-02 F5 첫 관측</span> · <span class="chg">CC 2.1.198 → 2.1.200</span> · <span class="chg">신호 최다 세션 resilient-jingling-lark (18)</span></p>
+
+    <!-- ② 시간축 추이 -->
+    <div class="trends">
+      <div class="trend"><div class="th"><span class="micro">일별 추정 비용</span><span class="tv">최대 $1,285</span></div><svg id="t-cost"></svg></div>
+      <div class="trend"><div class="th"><span class="micro">일별 검증 통과율</span><span class="tv">측정일만</span></div><svg id="t-pass"></svg></div>
+      <div class="trend"><div class="th"><span class="micro">일별 신호 수</span><span class="tv">최대 32</span></div><svg id="t-sig"></svg></div>
+    </div>
+
+    <!-- ③ 세션 히트 타임라인 -->
+    <div class="sess-block">
+      <div class="sess-head"><span class="micro">세션 — 클릭하면 리플레이</span><span class="fnote mono">06-05 → 07-04</span></div>
+      <div id="d1-sessions"></div>
+    </div>
+  </div></div>
+
+  <!-- ═══════════ 방향 2 ═══════════ -->
+  <div class="dirhead"><h2>방향 2 · 관제 콘솔</h2><span class="tag">좌측 고정 지표 컬럼 + 우측 세션 타임라인</span></div>
+  <p class="pros"><b>장점</b> 스크롤 없이 요약·상세 동시 시야, 밀도 최상 · <b>단점</b> 문자 위계가 좌우로 갈려 "요약 먼저"가 약해짐, 좁은 화면 취약</p>
+  <div class="app">
+    <div class="console">
+      <div class="con-side">
+        <div class="micro" style="margin-bottom:4px">전체 프로젝트 · 30일</div>
+        <div class="stat"><div class="micro">검증 통과</div><div class="v">69%</div><div class="row"><span class="delta up-good">▲ 6.2%p</span></div><svg id="c-pass"></svg></div>
+        <div class="stat"><div class="micro">추정 비용</div><div class="v">$3,485</div><div class="row"><span class="delta up-bad">▲ $1,120</span></div><svg id="c-cost"></svg></div>
+        <div class="stat"><div class="micro">단가 $/1M</div><div class="v">$12.4</div><div class="row"><span class="delta up-bad">▲ $2.1</span></div><svg id="c-rate"></svg></div>
+        <div class="stat"><div class="micro">캐시 적중</div><div class="v">96.2%</div><div class="row"><span class="delta up-good">▲ 1.1%p</span></div><svg id="c-hit"></svg></div>
+        <div class="stat" style="border-bottom:0"><div class="micro">도구 실패율</div><div class="v">2.1%</div><div class="row"><span class="delta flat">▬ 0.0</span></div><svg id="c-fail"></svg></div>
+      </div>
+      <div class="con-main">
+        <div class="sess-head"><span class="micro">세션 타임라인</span><span class="fnote mono">06-05 → 07-04</span></div>
+        <div id="d2-sessions"></div>
+        <hr class="rule">
+        <div class="sess-head"><span class="micro">선택 세션 — resilient-jingling-lark</span><span class="fnote mono">6,003 events · 07-03</span></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:8px">
+          <div style="background:var(--s2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px">
+            <div class="micro">검증</div><div class="mono" style="font-size:16px;font-weight:650;margin-top:4px">57/83 <span style="color:var(--fgs);font-size:11px">통과</span></div></div>
+          <div style="background:var(--s2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px">
+            <div class="micro">비용</div><div class="mono" style="font-size:16px;font-weight:650;margin-top:4px">$612</div></div>
+          <div style="background:var(--s2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px">
+            <div class="micro">신호</div><div class="mono" style="font-size:16px;font-weight:650;margin-top:4px">18</div></div>
+          <div style="background:var(--s2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px">
+            <div class="micro">적중</div><div class="mono" style="font-size:16px;font-weight:650;margin-top:4px">96.1%</div></div>
+        </div>
+        <p class="fnote" style="margin-top:10px">타임라인에서 세션 열을 hover/클릭하면 여기서 요약 → 더블클릭 시 리플레이 이동.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ 방향 3 ═══════════ -->
+  <div class="dirhead"><h2>방향 3 · 질문 카드</h2><span class="tag">질문 → 문자 답 → 종속 미니 차트, 3단</span></div>
+  <p class="pros"><b>장점</b> 질문 단위 완결·읽는 순서가 강제됨 · <b>단점</b> 화면이 다시 카드 조각으로 · 세션축이 카드마다 반복되어 스캔 동선 김</p>
+  <div class="app"><div class="apad">
+    <div class="qcard">
+      <div class="qh"><span class="q">상태가 좋은가</span><span class="micro">검증 · 신호</span></div>
+      <p class="ans">통과 <b>69%</b> (▲6.2%p) · 도구 실패율 <b>2.1%</b> (▬) · 신호 최다 세션 <b>18건</b></p>
+      <svg id="q1" style="width:100%;height:56px"></svg>
+    </div>
+    <div class="qcard">
+      <div class="qh"><span class="q">돈이 어디로 새나</span><span class="micro">비용 · 단가 · 캐시</span></div>
+      <p class="ans">추정 <b>$3,485</b> (▲$1,120) · 단가 <b>$12.4/1M</b> (▲$2.1) · 적중 <b>96.2%</b> (▲1.1%p)</p>
+      <svg id="q2" style="width:100%;height:56px"></svg>
+    </div>
+    <div class="qcard" style="margin-bottom:0">
+      <div class="qh"><span class="q">뭐가 바뀌었나</span><span class="micro">모델 · CC 코호트</span></div>
+      <p class="ans"><b>07-02 F5 첫 관측</b> · CC <b>2.1.198 → 2.1.200</b> · 이후 단가 <b>$10.4 → $31.2/1M</b></p>
+      <div id="q3"></div>
+    </div>
+  </div></div>
+
+</div>
+
+<script>
+/* ── 목업 데이터: 실제 30일 창과 같은 스케일 ── */
+const S = [ // [date, models, pass, fail, unk, cost, hit, rate, sig]
+ ['06-05','OS',45,12,55,310,95.8,11.0,8],
+ ['06-05','OHS',65,25,119,342,96.4,10.9,12],
+ ['06-07','O',8,2,6,58,97.1,9.8,3],
+ ['06-07','OH',10,3,5,74,96.9,10.2,4],
+ ['06-12','OH',22,8,12,260,96.0,11.3,9],
+ ['06-12','F',4,1,3,95,93.5,28.4,2],
+ ['06-12','FH',30,6,18,210,95.1,22.1,7],
+ ['06-13','O',52,9,28,505,96.8,10.4,11],
+ ['06-13','OH',40,18,25,780,97.2,10.1,14],
+ ['06-14','O',12,4,6,120,96.2,10.8,5],
+ ['06-14','OH',25,5,12,210,96.5,10.6,6],
+ ['06-20','O',2,0,1,12,94.0,11.2,1],
+ ['07-02','',0,0,0,0,null,null,0],
+ ['07-02','O',1,0,2,8,92.1,11.0,1],
+ ['07-03','OH',48,30,130,612,96.1,10.7,18],
+ ['07-03','F',6,2,4,88,91.5,30.2,3],
+ ['07-04','FO',3,1,2,91,88.9,34.8,2],
+];
+const MC = {O:'var(--info)',H:'var(--warn)',F:'var(--violet)',S:'var(--orange)'};
+const MODELS = [['O','O4.8'],['H','H4.5'],['F','F5'],['S','S4.6']];
+
+/* 스파크라인 (시간축 — 일 단위, 30칸) */
+function spark(id, vals, color, area=true){
+  const el = document.getElementById(id); if(!el) return;
+  const w = el.clientWidth || 300, h = el.clientHeight || 52, max = Math.max(...vals.filter(v=>v!=null), 1e-9);
+  const n = vals.length, step = w/(n-1);
+  let d='', started=false;
+  vals.forEach((v,i)=>{ if(v==null){started=false;return;}
+    const x=i*step, y=h-4-(v/max)*(h-10);
+    d += (started?`L${x.toFixed(1)},${y.toFixed(1)}`:`M${x.toFixed(1)},${y.toFixed(1)}`); started=true; });
+  const hasGap = vals.some(v=>v==null);
+  let fill='', dots='';
+  if(area && !hasGap){ fill=`<path d="${d} L${w},${h} L0,${h} Z" fill="${color}" opacity=".10"/>`; }
+  if(hasGap){ vals.forEach((v,i)=>{ if(v==null) return;
+    const x=i*step, y=h-4-(v/max)*(h-10);
+    dots+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.2" fill="${color}"/>`; }); }
+  el.setAttribute('viewBox',`0 0 ${w} ${h}`);
+  el.innerHTML = fill+`<path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round"/>`+dots;
+}
+const DAYS=30;
+const cost=Array(DAYS).fill(0), sig=Array(DAYS).fill(0), passr=Array(DAYS).fill(null);
+const d0=new Date('2026-06-05');
+S.forEach(s=>{ const i=Math.round((new Date('2026-'+s[0])-d0)/864e5); if(i<0||i>=DAYS)return;
+  cost[i]+=s[5]; sig[i]+=s[8];
+  const t=s[2]+s[3]; if(t>0){ passr[i]=passr[i]==null?s[2]/t*100:(passr[i]+s[2]/t*100)/2; } });
+
+/* 세션 히트 타임라인 (방향 1·2 공용) */
+function heat(v,max,color){ if(v==null) return 'background:var(--s2)';
+  const a=.14+.86*Math.min(1,v/max); return `background:${color};opacity:${a.toFixed(2)}`; }
+function sessions(elId){
+  const el=document.getElementById(elId); if(!el) return;
+  let html='';
+  // 모델 매트릭스
+  MODELS.forEach(([k,lab])=>{
+    html+=`<div class="hm-row"><span class="grid-lab">${lab}</span><div class="hm-cells">`;
+    S.forEach(s=>{ const onoff=s[1].includes(k)?`background:${MC[k]};opacity:.9`:'';
+      html+=`<i class="click" style="${onoff}"></i>`; });
+    html+='</div></div>';
+  });
+  // outcome 스택 (pass/fail 비율 미니)
+  html+='<div class="hm-row" style="margin-top:6px"><span class="grid-lab">검증</span><div class="hm-cells" style="align-items:flex-end">';
+  const omax=Math.max(...S.map(s=>s[2]+s[3]+s[4]));
+  S.forEach(s=>{ const t=s[2]+s[3]+s[4];
+    if(t===0){ html+='<i class="click" style="height:26px"></i>'; return; }
+    const hh=6+20*(t/omax);
+    html+=`<i class="click" style="height:${hh.toFixed(0)}px;background:linear-gradient(to top, var(--ok) ${(s[2]/t*100).toFixed(0)}%, var(--dng) ${(s[2]/t*100).toFixed(0)}% ${((s[2]+s[3])/t*100).toFixed(0)}%, #6a7180 ${((s[2]+s[3])/t*100).toFixed(0)}%)"></i>`; });
+  html+='</div></div>';
+  // 신호 히트
+  const smax=Math.max(...S.map(s=>s[8]));
+  html+=`<div class="hm-row"><span class="grid-lab">신호</span><div class="hm-cells">`;
+  S.forEach(s=>{ html+=`<i class="click" style="${heat(s[8]||null,smax,'var(--dng)')}"></i>`; });
+  html+='</div></div>';
+  // 단가 히트
+  const rmax=Math.max(...S.map(s=>s[7]||0));
+  html+=`<div class="hm-row"><span class="grid-lab">$/1M</span><div class="hm-cells">`;
+  S.forEach(s=>{ html+=`<i class="click" style="${heat(s[7],rmax,'var(--green)')}"></i>`; });
+  html+='</div></div>';
+  // 날짜
+  html+='<div class="hm-row"><span class="grid-lab"></span><div class="hm-dates">';
+  let prev='';
+  S.forEach(s=>{ html+=`<i>${s[0]!==prev?s[0]:''}</i>`; prev=s[0]; });
+  html+='</div></div>';
+  el.innerHTML=html;
+}
+
+window.addEventListener('load',()=>{
+  spark('t-cost',cost,'#41c285'); spark('t-pass',passr,'#4f8cff'); spark('t-sig',sig,'#ef4747');
+  ['c-pass','c-cost','c-rate','c-hit','c-fail'].forEach((id,i)=>{
+    spark(id,[cost,passr,sig][i%3] ?? cost, ['#4f8cff','#41c285','#41c285','#7da7ff','#ef4747'][i], false); });
+  spark('c-pass',passr,'#4f8cff',false); spark('c-cost',cost,'#41c285',false);
+  spark('c-rate',S.map(s=>s[7]),'#41c285',false); spark('c-hit',S.map(s=>s[6]),'#7da7ff',false);
+  spark('c-fail',sig,'#ef4747',false);
+  sessions('d1-sessions'); sessions('d2-sessions');
+  spark('q1',passr,'#4f8cff'); spark('q2',cost,'#41c285');
+  // q3: 모델 매트릭스 축약 + 경계 마커
+  const q3=document.getElementById('q3');
+  let h='';
+  MODELS.forEach(([k,lab])=>{
+    h+=`<div class="hm-row"><span class="grid-lab">${lab}</span><div class="hm-cells">`;
+    S.forEach(s=>{ h+=`<i style="${s[1].includes(k)?`background:${MC[k]};opacity:.9`:''}"></i>`; });
+    h+='</div></div>';
+  });
+  h+='<div class="hm-row"><span class="grid-lab">CC</span><div class="hm-cells">';
+  const cc=['165','165','175','175','176','176','177','178','178','198','198','198','200','200','200','200','200'];
+  let p='';
+  S.forEach((s,i)=>{ h+=`<i style="background:var(--s3)"><span style="font-family:var(--mono);font-size:8.5px;color:var(--fgm);padding-left:2px">${cc[i]!==p?'.'+cc[i]:''}</span></i>`; p=cc[i]; });
+  h+='</div></div>';
+  q3.innerHTML=h;
+});
+</script>
+</body>
+</html>

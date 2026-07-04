@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>검증 가시화 목업</title>
+<script src="./vendor-echarts.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0d12; --s1:#11141b; --s2:#161a23; --s3:#1b202a;
+    --bd:#1d212c; --bds:#2a3040;
+    --fg:#e6e8ee; --fgm:#aab0bd; --fgs:#6a7180;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --ok:#41c285; --warn:#f0b429; --dng:#ef4747; --info:#7da7ff; --violet:#b07dff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;
+    -webkit-font-smoothing:antialiased}
+  .page{padding:26px 38px 80px}
+  h1{font-size:19px;font-weight:650;letter-spacing:-.01em;margin:0}
+  h1 span{color:var(--fgm);font-weight:500;font-size:14px}
+  .micro{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--fgs);font-weight:650}
+  .mono{font-family:var(--mono)}
+  .fnote{font-size:11px;color:var(--fgs)}
+  .seclabel{display:flex;align-items:baseline;justify-content:space-between;margin:30px 0 10px}
+  .seclabel .q{font-size:13.5px;font-weight:650}
+  .seclabel .q small{color:var(--fgs);font-weight:500;font-size:11.5px;margin-left:8px}
+  .panel{background:var(--s1);border:1px solid var(--bd);border-radius:13px;padding:14px 16px 10px}
+
+  /* 헤드라인 */
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);border-block:1px solid var(--bd);margin-top:16px}
+  .stat{padding:18px 20px 15px;border-right:1px solid var(--bd)}
+  .stat:last-child{border-right:0}
+  .stat .v{font-size:29px;font-weight:650;letter-spacing:-.02em;font-family:var(--mono);margin:6px 0 5px}
+  .stat .v small{font-size:15px;color:var(--fgm);font-weight:500}
+  .delta{font-family:var(--mono);font-size:11.5px;padding:2px 7px;border-radius:5px;white-space:nowrap}
+  .delta.good{color:var(--ok);background:rgba(65,194,133,.10)}
+  .delta.warn{color:var(--warn);background:rgba(240,180,41,.10)}
+  .delta.bad{color:var(--dng);background:rgba(239,71,71,.10)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+
+  /* 리듬 스트립 */
+  .rh-row{display:flex;align-items:center;margin-bottom:14px}
+  .rh-lab{width:210px;flex:none;padding-right:14px}
+  .rh-lab .nm{font-family:var(--mono);font-size:11.5px;font-weight:650;color:var(--fg)}
+  .rh-lab .mt{font-family:var(--mono);font-size:10.5px;color:var(--fgs);margin-top:2px}
+  .rh-track{flex:1;position:relative;height:26px;background:var(--s2);border-radius:6px}
+  .rh-track b{position:absolute;top:5px;width:8px;height:16px;border-radius:2.5px;transform:translateX(-4px)}
+  .rh-axis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--fgs);
+    margin-top:6px;margin-left:210px}
+
+  /* 커버리지 바 */
+  .cv-row{display:flex;align-items:center;margin-bottom:10px}
+  .cv-lab{width:210px;flex:none;font-family:var(--mono);font-size:11.5px;color:var(--fg);padding-right:14px}
+  .cv-bar{flex:1;display:flex;height:18px;border-radius:5px;overflow:hidden;background:var(--s2)}
+  .cv-bar i{height:100%}
+  .cv-val{width:130px;flex:none;text-align:right;font-family:var(--mono);font-size:11px;color:var(--fgm)}
+  .cv-val b{color:var(--warn)}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>검증 <span>· 전체 프로젝트 · 30일 · 가드 793</span></h1>
+
+  <!-- ① 문자 헤드라인 -->
+  <div class="stats">
+    <div class="stat"><div class="micro">가드 실행</div><div class="v">793</div>
+      <div class="fnote">test 412 · build 201 · lint 88 · format 62 · typecheck 30</div></div>
+    <div class="stat"><div class="micro">측정됨 (exit code 확보)</div><div class="v">632<small> · 80%</small></div>
+      <div><span class="delta warn">판정불가 161</span> <span class="fnote">파이프 마스킹 118 · 기타 43</span></div></div>
+    <div class="stat"><div class="micro">통과 (측정분)</div><div class="v">545<small> · 86%</small></div>
+      <div><span class="delta good">▲ 4%p</span> <span class="fnote">이전 창 82%</span></div></div>
+    <div class="stat"><div class="micro">실패 방치</div><div class="v">26</div>
+      <div><span class="delta bad">실패 87 중 26</span> <span class="fnote">세션 종료까지 통과 전환 없음</span></div></div>
+    <div class="stat"><div class="micro">변경 커버리지</div><div class="v">71<small>%</small></div>
+      <div><span class="delta warn">미커버 hunk 214</span> <span class="fnote">diff hunk 738 중 검증 통과가 커버</span></div></div>
+  </div>
+
+  <div class="grid2">
+    <div>
+      <!-- ② 종류별 결과 구성 -->
+      <div class="seclabel"><span class="q">종류별 결과 구성 <small>가드 kind × 결과 — 100% 스택 · 오른쪽 = 건수</small></span></div>
+      <div class="panel"><div id="ch-kind" style="height:250px"></div></div>
+    </div>
+    <div>
+      <!-- ③ 실패의 행방 -->
+      <div class="seclabel"><span class="q">가드 793건의 행방 <small>측정 → 결과 → 실패의 복구 여부</small></span></div>
+      <div class="panel"><div id="ch-flow" style="height:250px"></div></div>
+    </div>
+  </div>
+
+  <!-- ④ 세션 내 실행 리듬 -->
+  <div class="seclabel"><span class="q">가드 실행 리듬 — 세션 진행률 위 실행 위치 <small>■ 통과 · ■ 실패 · ■ 판정불가 — 신호 상위 4개 세션</small></span>
+    <span class="fnote mono">x = 세션 진행률(이벤트 기준)</span></div>
+  <div class="panel" style="padding:18px 18px 12px">
+    <div id="rhythm"></div>
+    <div class="rh-axis"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+  </div>
+
+  <!-- ⑤ 변경 커버리지 -->
+  <div class="seclabel"><span class="q">변경 커버리지 — 검증 통과가 거친 diff hunk 비율 <small>hunk 수 상위 6개 세션 · <b style="color:#41c285">커버</b> / <b style="color:#f0b429">미커버</b></small></span>
+    <span class="fnote mono">전체 71% · 미커버 214 hunk</span></div>
+  <div class="panel" style="padding:18px 18px 10px">
+    <div id="coverage"></div>
+  </div>
+</div>
+
+<script>
+const TT={backgroundColor:'#1b202a',borderColor:'#2a3040',borderWidth:1,padding:[9,12],
+  textStyle:{color:'#e6e8ee',fontSize:12},
+  extraCssText:'border-radius:10px;box-shadow:0 14px 40px -18px rgba(0,0,0,.9)'};
+const AXL={color:'#6a7180',fontFamily:'ui-monospace,Menlo,monospace',fontSize:10.5};
+
+/* ── ② kind × outcome 100% 스택 (가로) ── */
+const KINDS=[
+ ['typecheck',10,2,18],
+ ['format',30,4,28],
+ ['lint',45,8,35],
+ ['build',150,18,33],
+ ['test',310,55,47],
+]; // [kind, 통과, 실패, 판정불가]
+const kd=echarts.init(document.getElementById('ch-kind'));
+kd.setOption({
+  animationDuration:700,
+  grid:{left:86,right:64,top:8,bottom:24},
+  tooltip:{...TT,formatter:p=>{
+    const k=KINDS.find(k=>k[0]===p.name);const t=k[1]+k[2]+k[3];
+    return `<b class="mono">${p.name}</b> · ${t}건<br>
+      <span style="color:#41c285">통과 ${k[1]}</span> ·
+      <span style="color:#ef4747">실패 ${k[2]}</span> ·
+      <span style="color:#6a7180">판정불가 ${k[3]}</span><br>
+      측정분 통과율 <b>${Math.round(k[1]/(k[1]+k[2])*100)}%</b> · 측정률 <b>${Math.round((k[1]+k[2])/t*100)}%</b>`;}},
+  xAxis:{type:'value',max:100,axisLabel:{...AXL,formatter:v=>v+'%'},
+    splitLine:{lineStyle:{color:'#171b24'}}},
+  yAxis:{type:'category',data:KINDS.map(k=>k[0]),axisLine:{show:false},axisTick:{show:false},
+    axisLabel:AXL},
+  series:[
+    {name:'통과',type:'bar',stack:'k',barWidth:17,
+      data:KINDS.map(k=>k[1]/(k[1]+k[2]+k[3])*100),itemStyle:{color:'#41c285',opacity:.92}},
+    {name:'실패',type:'bar',stack:'k',barWidth:17,
+      data:KINDS.map(k=>k[2]/(k[1]+k[2]+k[3])*100),itemStyle:{color:'#ef4747',opacity:.92}},
+    {name:'판정불가',type:'bar',stack:'k',barWidth:17,
+      data:KINDS.map(k=>k[3]/(k[1]+k[2]+k[3])*100),
+      itemStyle:{color:'#4a5162',opacity:.9,borderRadius:[0,3,3,0]},
+      label:{show:true,position:'right',distance:8,color:'#6a7180',
+        fontFamily:'ui-monospace,Menlo,monospace',fontSize:10.5,
+        formatter:p=>KINDS[p.dataIndex][1]+KINDS[p.dataIndex][2]+KINDS[p.dataIndex][3]+'건'}}]
+});
+
+/* ── ③ Sankey: 가드의 행방 ── */
+const fl=echarts.init(document.getElementById('ch-flow'));
+fl.setOption({
+  animationDuration:800,
+  tooltip:{...TT,trigger:'item',
+    formatter:p=>p.dataType==='edge'?`${p.data.source} → ${p.data.target}<br><b class="mono">${p.data.value}건</b>`:`<b>${p.name}</b>`},
+  series:[{type:'sankey',left:8,right:120,top:14,bottom:10,
+    nodeWidth:10,nodeGap:18,draggable:false,
+    label:{color:'#aab0bd',fontSize:11,fontFamily:'ui-monospace,Menlo,monospace',
+      formatter:n=>`${n.name}`},
+    lineStyle:{color:'gradient',opacity:.28,curveness:.55},
+    itemStyle:{borderWidth:0},
+    emphasis:{focus:'adjacency'},
+    data:[
+      {name:'가드 793',itemStyle:{color:'#7da7ff'}},
+      {name:'측정 632',itemStyle:{color:'#5f86c9'}},
+      {name:'판정불가 161',itemStyle:{color:'#4a5162'}},
+      {name:'통과 545',itemStyle:{color:'#41c285'}},
+      {name:'실패 87',itemStyle:{color:'#ef4747'}},
+      {name:'복구됨 61',itemStyle:{color:'#2f9668'}},
+      {name:'실패 방치 26',itemStyle:{color:'#ff6b6b'}},
+      {name:'파이프 마스킹 118',itemStyle:{color:'#5a6172'}},
+      {name:'기타 43',itemStyle:{color:'#3d4351'}},
+    ],
+    links:[
+      {source:'가드 793',target:'측정 632',value:632},
+      {source:'가드 793',target:'판정불가 161',value:161},
+      {source:'측정 632',target:'통과 545',value:545},
+      {source:'측정 632',target:'실패 87',value:87},
+      {source:'실패 87',target:'복구됨 61',value:61},
+      {source:'실패 87',target:'실패 방치 26',value:26},
+      {source:'판정불가 161',target:'파이프 마스킹 118',value:118},
+      {source:'판정불가 161',target:'기타 43',value:43},
+    ]}]
+});
+
+/* ── ④ 세션 내 실행 리듬 ── */
+const RHY=[
+ ['resilient-jingling-lark','가드 83 · 통과 57',[ [4,'f'],[6,'p'],[11,'f'],[13,'p'],[18,'f'],[20,'f'],[22,'p'],[30,'p'],[34,'f'],[36,'p'],[45,'p'],[52,'f'],[54,'p'],[62,'p'],[70,'u'],[74,'p'],[81,'f'],[83,'p'],[90,'p'],[95,'p'],[98,'p'] ]],
+ ['4e3cdf37-1a3d','가드 208 · 통과 48',[ [55,'u'],[60,'u'],[64,'u'],[68,'u'],[72,'f'],[75,'u'],[80,'u'],[84,'u'],[88,'f'],[91,'u'],[94,'u'],[97,'u'],[99,'u'] ]],
+ ['keen-herding-spindle','가드 89 · 통과 52',[ [82,'p'],[85,'p'],[88,'p'],[90,'p'],[92,'f'],[93,'p'],[95,'p'],[97,'p'],[98,'p'],[99,'p'] ]],
+ ['atomic-dancing-jellyfish','가드 209 · 통과 65',[ [8,'p'],[15,'p'],[22,'f'],[24,'p'],[31,'p'],[40,'p'],[48,'u'],[55,'p'],[63,'p'],[71,'f'],[73,'p'],[80,'p'],[88,'p'],[96,'p'] ]],
+];
+const OC={p:'#41c285',f:'#ef4747',u:'#4a5162'};
+document.getElementById('rhythm').innerHTML=RHY.map(([nm,mt,pts])=>`
+  <div class="rh-row">
+    <div class="rh-lab"><div class="nm">${nm.slice(0,24)}</div><div class="mt">${mt}</div></div>
+    <div class="rh-track">${pts.map(([x,o])=>`<b style="left:${x}%;background:${OC[o]}"></b>`).join('')}</div>
+  </div>`).join('');
+
+/* ── ⑤ 변경 커버리지 ── */
+const COV=[
+ ['resilient-jingling-lark',182,41],
+ ['atomic-dancing-jellyfish',149,38],
+ ['noble-floating-fern',88,52],
+ ['keen-herding-spindle',74,19],
+ ['smooth-plotting-cherny',31,44],
+ ['4e3cdf37-1a3d',0,20],
+];
+document.getElementById('coverage').innerHTML=COV.map(([nm,c,u])=>{
+  const t=c+u,pct=Math.round(c/t*100);
+  return `<div class="cv-row">
+    <div class="cv-lab">${nm.slice(0,24)}</div>
+    <div class="cv-bar"><i style="width:${c/t*100}%;background:#41c285;opacity:.9"></i><i style="width:${u/t*100}%;background:#f0b429;opacity:.75"></i></div>
+    <div class="cv-val">${pct}% · 미커버 <b>${u}</b></div>
+  </div>`;}).join('');
+addEventListener('resize',()=>{kd.resize();fl.resize();});
+</script>
+</body>
+</html>

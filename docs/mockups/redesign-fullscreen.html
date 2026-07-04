@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WitMCC 재설계 — A+B 전 화면 목업</title>
+<style>
+  :root{
+    --bg:#0b0d12; --s1:#11141b; --s2:#161a23; --s3:#1b202a;
+    --bd:#1d212c; --bds:#2a3040;
+    --fg:#e6e8ee; --fgm:#aab0bd; --fgs:#6a7180; --fgoa:#0b0d12;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --acc:#4f8cff; --accsoft:#1f3a78; --ok:#41c285; --warn:#f0b429; --dng:#ef4747; --info:#7da7ff;
+    --scaffold:#b07dff;
+    --teal:#2bd0d0; --orange:#ff8a4c; --violet:#b07dff; --green:#41c285; --magenta:#d97aff;
+    /* evolved language additions */
+    --elev:0 1px 0 rgba(255,255,255,.025), 0 10px 30px -22px rgba(0,0,0,.9);
+    --r-sm:7px; --r-md:11px; --r-lg:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;
+    -webkit-font-smoothing:antialiased}
+  .page{max-width:1480px;margin:0 auto;padding:22px 22px 120px}
+  h1{font-size:20px;font-weight:650;letter-spacing:-.01em;margin:0 0 4px}
+  .sub{color:var(--fgm);font-size:12.5px;margin:0 0 18px;max-width:900px}
+  .sub b{color:var(--fg)}
+  code{font-family:var(--mono);font-size:.9em;background:var(--s2);padding:1px 5px;border-radius:4px;color:var(--fgm)}
+  .seclabel{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--fgs);margin:26px 0 8px;font-weight:600}
+
+  /* ===== App frame ===== */
+  .app{border:1px solid var(--bd);border-radius:var(--r-lg);overflow:hidden;background:var(--bg);display:grid;
+    grid-template-columns:60px 1fr;height:880px}
+  .rail{background:var(--s1);border-right:1px solid var(--bd);display:flex;flex-direction:column;align-items:center;
+    padding:14px 0;gap:6px}
+  .rail .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--acc),var(--violet));margin-bottom:10px}
+  .rail .ic{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;color:var(--fgs);font-size:17px}
+  .rail .ic.on{background:var(--s3);color:var(--fg);position:relative}
+  .rail .ic.on::before{content:"";position:absolute;left:-14px;top:9px;bottom:9px;width:3px;border-radius:2px;background:var(--acc)}
+  .rail .sp{flex:1}
+
+  .main{display:flex;flex-direction:column;min-width:0;overflow:hidden}
+  .topbar{display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--bd)}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:13px}
+  .crumb a{color:var(--fgm);text-decoration:none}
+  .crumb .sep{color:var(--fgs)}
+  .crumb .cur{font-weight:600}
+  .crumb .slug{font-family:var(--mono);font-size:12px;color:var(--fg)}
+  .crumb .proj{font-size:11px;color:var(--fgs);border:1px solid var(--bd);border-radius:5px;padding:1px 7px;margin-left:2px}
+  .live{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ok);margin-left:6px}
+  .live .d{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(65,194,133,.6);animation:p 2s infinite}
+  @keyframes p{0%{box-shadow:0 0 0 0 rgba(65,194,133,.5)}70%{box-shadow:0 0 0 6px rgba(65,194,133,0)}100%{box-shadow:0 0 0 0 rgba(65,194,133,0)}}
+  .topbar .sp{flex:1}
+  .topbar .tbtn{font-size:12px;color:var(--fgm);border:1px solid var(--bd);border-radius:8px;padding:5px 11px;display:flex;gap:6px;align-items:center}
+
+  /* ===== KPI strip ===== */
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;padding:16px 20px 4px}
+  .kpi{background:var(--s2);border-radius:var(--r-md);padding:13px 14px;box-shadow:var(--elev);display:flex;flex-direction:column;gap:7px;min-width:0}
+  .kpi .lab{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--fgs);font-weight:600}
+  .kpi .val{font-size:21px;font-weight:650;letter-spacing:-.01em;line-height:1}
+  .kpi .val .u{font-size:12px;color:var(--fgm);font-weight:500;margin-left:2px}
+  .kpi .meta{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--fgm)}
+  .prov{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;padding:1px 6px;border-radius:4px;font-weight:600}
+  .prov.measured{background:rgba(65,194,133,.14);color:var(--ok)}
+  .prov.est{background:rgba(170,176,189,.12);color:var(--fgm)}
+  .prov.mixed{background:rgba(240,180,41,.14);color:var(--warn)}
+  .spark{height:22px;display:flex;align-items:flex-end;gap:2px}
+  .spark i{flex:1;background:var(--accsoft);border-radius:1px;opacity:.8}
+  .delta{font-size:11px;color:var(--ok);font-family:var(--mono)}
+  .delta.dn{color:var(--warn)}
+
+  .metarow{display:flex;align-items:center;gap:12px;padding:8px 20px 12px;border-bottom:1px solid var(--bd);
+    font-size:12px;color:var(--fgs)}
+  .metarow b{color:var(--fgm);font-weight:600}
+  .metarow .abtn{margin-left:auto;font-size:12px;color:var(--fgm);border:1px solid var(--bd);border-radius:8px;
+    padding:5px 11px;display:flex;gap:7px;align-items:center}
+  .metarow .abtn .bars{display:flex;gap:2px;align-items:flex-end}
+  .metarow .abtn .bars i{width:3px;background:var(--acc);border-radius:1px}
+
+  /* ===== body split: stream | detail ===== */
+  .split{display:grid;grid-template-columns:1fr 400px;flex:1;min-height:0}
+  .stream{overflow-y:auto;padding:18px 22px 40px;border-right:1px solid var(--bd)}
+  .detail{background:var(--s1);overflow-y:auto;display:flex;flex-direction:column}
+
+  /* ===== A+B hybrid stream ===== */
+  .tl{position:relative}
+  .tl .spine{position:absolute;left:60px;top:4px;bottom:30px;width:1px;
+    background:linear-gradient(180deg,transparent,var(--bd) 6%,var(--bd) 94%,transparent)}
+  .ev{position:relative;display:grid;grid-template-columns:52px 1fr;margin:0 0 18px}
+  .ev.tight{margin-bottom:9px}
+  .time{font-family:var(--mono);font-size:10px;color:var(--fgs);text-align:right;padding:7px 16px 0 0}
+  .node{position:absolute;left:56px;top:9px;width:9px;height:9px;border-radius:50%;background:var(--bg);
+    border:2px solid var(--fgs);z-index:2}
+  .node.user{border-color:var(--acc);background:var(--acc)}
+  .node.asst{border-color:var(--fgm)}
+  .node.tool{border-color:var(--green);width:7px;height:7px;top:11px;left:57px}
+  .node.think{border-color:var(--violet);background:var(--violet);width:6px;height:6px;top:12px;left:57.5px}
+  .node.batch{border-color:var(--orange);background:var(--orange)}
+  .body{margin-left:22px;padding-top:0;min-width:0}
+
+  .bubble{background:var(--s2);border-radius:var(--r-md);padding:13px 15px;box-shadow:var(--elev);max-width:760px}
+  .bubble.user{background:#1b2a4d;max-width:680px;margin-left:auto}
+  .who{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+  .who .nm{font-weight:600;font-size:12px}
+  .who .ag{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--fgs);border:1px solid var(--bd);border-radius:4px;padding:0 5px}
+  .who .t{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--fgs)}
+  .mtext{font-size:13.5px;line-height:1.6;color:var(--fg)}
+  .bubble.sel{box-shadow:0 0 0 1px var(--acc), 0 10px 30px -22px rgba(0,0,0,.9);background:#17233c}
+
+  .toolline{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--fgm);padding:4px 0}
+  .toolline .gl{color:var(--green);width:14px;text-align:center}
+  .toolline .nm{color:var(--fg);font-weight:550}
+  .toolline .arg{color:var(--fgs)}
+  .toolline .ok{color:var(--ok);font-size:11px}
+  .toolline .t{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--fgm)}
+  .toolpill{display:flex;align-items:center;gap:10px;background:var(--s2);border-radius:9px;padding:8px 13px;
+    max-width:520px;box-shadow:var(--elev)}
+  .toolpill .gl{width:18px;height:18px;border-radius:5px;background:var(--s3);display:grid;place-items:center;color:var(--fgm);font-size:10px}
+  .toolpill .nm{font-size:12px;color:var(--fg);font-weight:550}
+  .toolpill .ct{color:var(--fgs);font-size:11px}
+  .toolpill .chev{color:var(--fgs);font-size:11px}
+  .toolpill .t{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--fgm)}
+  .thinkline{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--fgs);font-style:italic;padding:3px 0}
+  .dur.warn{color:var(--warn)} .dur.hot{color:var(--dng)}
+
+  /* parallel fan */
+  .fan{margin-left:22px;margin-top:8px;position:relative;background:rgba(255,138,76,.04);border-radius:var(--r-md);
+    padding:11px 13px;box-shadow:inset 0 0 0 1px rgba(255,138,76,.18)}
+  .fanhead{display:flex;align-items:center;gap:9px;font-size:12px;margin-bottom:9px}
+  .fanhead .tag{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--orange);
+    border:1px solid rgba(255,138,76,.4);border-radius:5px;padding:1px 7px;font-weight:600}
+  .fanhead .nm{font-weight:600}
+  .fanhead .st{color:var(--ok);font-family:var(--mono);font-size:11px;margin-left:auto}
+  .lane{display:grid;grid-template-columns:170px 1fr 52px;gap:10px;align-items:center;padding:3px 0}
+  .lane .lh{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--fgm);min-width:0}
+  .lane .lh .sw{width:8px;height:8px;border-radius:2px;flex:none}
+  .lane .lh .nm{color:var(--fg);font-weight:550;white-space:nowrap}
+  .lane .lh .id{font-family:var(--mono);font-size:10px;color:var(--fgs)}
+  .lane .track{height:8px;background:var(--s3);border-radius:4px;position:relative}
+  .lane .fill{position:absolute;height:100%;border-radius:4px;opacity:.9}
+  .lane .d{font-family:var(--mono);font-size:10px;color:var(--fgm);text-align:right}
+  .laneconcl{font-size:11.5px;color:var(--fgm);line-height:1.5;margin:7px 0 0;padding-left:2px}
+
+  .endcard{margin-left:22px;margin-top:8px;display:flex;align-items:center;gap:10px;font-size:11.5px;
+    background:rgba(65,194,133,.06);border-radius:9px;padding:8px 12px;box-shadow:inset 0 0 0 1px rgba(65,194,133,.2)}
+  .endcard .ok{color:var(--ok)} .endcard .t{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--fgm)}
+  .startmark{display:flex;align-items:center;gap:9px;color:var(--fgs);font-size:11px;margin:2px 0 16px;padding-left:74px}
+  .startmark .ln{flex:1;height:1px;background:var(--bd)}
+
+  /* ===== detail panel ===== */
+  .dhead{padding:14px 16px;border-bottom:1px solid var(--bd)}
+  .dtabs{display:flex;gap:4px;margin-bottom:11px}
+  .dtab{font-size:12px;padding:6px 12px;border-radius:8px;color:var(--fgm);font-weight:550}
+  .dtab.on{background:var(--s3);color:var(--fg)}
+  .dtab .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--acc);margin-left:6px;vertical-align:middle}
+  .dtitle{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .dtitle .ic{color:var(--fgm)}
+  .dtitle .nm{font-weight:600;font-size:13px}
+  .dtitle .kind{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;padding:1px 6px;border-radius:4px;
+    background:rgba(79,140,255,.14);color:var(--acc);font-weight:600}
+  .idchips{display:flex;flex-wrap:wrap;gap:6px}
+  .idchip{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--fgm);
+    background:var(--s2);border-radius:6px;padding:3px 8px;max-width:100%}
+  .idchip .k{color:var(--fgs)}
+  .idchip .cp{color:var(--fgs);cursor:pointer}
+  .dbody{padding:14px 16px;overflow-y:auto}
+  .dsec{margin-bottom:18px}
+  .dsec .sh{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--fgs);font-weight:600;margin-bottom:8px;
+    display:flex;align-items:center;gap:8px}
+  .dsec .sh .ln{flex:1;height:1px;background:var(--bd)}
+  .prose{font-size:12.5px;line-height:1.6;color:var(--fg);background:var(--s2);border-radius:9px;padding:11px 13px}
+  .mrow{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--bd)}
+  .mrow:last-child{border-bottom:0}
+  .mrow .ml{font-size:12px;color:var(--fgm);display:flex;align-items:center;gap:6px}
+  .mrow .ml .q{color:var(--fgs);font-size:11px;border:1px solid var(--bd);border-radius:50%;width:14px;height:14px;display:grid;place-items:center}
+  .mrow .mv{font-family:var(--mono);font-size:12px;color:var(--fg);text-align:right}
+  .mrow .mp{justify-self:end}
+
+  /* ===== session list ===== */
+  .slist{border:1px solid var(--bd);border-radius:var(--r-lg);overflow:hidden;background:var(--s1)}
+  .slhead{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--bd)}
+  .slhead h3{font-size:14px;margin:0;font-weight:600}
+  .slhead .cnt{color:var(--fgs);font-size:12px}
+  .slhead .sp{flex:1}
+  .slhead .search{font-size:12px;color:var(--fgs);border:1px solid var(--bd);border-radius:8px;padding:6px 11px;width:220px}
+  .srow{display:grid;grid-template-columns:1fr 130px 120px 150px;gap:16px;align-items:center;
+    padding:13px 18px;border-bottom:1px solid var(--bd);cursor:pointer}
+  .srow:last-child{border-bottom:0}
+  .srow:hover{background:var(--s2)}
+  .sid{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .sid .top{display:flex;align-items:center;gap:8px}
+  .sid .slug{font-weight:600;font-size:13px}
+  .sid .proj{font-size:10px;color:var(--fgs);border:1px solid var(--bd);border-radius:5px;padding:0 6px}
+  .sid .uuid{font-family:var(--mono);font-size:10.5px;color:var(--fgs)}
+  .sid .prev{font-size:11.5px;color:var(--fgm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:560px}
+  .scol{font-size:12px;color:var(--fgm)}
+  .scol .big{font-size:14px;color:var(--fg);font-weight:600;font-family:var(--mono)}
+  .scol.rel{color:var(--fgs);font-family:var(--mono);font-size:11.5px}
+  .smix{display:flex;gap:5px;flex-wrap:wrap}
+  .tag{font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:5px;background:var(--s2);color:var(--fgm)}
+  .tag.live{background:rgba(65,194,133,.14);color:var(--ok)}
+  .model{font-size:10.5px;color:var(--violet)}
+
+  .note{font-size:12px;color:var(--fgm);margin:14px 0 0;line-height:1.6}
+  .note b{color:var(--fg)}
+  .note .k{color:var(--acc);font-weight:600}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>WitMCC 재설계 — A+B 하이브리드 · 전 화면</h1>
+  <p class="sub"><b>B 골격</b>(좌측 시간축 spine + 노드 + 병렬 레인) <b>× A 톤</b>(하이라인 제거·표면 레이어·넓은 여백·절제된 색·조판). 실제 <code>tokens.css</code> 값 + 진화 토큰(elevation·radius·type scale)으로 렌더. 단일 이벤트 접힘 제거, 소리 없는 잘림 해소, 시간/베이스라인 맥락, 슬러그 기반 식별 등 진단 항목을 반영했습니다.</p>
+
+  <div class="seclabel">① 세션 상세 — 실행 리플레이 (핵심 화면)</div>
+  <div class="app">
+    <div class="rail">
+      <div class="logo"></div>
+      <div class="ic on">◐</div>
+      <div class="ic">▤</div>
+      <div class="sp"></div>
+      <div class="ic">⚙</div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div class="crumb">
+          <a href="#">Sessions</a><span class="sep">/</span>
+          <span class="slug">resilient-jingling-lark</span>
+          <span class="proj">whats-in-my-cc</span>
+          <span class="live"><span class="d"></span>live</span>
+        </div>
+        <span class="sp"></span>
+        <span class="tbtn">⤓ export</span>
+      </div>
+
+      <!-- KPI strip -->
+      <div class="kpis">
+        <div class="kpi"><div class="lab">컨텍스트 효율</div><div class="val">99<span class="u">%</span></div>
+          <div class="meta"><span class="prov measured">측정</span><span class="delta">+2%p</span></div>
+          <div class="spark"><i style="height:40%"></i><i style="height:55%"></i><i style="height:48%"></i><i style="height:70%"></i><i style="height:82%"></i><i style="height:99%"></i></div></div>
+        <div class="kpi"><div class="lab">토큰 청구</div><div class="val">16.0<span class="u">M</span></div>
+          <div class="meta"><span class="prov measured">측정</span><span style="color:var(--fgs)">캐시 1.2B 무료</span></div>
+          <div class="spark"><i style="height:20%"></i><i style="height:35%"></i><i style="height:50%"></i><i style="height:62%"></i><i style="height:80%"></i><i style="height:92%"></i></div></div>
+        <div class="kpi"><div class="lab">검증 가드</div><div class="val">96/96</div>
+          <div class="meta"><span class="prov mixed">혼합</span><span style="color:var(--fgs)">미측정 48</span></div>
+          <div class="spark"><i style="height:60%;background:rgba(65,194,133,.4)"></i><i style="height:70%;background:rgba(65,194,133,.4)"></i><i style="height:55%;background:rgba(65,194,133,.4)"></i><i style="height:85%;background:rgba(65,194,133,.4)"></i><i style="height:90%;background:rgba(65,194,133,.4)"></i><i style="height:100%;background:rgba(65,194,133,.4)"></i></div></div>
+        <div class="kpi"><div class="lab">도구 실패</div><div class="val">43<span class="u">/1345</span></div>
+          <div class="meta"><span class="prov measured">측정</span><span style="color:var(--fgs)">3%</span></div>
+          <div class="spark"><i style="height:30%;background:rgba(240,180,41,.4)"></i><i style="height:55%;background:rgba(240,180,41,.4)"></i><i style="height:40%;background:rgba(240,180,41,.4)"></i><i style="height:25%;background:rgba(240,180,41,.4)"></i><i style="height:35%;background:rgba(240,180,41,.4)"></i><i style="height:20%;background:rgba(240,180,41,.4)"></i></div></div>
+        <div class="kpi"><div class="lab">비용 (추정)</div><div class="val">$790<span class="u">.81</span></div>
+          <div class="meta"><span class="prov est">추정</span><span style="color:var(--fgs)">공개 가격표</span></div>
+          <div class="spark"><i style="height:15%"></i><i style="height:30%"></i><i style="height:45%"></i><i style="height:60%"></i><i style="height:78%"></i><i style="height:95%"></i></div></div>
+      </div>
+      <div class="metarow"><span><b>24,749</b> events</span><span>·</span><span><b>7</b> turns</span><span>·</span><span>13시간 15분</span><span>·</span><span class="model" style="color:var(--violet)">Opus 4.8</span>
+        <span class="abtn"><span class="bars"><i style="height:8px"></i><i style="height:12px"></i><i style="height:6px"></i></span>분석</span></div>
+
+      <!-- split -->
+      <div class="split">
+        <div class="stream">
+          <div class="tl">
+            <div class="spine"></div>
+            <div class="startmark"><span>대화 시작 · 00:02</span><span class="ln"></span></div>
+
+            <div class="ev"><div class="time">09:05</div><div class="node user"></div><div class="body">
+              <div class="bubble user"><div class="who"><span class="nm">You</span><span class="t">09:05:58</span></div>
+              <div class="mtext">이전 PR에서 병렬 배치 묶기 UI를 개선했는데 보수가 적다. 병렬배치 대상이 아닌 서브에이전트가 너무 많다 — wimcc가 묶기에 실패한 건지 조사.</div></div>
+            </div></div>
+
+            <div class="ev"><div class="time">09:06</div><div class="node asst"></div><div class="body">
+              <div class="bubble"><div class="who"><span class="nm">Opus 4.8</span><span class="ag">agent</span><span class="t">09:06:09</span></div>
+              <div class="mtext">I'll investigate this systematically. Let me start by invoking the debugging skill since this is about unexpected behavior.</div></div>
+            </div></div>
+
+            <div class="ev tight"><div class="time">09:06</div><div class="node tool"></div><div class="body">
+              <div class="toolpill"><span class="gl">⌗</span><span class="nm">Bash ×3 · Read</span><span class="ct">6 events</span><span class="chev">›</span><span class="t">2.6s</span></div>
+            </div></div>
+
+            <div class="ev tight"><div class="time">09:07</div><div class="node tool"></div><div class="body">
+              <div class="toolline"><span class="gl">↳</span><span class="nm">Read</span><span class="arg">package.json</span><span class="ok">✓ 28 lines</span><span class="t">18ms</span></div>
+            </div></div>
+
+            <div class="ev tight"><div class="time">09:08</div><div class="node think"></div><div class="body">
+              <div class="thinkline">◌ 추론 · 1.8k tok · <span class="dur hot" style="font-style:normal">31.0s</span></div>
+            </div></div>
+
+            <div class="ev"><div class="time">09:10</div><div class="node asst"></div><div class="body">
+              <div class="bubble sel"><div class="who"><span class="nm">Opus 4.8</span><span class="ag">agent</span><span class="t">09:10:21</span></div>
+              <div class="mtext">All needed fields are present (agent_id, tool_use_id, message_id). Found the real dev DB (401MB). Bringing up the servers in parallel.</div></div>
+            </div></div>
+
+            <div class="ev"><div class="time">09:10</div><div class="node batch"></div><div class="body" style="margin-left:22px">
+              <div class="fan">
+                <div class="fanhead"><span class="tag">병렬 배치</span><span class="nm">3 agents</span><span class="st">✓ 3/3 · 1m08s</span></div>
+                <div class="lane"><div class="lh"><span class="sw" style="background:var(--teal)"></span><span class="nm">general-purpose</span><span class="id">aa1844</span></div><div class="track"><span class="fill" style="left:0;width:92%;background:var(--teal)"></span></div><span class="d">1m08s</span></div>
+                <div class="lane"><div class="lh"><span class="sw" style="background:var(--violet)"></span><span class="nm">code-explorer</span><span class="id">7c12</span></div><div class="track"><span class="fill" style="left:4%;width:61%;background:var(--violet)"></span></div><span class="d">42s</span></div>
+                <div class="lane"><div class="lh"><span class="sw" style="background:var(--green)"></span><span class="nm">Explore</span><span class="id">3f9d</span></div><div class="track"><span class="fill" style="left:6%;width:44%;background:var(--green)"></span></div><span class="d">30s</span></div>
+                <div class="laneconcl">↳ <b style="color:var(--fg)">종합:</b> wimcc 재구성은 lossy — 206 sidechain 중 69개가 sidecar 없음(워크플로 fan-out). 묶기 키는 turn_id + 시간 군집으로 복구 가능.</div>
+              </div>
+            </div></div>
+
+            <div class="ev tight"><div class="time">09:11</div><div class="node" style="border-color:var(--green);background:var(--green);width:7px;height:7px;top:11px;left:57px"></div><div class="body">
+              <div class="endcard"><span class="ok">✓</span><span>general-purpose 종료 · 메시지 10 · 도구 10</span><span class="t">1m08s</span></div>
+            </div></div>
+          </div>
+        </div>
+
+        <!-- detail panel -->
+        <div class="detail">
+          <div class="dhead">
+            <div class="dtabs"><span class="dtab on">Insight</span><span class="dtab">Raw <span class="dot"></span></span></div>
+            <div class="dtitle"><span class="ic">✦</span><span class="nm">Opus 4.8</span><span class="kind">원본</span></div>
+            <div class="idchips">
+              <span class="idchip"><span class="k">req</span> req_011Cc2…9PpRb <span class="cp">⧉</span></span>
+              <span class="idchip"><span class="k">turn</span> 5cf86504… <span class="cp">⧉</span></span>
+            </div>
+          </div>
+          <div class="dbody">
+            <div class="dsec"><div class="sh">WHAT — 한 일 <span class="ln"></span></div>
+              <div class="prose">All needed fields are present (agent_id, tool_use_id, message_id). Found the real dev DB (401MB). Bringing up the servers in parallel.</div>
+            </div>
+            <div class="dsec"><div class="sh">LLM 동작 <span class="ln"></span></div>
+              <div class="mrow"><span class="ml">TTFT <span class="q">?</span></span><span class="mv">0.82s</span><span class="mp"><span class="prov measured">측정</span></span></div>
+              <div class="mrow"><span class="ml">stop_reason</span><span class="mv">end_turn</span><span class="mp"><span class="prov measured">측정</span></span></div>
+              <div class="mrow"><span class="ml">시도 (attempts)</span><span class="mv">1</span><span class="mp"><span class="prov measured">측정</span></span></div>
+            </div>
+            <div class="dsec"><div class="sh">토큰 <span class="ln"></span></div>
+              <div class="mrow"><span class="ml">입력</span><span class="mv">12,148</span><span class="mp"><span class="prov measured">측정</span></span></div>
+              <div class="mrow"><span class="ml">캐시 읽기 <span class="q">?</span></span><span class="mv">1,204,992</span><span class="mp"><span class="prov measured">측정</span></span></div>
+              <div class="mrow"><span class="ml">출력</span><span class="mv">320</span><span class="mp"><span class="prov measured">측정</span></span></div>
+            </div>
+            <div class="dsec"><div class="sh">비용 <span class="ln"></span></div>
+              <div class="mrow"><span class="ml">이 응답</span><span class="mv">$0.043</span><span class="mp"><span class="prov est">추정</span></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="seclabel">② 세션 목록 — 슬러그·미리보기·상대시간 (UUID 벽 → 사람이 읽는 목록)</div>
+  <div class="slist">
+    <div class="slhead"><h3>Sessions</h3><span class="cnt">17 sessions</span><span class="sp"></span><span class="search">⌕ 프로젝트·슬러그 검색…</span></div>
+    <div class="srow"><div class="sid"><div class="top"><span class="slug">resilient-jingling-lark</span><span class="proj">whats-in-my-cc</span><span class="tag live">● live</span><span class="model">Opus 4.8</span></div><div class="prev">병렬 배치 묶기 UI 개선 — 서브에이전트 그룹핑 누락 조사 + 재설계…</div></div><div class="scol"><span class="big">24,749</span> events</div><div class="scol rel">3분 전</div><div class="smix"><span class="tag">txn 5.6k</span><span class="tag">otel 18k</span><span class="tag">hook 391</span></div></div>
+    <div class="srow"><div class="sid"><div class="top"><span class="slug">brave-summer-pond</span><span class="proj">whats-in-my-cc</span><span class="model">Opus 4.8</span></div><div class="prev">workflow grouping 에픽 — task-notification ↔ tool_use_id 조인 키 검증…</div></div><div class="scol"><span class="big">8,625</span> events</div><div class="scol rel">14시간 전</div><div class="smix"><span class="tag">txn 1.9k</span><span class="tag">otel 6.5k</span><span class="tag">hook 98</span></div></div>
+    <div class="srow"><div class="sid"><div class="top"><span class="slug">quiet-meadow-flux</span><span class="proj">cc-dev-tools</span><span class="model">Sonnet 4.6</span></div><div class="prev">플러그인 hook frontmatter 사고 — 세션 등록 후 해제 불가 재현…</div></div><div class="scol"><span class="big">1,190</span> events</div><div class="scol rel">1일 전</div><div class="smix"><span class="tag">txn 733</span><span class="tag">otel 368</span><span class="tag">hook 89</span></div></div>
+    <div class="srow"><div class="sid"><div class="top"><span class="slug">amber-cedar-loop</span><span class="proj">whats-in-my-cc</span><span class="model">Opus 4.8</span></div><div class="prev">retrospect 스킬 가설 원장 + detector metric_class Goodhart 가드…</div></div><div class="scol"><span class="big">3,058</span> events</div><div class="scol rel">2일 전</div><div class="smix"><span class="tag">txn 1.6k</span><span class="tag">otel 1.3k</span><span class="tag">hook 98</span></div></div>
+  </div>
+
+  <p class="note"><b>주요 변화</b> — <span class="k">①</span> 단일 이벤트는 인라인 한 줄(<code>↳ Read package.json ✓ 28 lines</code>), chevron 없음. <span class="k">②</span> 좌측 시간축에 노드가 매달리고 병렬은 레인으로 갈라져 동시성이 보임. <span class="k">③</span> KPI에 스파크라인+베이스라인 델타(시간 맥락). <span class="k">④</span> detail은 WHAT / LLM동작 / 토큰 / 비용 소제목으로 묶고 행마다 provenance, ID는 복사 가능. <span class="k">⑤</span> 세션 목록은 UUID 대신 슬러그·프로젝트·미리보기·상대시간·모델. <span class="k">⑥</span> 표면 레이어(elevation)로 위계를 만들어 하이라인 격자 제거.</p>
+</div>
+</body>
+</html>
