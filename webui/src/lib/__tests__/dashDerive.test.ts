@@ -251,6 +251,22 @@ describe('rankCohorts', () => {
     expect(b.addedRaw).toEqual([`project:${h2}`]);
     expect(b.removedRaw).toEqual([`project:${h1}`]);
   });
+  it('다중비교 보정: 활성 차원 수만큼 임계가 좁아진다 (B-14)', () => {
+    // 모델 점프(강한 신호) + CC 점프(약한 신호 — cost와 무관한 차원이지만
+    // 경계는 같은 통계로 평가됨). 활성 차원 2 → 유효 임계 0.05.
+    const twoDims = jump.map((r, i) => ({
+      ...r,
+      fingerprint: { ...r.fingerprint, cc_versions: i < 5 ? ['2.1.198'] : ['2.1.200'] },
+    }));
+    const { surfaced, effectiveExceedMax } = rankCohorts(twoDims);
+    expect(effectiveExceedMax).toBeCloseTo(0.05, 5);
+    // 노출된 경계는 전부 유효 임계 이내
+    expect(surfaced.every((b) => (b.exceed ?? 1) <= effectiveExceedMax)).toBe(true);
+  });
+  it('활성 차원 1개면 기본 임계 0.10 그대로', () => {
+    const { effectiveExceedMax } = rankCohorts(jump);
+    expect(effectiveExceedMax).toBeCloseTo(0.1, 5);
+  });
   it('all에는 게이트 미달 경계도 포함(수동 탐색용)', () => {
     const thin = [
       row('a0', '06-01', opus, { cost: 10 }),

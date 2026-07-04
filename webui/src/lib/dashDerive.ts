@@ -330,8 +330,11 @@ function splitStats(rows: SessionSeriesRowDto[]): Map<CohortMetric, Map<number, 
 export function rankCohorts(rows: SessionSeriesRowDto[]): {
   surfaced: RankedBoundary[];
   all: RankedBoundary[];
+  /** 다중비교 보정 후 유효 임계(B-14) — EXCEED_MAX ÷ 활성 개입 차원 수.
+   *  차원이 늘수록 "임의 상위 10%"에 우연히 걸릴 기회도 늘기 때문. */
+  effectiveExceedMax: number;
 } {
-  if (rows.length === 0) return { surfaced: [], all: [] };
+  if (rows.length === 0) return { surfaced: [], all: [], effectiveExceedMax: COHORT_EXCEED_MAX };
   const stats = splitStats(rows);
   const dimBoundaries = new Map<CohortDim, Set<number>>();
   const all: RankedBoundary[] = [];
@@ -394,9 +397,12 @@ export function rankCohorts(rows: SessionSeriesRowDto[]): {
       (d) => d !== b.dim && dimBoundaries.get(d)!.has(b.index),
     );
   }
+  // B-14: 게이트 통과 후보를 보유한 개입 차원 수로 임계를 나눈다(Bonferroni류).
+  const activeDims = new Set(all.filter((b) => b.exceed !== null).map((b) => b.dim)).size;
+  const effectiveExceedMax = COHORT_EXCEED_MAX / Math.max(1, activeDims);
   const surfaced = all
-    .filter((b) => b.exceed !== null && b.exceed <= COHORT_EXCEED_MAX)
+    .filter((b) => b.exceed !== null && b.exceed <= effectiveExceedMax)
     .sort((a, b) => a.exceed! - b.exceed! || b.index - a.index)
     .slice(0, COHORT_TOP_K);
-  return { surfaced, all };
+  return { surfaced, all, effectiveExceedMax };
 }
