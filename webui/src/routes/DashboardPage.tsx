@@ -11,8 +11,11 @@ import { useSearchParams } from 'react-router-dom';
 import { getMetricsSeries, getVerificationSummary, listSessions, ApiError } from '../api/client';
 import type { MetricsSeriesDto, SessionListItem, VerificationSummaryDto } from '../api/types';
 import { sortSeriesAscending } from '../lib/seriesView';
-import { headline, headlineDelta, observedChanges } from '../lib/dashDerive';
+import { buildDaily, headline, headlineDelta, observedChanges, signalsOf } from '../lib/dashDerive';
 import { HeadlineStats } from '../components/dash/HeadlineStats';
+import { DailyVerification } from '../components/dash/DailyVerification';
+import { DailyCostSignals } from '../components/dash/DailyCostSignals';
+import type { CohortMarker, DayDetail } from '../components/dash/dailyOptions';
 import {
   Select,
   SelectContent,
@@ -161,6 +164,44 @@ export default function DashboardPage() {
     [h, prevRows],
   );
   const changes = useMemo(() => observedChanges(rows), [rows]);
+  const daily = useMemo(() => buildDaily(rows), [rows]);
+  /** 코호트 전환 마커 — 관측된 변화 중 시간축에 놓을 수 있는 것(첫 관측·CC 전환). */
+  const markers = useMemo<CohortMarker[]>(
+    () =>
+      changes.flatMap((c) => {
+        if (c.kind === 'top_signals') return [];
+        const date = c.kind === 'model_first' ? c.date : c.lastDate;
+        const dayIdx = daily.dates.indexOf(date);
+        if (dayIdx < 0) return [];
+        return [
+          {
+            dayIdx,
+            label: c.kind === 'model_first' ? t('dash.marker.first', c.model) : `CC ${c.to}`,
+          },
+        ];
+      }),
+    [changes, daily, t],
+  );
+  const dayDetails = useMemo<DayDetail[][]>(
+    () =>
+      daily.sessionsOf.map((idxs) =>
+        idxs.map((ri) => {
+          const r = rows[ri];
+          return {
+            name: nameOf(r.session_id),
+            cost: Math.round(r.metrics.estimated_cost_usd ?? 0),
+            passed: r.metrics.verification_passed,
+            guards: r.metrics.verification_total,
+            signals: signalsOf(r.metrics),
+          };
+        }),
+      ),
+    [daily, rows, nameOf],
+  );
+  const zeroGuards = useMemo(
+    () => rows.filter((r) => r.metrics.verification_total === 0).length,
+    [rows],
+  );
 
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(params);
@@ -258,15 +299,23 @@ export default function DashboardPage() {
                 {changes.map((c, i) => (
                   <span key={i} className="mr-3.5 font-mono text-[11.5px] text-[#b07dff]">
                     {c.kind === 'model_first' && t('dash.observed.modelFirst', c)}
-                    {c.kind === 'cc_change' && t('dash.observed.ccChange', c)}
+                    {c.kind === 'cc_span' && t('dash.observed.ccSpan', c)}
                     {c.kind === 'top_signals' &&
                       t('dash.observed.topSignals', { name: nameOf(c.sessionId), n: c.n })}
                   </span>
                 ))}
               </p>
             )}
-            {/* 모듈 2~6: 일별 검증 / 일별 비용·신호 / 코호트 비교 / 세션
-                타임라인 / 세션 분포 — Task 5~8에서 장착 */}
+            <DailyVerification
+              daily={daily}
+              markers={markers}
+              details={dayDetails}
+              zeroGuards={zeroGuards}
+              guards={h.guards}
+              passed={rows.reduce((a, r) => a + r.metrics.verification_passed, 0)}
+            />
+            <DailyCostSignals daily={daily} markers={markers} details={dayDetails} />
+            {/* 모듈 4~6: 코호트 비교 / 세션 타임라인 / 세션 분포 — Task 6~8 */}
           </TabsContent>
 
           <TabsContent value="verification">

@@ -145,7 +145,7 @@ describe('DashboardPage', () => {
     );
     render(withRouter(<DashboardPage />, '/dashboard?project=all&w=30d'));
     await waitFor(() => expect(screen.getByText(/verification pass/i)).toBeInTheDocument());
-    expect(screen.getByText(/estimated cost/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/estimated cost/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/blended unit rate/i)).toBeInTheDocument();
     expect(screen.getByText(/cache hit/i)).toBeInTheDocument();
     expect(screen.getByText(/tool failure rate/i)).toBeInTheDocument();
