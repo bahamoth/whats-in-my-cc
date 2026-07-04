@@ -25,7 +25,10 @@ interface AutoscrollToggleProps {
 
 export function AutoscrollToggle({ autoscroll, newCount, onEnable, onDisable, leftSlot, indeterminate }: AutoscrollToggleProps) {
   const t = useT();
-  const showCount = (!autoscroll && newCount > 0) || (!!indeterminate && newCount > 0);
+  // Badge shows only while detached (autoscroll OFF) with pending arrivals.
+  // `indeterminate` governs the label wording (approximate count under a
+  // filter), not whether the badge shows — following (ON) always hides it.
+  const showCount = !autoscroll && newCount > 0;
   return (
     <div className={styles.footer} role="status" aria-live="off">
       <div className={styles.left}>{leftSlot}</div>

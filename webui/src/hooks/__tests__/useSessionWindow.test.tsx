@@ -511,4 +511,54 @@ describe('useSessionWindow', () => {
     );
     await waitFor(() => expect(result.current.matchedCount).toBe(42));
   });
+
+  // --- Task 11 defence: deep-link (initialAround) × active filter. The backend
+  // 400s on around×filter (§1.2), so a deep-link mount under an ACTIVE filter
+  // must NOT issue an unfiltered `?around=` fetch (which would render an
+  // unfiltered window while buildStreamModel is already in flat/filter mode).
+  // The filter wins: discard the around-window and load the FILTERED TAIL.
+  it('with initialAround AND an active filter, loads the filtered tail (not the around window)', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    // Stable filter reference (the page memoizes it by filterKey); an inlined
+    // object would churn identity and re-run the initial effect every render.
+    const filter: EventFilterParams = { q: 'deploy' };
+    f.mockResolvedValueOnce(
+      envelope({
+        events: [makeEvent(20), makeEvent(21)],
+        prev_cursor: 'pc-filtered',
+        next_cursor: null,
+        matched_count: 2,
+      }),
+    );
+    const { result } = renderHook(() =>
+      useSessionWindow('s1', {
+        initialAround: makeEvent(10).event_id,
+        filter,
+        filterKey: 'k',
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+    const initUrl = f.mock.calls.at(-1)?.[0] as string;
+    // filtered tail, NOT the around window
+    expect(initUrl).not.toContain('around=');
+    expect(initUrl).toContain(`q=${encodeURIComponent('deploy')}`);
+    expect(result.current.events.map((e) => e.event_id)).toEqual([
+      makeEvent(20).event_id,
+      makeEvent(21).event_id,
+    ]);
+    expect(result.current.matchedCount).toBe(2);
+  });
+
+  it('with initialAround and NO filter, still loads the around window (no regression)', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(9), makeEvent(10)], prev_cursor: 'pc', next_cursor: 'nc' }),
+    );
+    const { result } = renderHook(() =>
+      useSessionWindow('s1', { initialAround: makeEvent(10).event_id }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+    const initUrl = f.mock.calls.at(-1)?.[0] as string;
+    expect(initUrl).toContain(`around=${encodeURIComponent(makeEvent(10).event_id)}`);
+  });
 });
