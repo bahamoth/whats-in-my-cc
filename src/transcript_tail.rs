@@ -128,6 +128,19 @@ pub async fn run(
                                     observed_inserted = stats.observed_inserted,
                                     "transcript tail ingested"
                                 );
+                                // instruction 전향 관측 — 라이브 활동을 수신한
+                                // 지금이 measured 시점이다(스펙 §2 4차 개정).
+                                // 초기 스캔(backfill)에서는 부르지 않는다.
+                                if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                                    if let Err(e) =
+                                        crate::insight::instruction_observe::observe_session_instructions(
+                                            &pool, stem, None,
+                                        )
+                                        .await
+                                    {
+                                        tracing::warn!(error = ?e, session = %stem, "instruction observe failed");
+                                    }
+                                }
                             }
                         }
                         Err(e) => {

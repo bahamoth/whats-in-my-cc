@@ -25,6 +25,18 @@ pub struct SessionFingerprint {
     pub git_branches: Vec<String>,
     pub cwds: Vec<String>,
     pub entrypoints: Vec<String>,
+    /// 4차 개정 — tool_call tool_name(`mcp__…`)에서 파생한 관측 MCP
+    /// server_key 집합(정렬). 개입 차원: "이 플러그인을 붙인 뒤 달라졌나".
+    pub plugins: Vec<String>,
+    /// instruction 전향 관측 — (source, content_sha256) distinct 목록.
+    /// serve 가동 중 관측된 세션에만 존재(소급 backfill 없음).
+    pub instructions: Vec<InstructionRef>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InstructionRef {
+    pub source: String,
+    pub hash: String,
 }
 
 /// observed_event의 nullable TEXT 컬럼 하나의 distinct 정렬 목록.
@@ -55,6 +67,39 @@ pub async fn compute_session_fingerprint(
         .map(|r| r.get::<String, _>("m"))
         .collect();
 
+    let tool_rows = sqlx::query(
+        "SELECT DISTINCT json_extract(payload, '$.tool_name') AS t FROM observed_event \
+         WHERE session_id = ? AND kind = 'tool_call' \
+           AND json_extract(payload, '$.tool_name') LIKE 'mcp__%'",
+    )
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+    let plugins: Vec<String> = tool_rows
+        .iter()
+        .filter_map(|r| {
+            let name: String = r.get("t");
+            crate::insight::event_tags::parse_mcp_tool(&name).map(|(k, _)| k.to_string())
+        })
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+
+    let instr_rows = sqlx::query(
+        "SELECT DISTINCT source, content_sha256 FROM instruction_observation \
+         WHERE session_id = ? ORDER BY source, content_sha256",
+    )
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
+    let instructions = instr_rows
+        .iter()
+        .map(|r| InstructionRef {
+            source: r.get("source"),
+            hash: r.get("content_sha256"),
+        })
+        .collect();
+
     Ok(SessionFingerprint {
         session_id: session_id.to_string(),
         models,
@@ -62,5 +107,7 @@ pub async fn compute_session_fingerprint(
         git_branches: distinct_column(pool, session_id, "git_branch").await?,
         cwds: distinct_column(pool, session_id, "cwd").await?,
         entrypoints: distinct_column(pool, session_id, "entrypoint").await?,
+        plugins,
+        instructions,
     })
 }

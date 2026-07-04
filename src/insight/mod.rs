@@ -4,6 +4,7 @@ pub mod event_tags;
 pub mod extractor;
 pub mod extractors;
 pub mod fingerprint;
+pub mod instruction_observe;
 pub mod manifest;
 pub mod metrics;
 pub mod outcome;
