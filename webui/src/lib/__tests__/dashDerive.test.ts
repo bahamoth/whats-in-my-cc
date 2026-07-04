@@ -7,7 +7,7 @@ import type { SessionSeriesRowDto } from '../../api/types';
 import {
   buildDaily,
   modelColors,
-  cohortCompare,
+  rankCohorts,
   headline,
   headlineDelta,
   laneLayout,
@@ -154,42 +154,6 @@ describe('observedChanges', () => {
   });
 });
 
-describe('cohortCompare', () => {
-  const rows = [
-    row('a', '06-05', ['claude-opus-4-8'], { cost: 10 }),
-    row('b', '06-06', ['claude-opus-4-8'], { cost: 10 }),
-    row('c', '06-07', ['claude-opus-4-8'], { cost: 10 }),
-    row('d', '06-12', ['claude-opus-4-8', 'claude-fable-5'], { cost: 90 }),
-    row('e', '06-13', ['claude-opus-4-8', 'claude-fable-5'], { cost: 90 }),
-    row('f', '06-14', ['claude-opus-4-8', 'claude-fable-5'], { cost: 90 }),
-  ];
-  it('최신 경계의 인접 세그먼트를 전/후로 집계, 라벨은 diff에서 파생', () => {
-    const c = cohortCompare(rows)!;
-    expect(c.added).toEqual(['Fable 5']);
-    expect(c.removed).toEqual([]);
-    expect(c.boundaryIdx).toBe(3);
-    expect(c.before.n).toBe(3);
-    expect(c.after.n).toBe(3);
-    expect(c.after.unitRatePerM! > c.before.unitRatePerM!).toBe(true);
-    expect(c.lowSample).toBe(false);
-    expect(c.alsoCcChanged).toBe(false);
-  });
-  it('경계가 없으면 null', () => {
-    expect(cohortCompare(rows.slice(0, 3))).toBeNull();
-  });
-  it('한쪽 표본 n<3 → lowSample, 동시 CC 변경 → alsoCcChanged', () => {
-    const r2 = [
-      row('a', '06-05', ['claude-opus-4-8'], { cc: ['2.1.198'] }),
-      row('b', '06-06', ['claude-fable-5'], { cc: ['2.1.200'] }),
-    ];
-    const c = cohortCompare(r2)!;
-    expect(c.lowSample).toBe(true);
-    expect(c.alsoCcChanged).toBe(true);
-    expect(c.added).toEqual(['Fable 5']);
-    expect(c.removed).toEqual(['Opus 4.8']);
-  });
-});
-
 describe('modelColors', () => {
   it('최초 관측순으로 팔레트를 고정 배정한다(창 변경에도 안정)', () => {
     const rows = [
@@ -205,5 +169,62 @@ describe('modelColors', () => {
 describe('laneLayout', () => {
   it('겹치면 다음 레인, 자리가 나면 재사용', () => {
     expect(laneLayout([{ x: 0 }, { x: 5 }, { x: 40 }], 20)).toEqual([0, 1, 0]);
+  });
+});
+
+describe('rankCohorts', () => {
+  const opus = ['claude-opus-4-8'];
+  const fable = ['claude-fable-5'];
+  // 앞 6개 세션 단가 $10, 뒤 6개 $30 — 모델 경계(idx 6)에서 뚜렷한 점프.
+  const jump = [
+    ...Array.from({ length: 6 }, (_, i) => row(`a${i}`, `06-0${i + 1}`, opus, { cost: 10 })),
+    ...Array.from({ length: 6 }, (_, i) => row(`b${i}`, `06-1${i + 1}`, fable, { cost: 30 })),
+  ];
+  it('점프 경계를 유의 경계로 노출 — 차원·지표·초과율·라벨', () => {
+    const { surfaced } = rankCohorts(jump);
+    expect(surfaced.length).toBeGreaterThan(0);
+    const top = surfaced[0];
+    expect(top.dim).toBe('models');
+    expect(top.index).toBe(6);
+    expect(top.bestMetric).toBe('unitRate');
+    expect(top.added).toEqual(['Fable 5']);
+    expect(top.removed).toEqual(['Opus 4.8']);
+    // 최대 점프 지점 — 유효 분할점 중 상위(초과율 ≤ 0.10 임계 통과)
+    expect(top.exceed).toBeLessThanOrEqual(0.1);
+    expect(top.before.n).toBe(6);
+    expect(top.after.n).toBe(6);
+  });
+  it('지표가 평평하면 경계가 있어도 노출하지 않는다', () => {
+    const flat = [
+      ...Array.from({ length: 6 }, (_, i) => row(`a${i}`, `06-0${i + 1}`, opus, { cost: 10 })),
+      ...Array.from({ length: 6 }, (_, i) => row(`b${i}`, `06-1${i + 1}`, fable, { cost: 10 })),
+    ];
+    const { surfaced } = rankCohorts(flat);
+    expect(surfaced).toEqual([]);
+  });
+  it('표본 게이트: 한쪽 n<3 경계는 유의 후보에서 제외', () => {
+    const thin = [
+      row('a0', '06-01', opus, { cost: 10 }),
+      ...Array.from({ length: 6 }, (_, i) => row(`b${i}`, `06-1${i + 1}`, fable, { cost: 30 })),
+    ];
+    const { surfaced } = rankCohorts(thin);
+    expect(surfaced.every((b) => b.index !== 1)).toBe(true);
+  });
+  it('같은 인덱스에서 다른 차원도 변하면 alsoChanged에 기록', () => {
+    const withCc = jump.map((r, i) => ({
+      ...r,
+      fingerprint: { ...r.fingerprint, cc_versions: i < 6 ? ['2.1.198'] : ['2.1.200'] },
+    }));
+    const { surfaced } = rankCohorts(withCc);
+    const top = surfaced.find((b) => b.dim === 'models')!;
+    expect(top.alsoChanged).toContain('cc');
+  });
+  it('all에는 게이트 미달 경계도 포함(수동 탐색용)', () => {
+    const thin = [
+      row('a0', '06-01', opus, { cost: 10 }),
+      ...Array.from({ length: 6 }, (_, i) => row(`b${i}`, `06-1${i + 1}`, fable, { cost: 30 })),
+    ];
+    const { all } = rankCohorts(thin);
+    expect(all.some((b) => b.dim === 'models' && b.index === 1)).toBe(true);
   });
 });
