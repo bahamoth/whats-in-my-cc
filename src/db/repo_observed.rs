@@ -994,7 +994,7 @@ pub async fn list_session_window_scan(
     session_id: &str,
     sql_kinds: Option<&[String]>,
     sql_tools: Option<&[String]>,
-    pred: &dyn Fn(&ObservedEvent) -> bool,
+    pred: &(dyn Fn(&ObservedEvent) -> bool + Send + Sync),
     before: Option<&Cursor>,
     after: Option<&Cursor>,
     limit: i64,
@@ -1076,7 +1076,7 @@ pub async fn count_session_scan(
     session_id: &str,
     sql_kinds: Option<&[String]>,
     sql_tools: Option<&[String]>,
-    pred: &dyn Fn(&ObservedEvent) -> bool,
+    pred: &(dyn Fn(&ObservedEvent) -> bool + Send + Sync),
 ) -> Result<i64> {
     let mut count = 0i64;
     let mut resume: Option<Cursor> = None;

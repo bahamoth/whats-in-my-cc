@@ -490,6 +490,28 @@ pub struct EventsQuery {
     /// Cursor-paged like the unfiltered window; cannot be combined with
     /// `around` / `tool_use_id` / `request_id`.
     pub kind: Option<String>,
+    /// §1.2 role axis — CSV of `user` / `assistant` / `system` (mapped to
+    /// `user_message` / `assistant_message` / `system_summary` kinds).
+    pub role: Option<String>,
+    /// §1.2 origin axis — CSV of `origin_of` classifications (user_message only).
+    pub origin: Option<String>,
+    /// §1.2 error axis — `true` restricts to tool_result events with
+    /// `tool_result.is_error == true`.
+    pub error: Option<String>,
+    /// §1.2 signal axis — `true` restricts to events referenced by this
+    /// session's signal evidence_refs.
+    pub signal: Option<String>,
+    /// §1.2 verification axis — CSV of `passed` / `failed` / `unknown`,
+    /// matched against each event's latest verification_run status (by
+    /// trigger_event_id).
+    pub verification: Option<String>,
+    /// §1.2 tool axis — CSV of tool_name values (tool_call events).
+    pub tool: Option<String>,
+    /// §1.2 model axis — CSV of exact model name matches (assistant_message).
+    pub model: Option<String>,
+    /// §1.2 free-text search — case-insensitive substring over message/tool
+    /// input/result text.
+    pub q: Option<String>,
     /// On-demand correlated telemetry for the detail view: when either is set,
     /// the endpoint returns the events whose payload carries that
     /// tool_use_id / request_id (instead of the cursor-paged window).
@@ -524,46 +546,40 @@ pub async fn session_events(
             }),
         }
     }
-    // Dogfood 2026-06-12 — `kind=` CSV filter. Validate every name against the
-    // EventKind taxonomy up front: an unknown kind silently matching nothing
-    // would reproduce the silent-drop failure this slice removes.
-    let kind_filter: Option<Vec<String>> = match q.kind.as_deref() {
-        None => None,
-        Some(csv) => {
-            let mut kinds = Vec::new();
-            for k in csv.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-                let valid = serde_json::from_value::<crate::model::observed::EventKind>(
-                    serde_json::Value::String(k.to_string()),
-                )
-                .is_ok();
-                if !valid {
-                    return Err((
-                        StatusCode::BAD_REQUEST,
-                        Json(json!({
-                            "type": "about:blank",
-                            "title": "INVALID_KIND",
-                            "detail": format!("unknown event kind: {k}"),
-                        })),
-                    ));
-                }
-                kinds.push(k.to_string());
-            }
-            if kinds.is_empty() {
-                None
-            } else {
-                Some(kinds)
-            }
-        }
-    };
-    if kind_filter.is_some()
-        && (q.around.is_some() || q.tool_use_id.is_some() || q.request_id.is_some())
+    // §1.2 — 8축 필터 파싱. kind는 기존 dogfood 2026-06-12 검증을
+    // `EventFilter::from_params`로 이관(계약 보존: 미지 kind → 400
+    // INVALID_KIND, 그 외 축 오류 → INVALID_FILTER).
+    use crate::insight::event_filter::{EventFilter, FilterCtx, RawFilterParams};
+    let filter = EventFilter::from_params(&RawFilterParams {
+        kind: q.kind.as_deref(),
+        role: q.role.as_deref(),
+        origin: q.origin.as_deref(),
+        error: q.error.as_deref(),
+        signal: q.signal.as_deref(),
+        verification: q.verification.as_deref(),
+        tool: q.tool.as_deref(),
+        model: q.model.as_deref(),
+        q: q.q.as_deref(),
+    })
+    .map_err(|detail| {
+        let title = if detail.starts_with("unknown event kind:") {
+            "INVALID_KIND"
+        } else {
+            "INVALID_FILTER"
+        };
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"type":"about:blank","title": title,"detail": detail})),
+        )
+    })?;
+    if filter.is_some() && (q.around.is_some() || q.tool_use_id.is_some() || q.request_id.is_some())
     {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({
                 "type": "about:blank",
                 "title": "INVALID_PARAMS",
-                "detail": "kind cannot be combined with around / tool_use_id / request_id",
+                "detail": "filter params cannot be combined with around / tool_use_id / request_id",
             })),
         ));
     }
@@ -586,12 +602,14 @@ pub async fn session_events(
                 events,
                 prev_cursor: None,
                 next_cursor: None,
+                matched_count: None,
             },
         }));
     }
 
     let limit = q.limit.unwrap_or(500);
 
+    let mut matched_count: Option<i64> = None;
     let evs = if let Some(around_id) = q.around.as_deref() {
         // Deep-link window centered on an event the client only knows by id
         // (it cannot build the `<observed_at>|<event_id>` cursor itself).
@@ -614,26 +632,48 @@ pub async fn session_events(
     } else {
         let before = parse_cursor(q.before.as_deref())?;
         let after = parse_cursor(q.after.as_deref())?;
-        match &kind_filter {
-            Some(kinds) => repo_observed::list_session_window_kinds(
+        if let Some(f) = &filter {
+            let ctx = if f.needs_ctx() {
+                FilterCtx {
+                    signal_evidence: repo_signal::evidence_event_ids(&pool, &id)
+                        .await
+                        .expect("db"),
+                    verification_by_trigger: repo_verification_run::status_by_trigger(&pool, &id)
+                        .await
+                        .expect("db"),
+                }
+            } else {
+                FilterCtx::default()
+            };
+            let pred = |e: &crate::model::observed::ObservedEvent| f.matches(e, &ctx);
+            // kind·tool은 SQL 푸시다운, matches()에도 남아 있어 이중 안전.
+            matched_count = Some(
+                repo_observed::count_session_scan(
+                    &pool,
+                    &id,
+                    f.kinds.as_deref(),
+                    f.tools.as_deref(),
+                    &pred,
+                )
+                .await
+                .expect("db"),
+            );
+            repo_observed::list_session_window_scan(
                 &pool,
                 &id,
-                kinds,
+                f.kinds.as_deref(),
+                f.tools.as_deref(),
+                &pred,
                 before.as_ref(),
                 after.as_ref(),
                 limit,
             )
             .await
-            .expect("db"),
-            None => repo_observed::list_session_window(
-                &pool,
-                &id,
-                before.as_ref(),
-                after.as_ref(),
-                limit,
-            )
-            .await
-            .expect("db"),
+            .expect("db")
+        } else {
+            repo_observed::list_session_window(&pool, &id, before.as_ref(), after.as_ref(), limit)
+                .await
+                .expect("db")
         }
     };
 
@@ -647,7 +687,7 @@ pub async fn session_events(
                     last.event_id
                 ))
             };
-            let next = if kind_filter.is_some() {
+            let next = if filter.is_some() {
                 // Filtered window: the session's overall last_observed_at is
                 // the wrong tip (it is usually bulk telemetry). The tip rule
                 // for the filtered stream: a newest-anchored window (no
@@ -694,6 +734,7 @@ pub async fn session_events(
             events,
             prev_cursor,
             next_cursor,
+            matched_count,
         },
     }))
 }

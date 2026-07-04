@@ -108,6 +108,11 @@ pub struct SessionEventsResponse {
     pub events: Vec<Value>,
     pub prev_cursor: Option<String>,
     pub next_cursor: Option<String>,
+    /// §1.2 — total events matching the active filter across the whole
+    /// session (not just this window). `None` (omitted) when no filter axis
+    /// is active — the field only exists when a filter narrowed the window.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_count: Option<i64>,
 }
 
 #[derive(Serialize)]
