@@ -293,7 +293,7 @@ export const en = {
   'dash.observed.modelFirst': (a: { date: string; model: string }) =>
     `${a.date} ${a.model} first observed`,
   'dash.observed.ccSpan': (a: { from: string; to: string; count: number }) =>
-    a.count > 1 ? `CC ${a.from} → ${a.to} · ${a.count} transitions` : `CC ${a.from} → ${a.to}`,
+    a.count > 1 ? `Claude Code ${a.from} → ${a.to} · ${a.count} transitions` : `Claude Code ${a.from} → ${a.to}`,
   'dash.observed.topSignals': (a: { name: string; n: number }) => `most signals ${a.name} (${a.n})`,
   'dash.ver.error': 'Failed to load the verification summary.',
   'dash.daily.ver.title': 'Verification — daily',
@@ -310,7 +310,7 @@ export const en = {
   'dash.cohort.retired': (m: string) => `${m} retired`,
   'dash.cohort.beforeAfter': (a: { b: number; a: number }) => `before ${a.b} · after ${a.a} sessions`,
   'dash.cohort.lowSample': 'low sample',
-  'dash.cohort.ccAlso': 'CC version also changed at this boundary — effects are not separable',
+  'dash.cohort.ccAlso': 'Claude Code version also changed at this boundary — effects are not separable',
   'dash.cohort.sigPerSession': 'Signals / session',
   'dash.cohort.before': 'before',
   'dash.cohort.after': 'after',
@@ -354,6 +354,10 @@ export const en = {
   'dash.ver.cov.desc': 'covered / uncovered diff hunks · top sessions by hunk count',
   'dash.ver.cov.overall': (a: { pct: number; n: number }) => `overall ${a.pct}% · uncovered ${a.n}`,
   'dash.ver.cov.uncovered': (n: number) => `uncovered ${n}`,
+  'dash.range.last30': 'Last 30 days',
+  'dash.range.last90': 'Last 90 days',
+  'dash.range.all': 'All time',
+  'dash.range.hint': 'Pick two dates on the calendar for a custom range.',
   'dash.eyebrow': 'Project dashboard',
   'dash.allProjects': 'All projects',
   'dash.projectLabel': 'Project',

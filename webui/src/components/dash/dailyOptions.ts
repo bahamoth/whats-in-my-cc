@@ -18,7 +18,7 @@ export type DayDetail = {
 
 const MONO = 'ui-monospace,Menlo,monospace';
 
-function markLine(markers: CohortMarker[]) {
+function markLine(markers: CohortMarker[], nDays: number) {
   return {
     symbol: 'none',
     animationDuration: 900,
@@ -29,7 +29,14 @@ function markLine(markers: CohortMarker[]) {
       fontSize: 10.5,
       formatter: (p: { name: string }) => p.name,
     },
-    data: markers.map((m) => ({ name: m.label, xAxis: m.dayIdx })),
+    // 우측 40% 구간의 마커는 라벨을 선 왼쪽으로 — 차트 밖 클리핑 방지.
+    data: markers.map((m) => ({
+      name: m.label,
+      xAxis: m.dayIdx,
+      ...(m.dayIdx / Math.max(1, nDays - 1) > 0.6
+        ? { label: { align: 'right' as const, padding: [0, 6, 0, 0] } }
+        : { label: { align: 'left' as const, padding: [0, 0, 0, 6] } }),
+    })),
   };
 }
 
@@ -77,7 +84,6 @@ export function buildVerOption(args: {
       splitLine: { show: false },
     },
     yAxis: { type: 'value', axisLabel: AXIS_LABEL, splitLine: SPLIT_LINE },
-    dataZoom: [{ type: 'inside' }],
     series: [
       {
         name: labels.passed,
@@ -102,7 +108,7 @@ export function buildVerOption(args: {
         data: daily.unknown,
         barMaxWidth: 26,
         itemStyle: { color: OUTCOME_COLORS.unknown, opacity: 0.75, borderRadius: [3, 3, 0, 0] },
-        markLine: markLine(markers),
+        markLine: markLine(markers, daily.dates.length),
       },
     ],
   };
@@ -119,7 +125,7 @@ export function buildCostOption(args: {
   return {
     animationDuration: 700,
     animationEasing: 'cubicOut',
-    grid: { left: 56, right: 18, top: 26, bottom: 52 },
+    grid: { left: 56, right: 18, top: 26, bottom: 30 },
     tooltip: {
       ...TOOLTIP,
       trigger: 'axis',
@@ -151,21 +157,6 @@ export function buildCostOption(args: {
       axisLabel: { ...AXIS_LABEL, formatter: (v: number) => `$${v}` },
       splitLine: SPLIT_LINE,
     },
-    dataZoom: [
-      { type: 'inside' },
-      {
-        type: 'slider',
-        height: 26,
-        bottom: 10,
-        borderColor: '#1d212c',
-        backgroundColor: '#11141b',
-        fillerColor: 'rgba(79,140,255,.10)',
-        handleStyle: { color: '#2a3040', borderColor: '#2a3040' },
-        moveHandleStyle: { color: '#2a3040' },
-        dataBackground: { lineStyle: { color: '#2a3040' }, areaStyle: { color: '#161a23' } },
-        textStyle: { color: '#6a7180', fontSize: 10 },
-      },
-    ],
     series: [
       {
         type: 'bar',
@@ -178,7 +169,7 @@ export function buildCostOption(args: {
           },
         })),
         barMaxWidth: 26,
-        markLine: markLine(markers),
+        markLine: markLine(markers, daily.dates.length),
       },
     ],
   };

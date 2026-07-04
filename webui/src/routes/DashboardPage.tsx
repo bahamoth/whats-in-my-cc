@@ -34,9 +34,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DateRangeControl, type WindowSel } from '../components/dash/DateRangeControl';
 import { useT } from '../i18n';
 
 type SeriesState =
@@ -50,8 +50,49 @@ type VsumState =
   | { kind: 'ok'; data: VerificationSummaryDto }
   | { kind: 'error' };
 
-type WindowKey = '30d' | '90d' | 'all';
-const WINDOW_DAYS: Record<Exclude<WindowKey, 'all'>, number> = { '30d': 30, '90d': 90 };
+type WindowKey = '30d' | '90d' | 'all' | 'custom';
+const WINDOW_DAYS: Record<'30d' | '90d', number> = { '30d': 30, '90d': 90 };
+
+/** URL 파라미터 → 창 선택. custom은 from/to(YYYY-MM-DD)가 모두 있어야 성립. */
+function readWindow(params: URLSearchParams): WindowSel {
+  const w = params.get('w');
+  if (w === 'custom') {
+    const from = params.get('from');
+    const to = params.get('to');
+    if (from && to) return { kind: 'custom', from, to };
+    return { kind: 'all' };
+  }
+  if (w === '30d' || w === '90d') return { kind: w };
+  return { kind: 'all' };
+}
+
+/** 창 선택 → fetch 범위(ISO)와 직전 동일 창. all은 비교 없음. */
+function windowRange(sel: WindowSel): {
+  from?: string;
+  to?: string;
+  prevFrom?: string;
+  prevTo?: string;
+} {
+  if (sel.kind === 'all') return {};
+  if (sel.kind === 'custom') {
+    const fromMs = Date.parse(`${sel.from}T00:00:00Z`);
+    const toMs = Date.parse(`${sel.to}T23:59:59Z`);
+    const span = toMs - fromMs;
+    return {
+      from: new Date(fromMs).toISOString(),
+      to: new Date(toMs).toISOString(),
+      prevFrom: new Date(fromMs - span).toISOString(),
+      prevTo: new Date(fromMs).toISOString(),
+    };
+  }
+  const span = WINDOW_DAYS[sel.kind] * 86_400_000;
+  const now = Date.now();
+  return {
+    from: new Date(now - span).toISOString(),
+    prevFrom: new Date(now - 2 * span).toISOString(),
+    prevTo: new Date(now - span).toISOString(),
+  };
+}
 
 function basename(path: string): string {
   const parts = path.split('/').filter(Boolean);
@@ -67,7 +108,8 @@ export default function DashboardPage() {
   const [vsum, setVsum] = useState<VsumState>({ kind: 'idle' });
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
 
-  const windowKey = (params.get('w') as WindowKey | null) ?? 'all';
+  const windowSel = readWindow(params);
+  const windowKey: WindowKey = windowSel.kind;
   const projectParam = params.get('project');
   const tab = params.get('tab') === 'verification' ? 'verification' : 'overview';
 
@@ -105,10 +147,8 @@ export default function DashboardPage() {
     setSeries({ kind: 'loading' });
     setPrevSeries(null);
     setVsum({ kind: 'idle' });
-    const spanMs = windowKey === 'all' ? null : WINDOW_DAYS[windowKey] * 86_400_000;
-    const now = Date.now();
-    const from = spanMs ? new Date(now - spanMs).toISOString() : undefined;
-    getMetricsSeries({ project: effectiveProject, from, limit: 200 })
+    const range = windowRange(readWindow(params));
+    getMetricsSeries({ project: effectiveProject, from: range.from, to: range.to, limit: 200 })
       .then((data) => {
         if (alive) setSeries({ kind: 'ok', data });
       })
@@ -116,11 +156,11 @@ export default function DashboardPage() {
         if (alive)
           setSeries({ kind: 'error', message: e instanceof ApiError ? e.detail : String(e) });
       });
-    if (spanMs) {
+    if (range.prevFrom) {
       getMetricsSeries({
         project: effectiveProject,
-        from: new Date(now - 2 * spanMs).toISOString(),
-        to: new Date(now - spanMs).toISOString(),
+        from: range.prevFrom,
+        to: range.prevTo,
         limit: 200,
       })
         .then((data) => {
@@ -133,7 +173,9 @@ export default function DashboardPage() {
     return () => {
       alive = false;
     };
-  }, [effectiveProject, windowKey, projectParam, sessions.length]);
+    // params는 windowKey·from·to로 정규화되어 반영된다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveProject, windowKey, params.get('from'), params.get('to'), projectParam, sessions.length]);
 
   /** 검증 탭 lazy fetch — 같은 프로젝트·창 컨텍스트.
    *  주의: vsum.kind를 deps에 넣으면 setVsum(loading)이 effect를 재실행시켜
@@ -145,10 +187,11 @@ export default function DashboardPage() {
     if (vsum.kind !== 'idle') return;
     let cancelled = false;
     setVsum({ kind: 'loading' });
-    const spanMs = windowKey === 'all' ? null : WINDOW_DAYS[windowKey] * 86_400_000;
+    const range = windowRange(readWindow(params));
     getVerificationSummary({
       project: effectiveProject,
-      from: spanMs ? new Date(Date.now() - spanMs).toISOString() : undefined,
+      from: range.from,
+      to: range.to,
     })
       .then((data) => {
         if (!cancelled) setVsum({ kind: 'ok', data });
@@ -162,7 +205,7 @@ export default function DashboardPage() {
     };
     // vsum.kind는 재진입 가드로만 읽는다 — deps에 넣으면 자기취소 루프.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, series.kind, effectiveProject, windowKey]);
+  }, [tab, series.kind, effectiveProject, windowKey, params.get('from'), params.get('to')]);
 
   const rows = useMemo(
     () => (series.kind === 'ok' ? sortSeriesAscending(series.data.sessions) : []),
@@ -196,7 +239,7 @@ export default function DashboardPage() {
         return [
           {
             dayIdx,
-            label: c.kind === 'model_first' ? t('dash.marker.first', c.model) : `CC ${c.to}`,
+            label: c.kind === 'model_first' ? t('dash.marker.first', c.model) : `Claude Code ${c.to}`,
           },
         ];
       }),
@@ -265,16 +308,22 @@ export default function DashboardPage() {
               ))}
             </SelectContent>
           </Select>
-          <ToggleGroup
-            type="single"
-            value={windowKey}
-            onValueChange={(v) => v && setParam('w', v)}
-            aria-label={t('dash.windowLabel')}
-          >
-            <ToggleGroupItem value="30d">{t('dash.window.30d')}</ToggleGroupItem>
-            <ToggleGroupItem value="90d">{t('dash.window.90d')}</ToggleGroupItem>
-            <ToggleGroupItem value="all">{t('dash.window.all')}</ToggleGroupItem>
-          </ToggleGroup>
+          <DateRangeControl
+            sel={windowSel}
+            onChange={(next) => {
+              const p = new URLSearchParams(params);
+              if (next.kind === 'custom') {
+                p.set('w', 'custom');
+                p.set('from', next.from);
+                p.set('to', next.to);
+              } else {
+                p.set('w', next.kind);
+                p.delete('from');
+                p.delete('to');
+              }
+              setParams(p, { replace: true });
+            }}
+          />
         </div>
       </div>
 
