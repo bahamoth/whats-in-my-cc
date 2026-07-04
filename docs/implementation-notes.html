@@ -5935,9 +5935,11 @@ vitest: 69 passed
     렌더까지'로 강화. ⑤ 모델 표기 통일: shortModel/shortModelSet 삭제,
     formatModel은 displayModel 위임(minor 없는 'claude-fable-5'가 원문 노출되던
     회귀 수정). 미사용 dash.* i18n 키 45개 제거(en/ko 동기).</p>
-    <p><b>알려진 한계(후속):</b> ⓐ 변경 커버리지는 기존 covered_diff_hunk_ids의 보수
-    근사(세션에 passed run이 있으면 전 hunk 커버)라 실데이터에서 100%로 포화 —
-    정밀 시간 선행 조인은 후속. ⓑ 코호트 비교의 경계 선택은 최신 경계 고정 —
+    <p><b>알려진 한계(후속):</b> ⓐ <b>해소(2026-07-04 2차)</b> — 변경 커버리지를 정밀
+    시간 선행 조인으로 교체: hunk 도입 이벤트의 observed_at 이후에 passed run이
+    있을 때만 covered, 도입 시점 미상 hunk는 비커버(검증 안 된 변경을 숨기지 않는
+    보수). 실데이터 100% 포화 → 736/758로 분화. per-run API의
+    covered_diff_hunk_ids는 기존 근사 의미 유지(계약 불변). ⓑ 코호트 비교의 경계 선택은 최신 경계 고정 —
     스펙 §2.3의 마커 클릭 전환은 미구현(후속). ⓒ 세션 리스트 헤더 문구는 기존
     영어 하드코딩 관례를 따름(리스트 i18n 일괄 전환은 별도 작업).</p>
   </section>

@@ -3,8 +3,9 @@
 //! 결정론 정의를 잠근다:
 //! - recovered: failed run과 같은 (session, command_kind)에 더 늦은 passed 존재
 //! - rhythm pct: (started_at − session.first) / (last − first) × 100, 소수 1자리
-//! - coverage: 세션에 파싱 가능한 started_at의 passed run이 하나라도 있으면
-//!   그 세션 hunk 전부 covered(기존 covered_diff_hunk_ids의 보수적 의미와 동일)
+//! - coverage(정밀, 2026-07-04 2차): hunk는 도입 이벤트의 observed_at 이후에
+//!   passed run이 존재할 때만 covered. 도입 시점을 알 수 없는 hunk는 커버로
+//!   치지 않는다(검증 안 된 변경을 숨기지 않는 방향의 보수).
 
 use axum_test::TestServer;
 use serde_json::Value;
@@ -79,18 +80,40 @@ async fn seed_run(
     .unwrap();
 }
 
-async fn seed_hunks(pool: &sqlx::SqlitePool, sid: &str, n: usize) {
-    for i in 0..n {
-        sqlx::query(
-            "INSERT INTO diff_hunk (diff_hunk_id, schema_version, session_id, file_path, change_type, introduced_by_event_id, patch_preview, lines_added, lines_removed)
-             VALUES (?, 'diff_hunk.v1', ?, 'src/x.rs', 'modify', 'ev_x', '@@', 1, 0)",
-        )
-        .bind(format!("dh_{sid}_{i}"))
-        .bind(sid)
-        .execute(pool)
-        .await
-        .unwrap();
-    }
+/// hunk를 도입 이벤트(관측 시각 포함)와 함께 시드한다 — 정밀 커버리지의
+/// 시간 선행 조인이 실제 observed_event를 읽는 것을 검증하기 위해.
+async fn seed_hunk_at(pool: &sqlx::SqlitePool, sid: &str, idx: usize, observed_at: &str) {
+    let ev_id = format!("ev_hunk_{sid}_{idx}");
+    sqlx::query(
+        "INSERT INTO raw_event (raw_event_id, ingest_run_id, source_type, source_uri, source_line_no, source_byte_offset, payload_sha256, payload, captured_at)
+         VALUES (?, 'run_vs', 'claude_transcript', 'vs.jsonl', 0, 0, ?, '{}', datetime('now'))",
+    )
+    .bind(format!("raw_hunk_{sid}_{idx}"))
+    .bind(format!("sha_hunk_{sid}_{idx}"))
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO observed_event (event_id, raw_event_id, schema_version, session_id, observed_at, actor, kind, payload, parser_version)
+         VALUES (?, ?, 'observed_event.v1', ?, ?, 'assistant', 'tool_result', '{}', 'test')",
+    )
+    .bind(&ev_id)
+    .bind(format!("raw_hunk_{sid}_{idx}"))
+    .bind(sid)
+    .bind(observed_at)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO diff_hunk (diff_hunk_id, schema_version, session_id, file_path, change_type, introduced_by_event_id, patch_preview, lines_added, lines_removed)
+         VALUES (?, 'diff_hunk.v1', ?, 'src/x.rs', 'modify', ?, '@@', 1, 0)",
+    )
+    .bind(format!("dh_{sid}_{idx}"))
+    .bind(sid)
+    .bind(&ev_id)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 /// A: failed→passed(test, 복구) + build passed, hunk 3 (전부 covered)
@@ -134,7 +157,11 @@ async fn seeded() -> sqlx::SqlitePool {
         "2026-06-10T07:30:00+00:00",
     )
     .await;
-    seed_hunks(&p, "sess_va", 3).await;
+    // A: 마지막 passed run은 07:30. 01:00·05:30 도입 hunk는 covered,
+    // 09:00 도입 hunk는 이후 passed가 없어 uncovered.
+    seed_hunk_at(&p, "sess_va", 0, "2026-06-10T01:00:00+00:00").await;
+    seed_hunk_at(&p, "sess_va", 1, "2026-06-10T05:30:00+00:00").await;
+    seed_hunk_at(&p, "sess_va", 2, "2026-06-10T09:00:00+00:00").await;
     seed_session_events(
         &p,
         "sess_vb",
@@ -172,7 +199,8 @@ async fn seeded() -> sqlx::SqlitePool {
         "2026-06-11T00:50:00+00:00",
     )
     .await;
-    seed_hunks(&p, "sess_vb", 1).await;
+    // B: passed run이 없으므로 도입 시점과 무관하게 uncovered.
+    seed_hunk_at(&p, "sess_vb", 0, "2026-06-11T00:10:00+00:00").await;
     p
 }
 
@@ -221,12 +249,13 @@ async fn summary_aggregates_kinds_failures_rhythm_coverage() {
     assert_eq!(pcts, vec![25.0, 50.0, 75.0]);
     assert_eq!(rhythm[0]["runs"][0]["status"], "failed");
 
-    // coverage: A는 passed run 존재 → hunk 3 전부, B는 passed 없음 → 0.
-    assert_eq!(d["coverage"]["covered"], 3);
+    // coverage(정밀): A는 도입 01:00·05:30 hunk만 이후 passed(05:00은 아님 —
+    // 05:30 hunk를 커버하는 것은 07:30 build passed) → 2/3. B는 passed 없음 → 0/1.
+    assert_eq!(d["coverage"]["covered"], 2);
     assert_eq!(d["coverage"]["total"], 4);
     let by = d["coverage"]["by_session"].as_array().unwrap();
     assert_eq!(by[0]["session_id"], "sess_va");
-    assert_eq!(by[0]["covered"], 3);
+    assert_eq!(by[0]["covered"], 2);
     assert_eq!(by[1]["session_id"], "sess_vb");
     assert_eq!(by[1]["covered"], 0);
 }
