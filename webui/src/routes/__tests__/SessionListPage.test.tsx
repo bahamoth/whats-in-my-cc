@@ -112,7 +112,7 @@ describe('SessionListPage', () => {
     render(withRouter(<SessionListPage />));
     const link = await screen.findByText('legacy');
     const row = link.closest('tr')!;
-    expect(within(row).getByText('—')).toBeInTheDocument();
+    expect(within(row).getAllByText('—').length).toBeGreaterThan(0);
   });
 
   function headerByLabel(label: string): HTMLElement {
@@ -259,4 +259,107 @@ describe('SessionListPage', () => {
     expect(screen.queryByText('resilient-jingling-lark')).toBeNull();
     expect(screen.getByText('quiet-meadow-flux')).toBeInTheDocument();
   });
+
+  // ---- 2026-07-04 리스트 지표 컬럼(추가형) ----
+
+  const METRICS_ROW = {
+    session_id: 'mixed',
+    first_observed_at: '2026-05-21T00:00:00Z',
+    last_observed_at: '2026-05-21T01:00:00Z',
+    event_count: 100,
+    metrics: {
+      session_id: 'mixed',
+      tool_call_total: 50,
+      tool_failure_count: 3,
+      verification_total: 12,
+      verification_passed: 8,
+      verification_failed: 2,
+      verification_unknown: 2,
+      verification_not_executed: 0,
+      context_bloat_count: 1,
+      tool_user_rejected: 0,
+      tool_policy_denied: 0,
+      tool_cancelled: 0,
+      tool_backgrounded: 0,
+      turn_duration_ms_total: 0,
+      turn_duration_count: 0,
+      api_error_count: 0,
+      api_rate_limit_count: 0,
+      input_tokens: 100_000,
+      output_tokens: 500_000,
+      cache_read_input_tokens: 9_400_000,
+      cache_creation_input_tokens: 400_000,
+      estimated_cost_usd: 42.5,
+      compact_boundary_count: 0,
+      tool_result_truncated_count: 0,
+      user_interruption_count: 0,
+      detector_firing: {},
+    },
+    fingerprint: { session_id: 'mixed', models: [], cc_versions: [], git_branches: [], cwds: [], entrypoints: [] },
+  };
+
+  function routeFetch(sessions: unknown[], series: unknown[] | null) {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation((input: RequestInfo) => {
+      const url = String(input);
+      if (url.startsWith('/v1/metrics')) {
+        if (series === null) return Promise.resolve(new Response('{"detail":"x"}', { status: 500 }));
+        return Promise.resolve(envelope({ sessions: series, session_count: series.length, matched_count: series.length }));
+      }
+      if (url.startsWith('/v1/sessions')) return Promise.resolve(envelope(sessions));
+      return Promise.reject(new Error(`unexpected: ${url}`));
+    });
+  }
+
+  it('metrics join — 검증·신호·비용·단가·적중 컬럼을 렌더한다', async () => {
+    routeFetch(
+      [{ session_id: 'mixed', first_observed_at: '2026-05-21T00:00:00Z', last_observed_at: '2026-05-21T01:00:00Z', event_count: 100, source_uris: [] }],
+      [METRICS_ROW],
+    );
+    render(withRouter(<SessionListPage />));
+    await screen.findByText('mixed');
+    await waitFor(() =>
+      expect(
+        screen.getByText((_, el) => el?.tagName === 'TD' && el.textContent?.startsWith('8/12') === true),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText('$42.5')).toBeInTheDocument(); // 비용
+    expect(screen.getByText('$42.5/1M')).toBeInTheDocument(); // 단가 (billed 1M)
+    expect(screen.getByText('94.9%')).toBeInTheDocument(); // 적중
+    expect(screen.getByText('4')).toBeInTheDocument(); // 신호 3+1
+  });
+
+  it('metrics fetch 실패 시 기존 컬럼은 정상, 지표는 —', async () => {
+    routeFetch(
+      [{ session_id: 'alone', first_observed_at: '2026-05-21T00:00:00Z', last_observed_at: '2026-05-21T01:00:00Z', event_count: 7, source_uris: [] }],
+      null,
+    );
+    render(withRouter(<SessionListPage />));
+    await screen.findByText('alone');
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('cost 헤더 클릭 → 비용 내림차순 정렬', async () => {
+    const mk = (sid: string, cost: number) => ({
+      ...METRICS_ROW,
+      session_id: sid,
+      metrics: { ...METRICS_ROW.metrics, session_id: sid, estimated_cost_usd: cost },
+      fingerprint: { ...METRICS_ROW.fingerprint, session_id: sid },
+    });
+    routeFetch(
+      [
+        { session_id: 'cheap', first_observed_at: '2026-05-21T00:00:00Z', last_observed_at: '2026-05-21T02:00:00Z', event_count: 1, source_uris: [] },
+        { session_id: 'pricey', first_observed_at: '2026-05-21T00:00:00Z', last_observed_at: '2026-05-21T01:00:00Z', event_count: 1, source_uris: [] },
+      ],
+      [mk('cheap', 1), mk('pricey', 900)],
+    );
+    render(withRouter(<SessionListPage />));
+    await screen.findByText('cheap');
+    fireEvent.click(screen.getByText(/^cost/));
+    await waitFor(() => {
+      const rows = screen.getAllByRole('row');
+      expect(rows[1]).toHaveTextContent('pricey');
+      expect(rows[2]).toHaveTextContent('cheap');
+    });
+  });
+
 });
