@@ -1,0 +1,159 @@
+/* Task 10 — FilterBar. Follows the stream/ directory's CSS-module convention
+   (StreamLegend/AutoscrollToggle), not the dash/ tailwind+shadcn convention. */
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  background: var(--wimcc-surface-2);
+  border: 1px solid var(--wimcc-border);
+  border-radius: var(--wimcc-radius-sm, 7px);
+}
+
+.axes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.title {
+  font-weight: 600;
+  color: var(--wimcc-fg-muted);
+}
+
+.dropdown {
+  position: relative;
+}
+
+.summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  color: var(--wimcc-fg-muted);
+  background: var(--wimcc-surface-3);
+  border: 1px solid var(--wimcc-border);
+  border-radius: 5px;
+  cursor: pointer;
+  list-style: none;
+}
+.summary::-webkit-details-marker { display: none; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  padding: 0 3px;
+  font-size: 10px;
+  color: var(--wimcc-fg);
+  background: var(--wimcc-surface-1);
+  border-radius: 999px;
+}
+
+.menu {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 160px;
+  margin-top: 4px;
+  padding: 6px;
+  background: var(--wimcc-surface-1);
+  border: 1px solid var(--wimcc-border-strong);
+  border-radius: 7px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+
+.option {
+  padding: 3px 6px;
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 11px;
+  text-align: left;
+  color: var(--wimcc-fg-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.option:hover { background: var(--wimcc-surface-2); }
+.option[aria-pressed='true'] {
+  color: var(--wimcc-fg);
+  background: var(--wimcc-surface-2);
+  border-color: var(--wimcc-border-strong);
+}
+
+.groupLabel {
+  margin-top: 4px;
+  padding: 0 6px;
+  font-size: 10px;
+  color: var(--wimcc-fg-subtle);
+}
+
+.miniInput {
+  width: 100%;
+  padding: 3px 6px;
+  font-size: 11px;
+  color: var(--wimcc-fg);
+  background: var(--wimcc-surface-2);
+  border: 1px solid var(--wimcc-border);
+  border-radius: 4px;
+}
+
+.search {
+  flex: 1 1 160px;
+  min-width: 140px;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  color: var(--wimcc-fg);
+  background: var(--wimcc-surface-1);
+  border: 1px solid var(--wimcc-border);
+  border-radius: 5px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--wimcc-fg-muted);
+  background: var(--wimcc-surface-3);
+  border: 1px solid var(--wimcc-border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.chip:hover { color: var(--wimcc-fg); background: var(--wimcc-surface-2); }
+
+.matched {
+  font-size: 11px;
+  color: var(--wimcc-fg-subtle);
+}
+
+.clearAll {
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--wimcc-fg-muted);
+  background: none;
+  border: 1px solid var(--wimcc-border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.clearAll:hover { color: var(--wimcc-fg); background: var(--wimcc-surface-3); }
+
+.notice {
+  font-size: 11px;
+  color: var(--wimcc-warning, #f0b429);
+}

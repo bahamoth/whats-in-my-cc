@@ -235,6 +235,22 @@ export const en = {
   'stream.legend.close': 'Close legend',
   'stream.legend.show': 'Legend',
 
+  // Stream — filter bar (Task 10, spec §1.4)
+  'filter.title': 'Filter',
+  'filter.axis.kind': 'Kind',
+  'filter.axis.origin': 'Origin',
+  'filter.axis.outcome': 'Outcome',
+  'filter.axis.content': 'Tool·model·text',
+  'filter.outcome.error': 'errored tools',
+  'filter.outcome.signal': 'with signals',
+  'filter.outcome.verification': 'verification',
+  'filter.content.toolPlaceholder': 'tool name…',
+  'filter.content.modelPlaceholder': 'model id…',
+  'filter.qPlaceholder': 'search text…',
+  'filter.matched': (n: number) => `${n} matched`,
+  'filter.clearAll': 'Clear',
+  'filter.cleared.byJump': 'Filter cleared to jump to the event',
+
   // Stream — message card
   'stream.msg.summary': 'Summary',
   'stream.msg.viewRaw': 'View raw',
