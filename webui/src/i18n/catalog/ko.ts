@@ -189,6 +189,9 @@ export const ko: Messages = {
   'stream.autoscroll.label': '자동 스크롤',
   'stream.autoscroll.disableAria': '자동 스크롤 끄기',
   'stream.autoscroll.enableAria': '자동 스크롤 켜고 최신으로 이동',
+  // 필터 활성(§1.4) — 대기 수치가 필터링된 부분집합만 세므로 근사치라 구체적
+  // 숫자 대신 이 라벨을 보여준다.
+  'stream.newEvents': '새 이벤트 ↓',
 
   // Stream — scaffold group
   'stream.scaffold.chip': '커맨드·스킬',

@@ -81,3 +81,9 @@ export function filterKey(f: FilterState): string {
     verification: sortCsv(p.verification), tool: sortCsv(p.tool), model: sortCsv(p.model),
   });
 }
+
+/** 외부발 점프(§1.4): 필터 활성이고 대상이 로드된(=매칭) 버퍼 밖이면 필터를
+ *  해제하고 이동한다. 버퍼 안이면 매칭 대상이므로 해제 없이 스크롤. */
+export function jumpNeedsFilterClear(filterActive: boolean, targetInBuffer: boolean): boolean {
+  return filterActive && !targetInBuffer;
+}

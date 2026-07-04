@@ -63,6 +63,10 @@ interface ConversationStreamProps {
    *  sidechain 카드/스택에 출처 배지(⑂)를 붙이도록 MessageCard/ActivityStack에
    *  전달한다. */
   flatMode?: boolean;
+  /** 필터 활성(§1.4) — true면 대기 배지가 "N ↓" 대신 "새 이벤트 ↓"를 보여준다
+   *  (AutoscrollToggle indeterminate). 필터 창의 대기 수치는 필터링된
+   *  부분집합만 세므로 근사치다. */
+  filterActive?: boolean;
 }
 
 /** True when the item is a message with the given eventId, or an activity-run
@@ -105,6 +109,7 @@ export function ConversationStream({
   footerExtra,
   initialFollow = true,
   flatMode = false,
+  filterActive = false,
 }: ConversationStreamProps) {
   const t = useT();
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -624,6 +629,7 @@ export function ConversationStream({
         onEnable={auto.enable}
         onDisable={auto.disable}
         leftSlot={footerExtra}
+        indeterminate={filterActive}
       />
     </>
   );
