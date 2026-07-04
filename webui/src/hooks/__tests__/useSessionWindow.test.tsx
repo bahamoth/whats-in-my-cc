@@ -452,6 +452,53 @@ describe('useSessionWindow', () => {
     );
     rerender({ fk: 'B' });
     await waitFor(() => expect(f.mock.calls.length).toBeGreaterThan(callsBefore));
+    // 리셋은 호출 수만이 아니라 버퍼도 교체한다 — 새 filterKey 응답(makeEvent(20))이
+    // 실제로 events에 반영되고 이전 윈도우(10/11 + older 5)는 사라져야 한다.
+    await waitFor(() =>
+      expect(result.current.events.map((e) => e.event_id)).toEqual([makeEvent(20).event_id]),
+    );
+  });
+
+  it('keeps matchedCount null when no filter is active', async () => {
+    // §1.4 doc invariant: matchedCount is null when no filter is active. The
+    // real backend contract omits `matched_count` from the response unless a
+    // filter is present (docs/specs §1.2), so an unfiltered tail fetch must
+    // leave matchedCount at null — never a stray 0/total. Locks against a
+    // regression to `resp.matched_count ?? 0` (undefined ?? 0 = 0 ≠ null).
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(1), makeEvent(2)], prev_cursor: 'pc', next_cursor: null }),
+    );
+    const { result } = renderHook(() => useSessionWindow('s1'));
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+    expect(result.current.events).toHaveLength(2); // fetch resolved
+    expect(result.current.matchedCount).toBeNull();
+  });
+
+  it('does not re-fetch when filterKey is unchanged (no reset loop)', async () => {
+    // The reset trigger is filter *identity* (filterKey), not object churn.
+    // Re-rendering with the same filter reference AND the same filterKey must
+    // NOT re-run the initial fetch — otherwise a parent re-render would loop
+    // the buffer. Locks the "리셋 안 되는 절반".
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    const filter: EventFilterParams = { q: 'deploy' };
+    f.mockResolvedValue(
+      envelope({ events: [makeEvent(1)], prev_cursor: 'pc', next_cursor: null }),
+    );
+    const { result, rerender } = renderHook(
+      ({ fk }: { fk: string }) => useSessionWindow('s1', { filter, filterKey: fk }),
+      { initialProps: { fk: 'A' } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+    const callsAfterInit = f.mock.calls.length;
+
+    // Same filterKey (and same filter reference) → no new fetch.
+    rerender({ fk: 'A' });
+    // Flush any pending effect/microtask so a spurious refetch would surface.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(f.mock.calls.length).toBe(callsAfterInit);
   });
 
   it('exposes matched_count from the response', async () => {
