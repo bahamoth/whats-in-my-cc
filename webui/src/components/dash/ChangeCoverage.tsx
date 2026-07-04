@@ -2,6 +2,7 @@
  *  앰버로 튄다. 좌표계 없는 바 리스트라 DOM으로 그린다. */
 import type { VerificationSummaryDto } from '../../api/types';
 import { useT } from '../../i18n';
+import { InfoTip } from '../replay/insight-strip/InfoTip';
 
 export function ChangeCoverage({
   coverage,
@@ -18,6 +19,7 @@ export function ChangeCoverage({
       <div className="mb-2.5 flex items-baseline justify-between">
         <span className="text-[13.5px] font-semibold">
           {t('dash.ver.cov.title')}
+          <InfoTip label={t('dash.ver.cov.title')} text={t('dash.ver.cov.tip')} />
           <small className="ml-2 text-[11.5px] font-medium text-(--wimcc-fg-subtle)">
             {t('dash.ver.cov.desc')}
           </small>

@@ -5,6 +5,7 @@ import type { SessionSeriesRowDto } from '../../api/types';
 import { EChart } from './EChart';
 import { buildScatterOption } from './scatterOption';
 import { useT } from '../../i18n';
+import { InfoTip } from '../replay/insight-strip/InfoTip';
 
 type ScatterPointParams = { data?: { s?: { sid?: string } } };
 
@@ -38,6 +39,7 @@ export function SessionScatter({
       <div className="mb-2.5 flex items-baseline justify-between">
         <span className="text-[13.5px] font-semibold">
           {t('dash.scatter.title')}
+          <InfoTip label={t('dash.scatter.title')} text={t('dash.scatter.tip')} />
           <small className="ml-2 text-[11.5px] font-medium text-(--wimcc-fg-subtle)">
             {t('dash.scatter.desc')}
           </small>

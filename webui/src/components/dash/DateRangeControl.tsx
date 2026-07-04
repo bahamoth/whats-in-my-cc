@@ -3,6 +3,7 @@
  *  제거했고, 기간 변경은 이 컨트롤이 전담한다. */
 import { useState } from 'react';
 import type { DateRange } from 'react-day-picker';
+
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -25,6 +26,18 @@ export function DateRangeControl({
   const t = useT();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DateRange | undefined>(undefined);
+  const [hovered, setHovered] = useState<Date | undefined>(undefined);
+  /** 시작일만 고른 상태 — hover한 날짜까지의 구간을 보라 프리뷰로 칠한다. */
+  const picking =
+    draft?.from && (!draft.to || draft.from.getTime() === draft.to.getTime())
+      ? draft.from
+      : undefined;
+  const preview =
+    picking && hovered
+      ? hovered < picking
+        ? { from: hovered, to: picking }
+        : { from: picking, to: hovered }
+      : undefined;
 
   const label =
     sel.kind === 'custom'
@@ -41,7 +54,16 @@ export function DateRangeControl({
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (o) {
+          setDraft(undefined);
+          setHovered(undefined);
+        }
+      }}
+    >
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2 font-mono text-xs">
           <span aria-hidden>▦</span>
@@ -62,14 +84,20 @@ export function DateRangeControl({
                 {k === '30d' ? t('dash.range.last30') : k === '90d' ? t('dash.range.last90') : t('dash.range.all')}
               </Button>
             ))}
-            <p className="mt-1 max-w-[130px] px-2 text-[10.5px] leading-snug text-(--wimcc-fg-subtle)">
-              {t('dash.range.hint')}
+            <p
+              className={`mt-1 max-w-[130px] px-2 text-[10.5px] leading-snug ${
+                picking ? 'font-semibold text-[#b07dff]' : 'text-(--wimcc-fg-subtle)'
+              }`}
+            >
+              {picking ? t('dash.range.picking', iso(picking).slice(5)) : t('dash.range.hint')}
             </p>
           </div>
           <Calendar
             mode="range"
             numberOfMonths={2}
             selected={draft}
+            onDayMouseEnter={(d) => setHovered(d)}
+            {...(preview ? { modifiers: { preview }, modifiersClassNames: { preview: 'bg-[#b07dff]/20 rounded-none' } } : {})}
             defaultMonth={
               sel.kind === 'custom'
                 ? new Date(sel.from)

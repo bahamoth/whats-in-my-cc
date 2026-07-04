@@ -5,6 +5,7 @@
  */
 import type { Headline, HeadlineDelta } from '../../lib/dashDerive';
 import { useT } from '../../i18n';
+import { InfoTip } from '../replay/insight-strip/InfoTip';
 
 const trim1 = (v: number) => String(Math.round(v * 10) / 10);
 const money = (v: number) =>
@@ -44,6 +45,7 @@ export function HeadlineStats({ h, d }: { h: Headline; d: HeadlineDelta | null }
   const noCompare = t('dash.head.noCompare');
   const cells: Array<{
     label: string;
+    tip: string;
     value: string;
     unit?: string;
     delta: number | null;
@@ -53,6 +55,7 @@ export function HeadlineStats({ h, d }: { h: Headline; d: HeadlineDelta | null }
   }> = [
     {
       label: t('dash.head.pass'),
+      tip: t('dash.head.pass.tip'),
       value: h.passRatePct !== null ? trim1(h.passRatePct) : '—',
       unit: h.passRatePct !== null ? '%' : undefined,
       delta: d?.passRatePp ?? null,
@@ -62,6 +65,7 @@ export function HeadlineStats({ h, d }: { h: Headline; d: HeadlineDelta | null }
     },
     {
       label: t('dash.head.cost'),
+      tip: t('dash.head.cost.tip'),
       value: money(h.cost),
       delta: d?.cost ?? null,
       deltaUnit: '$',
@@ -70,6 +74,7 @@ export function HeadlineStats({ h, d }: { h: Headline; d: HeadlineDelta | null }
     },
     {
       label: t('dash.head.rate'),
+      tip: t('dash.head.rate.tip'),
       value: h.unitRatePerM !== null ? `$${trim1(h.unitRatePerM)}` : '—',
       unit: h.unitRatePerM !== null ? '/1M' : undefined,
       delta: d?.unitRate ?? null,
@@ -79,6 +84,7 @@ export function HeadlineStats({ h, d }: { h: Headline; d: HeadlineDelta | null }
     },
     {
       label: t('dash.head.hit'),
+      tip: t('dash.head.hit.tip'),
       value: h.cacheHitPct !== null ? trim1(h.cacheHitPct) : '—',
       unit: h.cacheHitPct !== null ? '%' : undefined,
       delta: d?.cacheHitPp ?? null,
@@ -88,6 +94,7 @@ export function HeadlineStats({ h, d }: { h: Headline; d: HeadlineDelta | null }
     },
     {
       label: t('dash.head.toolfail'),
+      tip: t('dash.head.toolfail.tip'),
       value: h.toolFailPct !== null ? trim1(h.toolFailPct) : '—',
       unit: h.toolFailPct !== null ? '%' : undefined,
       delta: d?.toolFailPp ?? null,
@@ -103,8 +110,9 @@ export function HeadlineStats({ h, d }: { h: Headline; d: HeadlineDelta | null }
     <div className="grid grid-cols-5 border-y border-(--wimcc-border)">
       {cells.map((c) => (
         <div key={c.label} className="border-r border-(--wimcc-border) px-5 pt-4 pb-3.5 last:border-r-0">
-          <div className="text-[10.5px] font-semibold tracking-[.09em] uppercase text-(--wimcc-fg-subtle)">
+          <div className="flex items-center gap-1 text-[10.5px] font-semibold tracking-[.09em] uppercase text-(--wimcc-fg-subtle)">
             {c.label}
+            <InfoTip label={c.label} text={c.tip} />
           </div>
           <div className="my-1.5 font-mono text-[29px] leading-none font-semibold tracking-tight">
             {c.value}

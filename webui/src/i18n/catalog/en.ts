@@ -357,6 +357,7 @@ export const en = {
   'dash.range.last30': 'Last 30 days',
   'dash.range.last90': 'Last 90 days',
   'dash.range.all': 'All time',
+  'dash.range.picking': (d: string) => `${d} → pick the end date`,
   'dash.range.hint': 'Pick two dates on the calendar for a custom range.',
   'dash.cohort.secTitle': 'Cohort boundaries',
   'dash.cohort.prefixNote': 'before/after = all sessions in the window before/after the boundary',
@@ -370,6 +371,78 @@ export const en = {
   'dash.cohort.noneAuto':
     'no boundary passes the exceedance gate in this window — pick a dimension to browse all boundaries',
   'dash.cohort.alsoDims': (d: string) => `${d} also changed at this point — effects are not separable`,
+  'dash.head.pass.tip':
+    'Pass rate over measured guards: passed ÷ (passed + failed).\n' +
+    'A guard is a test / build / lint / format run observed in the window.\n' +
+    'Undecidable runs (masked exit codes) stay out of the denominator.\n' +
+    'The delta chip compares against the previous window of the same length.',
+  'dash.head.cost.tip':
+    'Window total of estimated cost: public price list × usage tokens.\n' +
+    'This is a floor, not a bill — subscription discounts and service tiers are invisible locally.\n' +
+    'Cache reads are free and excluded.',
+  'dash.head.rate.tip':
+    'Blended unit rate = estimated cost ÷ billed tokens (input + cache write + output) × 1M.\n' +
+    'Rises when expensive models take a larger share of the window.',
+  'dash.head.hit.tip':
+    'Share of input context served from cache: cache read ÷ (input + cache write + cache read).\n' +
+    'Higher means the same context was reused cheaply.',
+  'dash.head.toolfail.tip':
+    'Failed tool calls ÷ all tool calls in the window.\n' +
+    'A deterministic count; severity is not judged.',
+  'dash.observed.tip':
+    'Every item is derived from observations:\n' +
+    '· model first observed — the day a model first appears in this window\n' +
+    '· Claude Code — first → last version with the number of transitions\n' +
+    '· most signals — the session with the largest process-signal total',
+  'dash.daily.ver.tip':
+    'A guard is an observed test / build / lint / format run.\n' +
+    'passed / failed come from exit codes; unknown means the exit code was masked (e.g. piped commands).\n' +
+    'Purple dashed lines mark model / Claude Code transitions.',
+  'dash.daily.cost.tip':
+    'Bar height = estimated cost of that day (public price list ≈, floor).\n' +
+    'Bar color = process signals that day, green (0) through red (max) — hot days stand out.\n' +
+    'Hover a bar to see the sessions behind it.',
+  'dash.cohort.tip':
+    'A boundary is where the session environment (fingerprint) changes — detected across 5 dimensions: model, Claude Code, branch, cwd, entrypoint.\n' +
+    '"top x% vs random splits" = the metric shift at this boundary ranks in the top x% of shifts from every possible split of this window. Lower = the change stands out more.\n' +
+    'The auto list shows up to 3 boundaries within the top 10% (fixed rule, spec §2).\n' +
+    'before/after = all sessions in the window before/after the boundary.',
+  'dash.cohort.sig.tip':
+    'Average process signals per session — the sum of 6 signal kinds (tool failures, context compactions, interruptions, …).',
+  'dash.lane.tip':
+    'Cards sit at their actual dates; same-day sessions stack into rows.\n' +
+    'Card: session name · models · estimated cost · signals · pass rate · events.\n' +
+    'An amber signal count means signal density above 2× the window median.\n' +
+    'Small dashed chips are idle sessions (no usage, signals, or guards).\n' +
+    'Click a card to open the replay.',
+  'dash.scatter.tip':
+    'x = billed tokens (log scale) · y = signals per 100 events · size = estimated cost · color = primary model.\n' +
+    'Dashed lines are the medians — upper right means heavy use with frequent signals.\n' +
+    'Top sessions by cost or signal density carry name labels.\n' +
+    'Click a dot to open the replay.',
+  'dash.ver.head.guards.tip':
+    'Total observed verification runs (test / build / lint / format) in the window.',
+  'dash.ver.head.measured.tip':
+    'Guards whose exit code was captured, so pass / fail is decidable.\n' +
+    'The main cause of undecidable runs is pipe masking — `cmd | tail` hides the exit code.',
+  'dash.ver.head.passed.tip': 'Passed ÷ measured (passed + failed) guards.',
+  'dash.ver.head.abandoned.tip':
+    'Failed guards with no later pass of the same kind before the session ended.\n' +
+    'Red that never turned green.',
+  'dash.ver.head.coverage.tip':
+    'Share of diff hunks with a passing guard after they were introduced.\n' +
+    'Uncovered = changed code no guard has confirmed since the change.',
+  'dash.ver.kind.tip':
+    'Result mix per guard kind (normalized to 100%).\n' +
+    'A large gray share means that kind often runs with masked exit codes.',
+  'dash.ver.flow.tip':
+    'Where every guard went: measured → passed / failed; failures split into recovered / left; undecidable splits by cause.',
+  'dash.ver.rhythm.tip':
+    'x = session progress (by time), each dot is a guard run colored by result.\n' +
+    'Patterns read directly: red followed by green, runs bunched at the end, gray streaks.',
+  'dash.ver.cov.tip':
+    'Covered (green) vs uncovered (amber) diff hunks per session.\n' +
+    'Sessions with many uncovered hunks are worth checking first.',
   'dash.eyebrow': 'Project dashboard',
   'dash.allProjects': 'All projects',
   'dash.projectLabel': 'Project',
