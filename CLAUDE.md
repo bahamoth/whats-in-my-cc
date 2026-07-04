@@ -50,6 +50,13 @@ schema-versioning·deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html` �
   invariant assertion으로 잠근다. 둘 다 없는 가정은 적지 않는다. 표본 1건으로 일반화하지 않는다.
 - **UI는 브라우저 smoke 후 commit**: WebUI 변경은 `cargo build`+`vitest` 통과만으론 미완.
   `wimcc serve` + 브라우저 navigation·시각 검증까지 끝낸 뒤 commit.
+- **툴팁 카피 규칙(강제)**: `.tip`로 끝나는 모든 i18n 키에 적용 — ① 문장·항목 단위
+  줄바꿈(`\n`), 120자 초과 단락 금지 ② 주요 단어 강조 최소 1개: `**굵게**`,
+  의미색 `[green|red|amber|violet|blue]…[/…]`, 코드 `` `…` `` (문법 SSOT:
+  `InfoTip.renderTipMarkup`) ③ 긍정·구체 문장(정의→수식→해석→출처), "~는 ~가
+  아니다"식 부정 설명 금지. **게이트**: `webui/src/i18n/__tests__/tipStyle.test.ts`가
+  위반을 CI에서 실패시킨다 — 2026-07-04 사용자 지시("가독성 규칙이 잘 안 지켜지므로
+  강제성 있게").
 
 ## Operations
 
