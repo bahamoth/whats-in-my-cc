@@ -177,13 +177,9 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(screen.getByText(/verification pass/i)).toBeInTheDocument());
     const tab = await screen.findByRole('tab', { name: /verification$/i });
     await userEvent.click(tab);
-    await waitFor(() =>
-      expect(
-        (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some((c) =>
-          String(c[0]).startsWith('/v1/verification/summary'),
-        ),
-      ).toBe(true),
-    );
+    // fetch 호출만이 아니라 결과가 실제로 렌더될 때까지 — loading 자기취소
+    // 회귀(useEffect가 자신의 fetch를 cleanup으로 죽이는 버그)를 잠근다.
+    await waitFor(() => expect(screen.getByText(/guard runs/i)).toBeInTheDocument());
   });
 
   it('API 실패 시 role=alert', async () => {
