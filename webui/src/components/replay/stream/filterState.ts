@@ -43,7 +43,9 @@ const LIST_KEYS = [
   ['f_verification', 'verifications'], ['f_tool', 'tools'], ['f_model', 'models'],
 ] as const;
 
-/** URL 동기화 — 접두 f_ (react-router searchParams). 왕복 무손실. */
+/** URL 동기화 — 접두 f_ (react-router searchParams). q는 trim 정규화 후 왕복하며,
+ *  그 외 축은 무손실. CSV 직렬화는 콤마를 이스케이프하지 않는다 — tools/models 등
+ *  축 값에 콤마가 없다는 가정(kind·role·model id·도구명 모두 콤마 미포함). */
 export function filterToSearch(f: FilterState, sp: URLSearchParams): void {
   for (const [key, prop] of LIST_KEYS) {
     const v = f[prop];
@@ -65,7 +67,17 @@ export function filterFromSearch(sp: URLSearchParams): FilterState {
   };
 }
 
-/** 필터 정체성 비교(윈도우 리셋 트리거) — 직렬화 키 */
+/** 필터 정체성 비교(윈도우 리셋 트리거) — 직렬화 키.
+ *  축 내 값 순서는 정체성과 무관하므로(같은 선택 집합) 정렬 후 직렬화한다 —
+ *  Set 이터레이션·토글 순서 차이로 인한 useSessionWindow 버퍼 스퓨리어스 리셋 방지.
+ *  서버 전송 순서(toEventFilterParams/filterToSearch)는 바꾸지 않는다. */
 export function filterKey(f: FilterState): string {
-  return JSON.stringify(toEventFilterParams(f));
+  const p = toEventFilterParams(f);
+  const sortCsv = (v?: string) =>
+    v === undefined ? undefined : v.split(',').sort().join(',');
+  return JSON.stringify({
+    ...p,
+    kind: sortCsv(p.kind), role: sortCsv(p.role), origin: sortCsv(p.origin),
+    verification: sortCsv(p.verification), tool: sortCsv(p.tool), model: sortCsv(p.model),
+  });
 }
