@@ -1204,6 +1204,73 @@ pub async fn metrics_series(
     }
 }
 
+#[derive(serde::Deserialize)]
+pub struct VerificationSummaryQuery {
+    pub project: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+}
+
+/// 2026-07-04 대시보드 검증 탭 — `GET /v1/verification/summary`.
+/// kind×결과·측정률(판정불가 원인 분해)·실패 복구/방치·실행 리듬·변경
+/// 커버리지의 창 단위 집계. 파생 정의의 SSOT는 insight::verification_summary.
+pub async fn verification_summary(
+    State(pool): State<SqlitePool>,
+    Query(q): Query<VerificationSummaryQuery>,
+) -> impl IntoResponse {
+    fn parse_time(
+        s: Option<&str>,
+        name: &str,
+    ) -> Result<Option<chrono::DateTime<chrono::Utc>>, (StatusCode, Json<serde_json::Value>)> {
+        match s {
+            None => Ok(None),
+            Some(v) => chrono::DateTime::parse_from_rfc3339(v)
+                .map(|d| Some(d.with_timezone(&chrono::Utc)))
+                .map_err(|_| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({
+                            "type": "about:blank",
+                            "title": "INVALID_TIME",
+                            "detail": format!("{name} must be RFC3339"),
+                        })),
+                    )
+                }),
+        }
+    }
+    let from = match parse_time(q.from.as_deref(), "from") {
+        Ok(v) => v,
+        Err(e) => return e.into_response(),
+    };
+    let to = match parse_time(q.to.as_deref(), "to") {
+        Ok(v) => v,
+        Err(e) => return e.into_response(),
+    };
+    let project_norm = q
+        .project
+        .as_deref()
+        .map(|p| p.trim_end_matches('/'))
+        .filter(|p| !p.is_empty())
+        .map(String::from);
+    match crate::insight::verification_summary::collect(&pool, project_norm.as_deref(), from, to)
+        .await
+    {
+        Ok(summary) => Json(Envelope {
+            meta: ResponseMeta::now(),
+            data: summary,
+        })
+        .into_response(),
+        Err(err) => {
+            tracing::error!(err = %err, "verification_summary failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
+    }
+}
+
 /// `GET /v1/sessions/:id/fingerprint` — 세션 환경 fingerprint (on-demand).
 ///
 /// 자기개선 루프의 독립변수 표면: 이 세션이 어떤 모델·CC 버전·branch·

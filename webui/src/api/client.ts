@@ -11,6 +11,7 @@ import type {
   UsageBaselineDto,
   SessionMetricsDto,
   MetricsSeriesDto,
+  VerificationSummaryDto,
   TurnRollupResponse,
   PluginDto,
   TaskDto,
@@ -137,4 +138,17 @@ export function getMetricsSeries(opts: {
   if (opts.limit !== undefined) params.set('limit', String(opts.limit));
   const qs = params.toString();
   return jsonGet<MetricsSeriesDto>(`/v1/metrics${qs ? `?${qs}` : ''}`);
+}
+
+export function getVerificationSummary(opts: {
+  project?: string;
+  from?: string;
+  to?: string;
+}): Promise<VerificationSummaryDto> {
+  const p = new URLSearchParams();
+  if (opts.project) p.set('project', opts.project);
+  if (opts.from) p.set('from', opts.from);
+  if (opts.to) p.set('to', opts.to);
+  const qs = p.toString();
+  return jsonGet<VerificationSummaryDto>(`/v1/verification/summary${qs ? `?${qs}` : ''}`);
 }

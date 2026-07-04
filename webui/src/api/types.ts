@@ -405,3 +405,35 @@ export type RawEventResponse = {
     resource?: Record<string, unknown>;
   } | null;
 };
+
+/** 2026-07-04 검증 탭 — GET /v1/verification/summary. 파생 정의의 SSOT는
+ * 백엔드 insight::verification_summary (tests/api_verification_summary.rs). */
+export type VerificationSummaryDto = {
+  total: number;
+  measured: number;
+  passed: number;
+  failed: number;
+  unknown: number;
+  unknown_piped: number;
+  unknown_other: number;
+  not_executed: number;
+  by_kind: Array<{
+    kind: string;
+    passed: number;
+    failed: number;
+    unknown: number;
+    not_executed: number;
+  }>;
+  failures: { recovered: number; abandoned: number };
+  rhythm: Array<{
+    session_id: string;
+    guards: number;
+    passed: number;
+    runs: Array<{ pct: number; status: string }>;
+  }>;
+  coverage: {
+    covered: number;
+    total: number;
+    by_session: Array<{ session_id: string; covered: number; total: number }>;
+  };
+};
