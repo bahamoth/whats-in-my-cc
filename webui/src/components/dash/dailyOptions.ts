@@ -6,6 +6,7 @@
 import type { EChartsCoreOption } from 'echarts/core';
 import type { Daily } from '../../lib/dashDerive';
 import { AXIS_LABEL, OUTCOME_COLORS, SPLIT_LINE, TOOLTIP, rampColor } from './echartsBase';
+import { layoutMarkerLabels } from './markerLayout';
 
 export type CohortMarker = {
   dayIdx: number;
@@ -23,31 +24,37 @@ export type DayDetail = {
 
 const MONO = 'ui-monospace,Menlo,monospace';
 
+/** markLine 옵션 + 라벨 스태거에 필요한 grid.top — 배치는 markerLayout이 SSOT. */
 function markLine(markers: CohortMarker[], nDays: number) {
+  const { placements, gridTop } = layoutMarkerLabels(markers, nDays);
   return {
-    symbol: 'none',
-    animationDuration: 900,
-    lineStyle: { color: '#b07dff', type: 'dashed', opacity: 0.75 },
-    label: {
-      color: '#b07dff',
-      fontFamily: MONO,
-      fontSize: 10.5,
-      formatter: (p: { name: string }) => p.name,
-    },
-    // 우측 40% 구간의 마커는 라벨을 선 왼쪽으로 — 차트 밖 클리핑 방지.
-    // 선택 경계(emphasis)는 진하게, 나머지는 흐리게 — 코호트 섹션과 동기.
-    data: markers.map((m) => ({
-      name: m.label,
-      xAxis: m.dayIdx,
-      lineStyle: { opacity: m.emphasis ? 0.95 : 0.35 },
+    gridTop,
+    option: {
+      symbol: 'none',
+      animationDuration: 900,
+      lineStyle: { color: '#b07dff', type: 'dashed', opacity: 0.75 },
       label: {
-        ...(m.dayIdx / Math.max(1, nDays - 1) > 0.6
-          ? { align: 'right' as const, padding: [0, 6, 0, 0] }
-          : { align: 'left' as const, padding: [0, 0, 0, 6] }),
-        opacity: m.emphasis ? 1 : 0.55,
-        fontWeight: m.emphasis ? 700 : 400,
+        color: '#b07dff',
+        fontFamily: MONO,
+        fontSize: 10.5,
+        formatter: (p: { name: string }) => p.name,
       },
-    })),
+      // 라벨 정렬(가장자리 클리핑 방지)·스태거 행(인접 겹침 방지)은
+      // layoutMarkerLabels 결정. 선택 경계(emphasis)는 진하게 — 코호트 섹션과 동기.
+      data: markers.map((m, i) => ({
+        name: m.label,
+        xAxis: m.dayIdx,
+        lineStyle: { opacity: m.emphasis ? 0.95 : 0.35 },
+        label: {
+          ...(placements[i].align === 'right'
+            ? { align: 'right' as const, padding: [0, 6, 0, 0] }
+            : { align: 'left' as const, padding: [0, 0, 0, 6] }),
+          distance: placements[i].distance,
+          opacity: m.emphasis ? 1 : 0.55,
+          fontWeight: m.emphasis ? 700 : 400,
+        },
+      })),
+    },
   };
 }
 
@@ -63,10 +70,11 @@ export function buildVerOption(args: {
   labels: { passed: string; failed: string; unknown: string; noGuards: string };
 }): EChartsCoreOption {
   const { daily, markers, details, labels } = args;
+  const ml = markLine(markers, daily.dates.length);
   return {
     animationDuration: 700,
     animationEasing: 'cubicOut',
-    grid: { left: 56, right: 18, top: 26, bottom: 30 },
+    grid: { left: 56, right: 18, top: ml.gridTop, bottom: 30 },
     tooltip: {
       ...TOOLTIP,
       trigger: 'axis',
@@ -119,7 +127,7 @@ export function buildVerOption(args: {
         data: daily.unknown,
         barMaxWidth: 26,
         itemStyle: { color: OUTCOME_COLORS.unknown, opacity: 0.75, borderRadius: [3, 3, 0, 0] },
-        markLine: markLine(markers, daily.dates.length),
+        markLine: ml.option,
       },
     ],
   };
@@ -133,10 +141,11 @@ export function buildCostOption(args: {
 }): EChartsCoreOption {
   const { daily, markers, details, labels } = args;
   const sigMax = Math.max(...daily.signals, 1);
+  const ml = markLine(markers, daily.dates.length);
   return {
     animationDuration: 700,
     animationEasing: 'cubicOut',
-    grid: { left: 56, right: 18, top: 26, bottom: 30 },
+    grid: { left: 56, right: 18, top: ml.gridTop, bottom: 30 },
     tooltip: {
       ...TOOLTIP,
       trigger: 'axis',
@@ -180,7 +189,7 @@ export function buildCostOption(args: {
           },
         })),
         barMaxWidth: 26,
-        markLine: markLine(markers, daily.dates.length),
+        markLine: ml.option,
       },
     ],
   };

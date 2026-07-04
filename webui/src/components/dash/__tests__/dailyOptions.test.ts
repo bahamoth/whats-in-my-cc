@@ -45,6 +45,45 @@ describe('buildVerOption', () => {
   });
 });
 
+describe('인접 마커 라벨 스태거(markerLayout 연결)', () => {
+  const wide: Daily = {
+    dates: Array.from({ length: 30 }, (_, i) => `06-${String(i + 1).padStart(2, '0')}`),
+    cost: Array(30).fill(10),
+    signals: Array(30).fill(1),
+    passed: Array(30).fill(1),
+    failed: Array(30).fill(0),
+    unknown: Array(30).fill(0),
+    sessionsOf: Array.from({ length: 30 }, () => []),
+  };
+  const adjacent = [
+    { dayIdx: 10, label: 'Fable 5 → Opus 4.8' },
+    { dayIdx: 11, label: 'Claude Code 2.1 → 2.2' },
+  ];
+  const wideDetails: DayDetail[][] = Array.from({ length: 30 }, () => []);
+  it('두 번째 라벨은 윗행(distance 증가), grid.top은 최심 행만큼 확장', () => {
+    const o = buildVerOption({
+      daily: wide,
+      markers: adjacent,
+      details: wideDetails,
+      labels: verLabels,
+    }) as Record<string, any>;
+    const ml = o.series[2].markLine.data;
+    expect(ml[1].label.distance).toBeGreaterThan(ml[0].label.distance);
+    expect(o.grid.top).toBeGreaterThan(26);
+  });
+  it('buildCostOption도 같은 배치를 쓴다', () => {
+    const o = buildCostOption({
+      daily: wide,
+      markers: adjacent,
+      details: wideDetails,
+      labels: costLabels,
+    }) as Record<string, any>;
+    const ml = o.series[0].markLine.data;
+    expect(ml[1].label.distance).toBeGreaterThan(ml[0].label.distance);
+    expect(o.grid.top).toBeGreaterThan(26);
+  });
+});
+
 describe('buildCostOption', () => {
   const o = buildCostOption({ daily, markers, details, labels: costLabels }) as Record<string, any>;
   it('막대 색 = 그날 신호 수의 램프값(최대 대비)', () => {
