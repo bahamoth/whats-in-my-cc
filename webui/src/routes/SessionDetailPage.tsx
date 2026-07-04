@@ -6,6 +6,7 @@ import { MetaStrip } from '../components/MetaStrip';
 import { DetailPanel } from '../components/replay/detail/DetailPanel';
 import { TopBar } from '../components/layout/TopBar';
 import { InsightStrip } from '../components/replay/insight-strip/InsightStrip';
+import { InstructionCard } from '../components/replay/InstructionCard';
 import { AnalysisPanel } from '../components/replay/analysis/AnalysisPanel';
 import {
   ReplaySelectionProvider,
@@ -378,6 +379,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               }
               turns={turns.data?.turns}
             />
+            <InstructionCard sessionId={sessionId} />
             <MetaStrip session={detail.data} events={window_.events} />
             <TeamStrip sessionId={sessionId} agentSetting={detail.data?.agent_setting} />
             <div className={styles.toolbar}>

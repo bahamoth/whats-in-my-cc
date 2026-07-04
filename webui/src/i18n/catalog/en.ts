@@ -448,6 +448,15 @@ export const en = {
   'dash.ver.cov.tip':
     '[green]Covered[/green] vs [amber]uncovered[/amber] diff hunks per session.\n' +
     'Sessions with **many uncovered hunks** are worth checking first.',
+  'instr.diff.counts': (a: { add: number; del: number }) => `+${a.add} −${a.del} lines`,
+  'instr.diff.error': 'Failed to load the snapshot.',
+  'instr.card.title': 'Instructions',
+  'instr.card.changes': (n: number) => `changed ${n}× during the session`,
+  'instr.card.observedAt': (d: string) => `observed ${d}`,
+  'instr.card.tip':
+    '**Prospectively observed** instruction files: the serve reads `CLAUDE.md` the moment session activity arrives.\n' +
+    '**project** = session cwd root · **user** = ~/.claude · **import** = files referenced via `@path` (recorded as existing, [amber]not claimed as loaded[/amber]).\n' +
+    'A mid-session change adds a new observation — click an entry to see the **content diff**.',
   'dash.eyebrow': 'Project dashboard',
   'dash.allProjects': 'All projects',
   'dash.projectLabel': 'Project',

@@ -11,6 +11,8 @@ import type {
   UsageBaselineDto,
   SessionMetricsDto,
   MetricsSeriesDto,
+  InstructionObservationDto,
+  InstructionSnapshotDto,
   VerificationSummaryDto,
   TurnRollupResponse,
   PluginDto,
@@ -139,6 +141,12 @@ export function getMetricsSeries(opts: {
   const qs = params.toString();
   return jsonGet<MetricsSeriesDto>(`/v1/metrics${qs ? `?${qs}` : ''}`);
 }
+
+export const getSessionInstructions = (id: string) =>
+  jsonGet<InstructionObservationDto[]>(`/v1/sessions/${id}/instructions`);
+
+export const getInstructionSnapshot = (sha: string) =>
+  jsonGet<InstructionSnapshotDto>(`/v1/instructions/${sha}`);
 
 export function getVerificationSummary(opts: {
   project?: string;

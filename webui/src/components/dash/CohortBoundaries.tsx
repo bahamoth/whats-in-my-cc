@@ -13,6 +13,7 @@ import {
 import type { rankCohorts } from '../../lib/dashDerive';
 import { EChart } from './EChart';
 import { useT } from '../../i18n';
+import { InstructionDiff } from './InstructionDiff';
 import { InfoTip } from '../replay/insight-strip/InfoTip';
 
 const trim1 = (v: number) => String(Math.round(v * 10) / 10);
@@ -139,6 +140,24 @@ export function boundaryLabel(
     : b.added.length
       ? t('dash.cohort.introduced', b.added.join(' · '))
       : t('dash.cohort.retired', b.removed.join(' · '));
+}
+
+/** instructions 경계의 raw 값('source:sha256')을 source별 전/후 쌍으로. */
+function instructionPairs(
+  b: RankedBoundary,
+): Array<{ source: string; before: string | null; after: string | null }> {
+  const parse = (v: string) => {
+    const i = v.indexOf(':');
+    return { source: v.slice(0, i), hash: v.slice(i + 1) };
+  };
+  const removed = new Map(b.removedRaw.map((v) => [parse(v).source, parse(v).hash]));
+  const added = new Map(b.addedRaw.map((v) => [parse(v).source, parse(v).hash]));
+  const sources = [...new Set([...removed.keys(), ...added.keys()])].sort();
+  return sources.map((source) => ({
+    source,
+    before: removed.get(source) ?? null,
+    after: added.get(source) ?? null,
+  }));
 }
 
 export function CohortBoundaries({
@@ -355,6 +374,16 @@ export function CohortBoundaries({
               />
             ))}
           </div>
+          {/* 지시문 경계 — 해시가 아니라 내용 diff가 맥락이다(스펙 §2). */}
+          {sel.dim === 'instructions' &&
+            instructionPairs(sel).map((p) => (
+              <InstructionDiff
+                key={`${p.source}:${p.before}:${p.after}`}
+                source={p.source}
+                beforeHash={p.before}
+                afterHash={p.after}
+              />
+            ))}
         </div>
       )}
     </section>
