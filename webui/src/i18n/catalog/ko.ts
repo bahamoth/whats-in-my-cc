@@ -270,7 +270,6 @@ export const ko: Messages = {
   'dash.head.rate': '블렌디드 단가',
   'dash.head.hit': '캐시 적중',
   'dash.head.toolfail': '도구 실패율',
-  'dash.head.prevWindow': (v: string) => `이전 창 ${v}`,
   'dash.head.noCompare': '비교 없음(전체 창)',
   'dash.head.costBasis': '공개 가격표 ≈ · 하한',
   'dash.head.ratePer': '과금 토큰 1M당',
@@ -282,7 +281,6 @@ export const ko: Messages = {
   'dash.observed.ccSpan': (a: { from: string; to: string; count: number }) =>
     a.count > 1 ? `CC ${a.from} → ${a.to} · 전환 ${a.count}회` : `CC ${a.from} → ${a.to}`,
   'dash.observed.topSignals': (a: { name: string; n: number }) => `신호 최다 ${a.name} (${a.n})`,
-  'dash.ver.loading': '검증 요약 로딩 중…',
   'dash.ver.error': '검증 요약을 불러오지 못했습니다.',
   'dash.daily.ver.title': '검증 결과 — 일별',
   'dash.daily.ver.zeroGuards': (n: number) => `가드 0 세션 ${n}개`,
@@ -355,79 +353,8 @@ export const ko: Messages = {
   'dash.emptyHint': '먼저 transcript를 수집하세요: wimcc ingest --all',
   'dash.error': 'series를 불러오지 못했습니다.',
   'dash.loading': 'series 불러오는 중…',
-  'dash.cohort.title': '모델 코호트',
-  'dash.cohort.tip':
-    '각 세션에서 실제로 응답한 모델입니다. 한 세션에서 여러 모델을 썼으면 + 로 묶입니다.\n' +
-    '세로 점선 — 모델 구성이 바뀐 지점\n' +
-    '점선 상자 — 모델 기록이 없는 세션(직전 구성을 이어간 것으로 표시)',
-  'dash.cohort.models': '모델',
-  'dash.cohort.ccTip':
-    '각 세션이 돌던 Claude Code 버전입니다.\n' +
-    '색 교대는 인접 버전 구간의 구분용이고, 버전 기록이 없는 세션은 직전 구간을 ' +
-    '이어갑니다(점선 상자).',
-  'dash.cohort.cc': 'CC 버전',
-  'dash.cohort.unknown': '미관측',
-  'dash.outcome.title': '검증 outcome',
-  'dash.outcome.tip':
-    '세션마다 검증 명령(테스트·빌드·린트)이 몇 번 어떤 결과로 끝났는지 셉니다.\n' +
-    'passed — 통과를 확인한 실행\n' +
-    'failed — 실패를 확인한 실행\n' +
-    'unknown — 실행은 됐지만 출력이 잘려 결과를 읽지 못한 실행\n' +
-    '거부·취소 등으로 실행되지 않은 명령은 집계에서 빠집니다.',
   'dash.outcome.passed': 'passed',
   'dash.outcome.failed': 'failed',
   'dash.outcome.unknown': 'unknown',
-  'dash.outcome.none': '이 기간에 verification run이 없습니다',
-  'dash.multiples.title': '프로세스 신호',
-  'dash.multiples.tip':
-    '세션 진행 중 벌어진 일들의 횟수입니다.\n' +
-    '예: 도구 실패가 늘었는데 위 outcome의 passed가 유지되면, 시행착오가 늘었지만 ' +
-    '결과는 지켜졌다고 읽을 수 있습니다.',
-  'dash.metric.tool_failure_count': '도구 실패',
-  'dash.metric.context_bloat_count': 'context bloat 신호',
-  'dash.metric.api_error_count': 'API 오류',
-  'dash.metric.user_interruption_count': '사용자 중단',
-  'dash.metric.compact_boundary_count': '컨텍스트 압축',
-  'dash.metric.tool_result_truncated_count': '잘린 tool result',
-  'dash.metric.api_rate_limit_count': 'rate limit(429)',
-  'dash.tokens.title': '토큰 사용량',
-  'dash.tokens.tip':
-    '세션이 쓴 토큰의 합계입니다.\n' +
-    'input — 새로 보낸 입력\n' +
-    'cache 생성 — 캐시에 새로 적재한 입력\n' +
-    'output — 모델 출력\n' +
-    'cache 읽기 — 캐시에서 재사용한 입력(양이 압도적이라 아래 별도 줄)\n' +
-    '구독 할당량 잔여치는 API가 알려주지 않아 사용량까지만 보여줍니다.',
-  'dash.tokens.empty': '토큰 데이터가 비어 있습니다 — 실행 중인 serve가 이 필드 이전 빌드거나(재시작 필요) usage facet 재수집 전입니다.',
-  'dash.eff.title': '효율',
-  'dash.eff.tip':
-    '세션별 usage 비율 — 셀이 진할수록 값이 높습니다.\n' +
-    'cache%: 입력 컨텍스트 중 캐시 재사용 비율(cache 읽기 ÷ input + cache 생성 + cache 읽기). 높을수록 쌉니다.\n' +
-    'out%: 과금 토큰 중 output 비율(output ÷ input + cache 생성 + output). 쓴 토큰이 얼마나 산출로 이어졌는지.\n' +
-    '$/1M: 과금 토큰 100만 개당 블렌디드 비용 — 비싼 모델 믹스일수록 높습니다.\n' +
-    'usage 데이터가 없는 세션은 셀을 그리지 않습니다.',
-  'dash.eff.hit.name': '캐시 적중률',
-  'dash.eff.hit.short': 'hit%',
-  'dash.eff.out.name': '과금 토큰 중 output 비율',
-  'dash.eff.out.short': 'out%',
-  'dash.eff.rate.name': '과금 토큰 1M당 블렌디드 비용',
-  'dash.eff.rate.short': '$/1M',
-  'dash.cost.title': '추정 비용(≈$)',
-  'dash.cost.tip':
-    '공개 가격표로 계산한 세션별 추정 비용입니다.\n' +
-    '청구서가 아닙니다 — 구독 할인·서비스 티어는 로컬에서 보이지 않고, 가격표에 없는 ' +
-    '모델은 제외되므로 하한값입니다.',
   'dash.cost.total': (v: string) => `합계 ≈$${v}`,
-  'dash.tokens.input': 'input',
-  'dash.tokens.output': 'output',
-  'dash.tokens.cacheCreation': 'cache 생성',
-  'dash.tokens.cacheRead': 'cache 읽기',
-  'dash.axis.max': (n: number | string) => `최대 ${n}`,
-  'dash.tab.charts': '차트',
-  'dash.table.summary': '데이터 표',
-  'dash.table.session': '세션',
-  'dash.table.date': '최초 관측',
-  'dash.table.events': '이벤트',
-  'dash.tooltip.events': (n: number) => `이벤트 ${n}개`,
-  'dash.openSession': (id: string) => `세션 ${id} 열기`,
 };

@@ -168,6 +168,8 @@ describe('formatModel', () => {
     expect(formatModel('claude-opus-4-8')).toBe('Opus 4.8');
     expect(formatModel('claude-sonnet-4-6')).toBe('Sonnet 4.6');
     expect(formatModel('claude-haiku-4-5-20251001')).toBe('Haiku 4.5');
+    // minor 없는 이름 — displayModel 위임으로 고쳐진 회귀(리스트에 원문 노출됐었음)
+    expect(formatModel('claude-fable-5')).toBe('Fable 5');
   });
   it('strips a [1m] context suffix', () => {
     expect(formatModel('claude-opus-4-8[1m]')).toBe('Opus 4.8');
