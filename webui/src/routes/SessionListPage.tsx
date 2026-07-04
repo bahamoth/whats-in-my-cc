@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { listSessions, ApiError } from '../api/client';
-import type { SessionListItem } from '../api/types';
+import { getMetricsSeries, listSessions, ApiError } from '../api/client';
+import type { SessionListItem, SessionMetricsDto } from '../api/types';
+import { signalsOf } from '../lib/dashDerive';
+import { usageRatios } from '../lib/seriesView';
 import { useLiveStream, type LiveEnvelope } from '../hooks/useLiveStream';
 import { relativeTime, formatModel } from '../lib/format';
 import { groupTeamRows } from '../lib/teamGrouping';
@@ -9,13 +11,26 @@ import { agentColor } from '../lib/colorHash';
 import { useLocale, useT } from '../i18n';
 import styles from './SessionListPage.module.css';
 
-type SortKey = 'last_observed_at' | 'event_count' | 'session_id';
+type SortKey =
+  | 'last_observed_at'
+  | 'event_count'
+  | 'session_id'
+  | 'verification'
+  | 'signals'
+  | 'cost'
+  | 'rate'
+  | 'hit';
 type SortDir = 'asc' | 'desc';
 
 const SORT_LABELS: Record<SortKey, string> = {
   session_id: 'session',
   last_observed_at: 'last seen',
   event_count: 'events',
+  verification: 'verify',
+  signals: 'signals',
+  cost: 'cost',
+  rate: '$/1M',
+  hit: 'hit',
 };
 
 type State =
@@ -82,15 +97,42 @@ function isLive(envelopeAtMs: number | undefined, nowMs: number): boolean {
   return nowMs - envelopeAtMs <= LIVE_THRESHOLD_MS;
 }
 
-function compare(a: SessionListItem, b: SessionListItem, key: SortKey): number {
+function compare(
+  a: SessionListItem,
+  b: SessionListItem,
+  key: SortKey,
+  metrics: Map<string, SessionMetricsDto>,
+): number {
+  const num = (r: SessionListItem): number => {
+    const m = metrics.get(r.session_id);
+    if (!m) return Number.NEGATIVE_INFINITY;
+    const ratios = usageRatios(m);
+    switch (key) {
+      case 'verification': {
+        const t = m.verification_passed + m.verification_failed;
+        return t > 0 ? m.verification_passed / t : Number.NEGATIVE_INFINITY;
+      }
+      case 'signals':
+        return signalsOf(m);
+      case 'cost':
+        return ratios.measured ? (m.estimated_cost_usd ?? 0) : Number.NEGATIVE_INFINITY;
+      case 'rate':
+        return ratios.measured ? ratios.unitRatePerM : Number.NEGATIVE_INFINITY;
+      case 'hit':
+        return ratios.measured ? ratios.cacheHitPct : Number.NEGATIVE_INFINITY;
+      default:
+        return 0;
+    }
+  };
   switch (key) {
     case 'event_count':
       return a.event_count - b.event_count;
     case 'session_id':
       return (a.slug ?? a.session_id).localeCompare(b.slug ?? b.session_id);
     case 'last_observed_at':
-    default:
       return a.last_observed_at.localeCompare(b.last_observed_at);
+    default:
+      return num(a) - num(b);
   }
 }
 
@@ -108,10 +150,62 @@ function matchesQuery(r: SessionListItem, q: string): boolean {
     .some((f) => f?.toLowerCase().includes(needle));
 }
 
+/** 지표 5셀 — 미측정은 '—'(0 위장 금지). 검증은 통과/전체 + pass/fail 마이크로바. */
+function MetricCells({ m }: { m?: SessionMetricsDto }) {
+  const dim = <td className={styles.eventsCell}><span className={styles.tagDim}>—</span></td>;
+  if (!m) return <>{dim}{dim}{dim}{dim}{dim}</>;
+  const ratios = usageRatios(m);
+  const total = m.verification_total;
+  const passPct = total > 0 ? (m.verification_passed / total) * 100 : 0;
+  const failPct = total > 0 ? (m.verification_failed / total) * 100 : 0;
+  const trim1 = (v: number) => String(Math.round(v * 10) / 10);
+  return (
+    <>
+      <td className={styles.eventsCell}>
+        {total > 0 ? (
+          <span title={`passed ${m.verification_passed} · failed ${m.verification_failed} · unknown ${m.verification_unknown}`}>
+            <strong>{m.verification_passed}</strong>/{total}
+            <span
+              style={{
+                display: 'inline-block',
+                width: 48,
+                height: 5,
+                borderRadius: 3,
+                background: 'var(--wimcc-surface-2)',
+                verticalAlign: 2,
+                marginLeft: 8,
+                overflow: 'hidden',
+              }}
+            >
+              <i style={{ display: 'block', float: 'left', height: '100%', width: `${passPct}%`, background: '#41c285' }} />
+              <i style={{ display: 'block', float: 'left', height: '100%', width: `${failPct}%`, background: '#ef4747' }} />
+            </span>
+          </span>
+        ) : (
+          <span className={styles.tagDim}>—</span>
+        )}
+      </td>
+      <td className={styles.eventsCell}>{signalsOf(m) || <span className={styles.tagDim}>0</span>}</td>
+      <td className={styles.eventsCell}>
+        {ratios.measured ? `$${trim1(m.estimated_cost_usd ?? 0)}` : <span className={styles.tagDim}>—</span>}
+      </td>
+      <td className={styles.eventsCell}>
+        {ratios.measured ? `$${trim1(ratios.unitRatePerM)}/1M` : <span className={styles.tagDim}>—</span>}
+      </td>
+      <td className={styles.eventsCell}>
+        {ratios.measured ? `${trim1(ratios.cacheHitPct)}%` : <span className={styles.tagDim}>—</span>}
+      </td>
+    </>
+  );
+}
+
 export default function SessionListPage() {
   const { locale } = useLocale();
   const t = useT();
   const [state, setState] = useState<State>({ kind: 'loading' });
+  // 2026-07-04 리스트 지표 컬럼(추가형) — /v1/metrics join. 실패해도 기존
+  // 컬럼은 그대로 렌더한다(지표만 '—').
+  const [metrics, setMetrics] = useState<Map<string, SessionMetricsDto>>(() => new Map());
   const [sortKey, setSortKey] = useState<SortKey>('last_observed_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [query, setQuery] = useState('');
@@ -150,6 +244,14 @@ export default function SessionListPage() {
       const message = e instanceof ApiError ? e.detail : String(e);
       setState({ kind: 'error', message });
     }
+    // 기존 컬럼이 먼저 서고, 지표는 도착하는 대로 채운다 — 실패해도 '—' 유지.
+    getMetricsSeries({ limit: 200 })
+      .then((series) => {
+        setMetrics(new Map(series.sessions.map((r) => [r.session_id, r.metrics])));
+      })
+      .catch(() => {
+        /* 지표는 부가 컬럼 */
+      });
   }, []);
 
   useEffect(() => { void load(); }, [load]);
@@ -200,13 +302,13 @@ export default function SessionListPage() {
     if (state.kind !== 'ok') return [];
     const copy = state.rows.filter((r) => matchesQuery(r, query));
     copy.sort((a, b) => {
-      const c = compare(a, b, sortKey);
+      const c = compare(a, b, sortKey, metrics);
       return sortDir === 'asc' ? c : -c;
     });
     // teammate 세션(team_name 보유)을 리드 세션 바로 아래로 — 정렬 뒤에
     // 적용해 리드의 정렬 위치는 유지하고 팀메이트만 붙인다.
     return groupTeamRows(copy);
-  }, [state, sortKey, sortDir, query]);
+  }, [state, sortKey, sortDir, query, metrics]);
 
   const onHeaderClick = (key: SortKey) => {
     if (sortKey === key) {
@@ -267,6 +369,21 @@ export default function SessionListPage() {
                 <th onClick={() => onHeaderClick('event_count')} className={`${styles.sortable} ${styles.numHead}`}>
                   events<SortIndicator active={sortKey === 'event_count'} dir={sortDir} />
                 </th>
+                <th onClick={() => onHeaderClick('verification')} className={`${styles.sortable} ${styles.numHead}`}>
+                  verify<SortIndicator active={sortKey === 'verification'} dir={sortDir} />
+                </th>
+                <th onClick={() => onHeaderClick('signals')} className={`${styles.sortable} ${styles.numHead}`}>
+                  signals<SortIndicator active={sortKey === 'signals'} dir={sortDir} />
+                </th>
+                <th onClick={() => onHeaderClick('cost')} className={`${styles.sortable} ${styles.numHead}`}>
+                  cost<SortIndicator active={sortKey === 'cost'} dir={sortDir} />
+                </th>
+                <th onClick={() => onHeaderClick('rate')} className={`${styles.sortable} ${styles.numHead}`}>
+                  $/1M<SortIndicator active={sortKey === 'rate'} dir={sortDir} />
+                </th>
+                <th onClick={() => onHeaderClick('hit')} className={`${styles.sortable} ${styles.numHead}`}>
+                  hit<SortIndicator active={sortKey === 'hit'} dir={sortDir} />
+                </th>
                 <th>sources</th>
               </tr>
             </thead>
@@ -316,6 +433,7 @@ export default function SessionListPage() {
                       {relativeTime(r.last_observed_at, nowMs, locale)}
                     </td>
                     <td className={styles.eventsCell}>{r.event_count.toLocaleString()}</td>
+                    <MetricCells m={metrics.get(r.session_id)} />
                     <td className={styles.mix}>
                       {mix.transcript > 0 && (
                         <span className={`${styles.tag} ${styles.tagTranscript}`}>txn {mix.transcript}</span>
