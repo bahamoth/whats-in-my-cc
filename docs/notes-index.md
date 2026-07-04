@@ -17,7 +17,7 @@ CLAUDE.md의 python 스니펫.
 | verification 파싱 | `#verification-tsc-2026-07-04` (tsc 승격, 패턴 17) | `#unknown-verification-loop` |
 | Teammate·Subagent 관측 | `#teammate-followups-2026-07-04` (B-6 종결: preview·북엔드·agent-setting·표본 2) | `#teammate-observability-2026-07-03` · `#teammate-in-session-2026-07-03` · `#bg-subagent-hairline-gutter-2026-06-14` · `#task-notification-sync-2026-06-14` |
 | WebUI replay·목록 | `#session-list-perf-2026-06-29` (facet materialize 51배) | `#scroll-scrollbar-fix` · `#autoscroll-model` · `#pr33-regression-review` · `#tool-metrics-transcript-fallback` |
-| 프로젝트 대시보드 | `#project-dashboard-2026-07-04` (/dashboard, 코호트 레일) | — |
+| 프로젝트 대시보드 | `#dashboard-feedback-2026-07-04` (전면 개편: ECharts 2탭·코호트 랭킹·instruction 관측·B-12/13/14) | `#project-dashboard-2026-07-04` · `#dashboard-shadcn-2026-07-04` |
 | MCP 표면 | `#mcp-digest-events-2026-07-04` (11종: structuredContent·events·digest) | `#mcp-parity-detector-config-2026-07-03` · `#dogfood-retrospect-2026-06-12` |
 | export·거버넌스 | `#export-bundle-2026-07-04` (POST /v1/export-bundles) + `#prd-09-decisions-2026-07-04` (§09 3건 종결) | `#full-retention` · `#slice-18-deviations` · `#slice-19-deviations` |
 | telemetry fold | `#telemetry-fold-group-a` · `#telemetry-fold-group-bc` | — |
