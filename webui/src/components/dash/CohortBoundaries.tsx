@@ -135,6 +135,14 @@ export function CohortBoundaries({ rows }: { rows: SessionSeriesRowDto[] }) {
     if (dimFilter === 'auto') return surfaced;
     return all.filter((b) => b.dim === dimFilter).sort((a, b) => b.index - a.index);
   }, [dimFilter, surfaced, all]);
+  /** 차원별 경계 수 + 유의 경계 보유 차원 — 레일 배지의 결정론 사실. */
+  const dimCount = useMemo(() => {
+    const m = new Map<CohortDim, number>();
+    for (const d of COHORT_DIMS) m.set(d, 0);
+    for (const b of all) m.set(b.dim, (m.get(b.dim) ?? 0) + 1);
+    return m;
+  }, [all]);
+  const surfacedDims = useMemo(() => new Set(surfaced.map((b) => b.dim)), [surfaced]);
 
   const sel: RankedBoundary | undefined =
     list.find((b) => `${b.dim}:${b.index}` === picked) ?? list[0];
@@ -205,24 +213,43 @@ export function CohortBoundaries({ rows }: { rows: SessionSeriesRowDto[] }) {
             {t('dash.cohort.prefixNote')}
           </small>
         </span>
-        <div className="flex gap-1">
-          {(['auto', ...COHORT_DIMS] as const).map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => {
-                setDimFilter(d);
-                setPicked(null);
-              }}
-              className={`rounded-md px-2 py-0.5 font-mono text-[10.5px] transition-colors ${
-                dimFilter === d
-                  ? 'bg-(--wimcc-surface-3) text-(--wimcc-fg)'
-                  : 'text-(--wimcc-fg-subtle) hover:text-(--wimcc-fg-muted)'
-              }`}
-            >
-              {dimName(d)}
-            </button>
-          ))}
+        <div className="flex gap-1 rounded-lg border border-(--wimcc-border) bg-(--wimcc-surface-1) p-1">
+          {(['auto', ...COHORT_DIMS] as const).map((d) => {
+            const count = d === 'auto' ? surfaced.length : (dimCount.get(d) ?? 0);
+            const empty = d !== 'auto' && count === 0;
+            const active = dimFilter === d;
+            return (
+              <button
+                key={d}
+                type="button"
+                disabled={empty}
+                aria-pressed={active}
+                onClick={() => {
+                  setDimFilter(d);
+                  setPicked(null);
+                }}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] transition-colors ${
+                  active
+                    ? 'bg-(--wimcc-surface-3) font-semibold text-(--wimcc-fg)'
+                    : empty
+                      ? 'cursor-default text-(--wimcc-fg-subtle) opacity-40'
+                      : 'text-(--wimcc-fg-muted) hover:bg-(--wimcc-surface-2) hover:text-(--wimcc-fg)'
+                }`}
+              >
+                {d !== 'auto' && surfacedDims.has(d) && (
+                  <span aria-hidden className="size-1.5 rounded-full bg-[#b07dff]" />
+                )}
+                {dimName(d)}
+                <span
+                  className={`rounded-[4px] px-1 font-mono text-[10px] ${
+                    active ? 'bg-(--wimcc-surface-1) text-(--wimcc-fg-muted)' : 'bg-(--wimcc-surface-2) text-(--wimcc-fg-subtle)'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -230,26 +257,38 @@ export function CohortBoundaries({ rows }: { rows: SessionSeriesRowDto[] }) {
         <p className="mb-2 text-[12px] text-(--wimcc-fg-subtle)">{t('dash.cohort.noneAuto')}</p>
       )}
       {list.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-1.5">
+        <div className="mb-0 overflow-hidden rounded-t-[13px] border border-b-0 border-(--wimcc-border) bg-(--wimcc-surface-1)">
           {list.map((b) => {
             const active = sel === b;
             return (
               <button
                 key={`${b.dim}:${b.index}`}
                 type="button"
+                data-selected={active}
                 onClick={() => setPicked(`${b.dim}:${b.index}`)}
-                className={`rounded-lg border px-2.5 py-1.5 text-left font-mono text-[10.5px] transition-colors ${
+                className={`flex w-full items-center gap-2.5 border-b border-(--wimcc-border) px-3 py-2 text-left font-mono text-[11px] transition-colors last:border-b-0 ${
                   active
-                    ? 'border-(--wimcc-border-strong) bg-(--wimcc-surface-2)'
-                    : 'border-(--wimcc-border) bg-(--wimcc-surface-1) hover:border-(--wimcc-border-strong)'
+                    ? 'bg-(--wimcc-surface-2)'
+                    : 'hover:bg-(--wimcc-surface-2)/50'
                 }`}
+                style={{
+                  boxShadow: active ? 'inset 3px 0 0 #b07dff' : undefined,
+                }}
               >
-                <span className="text-(--wimcc-fg-subtle)">{b.date}</span>{' '}
-                <span className="font-semibold">{labelOf(b)}</span>
+                <span
+                  aria-hidden
+                  className={active ? 'text-[#b07dff]' : 'text-(--wimcc-fg-subtle)'}
+                >
+                  {active ? '●' : '○'}
+                </span>
+                <span className="text-(--wimcc-fg-subtle)">{b.date}</span>
+                <span className="truncate font-semibold">{labelOf(b)}</span>
                 {dimFilter === 'auto' && (
-                  <span className="ml-1.5 text-(--wimcc-fg-subtle)">[{dimName(b.dim)}]</span>
+                  <span className="shrink-0 rounded-[4px] bg-(--wimcc-surface-2) px-1.5 py-0.5 text-[10px] text-(--wimcc-fg-muted)">
+                    {dimName(b.dim)}
+                  </span>
                 )}
-                <span className="ml-1.5 text-[#b07dff]">
+                <span className="ml-auto shrink-0 text-[#b07dff]">
                   {b.exceed !== null && b.bestMetric
                     ? `Δ${metricName[b.bestMetric]} · ${t('dash.cohort.exceed', Math.max(1, Math.round(b.exceed * 100)))}`
                     : t('dash.cohort.lowSample')}
@@ -261,7 +300,10 @@ export function CohortBoundaries({ rows }: { rows: SessionSeriesRowDto[] }) {
       )}
 
       {sel && (
-        <>
+        <div
+          className="rounded-b-[13px] border border-(--wimcc-border) bg-(--wimcc-surface-1)/40 px-3.5 pt-3 pb-3.5"
+          style={{ borderTop: '2px solid #b07dff' }}
+        >
           <div className="mb-2 flex items-baseline justify-between">
             <span className="text-[12.5px] font-medium text-(--wimcc-fg-muted)">
               {t('dash.cohort.compareTitle', labelOf(sel))}
@@ -286,7 +328,7 @@ export function CohortBoundaries({ rows }: { rows: SessionSeriesRowDto[] }) {
               />
             ))}
           </div>
-        </>
+        </div>
       )}
     </section>
   );
