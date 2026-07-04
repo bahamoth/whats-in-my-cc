@@ -30,6 +30,9 @@ transcript가 아닌 **execution replay**로 "무엇이·왜 그렇게 됐는가
 | HTTP / MCP endpoint 계약 | `docs/04_api_mcp_spec.html` |
 | Collection profile·redaction·export | `docs/05_security_governance_spec.html` |
 | 남은 작업·보류 백로그 (착수/완료 시 갱신) | `docs/BACKLOG.md` |
+| 확정 기능 스펙 (대시보드 개편 등) | `docs/specs/*.md` |
+| 구현 계획 (스펙 → 태스크 분해) | `docs/plans/*.md` |
+| 승인/기각 디자인 목업 (자기완결 HTML) | `docs/mockups/*.html` |
 | implementation-notes 토픽별 현재 진실 인덱스 | `docs/notes-index.md` |
 
 `docs/index.html`은 포털.
@@ -57,6 +60,11 @@ schema-versioning·deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html` �
   아니다"식 부정 설명 금지. **게이트**: `webui/src/i18n/__tests__/tipStyle.test.ts`가
   위반을 CI에서 실패시킨다 — 2026-07-04 사용자 지시("가독성 규칙이 잘 안 지켜지므로
   강제성 있게").
+- **WebUI 표기 원칙** (SSOT: `docs/specs/2026-07-04-dashboard-redesign.md` §0):
+  판정 문장 금지(숫자·delta·관측 사실만) · 섹션 제목 질문형 금지(서술형) ·
+  모델명은 전체 표시명(`displayModel` — 약칭 금지) · 미측정 ≠ 0(`—` 표기) ·
+  보라(#b07dff) = 코호트 경계 문법(차트 마커·선택·스트림 마커 공통) ·
+  표본 수 병기(n<3은 "표본 부족").
 
 ## Operations
 
@@ -69,6 +77,12 @@ schema-versioning·deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html` �
 - **인증**: 기본 `--auth off`(단일 사용자 dev). `--auth on`이면 `/v1/*`+`/mcp`에
   `Authorization: Bearer <token>` 필요(`/v1/stream`·collectors·SPA는 예외).
   token은 `dirs::config_dir()/wimcc/token`(0600).
+- **UI 스모크 스택**: 운영 serve(:7878)는 라이브 CC 세션을 물고 있으므로
+  **재시작 금지**. 스모크는 스크래치 serve(예: `--db-path <scratch>.sqlite serve
+  --port 7999 --auto-migrate`) + `WIMCC_PROXY_TARGET=http://127.0.0.1:7999
+  npx vite --port 5174`. **`--auto-migrate`를 빼먹으면 신규 테이블이 없어
+  런타임 WARN으로만 드러난다**(2026-07-04 실사고). 새 백엔드 필드는 스크래치
+  serve 재빌드·재기동 후에야 API에 실린다.
 - **dev DB**: migration 추가 시 원칙적으로 `wimcc init-db` + 재ingest. 단 serve/ingest
   startup에서 backfill하는 migration은 불필요(각 migration 주석이 명시). payload 필드
   (JSON BLOB)는 migration 없이 추가되므로 기존 이벤트엔 없다 — 재ingest해야 채워진다.

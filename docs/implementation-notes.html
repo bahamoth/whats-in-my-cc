@@ -5954,9 +5954,36 @@ vitest: 69 passed
     (관측 MCP server_key 집합)·instructions 추가, API 2종
     (/v1/instructions/:sha·/v1/sessions/:id/instructions). ④ UI: 코호트
     instructions 경계 diff 렌더(lineDiff LCS), 세션 디테일 지시문 카드
-    (source:hash8·세션 중 변경 횟수·diff 펼침). <b>명시적 보류(BACKLOG)</b>:
-    B-12 리플레이 스트림 인라인 변경 마커(그룹핑 파이프라인 확장 필요),
-    B-13 Tier3 트리 스캔, B-14 EXCEED 임계의 차원 수 보정.</p>
+    (source:hash8·세션 중 변경 횟수·diff 펼침). 보류로 남겼던 B-12/13/14는
+    같은 날 후속으로 완료(다음 문단).</p>
+    <p><b>후속 완료 — B-12/13/14 + 마커 라벨 배치(2026-07-04):</b>
+    ① <b>B-14</b> 다중비교 보정: 개입 차원 수만큼 후보 검정이 늘어 가짜 유의가
+    비례 증가 — Bonferroni 방식 <code>effectiveExceedMax = EXCEED_MAX ÷ 활성
+    개입 차원 수</code>(활성 = 그 창에서 exceed가 계산된 경계 보유 차원;
+    dashDerive.rankCohorts, vitest 잠금). ② <b>B-13</b> Tier3 트리 스캔:
+    <code>instruction_observe::tree_claude_mds</code> — cwd 트리 하위 CLAUDE.md를
+    source='tree'로 존재 기록(깊이 ≤4·디렉터리 ≤400·node_modules/target/.git/
+    dist/.venv/vendor 스킵, 루트는 Tier1과 중복이라 제외). 로드 무주장 원칙 동일.
+    ③ <b>B-12</b> 스트림 인라인 마커: StreamItem 유니온에
+    <code>instruction-marker</code> 추가, (source|path)별 연속 관측 쌍의 해시
+    변경을 <code>insertInstructionMarkers</code>(순수 함수, vitest)가 보라 점선
+    행으로 삽입 — 클릭 시 스냅샷 diff 펼침, Derived 배지(관측 행 2개의 파생이지
+    이벤트가 아님). 그룹 컴포넌트 4곳(itemEventIds·itemContainsEvent)에 마커
+    분기 추가. ④ <b>마커 라벨 겹침(사용자 발견)</b>: 일별 차트의 인접 markLine
+    라벨이 겹치고 가장자리에서 잘렸다 — <code>dash/markerLayout.ts</code>
+    (순수 함수, vitest 7건)로 세로 스태거 행(그리디 구간 배정, 행당 13px,
+    grid.top 자동 확장)+넘침이 작은 쪽으로 정렬 뒤집기. 플롯 폭은 빌드 시점에
+    실측 불가라 보수 추정 720px — 실제가 더 넓으면 스태거가 약간 과할 뿐 겹침은
+    없다. ⑤ 문서 스윕: BACKLOG를 게이트 항목 4건(G-1~G-4)만 남기고 재작성,
+    CLAUDE.md에 Document Map(specs/plans/mockups)·WebUI 표기 원칙·UI 스모크
+    스택 절 추가, 스펙 §2에 B-14 보정·Tier3·스트림 마커 명문화.
+    ⑥ <b>라이브 스모크가 잡은 결함 2건</b>: (a) 레코드 cwd는 Bash `cd`로
+    드리프트한다(실측: 이 세션 distinct cwd 4개) — distinct cwd 전부를 Tier1
+    project 루트로 취급해 하위 CLAUDE.md가 코호트 키('project')로 오기록됐다.
+    기준을 <b>최초 이벤트의 cwd(launch dir) 하나</b>로 수정(Tier3 트리 스캔도
+    동일 루트). (b) fingerprint.instructions가 tree/import까지 포함 — 존재
+    기록(Tier2/3)이 코호트 키를 오염하므로 <code>source IN
+    ('project','user')</code> 필터 추가. 둘 다 TDD로 잠금.</p>
   </section>
 
 </main>
