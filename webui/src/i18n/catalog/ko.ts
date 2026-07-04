@@ -181,6 +181,9 @@ export const ko: Messages = {
   'stream.laneExpandTitle': (label: string) => `${label} — 클릭하여 펼치기`,
   'stream.conversationStart': '대화 시작',
   'stream.workflow.agentN': (n: number) => `에이전트 ${n}`,
+  // flat 모드(필터 활성): 그룹핑 비활성 — sidechain 카드/스택에 이 배지를 붙여
+  // 맥락을 유지한다 (스펙 §1.4).
+  'stream.flatSidechainBadge': '⑂ 서브에이전트 내부',
 
   // Stream — autoscroll
   'stream.autoscroll.label': '자동 스크롤',

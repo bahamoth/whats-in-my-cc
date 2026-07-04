@@ -15,10 +15,14 @@ interface ActivityStackProps {
   stack: ActivityStackData;
   selectedEventId: string | null;
   onSelect: (eventId: string) => void;
+  /** flat 모드(필터 활성 — buildStreamModel opts.flat): 서브에이전트 그룹이
+   *  없으므로 sidechain 활동 스택에 출처 배지(⑂)를 헤더에 1회 붙인다. */
+  flatMode?: boolean;
 }
 
-export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStackProps) {
+export function ActivityStack({ stack, selectedEventId, onSelect, flatMode = false }: ActivityStackProps) {
   const t = useT();
+  const isSidechainStack = flatMode && stack.events.some((ae) => !!ae.event.is_sidechain);
   // `null` = no explicit user choice yet → follow `containsSelected` (auto-open
   // when a selection lands inside this run so the host can scroll it into view).
   // Once the user toggles, their explicit true/false wins — so they CAN COLLAPSE
@@ -116,6 +120,11 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
         data-errors={String(summary.errorCount)}
         className={`${styles.stack} ${styles.single}`}
       >
+        {isSidechainStack && (
+          <span data-testid="flat-sidechain-badge" className={styles.flatBadge}>
+            {t('stream.flatSidechainBadge')}
+          </span>
+        )}
         <div className={styles.items}>{renderItem(stack.events[0])}</div>
       </div>
     );
@@ -138,6 +147,11 @@ export function ActivityStack({ stack, selectedEventId, onSelect }: ActivityStac
           ? <ChevronDown size={13} aria-hidden className={styles.chevron} />
           : <ChevronRight size={13} aria-hidden className={styles.chevron} />}
         <Wrench size={12} aria-hidden />
+        {isSidechainStack && (
+          <span data-testid="flat-sidechain-badge" className={styles.flatBadge}>
+            {t('stream.flatSidechainBadge')}
+          </span>
+        )}
         {summary.topTools.length > 0 && (
           <span className={styles.topTools}>{summary.topTools.join(' · ')}</span>
         )}

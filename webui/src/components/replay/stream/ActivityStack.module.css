@@ -32,6 +32,20 @@
   color: var(--wimcc-fg-subtle, #6a7180);
 }
 
+/* flat-mode origin badge (⑂ 서브에이전트 내부) — filter active → grouping
+   disabled, so a sidechain activity stack carries this once in its header.
+   Muted, matching MessageCard's .flatBadge; NOT the cohort-boundary violet. */
+.flatBadge {
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: var(--wimcc-fg-subtle, #6a7180);
+  background: var(--wimcc-surface-3, #1b202a);
+  border: 1px solid var(--wimcc-border, #1d212c);
+}
+
 .topTools {
   color: var(--wimcc-fg, #e6e8ee);
   font-weight: 500;

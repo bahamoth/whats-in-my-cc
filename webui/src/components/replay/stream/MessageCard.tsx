@@ -39,9 +39,12 @@ interface MessageCardProps {
   selected: boolean;
   onSelect: (eventId: string) => void;
   hasFinding?: boolean;
+  /** flat 모드(필터 활성 — buildStreamModel opts.flat): 서브에이전트 그룹이
+   *  없으므로 sidechain 카드에 출처 배지(⑂)를 붙여 맥락을 표시한다. */
+  flatMode?: boolean;
 }
 
-export function MessageCard({ item, selected, onSelect, hasFinding = false }: MessageCardProps) {
+export function MessageCard({ item, selected, onSelect, hasFinding = false, flatMode = false }: MessageCardProps) {
   const t = useT();
   // A sidechain user_message is the orchestrator's prompt to a Task subagent —
   // not human input. It renders left, labelled "Prompt", inside a SubagentGroup.
@@ -200,6 +203,11 @@ export function MessageCard({ item, selected, onSelect, hasFinding = false }: Me
           </button>
         )}
         <span data-testid="source-badge" className={styles.sourceBadge}>{sourceTag}</span>
+        {flatMode && item.sidechain && (
+          <span data-testid="flat-sidechain-badge" className={styles.flatBadge}>
+            {t('stream.flatSidechainBadge')}
+          </span>
+        )}
         {teammateSessionId && (
           <a
             data-testid="teammate-open"

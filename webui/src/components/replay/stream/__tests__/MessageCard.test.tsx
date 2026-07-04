@@ -250,4 +250,27 @@ describe('MessageCard — markdown raw/styled view', () => {
     );
     expect(container.querySelector('table')).not.toBeNull();
   });
+
+  describe('flat mode — ⑂ sidechain badge', () => {
+    it('shows the badge for a sidechain message when flatMode is true', () => {
+      render(
+        <MessageCard item={m({ role: 'user', sidechain: true, text: 'sub' })} selected={false} onSelect={() => {}} flatMode />,
+      );
+      expect(screen.getByTestId('flat-sidechain-badge')).toBeInTheDocument();
+    });
+
+    it('omits the badge for a sidechain message when flatMode is false/absent (grouped mode)', () => {
+      render(
+        <MessageCard item={m({ role: 'user', sidechain: true, text: 'sub' })} selected={false} onSelect={() => {}} />,
+      );
+      expect(screen.queryByTestId('flat-sidechain-badge')).toBeNull();
+    });
+
+    it('omits the badge for a non-sidechain message even when flatMode is true', () => {
+      render(
+        <MessageCard item={m({ role: 'user', sidechain: false, text: 'hi' })} selected={false} onSelect={() => {}} flatMode />,
+      );
+      expect(screen.queryByTestId('flat-sidechain-badge')).toBeNull();
+    });
+  });
 });
