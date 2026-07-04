@@ -18,6 +18,7 @@ import type {
   PluginDto,
   TaskDto,
 } from './types';
+import type { EventFilterParams } from '../components/replay/stream/filterState';
 
 export class ApiError extends Error {
   constructor(public status: number, public detail: string) {
@@ -58,14 +59,16 @@ export const getEventRaw  = (eventId: string) =>
  *  the event is not in the session. Takes precedence over before/after. */
 export function getSessionEvents(
   id: string,
-  opts?: { before?: string; after?: string; around?: string; limit?: number; kind?: string },
+  opts?: { before?: string; after?: string; around?: string; limit?: number; filter?: EventFilterParams },
 ): Promise<SessionEventsResponse> {
   const params = new URLSearchParams();
   if (opts?.before) params.set('before', opts.before);
   if (opts?.after) params.set('after', opts.after);
   if (opts?.around) params.set('around', opts.around);
   if (opts?.limit !== undefined) params.set('limit', String(opts.limit));
-  if (opts?.kind) params.set('kind', opts.kind);
+  for (const [k, v] of Object.entries(opts?.filter ?? {})) {
+    if (v !== undefined) params.set(k, v);
+  }
   const qs = params.toString();
   const path =
     `/v1/sessions/${encodeURIComponent(id)}/events` + (qs ? `?${qs}` : '');
