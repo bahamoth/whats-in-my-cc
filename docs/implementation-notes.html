@@ -5942,6 +5942,21 @@ vitest: 69 passed
     covered_diff_hunk_ids는 기존 근사 의미 유지(계약 불변). ⓑ 코호트 비교의 경계 선택은 최신 경계 고정 —
     스펙 §2.3의 마커 클릭 전환은 미구현(후속). ⓒ 세션 리스트 헤더 문구는 기존
     영어 하드코딩 관례를 따름(리스트 i18n 일괄 전환은 별도 작업).</p>
+    <p><b>4차 개정 구현(2026-07-04, 스펙 §2 4차):</b> ① 코호트 차원 재편 —
+    개입(모델·Claude Code·entrypoint·plugins·instructions) vs 맥락(branch·cwd,
+    각주 전용). 직교하지 않는 차원이 같은 사건을 3중 등재하던 문제 해소.
+    ② <b>instruction 전향 관측</b>: transcript에 CLAUDE.md가 기록되지 않음을
+    전 transcript 스캔으로 실측 확인 후, serve tail이 라이브 활동 수신 시 세션
+    cwd/user CLAUDE.md를 직접 읽는 경로로 확정(measured). 내용 주소화 스냅샷
+    (diff 원료) + 관측 행, 신선도 가드 10분, @import는 존재만 기록(로드 무주장),
+    소급 backfill 없음(git 추정은 dirty tree로 가짜 경계 생성). 라이브 실증:
+    본 세션의 project CLAUDE.md 해시 108f3537 관측. ③ fingerprint에 plugins
+    (관측 MCP server_key 집합)·instructions 추가, API 2종
+    (/v1/instructions/:sha·/v1/sessions/:id/instructions). ④ UI: 코호트
+    instructions 경계 diff 렌더(lineDiff LCS), 세션 디테일 지시문 카드
+    (source:hash8·세션 중 변경 횟수·diff 펼침). <b>명시적 보류(BACKLOG)</b>:
+    B-12 리플레이 스트림 인라인 변경 마커(그룹핑 파이프라인 확장 필요),
+    B-13 Tier3 트리 스캔, B-14 EXCEED 임계의 차원 수 보정.</p>
   </section>
 
 </main>

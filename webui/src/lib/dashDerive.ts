@@ -261,9 +261,19 @@ const DIM_PICK: Record<CohortDim, (r: SessionSeriesRowDto) => string[]> = {
   cwd: (r) => r.fingerprint.cwds,
   entrypoint: (r) => r.fingerprint.entrypoints,
   plugins: (r) => r.fingerprint.plugins ?? [],
-  instructions: (r) =>
-    (r.fingerprint.instructions ?? []).map((x) => `${x.source}:${x.hash.slice(0, 8)}`),
+  // 전체 해시를 값으로 유지(diff 조회 키) — 표시 축약은 rankCohorts의 fmt가 한다.
+  instructions: (r) => (r.fingerprint.instructions ?? []).map((x) => `${x.source}:${x.hash}`),
 };
+
+/** 표시용 값 포맷 — instructions는 'source:hash8'로 축약, 그 외는 원문/모델명. */
+function fmtDimValue(dim: CohortDim, v: string): string {
+  if (dim === 'models') return displayModel(v);
+  if (dim === 'instructions') {
+    const i = v.indexOf(':');
+    return i >= 0 ? `${v.slice(0, i)}:${v.slice(i + 1, i + 9)}` : v;
+  }
+  return v;
+}
 
 export type CohortMetric = 'unitRate' | 'passRate' | 'signals' | 'cacheHit';
 const METRIC_ORDER: CohortMetric[] = ['unitRate', 'passRate', 'signals', 'cacheHit'];
@@ -288,6 +298,9 @@ export type RankedBoundary = {
   date: string;
   added: string[];
   removed: string[];
+  /** 표시 축약 전 원본 값(예: instructions의 전체 해시) — diff 조회 키. */
+  addedRaw: string[];
+  removedRaw: string[];
   before: CohortAgg;
   after: CohortAgg;
   /** 초과율이 가장 낮은(가장 두드러진) 지표와 그 |Δ|·초과율. 표본 게이트
@@ -333,7 +346,9 @@ export function rankCohorts(rows: SessionSeriesRowDto[]): {
       const setOf = (label: string) => new Set(label.split(' + ').filter(Boolean));
       const beforeSet = setOf(b.from);
       const afterSet = setOf(b.to);
-      const fmt = dim === 'models' ? displayModel : (v: string) => v;
+      const addedRaw = [...afterSet].filter((v) => !beforeSet.has(v));
+      const removedRaw = [...beforeSet].filter((v) => !afterSet.has(v));
+      const fmt = (v: string) => fmtDimValue(dim, v);
       const before = agg(rows.slice(0, b.index));
       const after = agg(rows.slice(b.index));
       const gated = b.index >= COHORT_MIN_N && rows.length - b.index >= COHORT_MIN_N;
@@ -361,8 +376,10 @@ export function rankCohorts(rows: SessionSeriesRowDto[]): {
         dim,
         index: b.index,
         date: rows[b.index].first_observed_at.slice(5, 10),
-        added: [...afterSet].filter((v) => !beforeSet.has(v)).map(fmt),
-        removed: [...beforeSet].filter((v) => !afterSet.has(v)).map(fmt),
+        added: addedRaw.map(fmt),
+        removed: removedRaw.map(fmt),
+        addedRaw,
+        removedRaw,
         before,
         after,
         bestMetric,

@@ -235,6 +235,22 @@ describe('rankCohorts', () => {
     const top = surfaced.find((b) => b.dim === 'models')!;
     expect(top.alsoChanged).toEqual(expect.arrayContaining(['branch', 'cwd']));
   });
+  it('instructions 차원: 라벨은 hash8 축약, raw는 전체 해시 보존(diff 키)', () => {
+    const h1 = 'a'.repeat(64);
+    const h2 = 'b'.repeat(64);
+    const withInstr = jump.map((r, i) => ({
+      ...r,
+      fingerprint: {
+        ...r.fingerprint,
+        instructions: [{ source: 'project', hash: i < 6 ? h1 : h2 }],
+      },
+    }));
+    const { all } = rankCohorts(withInstr);
+    const b = all.find((x) => x.dim === 'instructions')!;
+    expect(b.added).toEqual([`project:${'b'.repeat(8)}`]);
+    expect(b.addedRaw).toEqual([`project:${h2}`]);
+    expect(b.removedRaw).toEqual([`project:${h1}`]);
+  });
   it('all에는 게이트 미달 경계도 포함(수동 탐색용)', () => {
     const thin = [
       row('a0', '06-01', opus, { cost: 10 }),

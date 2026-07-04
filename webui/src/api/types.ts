@@ -441,3 +441,17 @@ export type VerificationSummaryDto = {
     by_session: Array<{ session_id: string; covered: number; total: number }>;
   };
 };
+
+/** instruction 전향 관측 — 세션의 관측 목록(시간순). */
+export type InstructionObservationDto = {
+  source: string;
+  path: string;
+  content_sha256: string;
+  observed_at: string;
+};
+
+export type InstructionSnapshotDto = {
+  content_sha256: string;
+  content: string;
+  first_observed_at: string;
+};

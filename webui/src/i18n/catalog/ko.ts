@@ -432,6 +432,15 @@ export const ko: Messages = {
   'dash.ver.cov.tip':
     '세션별 [green]커버[/green] / [amber]미커버[/amber] diff hunk.\n' +
     '**미커버가 많은 세션**부터 확인할 가치가 있습니다.',
+  'instr.diff.counts': (a: { add: number; del: number }) => `+${a.add} −${a.del} 줄`,
+  'instr.diff.error': '스냅샷을 불러오지 못했습니다.',
+  'instr.card.title': '지시문',
+  'instr.card.changes': (n: number) => `세션 중 ${n}회 변경`,
+  'instr.card.observedAt': (d: string) => `${d} 관측`,
+  'instr.card.tip':
+    '**전향 관측**된 지시문 파일: serve가 세션 활동을 수신한 순간 `CLAUDE.md`를 직접 읽습니다.\n' +
+    '**project** = 세션 cwd 루트 · **user** = ~/.claude · **import** = `@path` 참조 파일([amber]로드 여부는 주장하지 않고[/amber] 존재만 기록).\n' +
+    '세션 중 변경되면 관측이 추가됩니다 — 항목을 클릭하면 **내용 diff**를 보여줍니다.',
   'dash.eyebrow': '프로젝트 대시보드',
   'dash.allProjects': '전체 프로젝트',
   'dash.projectLabel': '프로젝트',
