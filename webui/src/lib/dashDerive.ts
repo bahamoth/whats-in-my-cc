@@ -191,7 +191,9 @@ export type CohortAgg = {
 };
 
 export type CohortCompare = {
-  label: string;
+  /** 경계에서 유입/이탈한 모델의 전체 표시명 — 문구 조립은 i18n 카탈로그 몫. */
+  added: string[];
+  removed: string[];
   boundaryIdx: number;
   alsoCcChanged: boolean;
   before: CohortAgg;
@@ -226,12 +228,6 @@ export function cohortCompare(rows: SessionSeriesRowDto[]): CohortCompare | null
   const afterSet = setOf(b.to);
   const added = [...afterSet].filter((m) => !beforeSet.has(m)).map(displayModel);
   const removed = [...beforeSet].filter((m) => !afterSet.has(m)).map(displayModel);
-  const label =
-    added.length && removed.length
-      ? `${removed.join(' · ')} → ${added.join(' · ')}`
-      : added.length
-        ? `${added.join(' · ')} 유입`
-        : `${removed.join(' · ')} 이탈`;
   const beforeRows = rows.slice(segBefore.start, segBefore.end + 1);
   const afterRows = rows.slice(segAfter.start, segAfter.end + 1);
   const ccAt = (idx: number): string | null => {
@@ -246,7 +242,8 @@ export function cohortCompare(rows: SessionSeriesRowDto[]): CohortCompare | null
   const alsoCcChanged =
     ccAfterRow.length > 0 && ccBefore !== null && ccAfterRow.join(' + ') !== ccBefore;
   return {
-    label,
+    added,
+    removed,
     boundaryIdx: b.index,
     alsoCcChanged,
     before: agg(beforeRows),
