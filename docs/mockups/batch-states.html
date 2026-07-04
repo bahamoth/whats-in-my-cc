@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>병렬 배치 / 서브에이전트 가시화 — 상태별</title>
+<style>
+  :root{
+    --bg:#0b0d12; --s1:#11141b; --s2:#161a23; --s3:#1b202a;
+    --bd:#1d212c; --bds:#2a3040;
+    --fg:#e6e8ee; --fgm:#aab0bd; --fgs:#6a7180;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --acc:#4f8cff; --ok:#41c285; --warn:#f0b429; --dng:#ef4747;
+    --teal:#2bd0d0; --orange:#ff8a4c; --violet:#b07dff; --green:#41c285;
+    --elev:0 1px 0 rgba(255,255,255,.025), 0 10px 30px -22px rgba(0,0,0,.9);
+    --r-md:11px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:26px 26px 120px}
+  h1{font-size:20px;font-weight:650;margin:0 0 4px}
+  .sub{color:var(--fgm);font-size:12.5px;margin:0 0 6px;max-width:880px;line-height:1.6}
+  .sub b{color:var(--fg)}
+  code{font-family:var(--mono);font-size:.9em;background:var(--s2);padding:1px 5px;border-radius:4px;color:var(--fgm)}
+  .rule{display:grid;grid-template-columns:26px 1fr;gap:10px;margin:14px 0 24px;padding:14px 16px;background:var(--s1);border-radius:12px;border:1px solid var(--bd)}
+  .rule .n{font-weight:700;color:var(--acc);font-size:15px}
+  .rule .q{font-weight:600;font-size:13px;margin-bottom:2px}
+  .rule .a{color:var(--fgm);font-size:12.5px;line-height:1.55}
+  .rule .a b{color:var(--fg)}
+
+  .seclabel{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--fgs);margin:30px 0 4px;font-weight:600}
+  .secdesc{color:var(--fgm);font-size:12px;margin:0 0 12px}
+  .secdesc b{color:var(--fg)}
+  .frame{border:1px solid var(--bd);border-radius:14px;background:var(--bg);padding:20px 22px;position:relative}
+  .frame .badge{position:absolute;right:14px;top:-10px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;
+    background:var(--s3);color:var(--fgm);padding:2px 9px;border-radius:999px;border:1px solid var(--bd);font-weight:600}
+
+  /* timeline base */
+  .tl{position:relative}
+  .spine{position:absolute;left:52px;top:4px;bottom:4px;width:1px;background:linear-gradient(180deg,transparent,var(--bd) 6%,var(--bd) 94%,transparent)}
+  .ev{position:relative;display:grid;grid-template-columns:46px 1fr;margin:0 0 16px}
+  .ev.tight{margin-bottom:8px}
+  .time{font-family:var(--mono);font-size:10px;color:var(--fgs);text-align:right;padding:7px 14px 0 0}
+  .node{position:absolute;left:48px;top:9px;width:9px;height:9px;border-radius:50%;background:var(--bg);border:2px solid var(--fgs);z-index:2}
+  .node.asst{border-color:var(--fgm)}
+  .node.batch{border-color:var(--orange);background:var(--orange)}
+  .body{margin-left:22px;min-width:0}
+  .bubble{background:var(--s2);border-radius:var(--r-md);padding:12px 14px;box-shadow:var(--elev);max-width:680px}
+  .who{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .who .nm{font-weight:600;font-size:12px}.who .ag{font-size:9.5px;text-transform:uppercase;color:var(--fgs);border:1px solid var(--bd);border-radius:4px;padding:0 5px}
+  .mtext{font-size:13px;line-height:1.55}
+
+  /* fan / batch */
+  .fan{margin-left:22px;background:rgba(255,138,76,.04);border-radius:var(--r-md);padding:11px 13px;
+    box-shadow:inset 0 0 0 1px rgba(255,138,76,.18)}
+  .fanhead{display:flex;align-items:center;gap:9px;font-size:12px;margin-bottom:10px}
+  .fanhead .tag{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--orange);border:1px solid rgba(255,138,76,.4);border-radius:5px;padding:1px 7px;font-weight:600}
+  .fanhead .nm{font-weight:600}
+  .fanhead .st{margin-left:auto;font-family:var(--mono);font-size:11px}
+  .fanhead .st.ok{color:var(--ok)} .fanhead .st.run{color:var(--warn)}
+
+  .lane{display:grid;grid-template-columns:18px 168px 1fr 50px;gap:9px;align-items:center;padding:4px 0;border-radius:7px}
+  .lane.click{cursor:pointer}
+  .lane.click:hover{background:rgba(255,255,255,.025)}
+  .lane .chev{color:var(--fgs);font-size:11px;text-align:center}
+  .lane .lh{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--fgm);min-width:0}
+  .lane .lh .sw{width:8px;height:8px;border-radius:2px;flex:none}
+  .lane .lh .nm{color:var(--fg);font-weight:550;white-space:nowrap}
+  .lane .lh .id{font-family:var(--mono);font-size:10px;color:var(--fgs)}
+  .lane .track{height:8px;background:var(--s3);border-radius:4px;position:relative;overflow:hidden}
+  .lane .fill{position:absolute;height:100%;border-radius:4px;opacity:.9}
+  .lane .fill.run{background-image:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);background-size:40px 100%;animation:sh 1.2s linear infinite}
+  @keyframes sh{0%{background-position:-40px 0}100%{background-position:300px 0}}
+  .lane .d{font-family:var(--mono);font-size:10px;color:var(--fgm);text-align:right}
+  .lane .d .live{color:var(--warn)}
+  .laneconcl{font-size:11.5px;color:var(--fgm);line-height:1.5;margin:8px 0 2px;padding-left:27px}
+  .laneconcl b{color:var(--fg)}
+  .expall{font-size:10.5px;color:var(--fgs);border:1px solid var(--bd);border-radius:6px;padding:2px 8px;margin-left:auto}
+
+  /* nested sub-timeline (expanded agent) */
+  .sub-tl{margin:6px 0 6px 27px;padding:8px 0 8px 16px;border-left:2px solid var(--teal);position:relative}
+  .sub-ev{display:grid;grid-template-columns:1fr;gap:0;margin-bottom:7px;position:relative}
+  .sub-ev .snode{position:absolute;left:-21px;top:5px;width:7px;height:7px;border-radius:50%;background:var(--bg);border:2px solid var(--teal)}
+  .sub-ev .snode.tool{border-color:var(--green);width:6px;height:6px}
+  .sub-ev .scard{background:var(--s2);border-radius:8px;padding:8px 11px;font-size:12px;line-height:1.5;max-width:600px}
+  .sub-ev .stool{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--fgm);padding:2px 0}
+  .sub-ev .stool .gl{color:var(--green)} .sub-ev .stool .nm{color:var(--fg);font-weight:550} .sub-ev .stool .t{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--fgm)}
+  .sub-ev .who2{font-size:10px;color:var(--fgs);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+
+  .note{font-size:11.5px;color:var(--fgs);margin-top:10px;line-height:1.6}
+  .note b{color:var(--fgm)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>병렬 배치 / 서브에이전트 — 가시화 & 상호작용</h1>
+  <p class="sub">질문하신 세 가지에 대한 제안입니다. 핵심 원칙: <b>요약은 항상 보이고(접기 없음), 내부 실행은 온디맨드로 드릴</b>. "펼쳐야 비로소 뭔가 보이는" 현재 방식과 반대입니다.</p>
+
+  <div class="rule"><div class="n">Q1</div><div><div class="q">어떻게 가시화되나?</div><div class="a">좌측 시간축 spine의 <b>한 노드(주황)</b>에서 레인이 갈라지는 <b>fan 패널</b>. 각 에이전트 = 색 레인 + 간트 막대(시작 offset·소요시간) + ID. 동시성·소요시간이 공간으로 한눈에. 전체 결과는 <b>종합(synthesis)</b> 한 줄.</div></div></div>
+  <div class="rule"><div class="n">Q2</div><div><div class="q">접었다 펼쳐지나?</div><div class="a"><b>요약(간트+종합)은 chevron 없이 항상 표시.</b> 그 위에서 <b>각 에이전트 레인을 클릭하면</b> 그 에이전트의 내부 실행이 <b>sub-timeline(중첩 타임라인)</b>으로 in-place 펼쳐집니다. 즉 접기/펼치기는 "내부 깊이가 있을 때만, 에이전트 단위로" 동작. 단일 이벤트는 여전히 인라인 한 줄(접기 없음).</div></div></div>
+  <div class="rule"><div class="n">Q3</div><div><div class="q">간략한 내용만 보여지나?</div><div class="a">기본은 <b>간략</b>(간트 + 종합)이되, 원하면 에이전트별 내부 타임라인까지 드릴 가능 — 둘 다. 어떤 개별 노드를 클릭하면 우측 detail 패널에 그 이벤트의 metrics/raw가 뜹니다(메인 스트림과 동일).</div></div></div>
+
+  <!-- STATE 1: 완료 · 요약 (default) -->
+  <div class="seclabel">상태 ① 완료 · 요약 (기본)</div>
+  <p class="secdesc">배치가 끝나면 <b>접힌 게 아니라</b> 이 요약이 최종 형태입니다. 간트로 누가 얼마나 동시에 돌았는지 + 종합 결과를 클릭 없이 봅니다. 각 레인 앞 <code>›</code>는 "내부 펼치기" 어포던스.</p>
+  <div class="frame"><span class="badge">settled · 요약</span>
+    <div class="tl"><div class="spine"></div>
+      <div class="ev"><div class="time">09:10</div><div class="node asst"></div><div class="body"><div class="bubble"><div class="who"><span class="nm">Opus 4.8</span><span class="ag">agent</span></div><div class="mtext">Bringing up servers and dispatching 3 agents in parallel to dissect the join.</div></div></div></div>
+      <div class="ev"><div class="time">09:10</div><div class="node batch"></div><div class="body">
+        <div class="fan">
+          <div class="fanhead"><span class="tag">병렬 배치</span><span class="nm">3 agents</span><span class="expall">전체 펼치기</span><span class="st ok">✓ 3/3 · 1m08s</span></div>
+          <div class="lane click"><span class="chev">›</span><div class="lh"><span class="sw" style="background:var(--teal)"></span><span class="nm">general-purpose</span><span class="id">aa1844</span></div><div class="track"><span class="fill" style="left:0;width:92%;background:var(--teal)"></span></div><span class="d">1m08s</span></div>
+          <div class="lane click"><span class="chev">›</span><div class="lh"><span class="sw" style="background:var(--violet)"></span><span class="nm">code-explorer</span><span class="id">7c12</span></div><div class="track"><span class="fill" style="left:4%;width:61%;background:var(--violet)"></span></div><span class="d">42s</span></div>
+          <div class="lane click"><span class="chev">›</span><div class="lh"><span class="sw" style="background:var(--green)"></span><span class="nm">Explore</span><span class="id">3f9d</span></div><div class="track"><span class="fill" style="left:6%;width:44%;background:var(--green)"></span></div><span class="d">30s</span></div>
+          <div class="laneconcl">↳ <b>종합:</b> wimcc 재구성은 lossy — 206 sidechain 중 69개가 sidecar 없음(워크플로 fan-out). 묶기 키는 turn_id + 시간 군집으로 복구 가능.</div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- STATE 2: 한 에이전트 드릴 -->
+  <div class="seclabel">상태 ② 한 에이전트 드릴 (레인 클릭)</div>
+  <p class="secdesc"><code>general-purpose</code> 레인을 클릭 → 그 에이전트의 <b>내부 실행이 중첩 타임라인</b>으로 펼쳐집니다(에이전트 색 spine). 나머지 레인은 요약 그대로. 평면 아코디언으로 선형화하지 않고 <b>"타임라인 속 타임라인"</b>으로 구조 유지.</p>
+  <div class="frame"><span class="badge">expanded · 1 agent</span>
+    <div class="tl"><div class="spine"></div>
+      <div class="ev"><div class="time">09:10</div><div class="node batch"></div><div class="body">
+        <div class="fan">
+          <div class="fanhead"><span class="tag">병렬 배치</span><span class="nm">3 agents</span><span class="expall">전체 접기</span><span class="st ok">✓ 3/3 · 1m08s</span></div>
+          <!-- expanded lane -->
+          <div class="lane click" style="background:rgba(43,208,208,.06)"><span class="chev" style="color:var(--teal)">⌄</span><div class="lh"><span class="sw" style="background:var(--teal)"></span><span class="nm">general-purpose</span><span class="id">aa1844</span></div><div class="track"><span class="fill" style="left:0;width:92%;background:var(--teal)"></span></div><span class="d">1m08s</span></div>
+          <div class="sub-tl">
+            <div class="sub-ev"><div class="snode"></div><div class="scard"><div class="who2">프롬프트</div>grep CI logs for retry markers and reconcile sidechain agent_ids against sidecars.</div></div>
+            <div class="sub-ev"><div class="snode tool"></div><div class="stool"><span class="gl">⌗</span><span class="nm">Bash</span><span style="color:var(--fgs)">sqlite3 .wimcc … count</span><span style="color:var(--ok)">✓</span><span class="t">0.4s</span></div></div>
+            <div class="sub-ev"><div class="snode"></div><div class="scard"><div class="who2">general-purpose</div>206 sidechain rows, only 137 have a sidecar. 69 orphans concentrate in 2 sessions — workflow fan-outs.</div></div>
+            <div class="sub-ev"><div class="snode tool"></div><div class="stool"><span class="gl">↳</span><span class="nm">Read</span><span style="color:var(--fgs)">streamModel.ts:1131</span><span style="color:var(--ok)">✓ 40 lines</span><span class="t">22ms</span></div></div>
+            <div class="sub-ev"><div class="snode"></div><div class="scard"><div class="who2">종합</div>turn_id + temporal cluster recovers the join; WorkflowGroup at :1131 never inspects it.</div></div>
+          </div>
+          <!-- collapsed lanes -->
+          <div class="lane click"><span class="chev">›</span><div class="lh"><span class="sw" style="background:var(--violet)"></span><span class="nm">code-explorer</span><span class="id">7c12</span></div><div class="track"><span class="fill" style="left:4%;width:61%;background:var(--violet)"></span></div><span class="d">42s</span></div>
+          <div class="lane click"><span class="chev">›</span><div class="lh"><span class="sw" style="background:var(--green)"></span><span class="nm">Explore</span><span class="id">3f9d</span></div><div class="track"><span class="fill" style="left:6%;width:44%;background:var(--green)"></span></div><span class="d">30s</span></div>
+        </div>
+      </div></div>
+    </div>
+    <p class="note"><b>단일 에이전트 배치/워크플로우</b>면 이 fan 래퍼 없이 그 에이전트의 sub-timeline이 메인 spine에 바로 붙습니다 — 래퍼·chevron 이중 껍데기 없음.</p>
+  </div>
+
+  <!-- STATE 3: 실행 중 -->
+  <div class="seclabel">상태 ③ 실행 중 (live)</div>
+  <p class="secdesc">아직 도는 중이면 <b>자동으로 진행 표시</b>. 완료된 레인은 ✓, 도는 레인은 흐르는 막대 + <code>● 실행 중</code>. 끝나면 자동으로 상태①(요약)로 정착. (사용자가 명시적으로 접으면 그 선택이 우선.)</p>
+  <div class="frame"><span class="badge">running · 2/3</span>
+    <div class="tl"><div class="spine"></div>
+      <div class="ev"><div class="time">09:10</div><div class="node batch"></div><div class="body">
+        <div class="fan">
+          <div class="fanhead"><span class="tag">병렬 배치</span><span class="nm">3 agents</span><span class="st run">⏳ 2/3 · 0m51s…</span></div>
+          <div class="lane"><span class="chev"></span><div class="lh"><span class="sw" style="background:var(--teal)"></span><span class="nm">general-purpose</span><span class="id">aa1844</span></div><div class="track"><span class="fill run" style="left:0;width:74%;background:var(--teal)"></span></div><span class="d"><span class="live">●</span></span></div>
+          <div class="lane"><span class="chev"></span><div class="lh"><span class="sw" style="background:var(--violet)"></span><span class="nm">code-explorer</span><span class="id">7c12</span></div><div class="track"><span class="fill" style="left:4%;width:61%;background:var(--violet)"></span></div><span class="d" style="color:var(--ok)">✓ 42s</span></div>
+          <div class="lane"><span class="chev"></span><div class="lh"><span class="sw" style="background:var(--green)"></span><span class="nm">Explore</span><span class="id">3f9d</span></div><div class="track"><span class="fill" style="left:6%;width:44%;background:var(--green)"></span></div><span class="d" style="color:var(--ok)">✓ 30s</span></div>
+          <div class="laneconcl" style="color:var(--fgs)">↳ 종합 대기 중… 2/3 완료</div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <p class="note"><b>정리</b> — 요약(간트+종합)은 <b>항상 보임</b> · 에이전트별 내부는 <b>클릭 시 sub-timeline으로 드릴</b> · 실행 중엔 <b>자동 진행 표시</b> · 단일 에이전트는 <b>래퍼 없음</b> · 개별 노드 클릭 → 우측 detail 패널. ≥4 동시 에이전트는 레인 대신 <b>밀집 스파인 + "+N"</b>으로 접되 종합은 유지(다음 단계에서 별도 목업).</p>
+</div>
+</body>
+</html>

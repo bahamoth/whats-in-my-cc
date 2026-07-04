@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WitMCC 재설계 — 디자인 방향 비교</title>
+<style>
+  :root{
+    --bg:#0b0d12; --s1:#11141b; --s2:#161a23; --s3:#1b202a;
+    --bd:#1d212c; --bds:#2a3040;
+    --fg:#e6e8ee; --fgm:#aab0bd; --fgs:#6a7180; --fgoa:#0b0d12;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --acc:#4f8cff; --accsoft:#1f3a78; --ok:#41c285; --warn:#f0b429; --dng:#ef4747; --info:#7da7ff;
+    --scaffold:#b07dff;
+    --teal:#2bd0d0; --orange:#ff8a4c; --violet:#b07dff; --green:#41c285; --magenta:#d97aff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 28px 120px}
+  h1{font-size:22px;font-weight:650;letter-spacing:-.01em;margin:0 0 6px}
+  .sub{color:var(--fgm);font-size:13px;margin:0 0 4px;max-width:760px}
+  .sub2{color:var(--fgs);font-size:12px;margin:0 0 24px}
+  code{font-family:var(--mono);font-size:.92em;background:var(--s2);padding:1px 5px;border-radius:4px;color:var(--fgm)}
+
+  /* sticky direction nav */
+  .nav{position:sticky;top:0;z-index:30;display:flex;gap:8px;align-items:center;
+    background:rgba(11,13,18,.86);backdrop-filter:blur(8px);
+    padding:12px 0;margin:0 0 8px;border-bottom:1px solid var(--bd)}
+  .nav a{font-size:12px;color:var(--fgm);text-decoration:none;padding:6px 12px;border:1px solid var(--bd);border-radius:999px}
+  .nav a.rec{border-color:var(--acc);color:var(--acc)}
+  .nav .spacer{flex:1}
+  .nav .hint{font-size:11px;color:var(--fgs)}
+
+  section{margin:34px 0 0;scroll-margin-top:64px}
+  .shead{display:flex;align-items:baseline;gap:12px;margin:0 0 4px}
+  .shead h2{font-size:16px;font-weight:650;margin:0}
+  .badge{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:2px 8px;border-radius:999px;font-weight:600}
+  .badge.rec{background:rgba(79,140,255,.14);color:var(--acc)}
+  .badge.prob{background:rgba(239,71,71,.14);color:var(--dng)}
+  .sdesc{color:var(--fgm);font-size:12.5px;margin:0 0 14px;max-width:840px}
+  .sdesc b{color:var(--fg);font-weight:600}
+
+  .frame{border:1px solid var(--bd);border-radius:14px;overflow:hidden;background:var(--s1)}
+  .frame .cap{font-size:11px;color:var(--fgs);padding:8px 14px;border-bottom:1px solid var(--bd);
+    display:flex;justify-content:space-between;font-family:var(--mono)}
+  .canvas{padding:20px}
+
+  /* ============ shared atoms ============ */
+  .tlabel{font-size:11px;color:var(--fgs);font-family:var(--mono)}
+  .who{display:flex;align-items:center;gap:7px;margin:0 0 5px}
+  .who .nm{font-weight:600;font-size:12.5px}
+  .who .ag{font-size:10px;color:var(--fgs);text-transform:uppercase;letter-spacing:.05em;
+    border:1px solid var(--bd);border-radius:4px;padding:0 5px}
+  .dur{font-family:var(--mono);font-size:11px;color:var(--fgm)}
+  .dur.warn{color:var(--warn)} .dur.hot{color:var(--dng)}
+  .tok{font-family:var(--mono);font-size:11px;color:var(--fgs)}
+
+  /* =================================================================
+     CURRENT (problem) — faithful compact recreation
+  ================================================================= */
+  .cur .row{border:1px solid var(--bd);border-radius:8px;background:var(--s1);padding:9px 11px;margin:7px 0}
+  .cur .msg{max-width:78%}
+  .cur .msg.user{margin-left:auto;background:var(--accsoft);border-color:#274a8f}
+  .cur .mhead{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--fgs);margin-bottom:4px}
+  .cur .mhead .who2{color:var(--fgm);font-weight:600}
+  .cur .mtext{font-size:13px;color:var(--fg)}
+  .cur .fold{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--fgm);
+    background:var(--s2);border:1px solid var(--bd);border-radius:7px;padding:7px 10px;margin:7px 0}
+  .cur .fold .chev{color:var(--fgs)}
+  .cur .fold .nm{color:var(--fg)}
+  .cur .fold .ct{color:var(--fgs)}
+  .cur .fold .rt{margin-left:auto}
+  .cur .flag{outline:1.5px solid var(--dng);outline-offset:1px;position:relative}
+  .cur .flagtag{position:absolute;right:-7px;top:-9px;background:var(--dng);color:#fff;font-size:9.5px;
+    padding:1px 6px;border-radius:999px;font-weight:600}
+  .cur .think{display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--fgs);padding:4px 2px}
+
+  /* =================================================================
+     A — Quiet Editorial
+  ================================================================= */
+  .ed{display:flex;flex-direction:column;gap:22px}
+  .ed .turn{display:flex;flex-direction:column;gap:10px}
+  .ed .bubble{background:var(--s2);border-radius:14px;padding:15px 17px;max-width:80%;
+    box-shadow:0 1px 0 rgba(255,255,255,.02), 0 8px 24px -18px rgba(0,0,0,.8)}
+  .ed .bubble.user{margin-left:auto;background:#1b2a4d}
+  .ed .bubble .mtext{font-size:14px;line-height:1.62;color:var(--fg)}
+  .ed .who .dot{width:7px;height:7px;border-radius:50%;background:var(--acc)}
+  .ed .who.asst .dot{background:var(--fgm)}
+  .ed .toolpill{display:flex;align-items:center;gap:10px;background:var(--s2);border-radius:11px;
+    padding:10px 14px;max-width:80%}
+  .ed .toolpill .gl{width:20px;height:20px;border-radius:6px;background:var(--s3);display:grid;place-items:center;font-size:11px;color:var(--fgm)}
+  .ed .toolpill .nm{font-size:12.5px;color:var(--fg);font-weight:550}
+  .ed .toolpill .meta{color:var(--fgs);font-size:11.5px}
+  .ed .toolpill .rt{margin-left:auto}
+  .ed .toolpill.single{background:transparent;padding:6px 0;max-width:80%;border-radius:0}
+  .ed .toolpill.single .gl{background:var(--s2)}
+  .ed .toolpill.single .ok{color:var(--ok);font-size:11px}
+  .ed .think{display:flex;align-items:center;gap:9px;color:var(--fgs);font-size:12px;padding-left:2px}
+  .ed .think .ic{opacity:.7}
+  .ed .panel{background:var(--s1);border-radius:14px;padding:4px 4px 8px;max-width:88%;
+    box-shadow:inset 0 0 0 1px var(--bd)}
+  .ed .panel .ph{display:flex;align-items:center;gap:10px;padding:12px 14px 10px}
+  .ed .panel .ph .tag{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--teal);
+    border:1px solid rgba(43,208,208,.4);border-radius:5px;padding:1px 7px;font-weight:600}
+  .ed .panel .ph .nm{font-weight:600;font-size:13px}
+  .ed .panel .ph .st{color:var(--ok);font-size:11.5px;font-family:var(--mono)}
+  .ed .panel .ph .rt{margin-left:auto}
+  .ed .gantt{padding:2px 14px 10px;display:flex;flex-direction:column;gap:6px}
+  .ed .gbar{display:flex;align-items:center;gap:9px}
+  .ed .gbar .gl{font-size:11px;color:var(--fgm);width:150px;display:flex;gap:6px;align-items:center}
+  .ed .gbar .sw{width:8px;height:8px;border-radius:2px}
+  .ed .gbar .track{flex:1;height:7px;background:var(--s3);border-radius:4px;position:relative;overflow:hidden}
+  .ed .gbar .fill{position:absolute;top:0;height:100%;border-radius:4px;opacity:.85}
+  .ed .agentcard{margin:0 14px;border-radius:10px;background:var(--s2);padding:10px 13px;border-left:3px solid var(--teal)}
+  .ed .agentcard + .agentcard{margin-top:8px}
+  .ed .agentcard .ah{display:flex;align-items:center;gap:8px;font-size:12px}
+  .ed .agentcard .ah .nm{font-weight:600}
+  .ed .agentcard .concl{color:var(--fgm);font-size:12px;margin-top:5px;line-height:1.5}
+
+  /* =================================================================
+     B — Trace Timeline
+  ================================================================= */
+  .tl{position:relative;padding-left:8px}
+  .tl .spine{position:absolute;left:78px;top:6px;bottom:6px;width:2px;background:linear-gradient(var(--bd),var(--bds),var(--bd))}
+  .tl .ev{position:relative;display:grid;grid-template-columns:70px 1fr;gap:0;margin:0 0 4px}
+  .tl .time{grid-column:1;font-family:var(--mono);font-size:10.5px;color:var(--fgs);text-align:right;padding:9px 14px 0 0}
+  .tl .node{position:absolute;left:74px;top:11px;width:10px;height:10px;border-radius:50%;
+    background:var(--bg);border:2px solid var(--fgs);z-index:2}
+  .tl .node.user{border-color:var(--acc);background:var(--acc)}
+  .tl .node.asst{border-color:var(--fgm)}
+  .tl .node.tool{border-color:var(--green);width:8px;height:8px;top:12px;left:75px}
+  .tl .node.think{border-color:var(--violet);background:var(--violet);width:6px;height:6px;top:13px;left:76px}
+  .tl .body{grid-column:2;margin-left:24px;padding:6px 0}
+  .tl .card{background:var(--s2);border:1px solid var(--bd);border-radius:9px;padding:10px 13px}
+  .tl .card.user{background:#16213c;border-color:#274a8f}
+  .tl .card .mtext{font-size:13px;color:var(--fg);line-height:1.55}
+  .tl .toolline{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--fgm);padding:3px 0}
+  .tl .toolline .nm{color:var(--fg);font-weight:550}
+  .tl .toolline .gl{color:var(--green)}
+  .tl .toolline .rt{margin-left:auto}
+  .tl .thinkline{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--fgs);font-style:italic;padding:2px 0}
+  /* parallel fan */
+  .tl .fan{grid-column:2;margin-left:24px;margin-top:6px;border-left:2px dashed var(--bds);padding:4px 0 4px 0;position:relative}
+  .tl .fanhead{display:flex;align-items:center;gap:9px;font-size:12px;margin:0 0 8px;padding-left:14px}
+  .tl .fanhead .tag{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--orange);
+    border:1px solid rgba(255,138,76,.4);border-radius:5px;padding:1px 7px;font-weight:600}
+  .tl .fanhead .st{color:var(--ok);font-family:var(--mono);font-size:11px}
+  .tl .lane{display:grid;grid-template-columns:160px 1fr;gap:10px;align-items:center;padding:3px 0 3px 14px}
+  .tl .lane .lh{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--fgm)}
+  .tl .lane .lh .sw{width:8px;height:8px;border-radius:2px}
+  .tl .lane .lh .nm{color:var(--fg);font-weight:550}
+  .tl .lane .track{height:9px;background:var(--s3);border-radius:4px;position:relative}
+  .tl .lane .fill{position:absolute;height:100%;border-radius:4px;opacity:.9}
+
+  /* =================================================================
+     C — Dense Console
+  ================================================================= */
+  .cn{font-family:var(--mono);font-size:12px;line-height:1.4}
+  .cn .line{display:grid;grid-template-columns:54px 16px 1fr auto;gap:10px;align-items:start;
+    padding:3px 8px;border-radius:5px}
+  .cn .line:hover{background:var(--s2)}
+  .cn .t{color:var(--fgs);font-size:10.5px;padding-top:1px}
+  .cn .gl{text-align:center}
+  .cn .gl.user{color:var(--acc)} .cn .gl.asst{color:var(--fgm)} .cn .gl.tool{color:var(--green)}
+  .cn .gl.think{color:var(--violet)} .cn .gl.batch{color:var(--orange)}
+  .cn .c{color:var(--fg);font-family:-apple-system,sans-serif;font-size:12.5px;line-height:1.45}
+  .cn .c.dim{color:var(--fgm)}
+  .cn .r{color:var(--fgs);font-size:10.5px;text-align:right;white-space:nowrap}
+  .cn .r .ok{color:var(--ok)} .cn .r .hot{color:var(--dng)} .cn .r .warn{color:var(--warn)}
+  .cn .divider{display:grid;grid-template-columns:54px 16px 1fr auto;gap:10px;padding:6px 8px 4px;
+    border-top:1px solid var(--bd);margin-top:4px;color:var(--orange);font-size:11px}
+  .cn .divider .lbl{grid-column:3;display:flex;gap:8px;align-items:center}
+  .cn .divider .lbl .tag{text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+  .cn .sub{grid-column:3;display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;padding:2px 0}
+  .cn .sub .nm{color:var(--fgm)} .cn .sub .nm b{color:var(--fg);font-weight:600}
+  .cn .sub .track{height:8px;background:var(--s3);border-radius:3px;position:relative}
+  .cn .sub .fill{position:absolute;height:100%;border-radius:3px;opacity:.9}
+  .cn .kb{margin-top:10px;padding:7px 10px;border:1px dashed var(--bd);border-radius:6px;color:var(--fgs);font-size:10.5px}
+  .cn .kb b{color:var(--fgm)}
+
+  .note{font-size:11.5px;color:var(--fgs);margin-top:10px;padding-left:2px}
+  .note b{color:var(--fgm)}
+  .pick{display:flex;gap:10px;margin-top:16px}
+  .pick .pb{flex:1;border:1px solid var(--bd);border-radius:10px;padding:12px 14px;cursor:pointer;background:var(--s1)}
+  .pick .pb:hover{border-color:var(--bds)}
+  .pick .pb.sel{border-color:var(--acc);background:rgba(79,140,255,.06)}
+  .pick .pb .lt{font-weight:650;font-size:13px;margin-bottom:3px}
+  .pick .pb .lt .k{color:var(--acc)}
+  .pick .pb .ld{font-size:11.5px;color:var(--fgm)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>WitMCC 재설계 — 디자인 방향 비교</h1>
+  <p class="sub">동일한 실행 슬라이스(사람 메시지 → 어시스턴트 → 멀티 툴 그룹 → <b>단일 툴 호출</b> → 추론 → <b>병렬 배치 3 agents</b>)를 <b>현재(문제)</b>와 <b>진화된 3개 방향</b>으로 렌더했습니다. 색·간격은 실제 <code>tokens.css</code> 값 그대로입니다.</p>
+  <p class="sub2">3개 방향 모두 단일 이벤트 접힘을 제거합니다 — <code>Read · 1 events ›</code> 같은 빈 껍데기 chevron이 사라지고 인라인으로 펼쳐집니다.</p>
+
+  <div class="nav">
+    <a href="#cur">현재(문제)</a>
+    <a href="#A">A · 정적 에디토리얼</a>
+    <a href="#B" class="rec">B · 트레이스 타임라인 ★</a>
+    <a href="#C">C · 밀집 콘솔</a>
+    <span class="spacer"></span>
+    <span class="hint">마음에 드는 방향 번호로 알려주세요 (혼합도 가능)</span>
+  </div>
+
+  <!-- ============ CURRENT ============ -->
+  <section id="cur">
+    <div class="shead"><h2>현재 (문제 진단)</h2><span class="badge prob">지금 상태</span></div>
+    <p class="sdesc">하이라인 박스가 균일하게 반복돼 위계가 약하고, <b>단일 이벤트도 접힌 바</b>로 렌더되며(아래 빨강), 우측 detail 패널은 선택 전까지 화면 절반을 비웁니다.</p>
+    <div class="frame">
+      <div class="cap"><span>ConversationStream — 현재</span><span>dense · hairline · single-item collapse</span></div>
+      <div class="canvas cur">
+        <div class="row msg user"><div class="mhead"><span>09:05</span><span class="who2">You</span></div><div class="mtext">이전 PR에서 병렬 배치 묶기 UI를 개선했는데 보수가 적다. 병렬배치 대상이 아닌 서브에이전트가 너무 많다.</div></div>
+        <div class="row msg"><div class="mhead"><span class="who2">Opus 4.8</span><span>agent</span><span>09:06</span></div><div class="mtext">I'll investigate this systematically. Let me start by invoking the debugging skill.</div></div>
+        <div class="fold"><span class="chev">›</span><span class="nm">Bash ×3 · Read</span><span class="ct">6 events</span><span class="rt dur">2.6s</span></div>
+        <div class="fold flag"><span class="flagtag">단일 이벤트 접힘 ✕</span><span class="chev">›</span><span class="nm">Read</span><span class="ct">1 events</span><span class="rt dur">18ms</span></div>
+        <div class="think">◌ 추론 · 1.8k tok · <span class="dur hot">31.0s</span></div>
+        <div class="row msg"><div class="mhead"><span class="who2">Opus 4.8</span><span>agent</span><span>09:10</span></div><div class="mtext">Found the real dev DB (401MB). Bringing up the servers in parallel.</div></div>
+        <div class="fold"><span class="chev">›</span><span class="nm">병렬 배치 · 3 agents</span><span class="ct">✓ 3/3</span><span class="rt dur warn">1m08s</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ A — Quiet Editorial ============ -->
+  <section id="A">
+    <div class="shead"><h2>A · 정적 에디토리얼 (Quiet Editorial)</h2></div>
+    <p class="sdesc"><b>철학:</b> Linear/Vercel급 차분함. 하이라인을 없애고 <b>표면 레이어(elevation)</b>로 위계를 만들고, 여백을 넓혀(턴 간 22px) 읽기 부담을 낮춥니다. 색은 강세(human=blue, agent=color dot)로만 절제 사용. 실행 기록이 잘 조판된 문서처럼 읽힙니다.</p>
+    <div class="frame">
+      <div class="cap"><span>ConversationStream — A</span><span>elevation · 넓은 여백 · 절제된 색</span></div>
+      <div class="canvas">
+        <div class="ed">
+          <div class="turn"><div class="bubble user"><div class="who"><span class="dot"></span><span class="nm">You</span><span class="tlabel" style="margin-left:auto">09:05</span></div><div class="mtext">이전 PR에서 병렬 배치 묶기 UI를 개선했는데 보수가 적다. 병렬배치 대상이 아닌 서브에이전트가 너무 많다.</div></div></div>
+          <div class="turn">
+            <div class="bubble"><div class="who asst"><span class="dot"></span><span class="nm">Opus 4.8</span><span class="ag">agent</span><span class="tlabel" style="margin-left:auto">09:06</span></div><div class="mtext">I'll investigate this systematically. Let me start by invoking the debugging skill.</div></div>
+            <div class="toolpill"><span class="gl">⌗</span><span class="nm">Bash ×3 · Read</span><span class="meta">6 events</span><span class="rt dur">2.6s</span></div>
+            <div class="toolpill single"><span class="gl">↳</span><span class="nm">Read <span style="color:var(--fgs);font-weight:400">package.json</span></span><span class="ok">✓ 28 lines</span><span class="rt dur">18ms</span></div>
+            <div class="think"><span class="ic">◌</span> 추론 · 1.8k tok · <span class="dur hot">31.0s</span></div>
+          </div>
+          <div class="turn">
+            <div class="bubble"><div class="who asst"><span class="dot"></span><span class="nm">Opus 4.8</span><span class="ag">agent</span><span class="tlabel" style="margin-left:auto">09:10</span></div><div class="mtext">Found the real dev DB (401MB). Bringing up the servers in parallel.</div></div>
+            <div class="panel">
+              <div class="ph"><span class="tag">병렬 배치</span><span class="nm">3 agents</span><span class="st">✓ 3/3</span><span class="rt dur warn">1m08s</span></div>
+              <div class="gantt">
+                <div class="gbar"><span class="gl"><span class="sw" style="background:var(--teal)"></span>general-purpose · aa1844</span><span class="track"><span class="fill" style="left:0;width:92%;background:var(--teal)"></span></span></div>
+                <div class="gbar"><span class="gl"><span class="sw" style="background:var(--violet)"></span>code-explorer · 7c12</span><span class="track"><span class="fill" style="left:4%;width:61%;background:var(--violet)"></span></span></div>
+                <div class="gbar"><span class="gl"><span class="sw" style="background:var(--green)"></span>Explore · 3f9d</span><span class="track"><span class="fill" style="left:6%;width:44%;background:var(--green)"></span></span></div>
+              </div>
+              <div class="agentcard"><div class="ah"><span class="sw" style="width:8px;height:8px;border-radius:2px;background:var(--teal)"></span><span class="nm">general-purpose</span><span class="tlabel">메시지 10 · 도구 10 · 1m08s</span></div><div class="concl">wimcc의 재구성은 lossy — sidechain 137개 중 69개가 sidecar 없음. 워크플로 fan-out이 원인.</div></div>
+            </div>
+          </div>
+        </div>
+        <p class="note"><b>단일 툴 호출</b>은 chevron 없이 인라인 한 줄(<code>↳ Read package.json ✓ 28 lines 18ms</code>)로. 멀티 이벤트만 접는 pill 유지.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ B — Trace Timeline ============ -->
+  <section id="B">
+    <div class="shead"><h2>B · 트레이스 타임라인 (Trace Timeline)</h2><span class="badge rec">추천 ★</span></div>
+    <p class="sdesc"><b>철학:</b> 이 제품의 본질인 <b>"실행 리플레이"</b>를 정면으로 표현. 좌측에 시간 축(spine)을 상시 두고 모든 이벤트가 노드로 매달립니다. 병렬 실행은 spine에서 <b>레인이 갈라져</b> 동시성이 공간으로 보입니다. 오늘 작업하신 gutter/spine 프로토타입의 연장선입니다.</p>
+    <div class="frame">
+      <div class="cap"><span>ConversationStream — B</span><span>time-spine · 노드 · 병렬 레인</span></div>
+      <div class="canvas">
+        <div class="tl">
+          <div class="spine"></div>
+          <div class="ev"><div class="time">09:05</div><div class="node user"></div><div class="body"><div class="card user"><div class="mtext">이전 PR에서 병렬 배치 묶기 UI를 개선했는데 보수가 적다. 병렬배치 대상이 아닌 서브에이전트가 너무 많다.</div></div></div></div>
+          <div class="ev"><div class="time">09:06</div><div class="node asst"></div><div class="body"><div class="card"><div class="who asst" style="margin-bottom:5px"><span class="nm" style="font-size:12px">Opus 4.8</span></div><div class="mtext">I'll investigate this systematically. Let me start by invoking the debugging skill.</div></div></div></div>
+          <div class="ev"><div class="time">09:06</div><div class="node tool"></div><div class="body"><div class="toolline"><span class="gl">⌗</span><span class="nm">Bash ×3 · Read</span><span class="tlabel">6 events</span><span class="rt dur">2.6s</span></div></div></div>
+          <div class="ev"><div class="time">09:07</div><div class="node tool"></div><div class="body"><div class="toolline"><span class="gl">↳</span><span class="nm">Read package.json</span><span style="color:var(--ok);font-size:11px">✓ 28 lines</span><span class="rt dur">18ms</span></div></div></div>
+          <div class="ev"><div class="time">09:08</div><div class="node think"></div><div class="body"><div class="thinkline">◌ 추론 · 1.8k tok · <span class="dur hot" style="font-style:normal">31.0s</span></div></div></div>
+          <div class="ev"><div class="time">09:10</div><div class="node asst"></div><div class="body"><div class="card"><div class="mtext">Found the real dev DB (401MB). Bringing up the servers in parallel.</div></div></div></div>
+          <div class="ev"><div class="time">09:10</div><div class="node" style="border-color:var(--orange);background:var(--orange)"></div>
+            <div class="fan">
+              <div class="fanhead"><span class="tag">병렬 배치</span><span class="nm" style="font-weight:600">3 agents</span><span class="st">✓ 3/3 · 1m08s</span></div>
+              <div class="lane"><div class="lh"><span class="sw" style="background:var(--teal)"></span><span class="nm">general-purpose</span><span class="tlabel">aa1844</span></div><div class="track"><span class="fill" style="left:0;width:92%;background:var(--teal)"></span></div></div>
+              <div class="lane"><div class="lh"><span class="sw" style="background:var(--violet)"></span><span class="nm">code-explorer</span><span class="tlabel">7c12</span></div><div class="track"><span class="fill" style="left:4%;width:61%;background:var(--violet)"></span></div></div>
+              <div class="lane"><div class="lh"><span class="sw" style="background:var(--green)"></span><span class="nm">Explore</span><span class="tlabel">3f9d</span></div><div class="track"><span class="fill" style="left:6%;width:44%;background:var(--green)"></span></div></div>
+            </div>
+          </div>
+        </div>
+        <p class="note"><b>단일 에이전트</b>면 레인 없이 spine 위 노드 하나로. <b>단일 툴</b>도 노드 한 줄(09:07)로 — 래퍼·chevron 없음. 동시성·소요시간이 축 위에서 한눈에.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ C — Dense Console ============ -->
+  <section id="C">
+    <div class="shead"><h2>C · 밀집 콘솔 (Dense Console)</h2></div>
+    <p class="sdesc"><b>철학:</b> 파워유저 밀도. 행을 좁히고(줄당 ~22px) 메타데이터는 모노스페이스, 의미색을 강하게, 키보드 우선(j/k). 24,000 이벤트 세션을 빠르게 훑는 데 최적. 정제된 로그 콘솔에 가깝습니다.</p>
+    <div class="frame">
+      <div class="cap"><span>ConversationStream — C</span><span>고밀도 · 모노 · 키보드</span></div>
+      <div class="canvas">
+        <div class="cn">
+          <div class="line"><span class="t">09:05</span><span class="gl user">▸</span><span class="c">이전 PR에서 병렬 배치 묶기 UI를 개선했는데 보수가 적다. 병렬배치 대상이 아닌 서브에이전트가 너무 많다.</span><span class="r">You</span></div>
+          <div class="line"><span class="t">09:06</span><span class="gl asst">✦</span><span class="c">I'll investigate this systematically. Let me start by invoking the debugging skill.</span><span class="r">Opus 4.8</span></div>
+          <div class="line"><span class="t">09:06</span><span class="gl tool">⌗</span><span class="c dim">Bash ×3 · Read <span style="color:var(--fgs)">· 6 events</span></span><span class="r">2.6s</span></div>
+          <div class="line"><span class="t">09:07</span><span class="gl tool">↳</span><span class="c dim">Read <span style="color:var(--fg)">package.json</span> <span style="color:var(--ok)">✓</span> 28 lines</span><span class="r">18ms</span></div>
+          <div class="line"><span class="t">09:08</span><span class="gl think">◌</span><span class="c dim">추론 · 1.8k tok</span><span class="r"><span class="hot">31.0s</span></span></div>
+          <div class="line"><span class="t">09:10</span><span class="gl asst">✦</span><span class="c">Found the real dev DB (401MB). Bringing up the servers in parallel.</span><span class="r">Opus 4.8</span></div>
+          <div class="divider"><span class="lbl"><span class="gl batch" style="margin-left:-26px">◷</span><span class="tag">병렬 배치 · 3 agents</span><span style="color:var(--ok)">✓ 3/3</span></span><span class="r" style="grid-column:4;color:var(--warn)">1m08s</span></div>
+          <div class="line"><span class="t"></span><span class="gl"></span><div class="sub"><span class="nm"><b>general-purpose</b> aa1844</span><span class="track"><span class="fill" style="left:0;width:92%;background:var(--teal)"></span></span></div><span class="r">1m08s</span></div>
+          <div class="line"><span class="t"></span><span class="gl"></span><div class="sub"><span class="nm"><b>code-explorer</b> 7c12</span><span class="track"><span class="fill" style="left:4%;width:61%;background:var(--violet)"></span></span></div><span class="r">42s</span></div>
+          <div class="line"><span class="t"></span><span class="gl"></span><div class="sub"><span class="nm"><b>Explore</b> 3f9d</span><span class="track"><span class="fill" style="left:6%;width:44%;background:var(--green)"></span></span></div><span class="r">30s</span></div>
+          <div class="kb"><b>j/k</b> 이벤트 이동 · <b>z</b> 그룹 접기/펼치기 · <b>e</b> 다음 에러 · <b>/</b> 검색 — 단일 이벤트는 접힘 없이 항상 한 줄</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="pick" id="pick">
+    <div class="pb" data-k="A" onclick="sel(this)"><div class="lt"><span class="k">A</span> · 정적 에디토리얼</div><div class="ld">차분·여백·문서형. 위험 낮음, 읽기 편함.</div></div>
+    <div class="pb" data-k="B" onclick="sel(this)"><div class="lt"><span class="k">B</span> · 트레이스 타임라인 ★</div><div class="ld">시간축+병렬 레인. 제품 본질·기존 작업과 일치.</div></div>
+    <div class="pb" data-k="C" onclick="sel(this)"><div class="lt"><span class="k">C</span> · 밀집 콘솔</div><div class="ld">고밀도·키보드. 대용량 세션 스캔 최적.</div></div>
+  </div>
+</div>
+<script>
+  function sel(el){document.querySelectorAll('.pb').forEach(p=>p.classList.remove('sel'));el.classList.add('sel');}
+</script>
+</body>
+</html>

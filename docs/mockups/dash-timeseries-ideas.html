@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시계열 압축 가시화 — 아이디어 3종</title>
+<style>
+  :root{
+    --bg:#0b0d12; --s1:#11141b; --s2:#161a23; --s3:#1b202a;
+    --bd:#1d212c; --bds:#2a3040;
+    --fg:#e6e8ee; --fgm:#aab0bd; --fgs:#6a7180;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --acc:#4f8cff; --ok:#41c285; --warn:#f0b429; --dng:#ef4747; --info:#7da7ff;
+    --violet:#b07dff; --orange:#ff8a4c; --green:#41c285;
+    --elev:0 1px 0 rgba(255,255,255,.025), 0 10px 30px -22px rgba(0,0,0,.9);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;
+    -webkit-font-smoothing:antialiased}
+  .page{max-width:1240px;margin:0 auto;padding:26px 22px 140px}
+  h1{font-size:20px;font-weight:650;letter-spacing:-.01em;margin:0 0 4px}
+  .sub{color:var(--fgm);font-size:12.5px;margin:0 0 8px;max-width:940px;line-height:1.55}
+  .sub b{color:var(--fg)}
+  .dirhead{display:flex;align-items:baseline;gap:10px;margin:38px 0 8px}
+  .dirhead h2{font-size:16px;font-weight:650;margin:0}
+  .dirhead .tag{font-size:11px;color:var(--fgs)}
+  .pros{color:var(--fgm);font-size:12px;margin:0 0 10px;line-height:1.5}
+  .pros b{color:var(--fg);font-weight:600}
+  .app{border:1px solid var(--bd);border-radius:14px;overflow:hidden;background:var(--bg);box-shadow:var(--elev);padding:18px 22px 20px}
+  .micro{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--fgs);font-weight:650}
+  .mono{font-family:var(--mono)}
+  .fnote{font-size:11px;color:var(--fgs)}
+
+  /* ── A. 멀티레인 ── */
+  .ml{position:relative;margin-top:10px}
+  .lane{display:flex;align-items:stretch}
+  .lane + .lane{margin-top:2px}
+  .lane .lab{width:176px;flex:none;display:flex;align-items:center;gap:6px;padding-right:10px;border-right:1px solid var(--bd);min-width:0}
+  .lane .lab .nm{font-size:11px;color:var(--fgm);font-weight:600;white-space:nowrap}
+  .lane .lab .vv{font-family:var(--mono);font-size:10.5px;color:var(--fg);margin-left:auto;white-space:nowrap}
+  .lane .plot{flex:1;position:relative;min-width:0}
+  .lane svg{display:block;width:100%;height:100%}
+  .ml-axis{display:flex;margin-top:4px}
+  .ml-axis .sp{width:176px;flex:none}
+  .ml-axis .ticks{flex:1;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--fgs)}
+  #xh{position:absolute;top:0;bottom:18px;width:1px;background:var(--bds);display:none;pointer-events:none}
+  #xh-date{position:absolute;top:-16px;transform:translateX(-50%);font-family:var(--mono);font-size:10px;color:var(--fg);background:var(--s3);border:1px solid var(--bds);border-radius:4px;padding:0 5px;white-space:nowrap}
+  .evmark{position:absolute;top:0;bottom:0;width:0;border-left:1px dashed rgba(176,125,255,.55);pointer-events:none}
+  .evmark span{position:absolute;top:-2px;left:3px;font-family:var(--mono);font-size:9px;color:var(--violet);white-space:nowrap}
+
+  /* ── B. 호라이즌 ── */
+  .hz .lane .plot{height:26px;background:var(--s1);border-radius:3px;overflow:hidden}
+  /* ── C. 스파크스트립 ── */
+  .ss{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:10px}
+  .ss .cell{background:var(--s1);border:1px solid var(--bd);border-radius:11px;padding:12px 14px 10px}
+  .ss .th{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .ss svg{display:block;width:100%;height:64px}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>시계열 압축 가시화 — 아이디어 3종</h1>
+  <p class="sub">같은 30일 데이터(일별 비용·과금 토큰·통과율·신호·세션 수)를 세 가지 관용구로.
+  공통 원칙: <b>모든 지표가 하나의 시간축을 공유</b>하고, 모델/CC 전환 마커가 전 레인을 관통하며, 값은 hover 판독(문자)으로 정확히 읽는다.</p>
+
+  <!-- A -->
+  <div class="dirhead"><h2>A · 멀티레인 트레이스 타임라인</h2><span class="tag">공유 시간축 + 크로스헤어 판독 — 마우스를 올려보세요 (추천)</span></div>
+  <p class="pros"><b>장점</b> 지표 간 동시성이 보임(비용 피크 날 신호도 피크인가) · 레인당 24–44px로 압축 · 값은 좌측 판독 컬럼이 hover 날짜 기준으로 갱신 · <b>단점</b> 구현 손이 감</p>
+  <div class="app">
+    <div class="micro" style="margin-bottom:8px">일별 추이 · 06-05 → 07-04 <span style="color:var(--violet)">┆ 코호트 전환</span></div>
+    <div class="ml" id="ml">
+      <div class="lane" style="height:46px"><div class="lab"><span class="nm">추정 비용</span><span class="vv" id="r-cost">$3,485</span></div><div class="plot"><svg id="a-cost"></svg></div></div>
+      <div class="lane" style="height:30px"><div class="lab"><span class="nm">과금 토큰</span><span class="vv" id="r-tok">96M</span></div><div class="plot"><svg id="a-tok"></svg></div></div>
+      <div class="lane" style="height:26px"><div class="lab"><span class="nm">검증 통과율</span><span class="vv" id="r-pass">69%</span></div><div class="plot"><svg id="a-pass"></svg></div></div>
+      <div class="lane" style="height:26px"><div class="lab"><span class="nm">신호</span><span class="vv" id="r-sig">116</span></div><div class="plot"><svg id="a-sig"></svg></div></div>
+      <div class="lane" style="height:18px"><div class="lab"><span class="nm">세션</span><span class="vv" id="r-sess">17</span></div><div class="plot"><svg id="a-sess"></svg></div></div>
+      <div id="xh"><span id="xh-date"></span></div>
+    </div>
+    <div class="ml-axis"><span class="sp"></span><div class="ticks"><span>06-05</span><span>06-12</span><span>06-19</span><span>06-26</span><span>07-04</span></div></div>
+  </div>
+
+  <!-- B -->
+  <div class="dirhead"><h2>B · 호라이즌 차트</h2><span class="tag">진폭을 2겹 농도로 접음 — 레인당 26px</span></div>
+  <p class="pros"><b>장점</b> 최소 세로 공간에서 피크가 가장 잘 튐(농도 2단) · 레인 수를 늘려도 부담 없음 · <b>단점</b> 절대값 직독 불가(판독 필요) · 처음 보는 사람에게 학습 비용</p>
+  <div class="app hz">
+    <div class="micro" style="margin-bottom:8px">같은 데이터, 반값 접기(밝음=상단 절반, 짙음=하단 절반)</div>
+    <div class="ml" id="hz">
+      <div class="lane" style="height:26px"><div class="lab"><span class="nm">추정 비용</span></div><div class="plot"><svg id="b-cost"></svg></div></div>
+      <div class="lane" style="height:26px"><div class="lab"><span class="nm">과금 토큰</span></div><div class="plot"><svg id="b-tok"></svg></div></div>
+      <div class="lane" style="height:26px"><div class="lab"><span class="nm">신호</span></div><div class="plot"><svg id="b-sig"></svg></div></div>
+      <div class="lane" style="height:26px"><div class="lab"><span class="nm">세션 수</span></div><div class="plot"><svg id="b-sess"></svg></div></div>
+    </div>
+    <div class="ml-axis"><span class="sp"></span><div class="ticks"><span>06-05</span><span>06-12</span><span>06-19</span><span>06-26</span><span>07-04</span></div></div>
+  </div>
+
+  <!-- C -->
+  <div class="dirhead"><h2>C · 밴드 스파크스트립</h2><span class="tag">추세선 + 7일 범위 밴드 + 피크 주석 + 전환 틱</span></div>
+  <p class="pros"><b>장점</b> 칸이 독립이라 배치 자유(그리드·헤드라인 옆) · 피크·범위가 주석으로 자기설명 · <b>단점</b> 지표 간 동시성 비교는 A보다 약함</p>
+  <div class="app">
+    <div class="ss">
+      <div class="cell"><div class="th"><span class="micro">일별 추정 비용</span><span class="fnote mono" id="pk-cost"></span></div><svg id="c-cost"></svg></div>
+      <div class="cell"><div class="th"><span class="micro">일별 과금 토큰</span><span class="fnote mono" id="pk-tok"></span></div><svg id="c-tok"></svg></div>
+      <div class="cell"><div class="th"><span class="micro">일별 신호</span><span class="fnote mono" id="pk-sig"></span></div><svg id="c-sig"></svg></div>
+      <div class="cell"><div class="th"><span class="micro">검증 통과율 (측정일)</span><span class="fnote mono" id="pk-pass"></span></div><svg id="c-pass"></svg></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── 일별 데이터 (30일, 실제 창 스케일) ── */
+const N=30, DATES=[...Array(N)].map((_,i)=>{const d=new Date(2026,5,5+i);
+  return String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');});
+const COST=[652,0,132,0,0,0,0,565,0,1285,330,0,0,0,0,12,0,0,0,0,0,0,0,0,0,0,0,8,700,791];
+const TOK =[18.2,0,3.5,0,0,0,0,15.8,0,34.1,9.2,0,0,0,0,0.4,0,0,0,0,0,0,0,0,0,0,0,0.3,19.5,21.0]; // M
+const PASS=[71,null,76,null,null,null,null,73,null,64,75,null,null,null,null,67,null,null,null,null,null,null,null,null,null,null,null,33,62,60];
+const SIG =[20,0,7,0,0,0,0,18,0,32,11,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,21,5];
+const SESS=[2,0,2,0,0,0,0,3,0,2,2,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,2,2,1];
+const EVENTS=[[27,'F5 첫 관측'],[24,'CC 2.1.200']];
+
+function xw(el){ return el.clientWidth||600; }
+
+/* A. 멀티레인: 비용=area, 토큰=bars, 통과율=dot-line, 신호=bars, 세션=ticks */
+function area(id,vals,color){ const el=document.getElementById(id),w=xw(el),h=el.parentElement.clientHeight;
+  const max=Math.max(...vals,1e-9),step=w/(N-1); let d='';
+  vals.forEach((v,i)=>{const x=i*step,y=h-2-(v/max)*(h-8); d+=(i?'L':'M')+x.toFixed(1)+','+y.toFixed(1);});
+  el.setAttribute('viewBox',`0 0 ${w} ${h}`);
+  el.innerHTML=`<path d="${d} L${w},${h} L0,${h} Z" fill="${color}" opacity=".13"/><path d="${d}" fill="none" stroke="${color}" stroke-width="1.6"/>`;}
+function bars(id,vals,color){ const el=document.getElementById(id),w=xw(el),h=el.parentElement.clientHeight;
+  const max=Math.max(...vals,1e-9),bw=w/N; let out='';
+  vals.forEach((v,i)=>{ if(!v)return; const bh=Math.max(2,(v/max)*(h-4));
+    out+=`<rect x="${(i*bw+1).toFixed(1)}" y="${(h-bh).toFixed(1)}" width="${(bw-2).toFixed(1)}" height="${bh.toFixed(1)}" rx="1.5" fill="${color}" opacity=".8"/>`;});
+  el.setAttribute('viewBox',`0 0 ${w} ${h}`); el.innerHTML=out;}
+function dotline(id,vals,color){ const el=document.getElementById(id),w=xw(el),h=el.parentElement.clientHeight;
+  const step=w/(N-1); let d='',dots='',started=false;
+  vals.forEach((v,i)=>{ if(v==null){started=false;return;} const x=i*step,y=h-3-(v/100)*(h-8);
+    d+=(started?'L':'M')+x.toFixed(1)+','+y.toFixed(1); started=true;
+    dots+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2" fill="${color}"/>`;});
+  el.setAttribute('viewBox',`0 0 ${w} ${h}`);
+  el.innerHTML=`<line x1="0" x2="${w}" y1="${h-3-(70/100)*(h-8)}" y2="${h-3-(70/100)*(h-8)}" stroke="${color}" stroke-opacity=".18" stroke-dasharray="3 3"/><path d="${d}" fill="none" stroke="${color}" stroke-width="1.4" opacity=".8"/>${dots}`;}
+function ticks(id,vals,color){ const el=document.getElementById(id),w=xw(el),h=el.parentElement.clientHeight;
+  const bw=w/N; let out='';
+  vals.forEach((v,i)=>{ if(!v)return;
+    out+=`<rect x="${(i*bw+1).toFixed(1)}" y="2" width="${(bw-2).toFixed(1)}" height="${h-4}" rx="2" fill="${color}" opacity="${(.25+.25*v).toFixed(2)}"/>`;});
+  el.setAttribute('viewBox',`0 0 ${w} ${h}`); el.innerHTML=out;}
+
+/* B. 호라이즌: 반값 접기 2겹 */
+function horizon(id,vals,color){ const el=document.getElementById(id),w=xw(el),h=26;
+  const max=Math.max(...vals,1e-9),half=max/2,bw=w/N; let out='';
+  vals.forEach((v,i)=>{ if(!v)return;
+    const h1=Math.min(v,half)/half*h, x=(i*bw).toFixed(1);
+    out+=`<rect x="${x}" y="${(h-h1).toFixed(1)}" width="${bw.toFixed(1)}" height="${h1.toFixed(1)}" fill="${color}" opacity=".38"/>`;
+    if(v>half){ const h2=(v-half)/half*h;
+      out+=`<rect x="${x}" y="${(h-h2).toFixed(1)}" width="${bw.toFixed(1)}" height="${h2.toFixed(1)}" fill="${color}" opacity=".92"/>`;}});
+  el.setAttribute('viewBox',`0 0 ${w} ${h}`); el.innerHTML=out;}
+
+/* C. 밴드 스파크스트립: 7일 이동 범위 밴드 + 추세선 + 피크 주석 + 전환 틱 */
+function sparkband(id,vals,color,pkId,fmt){ const el=document.getElementById(id),w=xw(el),h=64;
+  const clean=vals.map(v=>v==null?0:v), max=Math.max(...clean,1e-9),step=w/(N-1);
+  const y=v=>h-8-(v/max)*(h-22);
+  let lo='',hi='';
+  for(let i=0;i<N;i++){ const a=Math.max(0,i-3),b=Math.min(N-1,i+3);
+    const win=clean.slice(a,b+1); const mn=Math.min(...win),mx=Math.max(...win);
+    hi+=(i?'L':'M')+(i*step).toFixed(1)+','+y(mx).toFixed(1);
+    lo=`L${(i*step).toFixed(1)},${y(mn).toFixed(1)}`+lo.replace(/^M/,'L'); if(i===0) lo='M'+lo.slice(1);}
+  const band=`<path d="${hi} ${lo.replace(/^M/,'L')} Z" fill="${color}" opacity=".10"/>`;
+  let d=''; clean.forEach((v,i)=>{ d+=(i?'L':'M')+(i*step).toFixed(1)+','+y(v).toFixed(1);});
+  const pi=clean.indexOf(max);
+  const peak=`<circle cx="${(pi*step).toFixed(1)}" cy="${y(max).toFixed(1)}" r="2.5" fill="${color}"/>
+    <text x="${Math.min(pi*step+6,w-70).toFixed(1)}" y="${Math.max(y(max)-4,10).toFixed(1)}" font-family="var(--mono)" font-size="10" fill="#aab0bd">${fmt(max)} · ${DATES[pi]}</text>`;
+  let ev=''; EVENTS.forEach(([i])=>{ ev+=`<line x1="${(i*step).toFixed(1)}" x2="${(i*step).toFixed(1)}" y1="4" y2="${h-4}" stroke="#b07dff" stroke-opacity=".5" stroke-dasharray="3 3"/>`;});
+  el.setAttribute('viewBox',`0 0 ${w} ${h}`);
+  el.innerHTML=band+ev+`<path d="${d}" fill="none" stroke="${color}" stroke-width="1.6"/>`+peak;
+  if(pkId) document.getElementById(pkId).textContent='피크 '+fmt(max)+' ('+DATES[pi]+')';}
+
+window.addEventListener('load',()=>{
+  area('a-cost',COST,'#41c285'); bars('a-tok',TOK,'#7da7ff'); dotline('a-pass',PASS,'#4f8cff');
+  bars('a-sig',SIG,'#ef4747'); ticks('a-sess',SESS.map(v=>v/3),'#aab0bd');
+  horizon('b-cost',COST,'#41c285'); horizon('b-tok',TOK,'#7da7ff'); horizon('b-sig',SIG,'#ef4747'); horizon('b-sess',SESS,'#b07dff');
+  sparkband('c-cost',COST,'#41c285','pk-cost',v=>'$'+Math.round(v));
+  sparkband('c-tok',TOK,'#7da7ff','pk-tok',v=>v.toFixed(1)+'M');
+  sparkband('c-sig',SIG,'#ef4747','pk-sig',v=>Math.round(v));
+  sparkband('c-pass',PASS,'#4f8cff','pk-pass',v=>Math.round(v)+'%');
+
+  /* A: 코호트 전환 마커 + 크로스헤어 판독 */
+  const ml=document.getElementById('ml');
+  const plot0=ml.querySelector('.plot');
+  const left=plot0.offsetLeft;
+  EVENTS.forEach(([i,label])=>{ const m=document.createElement('div'); m.className='evmark';
+    m.style.left=(left+plot0.clientWidth*(i/(N-1)))+'px';
+    m.innerHTML=`<span>${label}</span>`; ml.appendChild(m);});
+  const xh=document.getElementById('xh'), xd=document.getElementById('xh-date');
+  ml.addEventListener('mousemove',e=>{ const r=plot0.getBoundingClientRect();
+    const fx=(e.clientX-r.left)/r.width; if(fx<0||fx>1){xh.style.display='none';reset();return;}
+    const i=Math.round(fx*(N-1));
+    xh.style.display='block'; xh.style.left=(left+fx*r.width)+'px'; xd.textContent=DATES[i];
+    document.getElementById('r-cost').textContent='$'+COST[i];
+    document.getElementById('r-tok').textContent=TOK[i].toFixed(1)+'M';
+    document.getElementById('r-pass').textContent=PASS[i]==null?'측정 없음':PASS[i]+'%';
+    document.getElementById('r-sig').textContent=SIG[i];
+    document.getElementById('r-sess').textContent=SESS[i];});
+  function reset(){ document.getElementById('r-cost').textContent='$3,485';
+    document.getElementById('r-tok').textContent='96M';
+    document.getElementById('r-pass').textContent='69%';
+    document.getElementById('r-sig').textContent='116';
+    document.getElementById('r-sess').textContent='17';}
+  ml.addEventListener('mouseleave',()=>{xh.style.display='none';reset();});
+});
+</script>
+</body>
+</html>
