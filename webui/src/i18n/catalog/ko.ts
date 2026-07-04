@@ -353,6 +353,8 @@ export const ko: Messages = {
   'dash.cohort.dim.cc': 'Claude Code',
   'dash.cohort.dim.branch': 'branch',
   'dash.cohort.dim.cwd': 'cwd',
+  'dash.cohort.dim.plugins': '플러그인',
+  'dash.cohort.dim.instructions': '지시문',
   'dash.cohort.dim.entrypoint': 'entrypoint',
   'dash.cohort.exceed': (x: number) => `임의 분할 대비 상위 ${x}%`,
   'dash.cohort.noneAuto':

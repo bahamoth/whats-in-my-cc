@@ -219,6 +219,22 @@ describe('rankCohorts', () => {
     const top = surfaced.find((b) => b.dim === 'models')!;
     expect(top.alsoChanged).toContain('cc');
   });
+  it('맥락 차원(branch·cwd)은 비교 목록에서 제외되고 각주로만 남는다', () => {
+    const withBranch = jump.map((r, i) => ({
+      ...r,
+      fingerprint: {
+        ...r.fingerprint,
+        git_branches: i < 6 ? ['feat/a'] : ['feat/b'],
+        cwds: i < 6 ? ['/w/x'] : ['/w/y'],
+      },
+    }));
+    const { surfaced, all } = rankCohorts(withBranch);
+    // branch/cwd 경계는 all/surfaced 어디에도 등재되지 않는다
+    expect(all.every((b) => b.dim !== 'branch' && b.dim !== 'cwd')).toBe(true);
+    // 대신 같은 인덱스의 개입 차원 경계에 각주로 남는다
+    const top = surfaced.find((b) => b.dim === 'models')!;
+    expect(top.alsoChanged).toEqual(expect.arrayContaining(['branch', 'cwd']));
+  });
   it('all에는 게이트 미달 경계도 포함(수동 탐색용)', () => {
     const thin = [
       row('a0', '06-01', opus, { cost: 10 }),

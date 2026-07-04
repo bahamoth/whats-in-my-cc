@@ -243,8 +243,16 @@ export const COHORT_MIN_N = 3;
 export const COHORT_EXCEED_MAX = 0.1;
 export const COHORT_TOP_K = 3;
 
-export type CohortDim = 'models' | 'cc' | 'branch' | 'cwd' | 'entrypoint';
-export const COHORT_DIMS: CohortDim[] = ['models', 'cc', 'branch', 'cwd', 'entrypoint'];
+export type CohortDim = 'models' | 'cc' | 'branch' | 'cwd' | 'entrypoint' | 'plugins' | 'instructions';
+
+/** 개입 차원 — 사용자가 교체할 수 있는 실행 환경(독립변수). 경계 비교·랭킹 대상.
+ *  근거: fingerprint 설계 의도("자기개선 루프의 독립변수 표면"), 스펙 §2 4차 개정. */
+export const INTERVENTION_DIMS: CohortDim[] = ['models', 'cc', 'entrypoint', 'plugins', 'instructions'];
+/** 맥락 차원 — 작업 내용의 식별자(교란 변수). 비교 대상이 아니라 각주 전용:
+ *  branch 전환은 "환경 변화"가 아니라 "다른 작업 시작"이고, cwd는 프로젝트
+ *  필터와 중복이며 프로젝트 간 지표 비교는 성립하지 않는다. */
+export const CONTEXT_DIMS: CohortDim[] = ['branch', 'cwd'];
+export const COHORT_DIMS: CohortDim[] = [...INTERVENTION_DIMS, ...CONTEXT_DIMS];
 
 const DIM_PICK: Record<CohortDim, (r: SessionSeriesRowDto) => string[]> = {
   models: (r) => cohortModels(r.fingerprint),
@@ -252,6 +260,9 @@ const DIM_PICK: Record<CohortDim, (r: SessionSeriesRowDto) => string[]> = {
   branch: (r) => r.fingerprint.git_branches,
   cwd: (r) => r.fingerprint.cwds,
   entrypoint: (r) => r.fingerprint.entrypoints,
+  plugins: (r) => r.fingerprint.plugins ?? [],
+  instructions: (r) =>
+    (r.fingerprint.instructions ?? []).map((x) => `${x.source}:${x.hash.slice(0, 8)}`),
 };
 
 export type CohortMetric = 'unitRate' | 'passRate' | 'signals' | 'cacheHit';
@@ -316,6 +327,8 @@ export function rankCohorts(rows: SessionSeriesRowDto[]): {
     const segs = cohortSegments(rows, DIM_PICK[dim]);
     const bs = cohortBoundaries(segs);
     dimBoundaries.set(dim, new Set(bs.map((b) => b.index)));
+    // 맥락 차원(branch·cwd)은 각주(alsoChanged) 계산에만 참여한다.
+    if (!INTERVENTION_DIMS.includes(dim)) continue;
     for (const b of bs) {
       const setOf = (label: string) => new Set(label.split(' + ').filter(Boolean));
       const beforeSet = setOf(b.from);

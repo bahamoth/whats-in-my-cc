@@ -367,6 +367,8 @@ export const en = {
   'dash.cohort.dim.cc': 'Claude Code',
   'dash.cohort.dim.branch': 'branch',
   'dash.cohort.dim.cwd': 'cwd',
+  'dash.cohort.dim.plugins': 'plugins',
+  'dash.cohort.dim.instructions': 'instructions',
   'dash.cohort.dim.entrypoint': 'entrypoint',
   'dash.cohort.exceed': (x: number) => `top ${x}% vs random splits`,
   'dash.cohort.noneAuto':

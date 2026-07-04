@@ -363,6 +363,10 @@ export type SessionFingerprintDto = {
   git_branches: string[];
   cwds: string[];
   entrypoints: string[];
+  /** 4차 개정 — 관측된 플러그인/MCP 서버 집합(개입 차원). 구서버 응답엔 부재. */
+  plugins?: string[];
+  /** instruction 전향 관측 — (source, sha256) 집합. 구서버·미관측 세션은 부재. */
+  instructions?: Array<{ source: string; hash: string }>;
 };
 
 /** `/v1/metrics` — 세션 횡단 series의 세션 한 행. */

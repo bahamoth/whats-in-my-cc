@@ -92,8 +92,10 @@ describe('CohortBoundaries', () => {
     mount(jump);
     const model = screen.getByRole('button', { name: /model\s*1/ });
     expect(model).toBeEnabled();
-    const branch = screen.getByRole('button', { name: /branch\s*0/ });
-    expect(branch).toBeDisabled();
+    // 맥락 차원(branch·cwd)은 레일에서 제외 — 개입 차원만 남는다(4차 개정).
+    expect(screen.queryByRole('button', { name: /branch/ })).toBeNull();
+    const plugins = screen.getByRole('button', { name: /plugins\s*0/ });
+    expect(plugins).toBeDisabled();
   });
   it('선택 행은 data-selected=true + 라디오 도트', () => {
     mount(jump);
