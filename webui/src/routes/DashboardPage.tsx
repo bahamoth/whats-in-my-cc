@@ -23,7 +23,7 @@ import {
   cohortSegments,
   cohortBoundaries,
   cohortModels,
-  shortModelSet,
+  shortModel,
 } from '../lib/seriesView';
 import {
   ChartContainer,
@@ -87,6 +87,17 @@ const STRIP_METRICS = [
   'tool_result_truncated_count',
 ] as const;
 type StripMetric = (typeof STRIP_METRICS)[number];
+
+/* 신호별 고유 색 — 제목 스와치와 바가 같은 색을 공유해 strip 구분감을 만든다.
+ * (단일-시리즈 소형 다중이라 정체성은 제목이 전달하고 색은 보조.) */
+const STRIP_COLORS: Record<StripMetric, string> = {
+  tool_failure_count: '#e66767',
+  context_bloat_count: '#c98500',
+  api_error_count: '#d95926',
+  user_interruption_count: '#9085e9',
+  compact_boundary_count: '#2bd0d0',
+  tool_result_truncated_count: '#8b93a7',
+};
 
 function basename(path: string): string {
   const parts = path.split('/').filter(Boolean);
@@ -188,8 +199,16 @@ export default function DashboardPage() {
         output: r.metrics.output_tokens ?? 0,
         cacheCreation: r.metrics.cache_creation_input_tokens ?? 0,
         cacheRead: r.metrics.cache_read_input_tokens ?? 0,
+        cost: r.metrics.estimated_cost_usd ?? 0,
         one: 1,
         events: r.event_count,
+        cacheHit: (() => {
+          const denom =
+            (r.metrics.input_tokens ?? 0) +
+            (r.metrics.cache_creation_input_tokens ?? 0) +
+            (r.metrics.cache_read_input_tokens ?? 0);
+          return denom > 0 ? Math.round(((r.metrics.cache_read_input_tokens ?? 0) / denom) * 1000) / 10 : 0;
+        })(),
         models: cohortModels(r.fingerprint).join(' + ').replaceAll('claude-', '') || '—',
         cc: r.fingerprint.cc_versions.join(' + ') || '—',
       })),
@@ -202,19 +221,21 @@ export default function DashboardPage() {
   );
   const ccSegments = useMemo(() => cohortSegments(rows, (r) => r.fingerprint.cc_versions), [rows]);
   const boundaries = useMemo(() => cohortBoundaries(modelSegments), [modelSegments]);
-  const slotOf = useMemo(() => {
-    const weight = new Map<string, number>();
-    for (const s of modelSegments) {
-      if (!s.known) continue;
-      weight.set(s.label, (weight.get(s.label) ?? 0) + (s.end - s.start + 1));
-    }
-    const ranked = [...weight.entries()].sort((a, b) =>
-      b[1] !== a[1] ? b[1] - a[1] : a[0].localeCompare(b[0]),
-    );
-    const m = new Map<string, string>();
-    ranked.forEach(([label], i) => m.set(label, i < MODEL_SLOTS.length ? MODEL_SLOTS[i] : MODEL_OVERFLOW));
-    return m;
-  }, [modelSegments]);
+  /* 모델 매트릭스 — 조합 레일 대신 모델별 row. 모델당 1색(1:1 매핑)이라
+   * 조합 폭발·라벨 겹침이 원천 소멸한다. row는 빈도순, 상한 초과분은
+   * 마지막에 접힌다. */
+  const matrixModels = useMemo(() => {
+    const freq = new Map<string, number>();
+    for (const r of rows) for (const m of cohortModels(r.fingerprint)) freq.set(m, (freq.get(m) ?? 0) + 1);
+    return [...freq.entries()]
+      .sort((a, b) => (b[1] !== a[1] ? b[1] - a[1] : a[0].localeCompare(b[0])))
+      .map(([m]) => m)
+      .slice(0, 6);
+  }, [rows]);
+  const modelColor = (m: string) =>
+    matrixModels.indexOf(m) >= 0 && matrixModels.indexOf(m) < MODEL_SLOTS.length
+      ? MODEL_SLOTS[matrixModels.indexOf(m)]
+      : MODEL_OVERFLOW;
 
   const outcomeConfig = {
     passed: { label: t('dash.outcome.passed'), color: 'var(--chart-5)' },
@@ -311,17 +332,24 @@ export default function DashboardPage() {
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
 
-  const modelRail = clipSegments(
-    modelSegments,
-    (label) => slotOf.get(label) ?? MODEL_OVERFLOW,
-    (label) => shortModelSet(label),
-  );
-  /* CC 버전 — 순서 척도라 두 shade 교대(정체성은 라벨이 전달). */
+  /* CC 버전 트랙 — 단색 배경 위 변화점 라벨만(교대색·라벨 반복 제거). */
   const ccRail = clipSegments(
     ccSegments,
-    (_label, i) => (i % 2 === 0 ? '#24407c' : '#3a5fb8'),
+    () => 'transparent',
     (label) => label,
   );
+
+  /* 모델 매트릭스 셀 — 현재 Brush 창의 세션 중 그 모델을 쓴 인덱스. */
+  const matrixCells = useMemo(() => {
+    const cells = new Map<string, number[]>();
+    for (const m of matrixModels) cells.set(m, []);
+    for (let i = winStart; i <= winEnd && i < rows.length; i++) {
+      for (const m of cohortModels(rows[i].fingerprint)) {
+        cells.get(m)?.push(i);
+      }
+    }
+    return cells;
+  }, [rows, matrixModels, winStart, winEnd]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-7 py-6">
@@ -426,45 +454,72 @@ export default function DashboardPage() {
                 라벨은 플롯 왼쪽 모서리에 정렬해 리듬을 만든다. */}
             <Card>
               <CardContent className="pt-5">
-                {[
-                  { name: t('dash.cohort.models'), tip: t('dash.cohort.tip'), segs: modelRail },
-                  { name: 'CC', tip: t('dash.cohort.ccTip'), segs: ccRail },
-                ].map((rail) => (
-                  <div key={rail.name} className="mb-1 flex items-center">
+                {/* 모델 매트릭스 — 모델당 한 줄·한 색. 세션이 그 모델을
+                    썼으면 셀이 칠해진다(집합 조합·라벨 겹침 원천 소멸). */}
+                <div className="mb-0.5 flex items-center gap-1" style={{ width: PLOT_LEFT_PX + 120 }}>
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                    {t('dash.cohort.models')}
+                  </span>
+                  <InfoTip label={t('dash.cohort.title')} text={t('dash.cohort.tip')} />
+                </div>
+                {matrixModels.map((m) => (
+                  <div key={m} className="mb-[3px] flex items-center">
                     <span
-                      className="flex shrink-0 items-center gap-1 pr-1 text-[10px] uppercase tracking-wider text-muted-foreground/70"
+                      className="shrink-0 truncate pr-2 text-right font-mono text-[10px] text-muted-foreground"
                       style={{ width: PLOT_LEFT_PX }}
+                      title={m}
                     >
-                      {rail.name}
-                      <InfoTip label={rail.name} text={rail.tip} />
+                      {shortModel(m)}
                     </span>
-                    <div className="relative h-[20px] min-w-0 flex-1" style={{ marginRight: PLOT_RIGHT_PX }}>
-                      {rail.segs.map((seg) =>
-                        seg.known ? (
-                          <span
-                            key={seg.key}
-                            title={seg.label}
-                            className="absolute inset-y-0 flex items-center overflow-hidden rounded-[4px] px-1 font-mono text-[10px] whitespace-nowrap text-white"
-                            style={{
-                              left: `${seg.leftPct}%`,
-                              width: `calc(${seg.widthPct}% - 2px)`,
-                              background: seg.color,
-                            }}
-                          >
-                            {seg.display}
-                          </span>
-                        ) : (
-                          <span
-                            key={seg.key}
-                            title={t('dash.cohort.unknown')}
-                            className="absolute inset-y-0 rounded-[4px] border border-dashed border-(--wimcc-border-strong)"
-                            style={{ left: `${seg.leftPct}%`, width: `calc(${seg.widthPct}% - 2px)` }}
-                          />
-                        ),
-                      )}
+                    <div className="relative h-[12px] min-w-0 flex-1" style={{ marginRight: PLOT_RIGHT_PX }}>
+                      {(matrixCells.get(m) ?? []).map((i) => (
+                        <span
+                          key={i}
+                          className="absolute inset-y-0 rounded-[2px]"
+                          style={{
+                            left: `${((i - winStart) / winLen) * 100}%`,
+                            width: `calc(${(1 / winLen) * 100}% - 2px)`,
+                            background: modelColor(m),
+                          }}
+                        />
+                      ))}
                     </div>
                   </div>
                 ))}
+                {/* CC 버전 트랙 — 단색 배경, 변화점에만 버전 라벨. */}
+                <div className="mt-1.5 mb-1 flex items-center">
+                  <span
+                    className="flex shrink-0 items-center gap-1 pr-1 text-[10px] uppercase tracking-wider text-muted-foreground/70"
+                    style={{ width: PLOT_LEFT_PX }}
+                  >
+                    CC
+                    <InfoTip label="CC" text={t('dash.cohort.ccTip')} />
+                  </span>
+                  <div
+                    className="relative h-[18px] min-w-0 flex-1 rounded-[4px] bg-(--wimcc-surface-2)"
+                    style={{ marginRight: PLOT_RIGHT_PX }}
+                  >
+                    {ccRail.map((seg) =>
+                      seg.known ? (
+                        <span
+                          key={seg.key}
+                          title={seg.label}
+                          className="absolute inset-y-0 flex items-center overflow-hidden border-l border-(--wimcc-border-strong) pl-1 font-mono text-[10px] whitespace-nowrap text-muted-foreground first:border-l-0"
+                          style={{ left: `${seg.leftPct}%`, width: `${seg.widthPct}%` }}
+                        >
+                          {seg.display}
+                        </span>
+                      ) : (
+                        <span
+                          key={seg.key}
+                          title={t('dash.cohort.unknown')}
+                          className="absolute inset-y-0 rounded-[3px] border border-dashed border-(--wimcc-border-strong)"
+                          style={{ left: `${seg.leftPct}%`, width: `${seg.widthPct}%` }}
+                        />
+                      ),
+                    )}
+                  </div>
+                </div>
 
                 {/* ── 검증 outcome ─────────────────────────────────── */}
                 <div
@@ -592,6 +647,78 @@ export default function DashboardPage() {
                   </BarChart>
                 </ChartContainer>
 
+                <div
+                  className="mt-3 mb-1 flex items-baseline justify-between"
+                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
+                >
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {t('dash.cost.title')}
+                    <InfoTip label={t('dash.cost.title')} text={t('dash.cost.tip')} />
+                  </span>
+                  <span className="font-mono text-[10px] text-muted-foreground/70">
+                    {t('dash.cost.total', chartData.reduce((a, d) => a + d.cost, 0).toFixed(2))}
+                  </span>
+                </div>
+                <ChartContainer
+                  config={{ cost: { label: t('dash.cost.title'), color: '#5cbf8a' } }}
+                  className="h-14 w-full"
+                >
+                  <BarChart
+                    data={chartData}
+                    syncId="dash"
+                    onClick={openSession}
+                    margin={{ top: 2, right: 8, left: 8, bottom: 0 }}
+                    className="cursor-pointer"
+                  >
+                    <XAxis dataKey="idx" hide />
+                    <YAxis
+                      width={36}
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={10}
+                      tickFormatter={(v: number) => `$${v}`}
+                    />
+                    {cohortRefs()}
+                    <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
+                    <Bar dataKey="cost" fill="#5cbf8a" fillOpacity={0.85} radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ChartContainer>
+                <div
+                  className="mt-2 mb-1 flex items-baseline justify-between"
+                  style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
+                >
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {t('dash.cacheHit.title')}
+                    <InfoTip label={t('dash.cacheHit.title')} text={t('dash.cacheHit.tip')} />
+                  </span>
+                </div>
+                <ChartContainer
+                  config={{ cacheHit: { label: t('dash.cacheHit.title'), color: 'var(--wimcc-info)' } }}
+                  className="h-12 w-full"
+                >
+                  <BarChart
+                    data={chartData}
+                    syncId="dash"
+                    onClick={openSession}
+                    margin={{ top: 2, right: 8, left: 8, bottom: 0 }}
+                    className="cursor-pointer"
+                  >
+                    <XAxis dataKey="idx" hide />
+                    <YAxis
+                      width={36}
+                      domain={[0, 100]}
+                      ticks={[0, 50, 100]}
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={10}
+                      tickFormatter={(v: number) => `${v}%`}
+                    />
+                    {cohortRefs()}
+                    <ChartTooltip content={<ChartTooltipContent labelFormatter={tooltipLabel} />} />
+                    <Bar dataKey="cacheHit" fill="var(--wimcc-info)" fillOpacity={0.85} radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ChartContainer>
+
                 {/* ── 프로세스 신호 ────────────────────────────────── */}
                 <div
                   className="mt-5 mb-1 flex items-center"
@@ -602,14 +729,18 @@ export default function DashboardPage() {
                     <InfoTip label={t('dash.multiples.title')} text={t('dash.multiples.tip')} />
                   </span>
                 </div>
-                <div className="space-y-2.5">
-                  {STRIP_METRICS.map((metric) => (
-                    <div key={metric}>
+                <div>
+                  {STRIP_METRICS.map((metric, i) => (
+                    <div key={metric} className={i > 0 ? 'mt-2 border-t border-border/60 pt-2' : ''}>
                       <div
                         className="mb-0.5 flex items-baseline justify-between"
                         style={{ marginLeft: PLOT_LEFT_PX, marginRight: PLOT_RIGHT_PX }}
                       >
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <span
+                            className="inline-block size-2 rounded-[2px]"
+                            style={{ background: STRIP_COLORS[metric] }}
+                          />
                           {t(`dash.metric.${metric}`)}
                         </span>
                         <span className="font-mono text-[10px] text-muted-foreground/70">
@@ -617,7 +748,7 @@ export default function DashboardPage() {
                         </span>
                       </div>
                       <ChartContainer
-                        config={{ [metric]: { label: t(`dash.metric.${metric}`), color: 'var(--wimcc-info)' } }}
+                        config={{ [metric]: { label: t(`dash.metric.${metric}`), color: STRIP_COLORS[metric] } }}
                         className="h-12 w-full"
                       >
                         <BarChart
@@ -633,7 +764,7 @@ export default function DashboardPage() {
                           <ChartTooltip
                             content={<ChartTooltipContent labelFormatter={tooltipLabel} />}
                           />
-                          <Bar dataKey={metric} fill="var(--wimcc-info)" radius={[2, 2, 0, 0]} />
+                          <Bar dataKey={metric} fill={STRIP_COLORS[metric]} fillOpacity={0.85} radius={[2, 2, 0, 0]} />
                         </BarChart>
                       </ChartContainer>
                     </div>
@@ -662,6 +793,7 @@ export default function DashboardPage() {
                       ))}
                       <TableHead className="text-right">{t('dash.tokens.input')}</TableHead>
                       <TableHead className="text-right">{t('dash.tokens.output')}</TableHead>
+                      <TableHead className="text-right">{t('dash.cost.title')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -684,6 +816,9 @@ export default function DashboardPage() {
                         ))}
                         <TableCell className="text-right">{d.input.toLocaleString()}</TableCell>
                         <TableCell className="text-right">{d.output.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">
+                          {d.cost > 0 ? `$${d.cost.toFixed(2)}` : '—'}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

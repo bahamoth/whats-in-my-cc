@@ -669,4 +669,11 @@ async fn rate_limit_and_token_totals() {
     assert_eq!(m.output_tokens, 250);
     assert_eq!(m.cache_read_input_tokens, 4000);
     assert_eq!(m.cache_creation_input_tokens, 30);
+    // 추정 비용 — pricing.rs 공개 가격표(estimate_session_cost)와 동일 값.
+    // claude-opus-4-8이 가격표에 있으면 0보다 커야 한다.
+    assert!(
+        m.estimated_cost_usd > 0.0,
+        "usage facet이 있으면 추정 비용이 계산된다: {}",
+        m.estimated_cost_usd
+    );
 }

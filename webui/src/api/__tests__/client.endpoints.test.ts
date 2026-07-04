@@ -134,6 +134,7 @@ describe('getSessionMetrics', () => {
       output_tokens: 0,
       cache_read_input_tokens: 0,
       cache_creation_input_tokens: 0,
+      estimated_cost_usd: 0,
       compact_boundary_count: 1,
       tool_result_truncated_count: 1,
       user_interruption_count: 2,

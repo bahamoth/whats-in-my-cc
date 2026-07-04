@@ -27,6 +27,7 @@ const m: SessionMetricsDto = {
   output_tokens: 0,
   cache_read_input_tokens: 0,
   cache_creation_input_tokens: 0,
+  estimated_cost_usd: 0,
   compact_boundary_count: 0,
   tool_result_truncated_count: 0,
   user_interruption_count: 0,

@@ -80,6 +80,10 @@ pub struct SessionMetrics {
     pub output_tokens: i64,
     pub cache_read_input_tokens: i64,
     pub cache_creation_input_tokens: i64,
+    /// 공개 가격표 기반 추정 비용(USD) — pricing.rs estimate_session_cost
+    /// (cost_basis=estimate_public_pricing; 실비 아님, 가격표 밖 모델은
+    /// 합계에서 제외돼 하한 추정이다). 2026-07-04 대시보드 비용 효율.
+    pub estimated_cost_usd: f64,
     /// system/compact_boundary 레코드 수 (컨텍스트 압축 발생 횟수).
     pub compact_boundary_count: i64,
     /// system/away_summary 레코드 수 (사용자 자리비움 turn). away/compact turn은
@@ -192,6 +196,7 @@ async fn compute_session_metrics_uncached(
     let vruns = repo_verification_run::list_session(pool, session_id).await?;
     // 토큰 사용량 — usage facet 세션 합계(2026-07-04). 할당량은 관측면에 없다.
     let usage = crate::db::repo_usage_facet::session_aggregate(pool, session_id).await?;
+    let cost = crate::insight::pricing::estimate_session_cost(&usage.by_model);
 
     let tool_call_total = events
         .iter()
@@ -301,6 +306,7 @@ async fn compute_session_metrics_uncached(
         output_tokens: usage.output_tokens,
         cache_read_input_tokens: usage.cache_read_input_tokens,
         cache_creation_input_tokens: usage.cache_creation_input_tokens,
+        estimated_cost_usd: cost.total_usd,
         compact_boundary_count,
         away_summary_count,
         tool_result_truncated_count,

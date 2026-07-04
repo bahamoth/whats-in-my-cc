@@ -320,6 +320,16 @@ export const ko: Messages = {
     'cache 읽기 — 캐시에서 재사용한 입력(양이 압도적이라 아래 별도 줄)\n' +
     '구독 할당량 잔여치는 API가 알려주지 않아 사용량까지만 보여줍니다.',
   'dash.tokens.empty': '토큰 데이터가 비어 있습니다 — 실행 중인 serve가 이 필드 이전 빌드거나(재시작 필요) usage facet 재수집 전입니다.',
+  'dash.cost.title': '추정 비용(≈$)',
+  'dash.cost.tip':
+    '공개 가격표로 계산한 세션별 추정 비용입니다.\n' +
+    '청구서가 아닙니다 — 구독 할인·서비스 티어는 로컬에서 보이지 않고, 가격표에 없는 ' +
+    '모델은 제외되므로 하한값입니다.',
+  'dash.cost.total': (v: string) => `합계 ≈$${v}`,
+  'dash.cacheHit.title': '캐시 적중률',
+  'dash.cacheHit.tip':
+    '입력 토큰 중 캐시에서 재사용된 비율: cache 읽기 ÷ (input + cache 생성 + cache 읽기).\n' +
+    '높을수록 같은 작업을 싸게 돌린 것입니다 — 캐시 입력은 신규 입력 대비 소액입니다.',
   'dash.tokens.input': 'input',
   'dash.tokens.output': 'output',
   'dash.tokens.cacheCreation': 'cache 생성',
