@@ -7,9 +7,10 @@
 //!   `started_at`이 더 늦은 passed run이 있으면 recovered, 없으면 abandoned.
 //! - rhythm pct: (run.started_at − session.first) / (last − first) × 100,
 //!   소수 1자리. span 0 → 50.0.
-//! - coverage: 세션에 파싱 가능한 started_at의 passed run이 하나라도 있으면
-//!   그 세션의 diff hunk 전부를 covered로 본다 — 기존
-//!   `covered_diff_hunk_ids`(routes.rs, DEV-S11-02 보수 근사)와 동일 의미.
+//! - coverage(정밀, 2026-07-04 2차): hunk는 **도입 이벤트의 observed_at 이후에
+//!   passed run이 존재할 때만** covered. 도입 시점을 알 수 없는 hunk는 커버로
+//!   치지 않는다 — 검증 안 된 변경을 숨기지 않는 방향의 보수. per-run API의
+//!   `covered_diff_hunk_ids`(routes.rs) 근사와 의미가 다름을 주석으로 명시.
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -100,6 +101,41 @@ fn parse_ts(s: &str) -> Option<DateTime<Utc>> {
         .ok()
 }
 
+/// hunk 도입 이벤트들의 observed_at 조회 — 세션 단위 IN 쿼리 한 번.
+async fn intro_timestamps(
+    pool: &SqlitePool,
+    session_id: &str,
+    hunks: &[crate::db::repo_diff_hunk::DiffHunkRow],
+) -> Result<std::collections::HashMap<String, DateTime<Utc>>> {
+    use sqlx::Row as _;
+    let ids: Vec<&str> = hunks
+        .iter()
+        .map(|h| h.introduced_by_event_id.as_str())
+        .collect();
+    if ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let placeholders = vec!["?"; ids.len()].join(",");
+    let sql = format!(
+        "SELECT event_id, observed_at FROM observed_event
+         WHERE session_id = ? AND event_id IN ({placeholders})"
+    );
+    let mut q = sqlx::query(&sql).bind(session_id);
+    for id in &ids {
+        q = q.bind(*id);
+    }
+    let rows = q.fetch_all(pool).await?;
+    let mut out = std::collections::HashMap::new();
+    for row in rows {
+        let ev: String = row.get("event_id");
+        let at: String = row.get("observed_at");
+        if let Some(ts) = parse_ts(&at) {
+            out.insert(ev, ts);
+        }
+    }
+    Ok(out)
+}
+
 pub async fn collect(
     pool: &SqlitePool,
     project: Option<&str>,
@@ -135,7 +171,7 @@ pub async fn collect(
         let hunks = repo_diff_hunk::list_session(pool, &s.session_id).await?;
 
         let mut sess_passed = 0i64;
-        let mut has_parseable_pass = false;
+        let mut passed_times: Vec<DateTime<Utc>> = Vec::new();
         for r in &runs {
             total += 1;
             let k = by_kind.entry(map_kind(&r.command_kind)).or_insert(KindAgg {
@@ -150,8 +186,8 @@ pub async fn collect(
                     passed += 1;
                     sess_passed += 1;
                     k.passed += 1;
-                    if parse_ts(&r.started_at).is_some() {
-                        has_parseable_pass = true;
+                    if let Some(ts) = parse_ts(&r.started_at) {
+                        passed_times.push(ts);
                     }
                 }
                 "failed" => {
@@ -223,13 +259,20 @@ pub async fn collect(
         }
 
         if !hunks.is_empty() {
+            // 정밀 커버리지: hunk 도입 이벤트의 observed_at을 조회해, 그 이후에
+            // passed run이 있는 hunk만 covered로 센다.
+            let intro_ts = intro_timestamps(pool, &s.session_id, &hunks).await?;
+            let covered = hunks
+                .iter()
+                .filter(|h| {
+                    intro_ts
+                        .get(&h.introduced_by_event_id)
+                        .is_some_and(|ts| passed_times.iter().any(|p| p >= ts))
+                })
+                .count() as i64;
             cov_all.push(SessionCoverage {
                 session_id: s.session_id.clone(),
-                covered: if has_parseable_pass {
-                    hunks.len() as i64
-                } else {
-                    0
-                },
+                covered,
                 total: hunks.len() as i64,
             });
         }
