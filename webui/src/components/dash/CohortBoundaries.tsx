@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { EChartsCoreOption } from 'echarts/core';
 import {
-  COHORT_DIMS,
+  INTERVENTION_DIMS,
   type CohortDim,
   type CohortMetric,
   type RankedBoundary,
@@ -161,7 +161,7 @@ export function CohortBoundaries({
   /** 차원별 경계 수 + 유의 경계 보유 차원 — 레일 배지의 결정론 사실. */
   const dimCount = useMemo(() => {
     const m = new Map<CohortDim, number>();
-    for (const d of COHORT_DIMS) m.set(d, 0);
+    for (const d of INTERVENTION_DIMS) m.set(d, 0);
     for (const b of all) m.set(b.dim, (m.get(b.dim) ?? 0) + 1);
     return m;
   }, [all]);
@@ -241,7 +241,7 @@ export function CohortBoundaries({
           </small>
         </span>
         <div className="flex gap-1 rounded-lg border border-(--wimcc-border) bg-(--wimcc-surface-1) p-1">
-          {(['auto', ...COHORT_DIMS] as const).map((d) => {
+          {(['auto', ...INTERVENTION_DIMS] as const).map((d) => {
             const count = d === 'auto' ? surfaced.length : (dimCount.get(d) ?? 0);
             const empty = d !== 'auto' && count === 0;
             const active = dimFilter === d;
