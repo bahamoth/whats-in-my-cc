@@ -1,5 +1,62 @@
 # Changelog
 
+## [1.1.0](https://github.com/bahamoth/whats-in-my-cc/compare/v1.0.0...v1.1.0) (2026-07-04)
+
+
+### Features
+
+* **api+webui:** 검증 집계 /v1/verification/summary (TDD) ([0f81630](https://github.com/bahamoth/whats-in-my-cc/commit/0f816307f821a6ea10ed5fa4c54ade5d4a977817))
+* **api:** B-4 — POST /v1/export-bundles: owner-only local export ([ad7b5cf](https://github.com/bahamoth/whats-in-my-cc/commit/ad7b5cfd310b0222debd265628b7a907d5b78b23))
+* **doctor:** transcript-only 환경에 구조적-unknown OTLP 안내 (B-11) ([9df2241](https://github.com/bahamoth/whats-in-my-cc/commit/9df22415b66c77f0ec8defc0a0f3077e2a318cca))
+* **insight+api:** instruction 전향 관측 + fingerprint plugins/instructions (TDD) ([9911364](https://github.com/bahamoth/whats-in-my-cc/commit/99113648e0a4dc903cb8f71271ada489ccc64a6d))
+* **insight:** B-13 Tier3 트리 관측 + 관측 정밀화(라이브 스모크 결함 2건) ([44eb486](https://github.com/bahamoth/whats-in-my-cc/commit/44eb486014b4bc80bb5a474a3e7f49a98e387729))
+* **insight:** verification allowlist에 tsc 승격 — 패턴 17 + pnpm exec wrapper (B-2) ([97ba757](https://github.com/bahamoth/whats-in-my-cc/commit/97ba757fc141feb676d6c6b6b5d03148b017993b))
+* **insight:** vitest 요약 2형태 승격 — 파이프 구분 실패·Tests-줄만 성공 (2026-07-04 루프) ([6882643](https://github.com/bahamoth/whats-in-my-cc/commit/6882643ace47bb8256a16fc817168934c586481b))
+* **insight:** 변경 커버리지 정밀화 — hunk 도입 시점 이후 passed run 존재 기준 (TDD) ([b71c424](https://github.com/bahamoth/whats-in-my-cc/commit/b71c424dd85751d8c617efd798622253e2e1d480))
+* **insight:** 태깅 루프 2026-07-04 — pnpm 폴백·--version 규칙·보편 CLI 6종 사전 추가 ([5afa6bc](https://github.com/bahamoth/whats-in-my-cc/commit/5afa6bc7a8aebf8ddf9503c4cf7ec997cfba6a74))
+* **insight:** 태깅 인프라 B-7 — $() 편평화·무확장 규칙·기결정 필터·PR-전 게이트 ([325017e](https://github.com/bahamoth/whats-in-my-cc/commit/325017e604b9eadd4bab84437c4c45ecb9510fd2))
+* **mcp:** B-3 — structuredContent·turns 페이지네이션·events 창·세션 다이제스트 (9종→11종) ([33dae83](https://github.com/bahamoth/whats-in-my-cc/commit/33dae8341ddf20324d70fd85e562e6737745a5a1))
+* **teammate:** B-6 후속 묶음 — preview 스트립·이산 북엔드·agent-setting 정규화·표본 실측 ([50799a2](https://github.com/bahamoth/whats-in-my-cc/commit/50799a219307114242d137f563ed0a69c3fe43e9))
+* **webui+insight:** 대시보드 5차 — 모델 매트릭스·비용/캐시 적중률 strip·신호 색 분리 ([60425b7](https://github.com/bahamoth/whats-in-my-cc/commit/60425b79e6eac5dc0f1aa6518ec4bad75816b2f8))
+* **webui+insight:** 대시보드 피드백 2차 — InfoTip 통일·라벨 레일 복원·Brush 수정·rate limit/토큰 측정 ([31b8fdd](https://github.com/bahamoth/whats-in-my-cc/commit/31b8fdde0f9f6e086383b53e0d67187409ba426f))
+* **webui:** B-12 리플레이 스트림 지시문 변경 인라인 마커 ([e9fa065](https://github.com/bahamoth/whats-in-my-cc/commit/e9fa0659d2ee88e73a4e7afc51ec45c7d86c3e64))
+* **webui:** B-14 유의 임계 다중비교 보정 — effectiveExceedMax ([96c070f](https://github.com/bahamoth/whats-in-my-cc/commit/96c070f5f9242255584b182ed15e1d7a2f552ee2))
+* **webui:** ECharts tree-shaken 래퍼 + 차트 베이스 상수 ([ebb1702](https://github.com/bahamoth/whats-in-my-cc/commit/ebb17023a9d7d069a5624b6ae40b596326ccea0d))
+* **webui:** 검증 탭 — 측정률·kind 구성·가드 행방 Sankey·실행 리듬·변경 커버리지 ([1b196b3](https://github.com/bahamoth/whats-in-my-cc/commit/1b196b346de951c6bcbd9584ebc0767ddac8a919))
+* **webui:** 기간 컨트롤 재설계 — 프리셋+캘린더 범위 Popover, 차트 내 dataZoom 제거 ([51fcfe7](https://github.com/bahamoth/whats-in-my-cc/commit/51fcfe763d431fbdbae436948cd45ba4485739ca))
+* **webui:** 대시보드 3차 — 모델 약칭 레일·CC 레일 복원·툴팁 재작성·429 strip 제거 ([6b8f09f](https://github.com/bahamoth/whats-in-my-cc/commit/6b8f09fdcb6f3c2408ffd844d18fd0f87d483b17))
+* **webui:** 대시보드 6차 — 토큰 섹션 압축, 효율 히트 매트릭스(hit%·out%·$/1M) ([ceba04b](https://github.com/bahamoth/whats-in-my-cc/commit/ceba04b417075dc6f52c5a88e07979448709c6d9))
+* **webui:** 대시보드 UX 개편 — shadcn/ui + Recharts (피드백 반영) ([1eda037](https://github.com/bahamoth/whats-in-my-cc/commit/1eda0372a443945f2b5d82b3097a41b64fb4b32a))
+* **webui:** 대시보드 골격 재작성 — 개요/검증 탭 + 문자 헤드라인 + 이전 창 delta ([4375912](https://github.com/bahamoth/whats-in-my-cc/commit/4375912348de4fbac64dbf6315d5087aa172f207))
+* **webui:** 대시보드 파생 SSOT lib/dashDerive + displayModel 전체 표시명 ([4a450be](https://github.com/bahamoth/whats-in-my-cc/commit/4a450be5f8e0443c1f5e3c40da257d3d4daae844))
+* **webui:** 대시보드 피드백 반영 — 레인 시간축·고스트 칩·스캐터 가시성 ([82f8993](https://github.com/bahamoth/whats-in-my-cc/commit/82f8993e8acab7f54965f12600e84d550970c06b))
+* **webui:** 세션 리스트 지표 컬럼 추가(기존 컬럼 유지) + 정렬 ([e9ff1ea](https://github.com/bahamoth/whats-in-my-cc/commit/e9ff1ea81d5ee87a6e4ab79fe6d96d100207ed39))
+* **webui:** 세션 분포 스캐터 — log 사용량 × 신호 밀도, 이상점 라벨, 클릭 리플레이 ([1bdf49f](https://github.com/bahamoth/whats-in-my-cc/commit/1bdf49feb7e5c6f3905fe86125e4f5c3f2578b00))
+* **webui:** 세션 타임라인 카드 레인 — 시간축 귀속·리듬 (DOM 배치) ([95ad222](https://github.com/bahamoth/whats-in-my-cc/commit/95ad222dedc8421a6b761d13e32e7c18f211ca90))
+* **webui:** 일별 검증·비용/신호 모듈 (ECharts) + CC 전환 결정론 압축 ([e6e78ce](https://github.com/bahamoth/whats-in-my-cc/commit/e6e78ce77d7ab85b54005c794a7fbb0bf2411bc7))
+* **webui:** 전 지표 InfoTip 설명 + 데이트 피커 범위 선택 가시화 ([f19c1e0](https://github.com/bahamoth/whats-in-my-cc/commit/f19c1e01980a8774419f941ae1f05ae8d78a270c))
+* **webui:** 지시문 diff·세션 카드 + 코호트 instructions/plugins 차원 UI ([6f846ee](https://github.com/bahamoth/whats-in-my-cc/commit/6f846ee75833019934538e562de6034f176aa0fa))
+* **webui:** 차트 마커를 코호트 유의 경계와 동기화 ([9184443](https://github.com/bahamoth/whats-in-my-cc/commit/91844434d3964d12dcfe8c79f13f8cd4da4c23a1))
+* **webui:** 코호트 경계 UI 가독성 — 카운트 배지 차원 레일 + 라디오 행 선택(A안) ([b6c2e86](https://github.com/bahamoth/whats-in-my-cc/commit/b6c2e861f929cb385950b840cac5b34ed211b221))
+* **webui:** 코호트 경계 일반화 — 5차원 검출 + 결정론 유의 랭킹(rankCohorts) ([47aa4ea](https://github.com/bahamoth/whats-in-my-cc/commit/47aa4ea9b154933cb265f43f2c3f11a04274a691))
+* **webui:** 코호트 비교 슬로프 — 최신 경계 결정론 라벨(added/removed 구조화) ([f4c3efb](https://github.com/bahamoth/whats-in-my-cc/commit/f4c3efb6ef7934785b81951b3bc01ded56545aad))
+* **webui:** 코호트 차원 재편 — 개입/맥락 분리(스펙 §2 4차 개정 1단계) ([9b2d3be](https://github.com/bahamoth/whats-in-my-cc/commit/9b2d3bef1b3e0f160dc77347e062d691119878b8))
+* **webui:** 툴팁 카피 규칙 강제화 — 마크업 렌더러 + 전 툴팁 강조 적용 + CI 게이트 ([fa697d8](https://github.com/bahamoth/whats-in-my-cc/commit/fa697d8cb2bd58b2d8f644e050e3464ff7941af9))
+* **webui:** 프로젝트 대시보드 라우트 — 세션 횡단 트렌드 + 코호트 경계 (B-1) ([71a5bac](https://github.com/bahamoth/whats-in-my-cc/commit/71a5bacf19a47b5a424ebf720f806e783ec9594e))
+
+
+### Bug Fixes
+
+* **insight:** 서브셸 내부 세그먼트를 발생 위치에 스플라이스 — 시간 순서 보존 ([1ff9840](https://github.com/bahamoth/whats-in-my-cc/commit/1ff984004f64c99daaa67f62a2248aca75de17ca))
+* **webui:** 검증 탭 fetch 자기취소 고착 수정 — vsum.kind를 effect deps에서 제거 ([b1c03ea](https://github.com/bahamoth/whats-in-my-cc/commit/b1c03eae8741440b71425f666fc4356f7fd67dc7))
+* **webui:** 대시보드 4차 — strip 타임라인 정렬 버그 수정 + 연속 타임라인 카드 통합 ([f278154](https://github.com/bahamoth/whats-in-my-cc/commit/f278154be05c0a08850c8e43a2461007048812c5))
+* **webui:** 일별 차트 코호트 마커 라벨 겹침·클리핑 — 스태거 배치 ([f36cf2a](https://github.com/bahamoth/whats-in-my-cc/commit/f36cf2a7d1e78cb67d7a88266cbdd8b69c08d08e))
+
+
+### Performance Improvements
+
+* **insight:** B-8 — SessionMetrics 인메모리 캐시 (실측 게이트 통과분만) ([8b11eba](https://github.com/bahamoth/whats-in-my-cc/commit/8b11ebac1835c301bc0cbcb2db71c4799c53cb27))
+
 ## [1.0.0](https://github.com/bahamoth/whats-in-my-cc/compare/v0.12.0...v1.0.0) (2026-07-03)
 
 
