@@ -1,5 +1,5 @@
 /** 코호트 경계 섹션 — 유의 경계 노출(초과율 문구)·차원 수동 탐색·슬로프 렌더. */
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 import { describe, expect, it, vi, afterEach, beforeAll } from 'vitest';
 import { CohortBoundaries } from '../CohortBoundaries';
 import { I18nProvider } from '../../../i18n';
@@ -87,10 +87,18 @@ describe('CohortBoundaries', () => {
     expect(screen.getAllByTestId('echart')).toHaveLength(4);
     expect(screen.getByText(/before 6 · after 6 sessions/i)).toBeInTheDocument();
   });
-  it('차원 버튼으로 수동 탐색 — 경계 없는 차원은 안내 문구', () => {
+  it('차원 레일: 카운트 배지, 경계 0 차원은 비활성', () => {
     mount(jump);
-    fireEvent.click(screen.getByRole('button', { name: 'branch' }));
-    expect(screen.getByText(/pick a dimension to browse/i)).toBeInTheDocument();
+    const model = screen.getByRole('button', { name: /model\s*1/ });
+    expect(model).toBeEnabled();
+    const branch = screen.getByRole('button', { name: /branch\s*0/ });
+    expect(branch).toBeDisabled();
+  });
+  it('선택 행은 data-selected=true + 라디오 도트', () => {
+    mount(jump);
+    const rows = screen.getAllByText(/top \d+% vs random splits/).map((el) => el.closest('button')!);
+    expect(rows[0].dataset.selected).toBe('true');
+    expect(rows[0].textContent).toContain('●');
   });
   it('경계가 하나도 없으면 섹션 미렌더', () => {
     const flat = Array.from({ length: 6 }, (_, i) => row(`a${i}`, `06-0${i + 1}`, ['claude-opus-4-8'], 10));
