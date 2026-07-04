@@ -21,6 +21,11 @@ use std::path::{Path, PathBuf};
 const FRESH_WINDOW_MIN: i64 = 10;
 const MAX_IMPORTS: usize = 20;
 const MAX_FILE_BYTES: u64 = 1_000_000;
+/// Tier3 트리 스캔 상한 — 깊이·방문 디렉토리 수(B-13). 존재 기록 전용이라
+/// 놓침은 무해하고, 폭주만 막으면 된다.
+const TREE_MAX_DEPTH: usize = 4;
+const TREE_MAX_DIRS: usize = 400;
+const TREE_SKIP: [&str; 6] = ["node_modules", "target", ".git", "dist", ".venv", "vendor"];
 
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut h = Sha256::new();
@@ -120,19 +125,24 @@ pub async fn observe_session_instructions(
         return Ok(0);
     }
 
-    let cwd_rows = sqlx::query(
-        "SELECT DISTINCT cwd FROM observed_event WHERE session_id = ? AND cwd IS NOT NULL",
+    // 세션 루트 = 최초 이벤트의 cwd(launch dir). 레코드 cwd는 Bash `cd`로
+    // 드리프트한다(실측 2026-07-04: 한 세션에 distinct cwd 4개) — 드리프트
+    // cwd를 project 루트로 취급하면 하위 CLAUDE.md가 코호트 키('project')로
+    // 오기록되므로 기준은 하나다.
+    let launch_cwd: Option<String> = sqlx::query(
+        "SELECT cwd FROM observed_event WHERE session_id = ? AND cwd IS NOT NULL
+         ORDER BY observed_at ASC, event_id ASC LIMIT 1",
     )
     .bind(session_id)
-    .fetch_all(pool)
-    .await?;
+    .fetch_optional(pool)
+    .await?
+    .map(|r| r.get("cwd"));
 
     let mut recorded = 0usize;
     let mut tier1_contents: Vec<(PathBuf, String)> = Vec::new();
 
-    for r in &cwd_rows {
-        let cwd: String = r.get("cwd");
-        let p = Path::new(&cwd).join("CLAUDE.md");
+    if let Some(cwd) = &launch_cwd {
+        let p = Path::new(cwd).join("CLAUDE.md");
         let (new, content) = record(pool, session_id, "project", &p).await?;
         if new {
             recorded += 1;
@@ -150,6 +160,16 @@ pub async fn observe_session_instructions(
         }
         if let Some(c) = content {
             tier1_contents.push((p, c));
+        }
+    }
+
+    // Tier3 — launch cwd 트리의 하위 CLAUDE.md(존재 기록만, 로드 무주장. B-13).
+    if let Some(cwd) = &launch_cwd {
+        for p in tree_claude_mds(Path::new(cwd)) {
+            let (new, _) = record(pool, session_id, "tree", &p).await?;
+            if new {
+                recorded += 1;
+            }
         }
     }
 
@@ -172,4 +192,35 @@ pub async fn observe_session_instructions(
         }
     }
     Ok(recorded)
+}
+
+/// cwd 하위(루트 제외)의 CLAUDE.md 나열 — 깊이/방문 상한, 무거운 디렉토리 제외.
+fn tree_claude_mds(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack: Vec<(PathBuf, usize)> = vec![(root.to_path_buf(), 0)];
+    let mut visited = 0usize;
+    while let Some((dir, depth)) = stack.pop() {
+        if depth > TREE_MAX_DEPTH || visited >= TREE_MAX_DIRS {
+            continue;
+        }
+        visited += 1;
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            let name = e.file_name();
+            let name = name.to_string_lossy();
+            if p.is_dir() {
+                if name.starts_with('.') || TREE_SKIP.contains(&name.as_ref()) {
+                    continue;
+                }
+                stack.push((p, depth + 1));
+            } else if name == "CLAUDE.md" && depth > 0 {
+                out.push(p);
+            }
+        }
+    }
+    out.sort();
+    out
 }

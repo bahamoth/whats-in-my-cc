@@ -111,12 +111,30 @@ async fn fingerprint_exposes_plugins_and_instructions() {
     .execute(&pool)
     .await
     .unwrap();
+    // Tier2/3(존재 기록)은 코호트 키가 아니다 — fingerprint.instructions는
+    // Tier1(project/user)만 포함한다(스펙 §2 4차: 로드 무주장).
+    for (oid, source, path) in [
+        ("obs2", "tree", "/w/sub/CLAUDE.md"),
+        ("obs3", "import", "/w/docs/rules.md"),
+    ] {
+        sqlx::query(
+            "INSERT INTO instruction_observation (observation_id, session_id, source, path, content_sha256, observed_at)
+             VALUES (?, 'sess_fp2', ?, ?, 'aabbccdd', '2026-07-04T00:00:02+00:00')",
+        )
+        .bind(oid)
+        .bind(source)
+        .bind(path)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
 
     let f = wimcc::insight::fingerprint::compute_session_fingerprint(&pool, "sess_fp2")
         .await
         .unwrap();
     let v: Value = serde_json::to_value(&f).unwrap();
     assert_eq!(v["plugins"], json!(["claude-in-chrome", "serena"]));
+    assert_eq!(v["instructions"].as_array().unwrap().len(), 1);
     assert_eq!(v["instructions"][0]["source"], "project");
     assert_eq!(v["instructions"][0]["hash"], "aabbccdd");
 }

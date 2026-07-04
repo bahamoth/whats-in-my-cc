@@ -137,3 +137,73 @@ async fn tier2_imports_snapshotted_without_load_claim() {
     .collect();
     assert_eq!(src, vec!["import".to_string(), "project".to_string()]);
 }
+
+#[tokio::test]
+async fn shell_cd_drift_does_not_create_project_rows() {
+    // 실측(2026-07-04, 세션 190a23db 라이브 스모크): Bash `cd`로 레코드 cwd가
+    // 드리프트해 distinct cwd 4개 — 전부를 project 루트로 취급하면 하위
+    // CLAUDE.md가 코호트 키('project')로 오기록된다. 기준은 최초 이벤트의
+    // cwd(launch dir) 하나다. 하위 파일은 tree(존재 기록)로만 나타난다.
+    let p = pool().await;
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("CLAUDE.md"), "# root\n").unwrap();
+    std::fs::create_dir_all(dir.path().join("webui")).unwrap();
+    std::fs::write(dir.path().join("webui/CLAUDE.md"), "# sub\n").unwrap();
+    let earlier = (chrono::Utc::now() - chrono::Duration::minutes(2)).to_rfc3339();
+    seed_activity(&p, "s4", dir.path().to_str().unwrap(), &earlier).await;
+    seed_activity(
+        &p,
+        "s4",
+        dir.path().join("webui").to_str().unwrap(),
+        &now_iso(),
+    )
+    .await;
+
+    observe_session_instructions(&p, "s4", None).await.unwrap();
+    let proj: Vec<String> = sqlx::query(
+        "SELECT path FROM instruction_observation WHERE session_id='s4' AND source='project'",
+    )
+    .fetch_all(&p)
+    .await
+    .unwrap()
+    .iter()
+    .map(|r| r.get("path"))
+    .collect();
+    assert_eq!(proj.len(), 1, "launch cwd의 CLAUDE.md만 project: {proj:?}");
+    assert!(!proj[0].ends_with("webui/CLAUDE.md"));
+    let tree: Vec<String> = sqlx::query(
+        "SELECT path FROM instruction_observation WHERE session_id='s4' AND source='tree'",
+    )
+    .fetch_all(&p)
+    .await
+    .unwrap()
+    .iter()
+    .map(|r| r.get("path"))
+    .collect();
+    assert_eq!(tree.len(), 1);
+    assert!(tree[0].ends_with("webui/CLAUDE.md"));
+}
+
+#[tokio::test]
+async fn tier3_tree_claude_md_recorded_as_existence_only() {
+    let p = pool().await;
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("CLAUDE.md"), "# root\n").unwrap();
+    std::fs::create_dir_all(dir.path().join("webui/src")).unwrap();
+    std::fs::write(dir.path().join("webui/CLAUDE.md"), "# sub\n").unwrap();
+    // 제외 디렉토리의 CLAUDE.md는 스캔하지 않는다.
+    std::fs::create_dir_all(dir.path().join("node_modules/x")).unwrap();
+    std::fs::write(dir.path().join("node_modules/x/CLAUDE.md"), "# noise\n").unwrap();
+    seed_activity(&p, "s3", dir.path().to_str().unwrap(), &now_iso()).await;
+
+    observe_session_instructions(&p, "s3", None).await.unwrap();
+    let rows = sqlx::query(
+        "SELECT source, path FROM instruction_observation WHERE session_id='s3' AND source='tree'",
+    )
+    .fetch_all(&p)
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 1);
+    let path: String = rows[0].get("path");
+    assert!(path.ends_with("webui/CLAUDE.md"));
+}
