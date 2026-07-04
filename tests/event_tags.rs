@@ -100,6 +100,8 @@ fn run_code_interpreters_and_paths() {
 #[test]
 fn write_delete_deps() {
     assert_eq!(tag(&bash("mkdir -p a/b")), Some("write.file"));
+    // coreutils mktemp — 실 표본: TMP=$(mktemp -d) 후 스크래치 ingest (2026-07-04 루프)
+    assert_eq!(tag(&bash("mktemp -d")), Some("write.file"));
     assert_eq!(tag(&bash("cp a b")), Some("write.file"));
     assert_eq!(tag(&bash("chmod +x x")), Some("write.file"));
     assert_eq!(tag(&bash("rm -rf target")), Some("delete.file"));

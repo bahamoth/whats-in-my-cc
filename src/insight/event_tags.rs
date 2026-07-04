@@ -140,6 +140,7 @@ pub static BASH_FIRST_TOKEN_TAGS: &[(&str, &str)] = &[
     ("dig", "read.web"),
     // write.file — 생성/수정 (비파괴)
     ("mkdir", "write.file"),
+    ("mktemp", "write.file"),
     ("touch", "write.file"),
     ("cp", "write.file"),
     ("chmod", "write.file"),
