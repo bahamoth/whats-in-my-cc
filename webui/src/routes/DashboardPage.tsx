@@ -11,12 +11,20 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getMetricsSeries, getVerificationSummary, listSessions, ApiError } from '../api/client';
 import type { MetricsSeriesDto, SessionListItem, VerificationSummaryDto } from '../api/types';
 import { sortSeriesAscending } from '../lib/seriesView';
-import { buildDaily, headline, headlineDelta, observedChanges, signalsOf } from '../lib/dashDerive';
+import {
+  buildDaily,
+  headline,
+  headlineDelta,
+  observedChanges,
+  rankCohorts,
+  signalsOf,
+  type RankedBoundary,
+} from '../lib/dashDerive';
 import { HeadlineStats } from '../components/dash/HeadlineStats';
 import { DailyVerification } from '../components/dash/DailyVerification';
 import { DailyCostSignals } from '../components/dash/DailyCostSignals';
 import type { CohortMarker, DayDetail } from '../components/dash/dailyOptions';
-import { CohortBoundaries } from '../components/dash/CohortBoundaries';
+import { CohortBoundaries, boundaryLabel } from '../components/dash/CohortBoundaries';
 import { SessionCardLane } from '../components/dash/SessionCardLane';
 import { SessionScatter } from '../components/dash/SessionScatter';
 import { VerificationTab } from '../components/dash/VerificationTab';
@@ -222,23 +230,27 @@ export default function DashboardPage() {
   );
   const changes = useMemo(() => observedChanges(rows), [rows]);
   const daily = useMemo(() => buildDaily(rows), [rows]);
-  /** 코호트 전환 마커 — 관측된 변화 중 시간축에 놓을 수 있는 것(첫 관측·CC 전환). */
-  const markers = useMemo<CohortMarker[]>(
-    () =>
-      changes.flatMap((c) => {
-        if (c.kind === 'top_signals') return [];
-        const date = c.kind === 'model_first' ? c.date : c.lastDate;
-        const dayIdx = daily.dates.indexOf(date);
-        if (dayIdx < 0) return [];
-        return [
-          {
-            dayIdx,
-            label: c.kind === 'model_first' ? t('dash.marker.first', c.model) : `Claude Code ${c.to}`,
-          },
-        ];
-      }),
-    [changes, daily, t],
-  );
+  const ranked = useMemo(() => rankCohorts(rows), [rows]);
+  const [selBoundary, setSelBoundary] = useState<RankedBoundary | null>(null);
+  /** 차트 마커 = 코호트 시스템과 동기 — 유의 경계(흐림) + 선택 경계(강조).
+   *  같은 날짜의 여러 경계는 하나로 접고, 선택 경계의 라벨이 우선한다. */
+  const markers = useMemo<CohortMarker[]>(() => {
+    const byDate = new Map<string, CohortMarker>();
+    const put = (b: RankedBoundary, emphasis: boolean) => {
+      const dayIdx = daily.dates.indexOf(b.date);
+      if (dayIdx < 0) return;
+      const existing = byDate.get(b.date);
+      if (!existing) {
+        byDate.set(b.date, { dayIdx, label: boundaryLabel(b, t), emphasis });
+      } else if (emphasis) {
+        existing.emphasis = true;
+        existing.label = boundaryLabel(b, t);
+      }
+    };
+    for (const b of ranked.surfaced) put(b, false);
+    if (selBoundary) put(selBoundary, true);
+    return [...byDate.values()];
+  }, [ranked, selBoundary, daily, t]);
   const dayDetails = useMemo<DayDetail[][]>(
     () =>
       daily.sessionsOf.map((idxs) =>
@@ -379,7 +391,7 @@ export default function DashboardPage() {
               passed={rows.reduce((a, r) => a + r.metrics.verification_passed, 0)}
             />
             <DailyCostSignals daily={daily} markers={markers} details={dayDetails} />
-            <CohortBoundaries rows={rows} />
+            <CohortBoundaries ranked={ranked} onSelectionChange={setSelBoundary} />
             <SessionCardLane
               rows={rows}
               nameOf={nameOf}

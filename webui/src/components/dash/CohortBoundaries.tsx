@@ -2,16 +2,15 @@
  *  기본 뷰는 초과율 게이트를 통과한 경계(rankCohorts.surfaced, 결정론),
  *  차원 버튼으로 모든 경계를 수동 탐색. 전/후 = 창 내 경계 이전/이후 전체 —
  *  랭킹 통계량과 표시 집계가 같은 정의다. */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { EChartsCoreOption } from 'echarts/core';
-import type { SessionSeriesRowDto } from '../../api/types';
 import {
-  rankCohorts,
   COHORT_DIMS,
   type CohortDim,
   type CohortMetric,
   type RankedBoundary,
 } from '../../lib/dashDerive';
+import type { rankCohorts } from '../../lib/dashDerive';
 import { EChart } from './EChart';
 import { useT } from '../../i18n';
 import { InfoTip } from '../replay/insight-strip/InfoTip';
@@ -130,11 +129,30 @@ function SlopeCard({
   );
 }
 
-export function CohortBoundaries({ rows }: { rows: SessionSeriesRowDto[] }) {
+/** 경계 라벨 조립 — 코호트 섹션과 차트 마커가 같은 문구를 쓴다. */
+export function boundaryLabel(
+  b: RankedBoundary,
+  t: ReturnType<typeof useT>,
+): string {
+  return b.added.length && b.removed.length
+    ? `${b.removed.join(' · ')} → ${b.added.join(' · ')}`
+    : b.added.length
+      ? t('dash.cohort.introduced', b.added.join(' · '))
+      : t('dash.cohort.retired', b.removed.join(' · '));
+}
+
+export function CohortBoundaries({
+  ranked,
+  onSelectionChange,
+}: {
+  ranked: ReturnType<typeof rankCohorts>;
+  /** 현재 선택(자동 기본 포함)을 페이지로 보고 — 차트 마커 강조와 동기. */
+  onSelectionChange?: (b: RankedBoundary | null) => void;
+}) {
   const t = useT();
   const [dimFilter, setDimFilter] = useState<'auto' | CohortDim>('auto');
   const [picked, setPicked] = useState<string | null>(null); // `${dim}:${index}`
-  const { surfaced, all } = useMemo(() => rankCohorts(rows), [rows]);
+  const { surfaced, all } = ranked;
 
   const list = useMemo(() => {
     if (dimFilter === 'auto') return surfaced;
@@ -152,16 +170,15 @@ export function CohortBoundaries({ rows }: { rows: SessionSeriesRowDto[] }) {
   const sel: RankedBoundary | undefined =
     list.find((b) => `${b.dim}:${b.index}` === picked) ?? list[0];
 
+  useEffect(() => {
+    onSelectionChange?.(sel ?? null);
+  }, [sel, onSelectionChange]);
+
   if (all.length === 0) return null;
 
   const dimName = (d: 'auto' | CohortDim) =>
     d === 'auto' ? t('dash.cohort.dim.auto') : t(`dash.cohort.dim.${d}`);
-  const labelOf = (b: RankedBoundary) =>
-    b.added.length && b.removed.length
-      ? `${b.removed.join(' · ')} → ${b.added.join(' · ')}`
-      : b.added.length
-        ? t('dash.cohort.introduced', b.added.join(' · '))
-        : t('dash.cohort.retired', b.removed.join(' · '));
+  const labelOf = (b: RankedBoundary) => boundaryLabel(b, t);
   const axisLabels: [string, string] = [t('dash.cohort.before'), t('dash.cohort.after')];
 
   const metricName: Record<CohortMetric, string> = {

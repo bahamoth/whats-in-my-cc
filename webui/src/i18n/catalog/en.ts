@@ -306,7 +306,6 @@ export const en = {
   'dash.tt.noSessions': 'no sessions',
   'dash.tt.noGuards': 'no guards observed',
   'dash.tt.signals': 'signals',
-  'dash.marker.first': (m: string) => `${m} first observed`,
   'dash.cohort.compareTitle': (label: string) => `Cohort compare — around ${label}`,
   'dash.cohort.introduced': (m: string) => `${m} introduced`,
   'dash.cohort.retired': (m: string) => `${m} retired`,
