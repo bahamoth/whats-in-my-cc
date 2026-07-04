@@ -46,9 +46,9 @@ export const en = {
 
   'insight.context.title': 'Context efficiency',
   'insight.context.tip':
-    'Cache hit ratio = cache_read / (cache_read + cache_creation + input). Measured (usage facet). ' +
-    'Expand for the fixed cached-context size, its growth, and cache misses. Per system-prompt/skill/memory ' +
-    'breakdown and a "contamination" verdict are not in the data, so not provided (design §8 limitation).',
+    'Cache hit ratio = **cache_read / (cache_read + cache_creation + input)** — measured (usage facet).\n' +
+    'Expand for the fixed cached-context size, its growth, and cache misses.\n' +
+    'Per system-prompt/skill/memory breakdown and a "contamination" verdict are outside the data (design §8).',
   'insight.context.detailCacheRead': (v: string) => `Cache reads ${v}`,
   'insight.context.drillHitRate': (v: string) => `Cache hit rate ${v}`,
   'insight.context.drillCacheReadFree': (v: string) => `Cache reads (free) ${v}`,
@@ -57,8 +57,8 @@ export const en = {
 
   'insight.tokens.title': 'Tokens',
   'insight.tokens.tip':
-    'Billed tokens (input + cache_creation + output) and cache reads (free) mean different things and are ' +
-    'never summed (design §3 Q2). Measured (usage facet).',
+    'Billed tokens = **input + cache_creation + output**; cache reads are [green]free[/green] — different meanings, always counted apart (design §3 Q2).\n' +
+    'Measured (usage facet).',
   'insight.tokens.valueBilled': (v: string) => `Billed ${v}`,
   'insight.tokens.detailCacheReadFree': (v: string) => `Cache reads ${v} (free)`,
   'insight.tokens.drillByModel': (a: { model: string; events: number; out: string }) =>
@@ -66,7 +66,8 @@ export const en = {
 
   'insight.verification.title': 'Verification',
   'insight.verification.tip':
-    'Guards = the test/build/lint/format checks that ran. Measured when based on a known-tool match (known_tool) ' +
+    '**Guards** = the test/build/lint/format checks that ran.\n' +
+    'Measured when based on a known-tool match (`known_tool`) ' +
     'plus an exit code (exit); shown as mixed when piped-masked exit codes are mixed in (slice 2 ' +
     'detection_basis/status_basis). Keyword guesses (test_keyword) are no longer produced (F2) and only appear in ' +
     'older ingested data. Browser smoke / subagent tests are not detected (design §3 Q4 limitation).',
@@ -79,13 +80,14 @@ export const en = {
 
   'insight.toolFailure.title': 'Tool failures',
   'insight.toolFailure.tip':
-    'Tool-failure signal count (detector=tool_failure). A deterministic count; it does not judge severity.',
+    'Tool-failure signal count (`detector=tool_failure`).\n' +
+    'A **deterministic count**; severity is out of scope.',
   'insight.toolFailure.none': 'No tool failures',
   'insight.toolFailure.expand': 'Expand to view',
 
   'insight.cost.title': 'Cost',
   'insight.cost.tip':
-    'An estimate computed from the public price list × usage tokens — not the actual bill (design §6.5/§11.3). ' +
+    'An estimate from **public price list × usage tokens** — a floor, not the bill (design §6.5/§11.3).\n' +
     'Replaced once the OTel claude_code.cost.usage metric arrives. cache_read (free) is excluded from cost.',
   'insight.cost.detailEstimate': 'Public-pricing estimate (≈)',
   'insight.cost.detailEstimateUnpriced': (n: number) => `Public-pricing estimate (≈) · ${n} unpriced`,
@@ -372,77 +374,79 @@ export const en = {
     'no boundary passes the exceedance gate in this window — pick a dimension to browse all boundaries',
   'dash.cohort.alsoDims': (d: string) => `${d} also changed at this point — effects are not separable`,
   'dash.head.pass.tip':
-    'Pass rate over measured guards: passed ÷ (passed + failed).\n' +
-    'A guard is a test / build / lint / format run observed in the window.\n' +
+    'Pass rate over measured guards: **passed ÷ (passed + failed)**.\n' +
+    'A **guard** is a test / build / lint / format run observed in the window.\n' +
     'Undecidable runs (masked exit codes) stay out of the denominator.\n' +
     'The delta chip compares against the previous window of the same length.',
   'dash.head.cost.tip':
-    'Window total of estimated cost: public price list × usage tokens.\n' +
-    'This is a floor, not a bill — subscription discounts and service tiers are invisible locally.\n' +
+    'Window total of estimated cost: **public price list × usage tokens**.\n' +
+    'This is a **floor**, not a bill — subscription discounts and service tiers are invisible locally.\n' +
     'Cache reads are free and excluded.',
   'dash.head.rate.tip':
-    'Blended unit rate = estimated cost ÷ billed tokens (input + cache write + output) × 1M.\n' +
+    'Blended unit rate = **estimated cost ÷ billed tokens (input + cache write + output) × 1M**.\n' +
     'Rises when expensive models take a larger share of the window.',
   'dash.head.hit.tip':
-    'Share of input context served from cache: cache read ÷ (input + cache write + cache read).\n' +
+    'Share of input context served from cache: **cache read ÷ (input + cache write + cache read)**.\n' +
     'Higher means the same context was reused cheaply.',
   'dash.head.toolfail.tip':
-    'Failed tool calls ÷ all tool calls in the window.\n' +
+    '**Failed tool calls ÷ all tool calls** in the window.\n' +
     'A deterministic count; severity is not judged.',
   'dash.observed.tip':
     'Every item is derived from observations:\n' +
-    '· model first observed — the day a model first appears in this window\n' +
-    '· Claude Code — first → last version with the number of transitions\n' +
-    '· most signals — the session with the largest process-signal total',
+    '· **model first observed** — the day a model first appears in this window\n' +
+    '· **Claude Code** — first → last version with the number of transitions\n' +
+    '· **most signals** — the session with the largest process-signal total',
   'dash.daily.ver.tip':
-    'A guard is an observed test / build / lint / format run.\n' +
-    'passed / failed come from exit codes; unknown means the exit code was masked (e.g. piped commands).\n' +
-    'Purple dashed lines mark model / Claude Code transitions.',
+    'A **guard** is an observed test / build / lint / format run.\n' +
+    '[green]passed[/green] / [red]failed[/red] come from `exit codes`; unknown means the exit code was masked (e.g. piped commands).\n' +
+    '[violet]Purple dashed lines[/violet] mark model / Claude Code transitions.',
   'dash.daily.cost.tip':
-    'Bar height = estimated cost of that day (public price list ≈, floor).\n' +
-    'Bar color = process signals that day, green (0) through red (max) — hot days stand out.\n' +
+    '**Bar height** = estimated cost of that day (public price list ≈, floor).\n' +
+    '**Bar color** = process signals that day, [green]green (0)[/green] through [red]red (max)[/red] — hot days stand out.\n' +
     'Hover a bar to see the sessions behind it.',
   'dash.cohort.tip':
-    'A boundary is where the session environment (fingerprint) changes — detected across 5 dimensions: model, Claude Code, branch, cwd, entrypoint.\n' +
-    '"top x% vs random splits" = the metric shift at this boundary ranks in the top x% of shifts from every possible split of this window. Lower = the change stands out more.\n' +
-    'The auto list shows up to 3 boundaries within the top 10% (fixed rule, spec §2).\n' +
+    'A **boundary** is where the session environment (fingerprint) changes — detected across **5 dimensions: model, Claude Code, branch, cwd, entrypoint**.\n' +
+    '**"top x% vs random splits"** = the metric shift at this boundary ranks in the top x% of shifts from every possible split of this window. **Lower = the change stands out more**.\n' +
+    'The auto list shows up to **3 boundaries within the top 10%** (fixed rule, spec §2).\n' +
     'before/after = all sessions in the window before/after the boundary.',
   'dash.cohort.sig.tip':
-    'Average process signals per session — the sum of 6 signal kinds (tool failures, context compactions, interruptions, …).',
+    '**Average process signals per session**.\n' +
+    'The sum of 6 signal kinds: tool failures, context compactions, interruptions, ….',
   'dash.lane.tip':
-    'Cards sit at their actual dates; same-day sessions stack into rows.\n' +
+    'Cards sit at their **actual dates**; same-day sessions stack into rows.\n' +
     'Card: session name · models · estimated cost · signals · pass rate · events.\n' +
-    'An amber signal count means signal density above 2× the window median.\n' +
-    'Small dashed chips are idle sessions (no usage, signals, or guards).\n' +
+    'An [amber]amber[/amber] signal count means signal density above **2× the window median**.\n' +
+    'Small dashed chips are **idle sessions** (no usage, signals, or guards).\n' +
     'Click a card to open the replay.',
   'dash.scatter.tip':
-    'x = billed tokens (log scale) · y = signals per 100 events · size = estimated cost · color = primary model.\n' +
-    'Dashed lines are the medians — upper right means heavy use with frequent signals.\n' +
+    '**x** = billed tokens (log scale) · **y** = signals per 100 events · **size** = estimated cost · **color** = primary model.\n' +
+    'Dashed lines are the **medians** — **upper right** means heavy use with frequent signals.\n' +
     'Top sessions by cost or signal density carry name labels.\n' +
     'Click a dot to open the replay.',
   'dash.ver.head.guards.tip':
-    'Total observed verification runs (test / build / lint / format) in the window.',
+    'Total observed **verification runs** (test / build / lint / format) in the window.',
   'dash.ver.head.measured.tip':
-    'Guards whose exit code was captured, so pass / fail is decidable.\n' +
-    'The main cause of undecidable runs is pipe masking — `cmd | tail` hides the exit code.',
-  'dash.ver.head.passed.tip': 'Passed ÷ measured (passed + failed) guards.',
+    'Guards whose `exit code` was captured, so [green]pass[/green] / [red]fail[/red] is decidable.\n' +
+    'The main cause of undecidable runs is **pipe masking** — `cmd | tail` hides the exit code.',
+  'dash.ver.head.passed.tip': 'Pass rate over measured guards: **passed ÷ (passed + failed)**.',
   'dash.ver.head.abandoned.tip':
-    'Failed guards with no later pass of the same kind before the session ended.\n' +
-    'Red that never turned green.',
+    'Failed guards with **no later pass of the same kind** before the session ended.\n' +
+    '[red]Red[/red] that never turned [green]green[/green].',
   'dash.ver.head.coverage.tip':
-    'Share of diff hunks with a passing guard after they were introduced.\n' +
-    'Uncovered = changed code no guard has confirmed since the change.',
+    'Share of diff hunks with a **passing guard after they were introduced**.\n' +
+    '[amber]Uncovered[/amber] = changed code no guard has confirmed since the change.',
   'dash.ver.kind.tip':
-    'Result mix per guard kind (normalized to 100%).\n' +
-    'A large gray share means that kind often runs with masked exit codes.',
+    'Result mix per guard kind (**normalized to 100%**).\n' +
+    'A **large gray share** means that kind often runs with masked `exit codes`.',
   'dash.ver.flow.tip':
-    'Where every guard went: measured → passed / failed; failures split into recovered / left; undecidable splits by cause.',
+    'Where every guard went: **measured → passed / failed**.\n' +
+    'Failures split into **recovered / left**; undecidable splits by cause.',
   'dash.ver.rhythm.tip':
-    'x = session progress (by time), each dot is a guard run colored by result.\n' +
-    'Patterns read directly: red followed by green, runs bunched at the end, gray streaks.',
+    '**x = session progress (by time)**, each dot is a guard run colored by result.\n' +
+    'Patterns read directly: [red]red[/red] followed by [green]green[/green], runs bunched at the end, gray streaks.',
   'dash.ver.cov.tip':
-    'Covered (green) vs uncovered (amber) diff hunks per session.\n' +
-    'Sessions with many uncovered hunks are worth checking first.',
+    '[green]Covered[/green] vs [amber]uncovered[/amber] diff hunks per session.\n' +
+    'Sessions with **many uncovered hunks** are worth checking first.',
   'dash.eyebrow': 'Project dashboard',
   'dash.allProjects': 'All projects',
   'dash.projectLabel': 'Project',

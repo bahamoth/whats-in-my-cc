@@ -12,6 +12,7 @@
  * the decision uses the bubble's real height.
  */
 import { useLayoutEffect, useRef, useState } from 'react';
+import type * as React from 'react';
 import { useT } from '../../../i18n';
 import styles from './InfoTip.module.css';
 
@@ -54,6 +55,57 @@ interface InfoTipProps {
   label: string;
   /** Long-form explanation shown in the tooltip body. */
   text: string;
+}
+
+/** 툴팁 마크업(CLAUDE.md '툴팁 카피 규칙'의 문법 SSOT):
+ *  **강조** → 밝은 굵은 글씨 · `코드` → 모노 칩 ·
+ *  [green]|[red]|[amber]|[violet]|[blue]텍스트[/색] → 의미색 굵은 글씨. */
+const TIP_TINTS: Record<string, string> = {
+  green: '#41c285',
+  red: '#ef4747',
+  amber: '#f0b429',
+  violet: '#b07dff',
+  blue: '#7da7ff',
+};
+const TIP_TOKEN =
+  /(\*\*.+?\*\*|`[^`]+`|\[(?:green|red|amber|violet|blue)\].+?\[\/(?:green|red|amber|violet|blue)\])/g;
+
+export function renderTipMarkup(text: string): React.ReactNode[] {
+  return text.split(TIP_TOKEN).map((part, i) => {
+    if (!part) return null;
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <b key={i} style={{ color: 'var(--wimcc-fg)', fontWeight: 650 }}>
+          {part.slice(2, -2)}
+        </b>
+      );
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code
+          key={i}
+          style={{
+            fontFamily: 'ui-monospace,Menlo,monospace',
+            fontSize: '0.92em',
+            background: 'var(--wimcc-surface-3)',
+            borderRadius: 4,
+            padding: '0 4px',
+          }}
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    const tint = part.match(/^\[(green|red|amber|violet|blue)\](.+)\[\/\1\]$/s);
+    if (tint) {
+      return (
+        <b key={i} style={{ color: TIP_TINTS[tint[1]], fontWeight: 650 }}>
+          {tint[2]}
+        </b>
+      );
+    }
+    return part;
+  });
 }
 
 export function InfoTip({ label, text }: InfoTipProps) {
@@ -117,7 +169,7 @@ export function InfoTip({ label, text }: InfoTipProps) {
             .filter(Boolean)
             .join(' ')}
         >
-          {text}
+          {renderTipMarkup(text)}
         </span>
       )}
     </span>
