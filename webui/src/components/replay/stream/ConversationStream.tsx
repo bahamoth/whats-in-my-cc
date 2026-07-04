@@ -20,6 +20,7 @@ import type { StreamItem } from './streamModel';
 import { shouldLoadOlder, shouldLoadNewer, shouldAdjustOnItemResize, LOAD_OLDER_TOP_PX, LOAD_NEWER_BOTTOM_PX } from './scrollAnchor';
 import { useAutoscroll } from '../../../hooks/useAutoscroll';
 import { useT } from '../../../i18n';
+import { InstructionMarkerRow } from './InstructionMarkerRow';
 import styles from './ConversationStream.module.css';
 
 const FALLBACK_CAP = 200;
@@ -82,6 +83,7 @@ function itemContainsEvent(item: StreamItem, eventId: string): boolean {
     return item.rows.some(
       (r) => r.task.event_id === eventId || r.work.some((i) => itemContainsEvent(i, eventId)),
     );
+  if (item.type === 'instruction-marker') return false; // 파생 마커 — 이벤트 없음
   return item.events.some((ae) => ae.event.event_id === eventId);
 }
 
@@ -418,6 +420,9 @@ export function ConversationStream({
   }
 
   const renderItem = (item: StreamItem) => {
+    if (item.type === 'instruction-marker') {
+      return <InstructionMarkerRow item={item} />;
+    }
     if (item.type === 'message') {
       return (
         <MessageCard
@@ -541,6 +546,7 @@ export function ConversationStream({
       case 'subagent-end':
       case 'workflow-end':
       case 'task-list':
+      case 'instruction-marker':
         return null;
       default:
         return 'tool'; // activity-run

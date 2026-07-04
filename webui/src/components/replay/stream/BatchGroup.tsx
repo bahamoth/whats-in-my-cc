@@ -39,6 +39,7 @@ function itemEventIds(it: StreamItem): string[] {
     return it.agentGroups.flatMap(itemEventIds);
   if (it.type === 'subagent-end' || it.type === 'workflow-end') return [];
   if (it.type === 'task-list') return []; // top-level only; never nested in a group
+  if (it.type === 'instruction-marker') return []; // 파생 마커 — 이벤트 없음
   return it.items.flatMap(itemEventIds);
 }
 

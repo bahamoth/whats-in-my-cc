@@ -448,6 +448,10 @@ export const en = {
   'dash.ver.cov.tip':
     '[green]Covered[/green] vs [amber]uncovered[/amber] diff hunks per session.\n' +
     'Sessions with **many uncovered hunks** are worth checking first.',
+  'instr.marker.label': (a: { source: string; time: string }) =>
+    `instruction change observed · ${a.source} · ${a.time}`,
+  'instr.marker.show': 'diff',
+  'instr.marker.hide': 'close',
   'instr.diff.counts': (a: { add: number; del: number }) => `+${a.add} −${a.del} lines`,
   'instr.diff.error': 'Failed to load the snapshot.',
   'instr.card.title': 'Instructions',
