@@ -26,6 +26,7 @@ import type { CohortMarker, DayDetail } from '../components/dash/dailyOptions';
 import { CohortCompareCards } from '../components/dash/CohortCompare';
 import { SessionCardLane } from '../components/dash/SessionCardLane';
 import { SessionScatter } from '../components/dash/SessionScatter';
+import { VerificationTab } from '../components/dash/VerificationTab';
 import {
   Select,
   SelectContent,
@@ -347,12 +348,7 @@ export default function DashboardPage() {
                 {t('dash.ver.error')}
               </p>
             )}
-            {vsum.kind === 'ok' && (
-              /* Task 9에서 VerificationTab 모듈로 대체 */
-              <p className="font-mono text-sm text-(--wimcc-fg-muted)">
-                {t('dash.head.guards', vsum.data.total)}
-              </p>
-            )}
+            {vsum.kind === 'ok' && <VerificationTab sum={vsum.data} nameOf={nameOf} />}
           </TabsContent>
         </Tabs>
       )}
