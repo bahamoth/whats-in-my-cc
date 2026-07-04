@@ -2,6 +2,7 @@
 import { render, screen, cleanup } from '@testing-library/react';
 import { describe, expect, it, vi, afterEach, beforeAll } from 'vitest';
 import { CohortBoundaries } from '../CohortBoundaries';
+import { rankCohorts } from '../../../lib/dashDerive';
 import { I18nProvider } from '../../../i18n';
 import type { SessionSeriesRowDto } from '../../../api/types';
 
@@ -73,7 +74,7 @@ const jump = [
 function mount(rows: SessionSeriesRowDto[]) {
   return render(
     <I18nProvider initialLocale="en">
-      <CohortBoundaries rows={rows} />
+      <CohortBoundaries ranked={rankCohorts(rows)} />
     </I18nProvider>,
   );
 }

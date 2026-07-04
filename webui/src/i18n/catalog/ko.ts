@@ -292,7 +292,6 @@ export const ko: Messages = {
   'dash.tt.noSessions': '세션 없음',
   'dash.tt.noGuards': '가드 관측 없음',
   'dash.tt.signals': '신호',
-  'dash.marker.first': (m: string) => `${m} 첫 관측`,
   'dash.cohort.compareTitle': (label: string) => `코호트 비교 — ${label} 전후`,
   'dash.cohort.introduced': (m: string) => `${m} 유입`,
   'dash.cohort.retired': (m: string) => `${m} 이탈`,

@@ -7,7 +7,12 @@ import type { EChartsCoreOption } from 'echarts/core';
 import type { Daily } from '../../lib/dashDerive';
 import { AXIS_LABEL, OUTCOME_COLORS, SPLIT_LINE, TOOLTIP, rampColor } from './echartsBase';
 
-export type CohortMarker = { dayIdx: number; label: string };
+export type CohortMarker = {
+  dayIdx: number;
+  label: string;
+  /** 코호트 섹션에서 선택된 경계 — 진하게, 나머지 유의 경계는 흐리게. */
+  emphasis?: boolean;
+};
 export type DayDetail = {
   name: string;
   cost: number;
@@ -30,12 +35,18 @@ function markLine(markers: CohortMarker[], nDays: number) {
       formatter: (p: { name: string }) => p.name,
     },
     // 우측 40% 구간의 마커는 라벨을 선 왼쪽으로 — 차트 밖 클리핑 방지.
+    // 선택 경계(emphasis)는 진하게, 나머지는 흐리게 — 코호트 섹션과 동기.
     data: markers.map((m) => ({
       name: m.label,
       xAxis: m.dayIdx,
-      ...(m.dayIdx / Math.max(1, nDays - 1) > 0.6
-        ? { label: { align: 'right' as const, padding: [0, 6, 0, 0] } }
-        : { label: { align: 'left' as const, padding: [0, 0, 0, 6] } }),
+      lineStyle: { opacity: m.emphasis ? 0.95 : 0.35 },
+      label: {
+        ...(m.dayIdx / Math.max(1, nDays - 1) > 0.6
+          ? { align: 'right' as const, padding: [0, 6, 0, 0] }
+          : { align: 'left' as const, padding: [0, 0, 0, 6] }),
+        opacity: m.emphasis ? 1 : 0.55,
+        fontWeight: m.emphasis ? 700 : 400,
+      },
     })),
   };
 }
