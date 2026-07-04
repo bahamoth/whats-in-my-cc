@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, getSessionEvents } from '../api/client';
 import type { ObservedEventDto } from '../api/types';
+import type { EventFilterParams } from '../components/replay/stream/filterState';
 
 const DEFAULT_INITIAL_LIMIT = 500;
 const DEFAULT_PAGE_LIMIT = 500;
@@ -42,6 +43,15 @@ export interface UseSessionWindowOpts {
    *  load and there is no tail-vs-around race (the live-session deep-link bug).
    *  Captured once at mount by the caller; must be stable. */
   initialAround?: string | null;
+  /** Active event filter (§1.4). When set, ALL fetches (tail/older/newer)
+   *  carry these params so the buffer only ever holds matching rows.
+   *  `loadAround` never carries a filter — around×filter is unsupported
+   *  (§1.2); callers must clear the filter before deep-linking. */
+  filter?: EventFilterParams | null;
+  /** Filter identity (order-invariant serialization, see `filterKey()` in
+   *  filterState.ts). Changing this resets the buffer — the initial-fetch
+   *  effect re-runs and REPLACES `events` with the newly filtered tail. */
+  filterKey?: string;
 }
 
 export interface UseSessionWindowResult {
@@ -73,6 +83,12 @@ export interface UseSessionWindowResult {
   appendOne: (e: ObservedEventDto) => void;
   /** Force re-initial-fetch (e.g. after SSE `event: resync`). */
   reload: () => Promise<void>;
+  /** Total rows matching the active filter across the whole session (not just
+   *  the loaded window), from the newest tail/older/newer response's
+   *  `matched_count`. `null` when no filter is active or none has loaded yet
+   *  (never coerced to 0 — "unmeasured ≠ 0"). `loadAround` does not update
+   *  this (around×filter unsupported). */
+  matchedCount: number | null;
 }
 
 function cursorOf(e: ObservedEventDto): string {
@@ -102,6 +118,8 @@ export function useSessionWindow(
   const initialLimit = opts.initialLimit ?? DEFAULT_INITIAL_LIMIT;
   const pageLimit = opts.pageLimit ?? DEFAULT_PAGE_LIMIT;
   const maxEvents = opts.maxEvents ?? DEFAULT_MAX_EVENTS;
+  const filter = opts.filter ?? null;
+  const filterKey = opts.filterKey ?? '';
 
   const [events, setEvents] = useState<ObservedEventDto[]>([]);
   // Mirror of `events` so async `loadNewer` reads the freshest tail cursor
@@ -113,6 +131,7 @@ export function useSessionWindow(
   const [atLiveTip, setAtLiveTip] = useState<boolean>(false);
   const [loading, setLoading] = useState<WindowLoadingState>('initial');
   const [error, setError] = useState<string | null>(null);
+  const [matchedCount, setMatchedCount] = useState<number | null>(null);
 
   // Loading ref so concurrent `appendOne` / `loadOlder` see fresh state
   // without waiting for React's setState batch to commit.
@@ -133,17 +152,24 @@ export function useSessionWindow(
     setLoadingBoth('initial');
     setError(null);
     try {
-      const resp = await getSessionEvents(sessionId, { limit: initialLimit });
+      const resp = await getSessionEvents(sessionId, {
+        limit: initialLimit,
+        ...(filter ? { filter } : {}),
+      });
       setEvents(resp.events);
       setOldest(resp.prev_cursor);
       setNewest(resp.next_cursor);
       setAtLiveTip(resp.next_cursor === null);
+      setMatchedCount(resp.matched_count ?? null);
       setLoadingBoth('idle');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setLoadingBoth('error');
     }
-  }, [sessionId, initialLimit, setLoadingBoth]);
+    // `filterKey` (not just `filter`) is a dep so callers that memoize `filter`
+    // by identity still get a fresh `loadTail`/`doInitial` (and thus a reset
+    // fetch) exactly when the filter's *value* changes.
+  }, [sessionId, initialLimit, filter, filterKey, setLoadingBoth]);
 
   const doInitial = useCallback(async () => {
     // Non-deep-link mount: the tail IS the initial window.
@@ -167,7 +193,11 @@ export function useSessionWindow(
       setError(e instanceof Error ? e.message : String(e));
       setLoadingBoth('error');
     }
-  }, [sessionId, initialLimit, initialAround, loadTail, setLoadingBoth]);
+    // `filterKey` dep: even though this branch's fetch doesn't carry `filter`
+    // (around×filter unsupported, §1.2), a filterKey change must still
+    // re-trigger `doInitial` via the effect below so the page can react
+    // (e.g. clear the deep-link around-window once the caller drops `around`).
+  }, [sessionId, initialLimit, initialAround, loadTail, filterKey, setLoadingBoth]);
 
   useEffect(() => {
     void doInitial();
@@ -181,20 +211,23 @@ export function useSessionWindow(
       const resp = await getSessionEvents(sessionId, {
         before: oldest,
         limit: pageLimit,
+        ...(filter ? { filter } : {}),
       });
       if (resp.events.length === 0) {
         setOldest(null);
+        setMatchedCount(resp.matched_count ?? null);
         setLoadingBoth('idle');
         return;
       }
       setEvents((prev) => [...resp.events, ...prev]);
       setOldest(resp.prev_cursor);
+      setMatchedCount(resp.matched_count ?? null);
       setLoadingBoth('idle');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setLoadingBoth('idle'); // recoverable — page can retry
     }
-  }, [sessionId, oldest, pageLimit, setLoadingBoth]);
+  }, [sessionId, oldest, pageLimit, filter, setLoadingBoth]);
 
   const loadNewer = useCallback(async () => {
     if (loadingRef.current !== 'idle') return;
@@ -203,7 +236,11 @@ export function useSessionWindow(
     const after = cursorOf(cur[cur.length - 1]);
     setLoadingBoth('newer');
     try {
-      const resp = await getSessionEvents(sessionId, { after, limit: pageLimit });
+      const resp = await getSessionEvents(sessionId, {
+        after,
+        limit: pageLimit,
+        ...(filter ? { filter } : {}),
+      });
       if (resp.events.length > 0) {
         setEvents((prev) => {
           const have = new Set(prev.map((p) => p.event_id));
@@ -220,12 +257,13 @@ export function useSessionWindow(
       }
       setNewest(resp.next_cursor);
       setAtLiveTip(resp.next_cursor === null);
+      setMatchedCount(resp.matched_count ?? null);
       setLoadingBoth('idle');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setLoadingBoth('idle'); // recoverable — next envelope retries
     }
-  }, [sessionId, pageLimit, maxEvents, setLoadingBoth]);
+  }, [sessionId, pageLimit, maxEvents, filter, setLoadingBoth]);
 
   const loadAround = useCallback(
     async (eventId: string): Promise<boolean> => {
@@ -297,5 +335,6 @@ export function useSessionWindow(
     loadAround,
     appendOne,
     reload: loadTail,
+    matchedCount,
   };
 }

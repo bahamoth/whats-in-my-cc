@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useSessionWindow } from '../useSessionWindow';
 import type { ObservedEventDto } from '../../api/types';
+import type { EventFilterParams } from '../../components/replay/stream/filterState';
 
 function makeEvent(i: number): ObservedEventDto {
   return {
@@ -412,5 +413,55 @@ describe('useSessionWindow', () => {
     // oldest cursor must point at the (now) earliest row in the window, not
     // at the original page-1 prev_cursor.
     expect(result.current.oldest).not.toBe('pc-original');
+  });
+
+  // --- Task 8: filter threading — §1.4. All three fetch paths (initial tail,
+  // loadOlder, loadNewer) must carry the active filter's query params, and a
+  // `filterKey` change must reset the buffer (re-run the initial fetch).
+  it('passes filter params to tail/older/newer fetches and resets on filterKey change', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    const filter: EventFilterParams = { origin: 'human', q: 'deploy' };
+
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(10), makeEvent(11)], prev_cursor: 'pc-init', next_cursor: null }),
+    );
+    const { result, rerender } = renderHook(
+      ({ fk }: { fk: string }) => useSessionWindow('s1', { filter, filterKey: fk }),
+      { initialProps: { fk: 'A' } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe('idle'));
+    // initial tail fetch includes filter params
+    const initUrl = f.mock.calls.at(-1)?.[0] as string;
+    expect(initUrl).toContain(`origin=${encodeURIComponent('human')}`);
+    expect(initUrl).toContain(`q=${encodeURIComponent('deploy')}`);
+
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(5)], prev_cursor: 'pc-older', next_cursor: null }),
+    );
+    await act(async () => {
+      await result.current.loadOlder();
+    });
+    const olderUrl = f.mock.calls.at(-1)?.[0] as string;
+    expect(olderUrl).toContain('before=');
+    expect(olderUrl).toContain(`q=${encodeURIComponent('deploy')}`);
+
+    // filterKey 변경 → 버퍼 리셋(재-initial fetch)
+    const callsBefore = f.mock.calls.length;
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(20)], prev_cursor: 'pc-reset', next_cursor: null }),
+    );
+    rerender({ fk: 'B' });
+    await waitFor(() => expect(f.mock.calls.length).toBeGreaterThan(callsBefore));
+  });
+
+  it('exposes matched_count from the response', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    f.mockResolvedValueOnce(
+      envelope({ events: [], prev_cursor: null, next_cursor: null, matched_count: 42 }),
+    );
+    const { result } = renderHook(() =>
+      useSessionWindow('s1', { filter: { q: 'x' }, filterKey: 'k' }),
+    );
+    await waitFor(() => expect(result.current.matchedCount).toBe(42));
   });
 });
