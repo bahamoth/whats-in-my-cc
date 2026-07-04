@@ -87,7 +87,9 @@ export function buildScatterOption(args: {
   if (groups.has(null)) order.push(null as unknown as string);
 
   const option: EChartsCoreOption = {
-    animationDuration: 800,
+    animationDuration: 900,
+    animationEasing: 'elasticOut',
+    animationDelay: (idx: number) => idx * 40,
     grid: { left: 56, right: 110, top: 34, bottom: 44 },
     legend: {
       top: 0,
@@ -137,14 +139,21 @@ export function buildScatterOption(args: {
       name: key ? displayModel(key) : labels.unassigned,
       type: 'scatter',
       data: groups.get(key)!,
-      symbolSize: (d: [number, number, number]) => 6 + Math.sqrt(Math.max(0, d[2])) * 1.15,
+      symbolSize: (d: [number, number, number]) =>
+        Math.min(52, 10 + Math.sqrt(Math.max(0, d[2])) * 1.6),
       itemStyle: {
         color: key ? (colors.get(key) ?? MODEL_OVERFLOW_COLOR) : MODEL_OVERFLOW_COLOR,
-        opacity: 0.85,
-        borderColor: '#0b0d12',
-        borderWidth: 1,
+        opacity: 0.9,
+        borderColor: 'rgba(230,232,238,.35)',
+        borderWidth: 1.5,
       },
-      emphasis: { scale: 1.4 },
+      emphasis: {
+        scale: 1.5,
+        focus: 'series',
+        blurScope: 'coordinateSystem',
+        itemStyle: { opacity: 1, shadowBlur: 18, shadowColor: 'rgba(125,167,255,.35)' },
+      },
+      blur: { itemStyle: { opacity: 0.25 } },
       labelLayout: { hideOverlap: true },
       label: {
         show: true,
