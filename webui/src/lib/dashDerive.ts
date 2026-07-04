@@ -190,17 +190,7 @@ export type CohortAgg = {
   cacheHitPct: number | null;
 };
 
-export type CohortCompare = {
-  /** 경계에서 유입/이탈한 모델의 전체 표시명 — 문구 조립은 i18n 카탈로그 몫. */
-  added: string[];
-  removed: string[];
-  boundaryIdx: number;
-  alsoCcChanged: boolean;
-  before: CohortAgg;
-  after: CohortAgg;
-  lowSample: boolean;
-};
-
+/** 세션 묶음의 코호트 집계 — headline 합계 기반(분모 0 → null). */
 function agg(rows: SessionSeriesRowDto[]): CohortAgg {
   const h = headline(rows);
   const signals = rows.reduce((a, r) => a + signalsOf(r.metrics), 0);
@@ -210,45 +200,6 @@ function agg(rows: SessionSeriesRowDto[]): CohortAgg {
     passRatePct: h.passRatePct,
     signalsPerSession: rows.length > 0 ? round1(signals / rows.length) : 0,
     cacheHitPct: h.cacheHitPct,
-  };
-}
-
-/** 최신 모델-집합 경계의 인접 세그먼트 비교. 라벨은 집합 diff에서 파생:
- *  유입만 → "{names} 유입", 이탈만 → "{names} 이탈", 둘 다 → "A → B". */
-export function cohortCompare(rows: SessionSeriesRowDto[]): CohortCompare | null {
-  const segs = cohortSegments(rows, (r) => cohortModels(r.fingerprint));
-  const known = segs.filter((s) => s.known);
-  const bs = cohortBoundaries(segs);
-  if (bs.length === 0) return null;
-  const b = bs[bs.length - 1];
-  const segAfter = known.find((s) => s.start === b.index)!;
-  const segBefore = [...known].reverse().find((s) => s.start < b.index)!;
-  const setOf = (label: string) => new Set(label.split(' + ').filter(Boolean));
-  const beforeSet = setOf(b.from);
-  const afterSet = setOf(b.to);
-  const added = [...afterSet].filter((m) => !beforeSet.has(m)).map(displayModel);
-  const removed = [...beforeSet].filter((m) => !afterSet.has(m)).map(displayModel);
-  const beforeRows = rows.slice(segBefore.start, segBefore.end + 1);
-  const afterRows = rows.slice(segAfter.start, segAfter.end + 1);
-  const ccAt = (idx: number): string | null => {
-    for (let i = idx; i >= 0; i--) {
-      const cc = rows[i].fingerprint.cc_versions;
-      if (cc.length > 0) return cc.join(' + ');
-    }
-    return null;
-  };
-  const ccBefore = ccAt(b.index - 1);
-  const ccAfterRow = rows[b.index].fingerprint.cc_versions;
-  const alsoCcChanged =
-    ccAfterRow.length > 0 && ccBefore !== null && ccAfterRow.join(' + ') !== ccBefore;
-  return {
-    added,
-    removed,
-    boundaryIdx: b.index,
-    alsoCcChanged,
-    before: agg(beforeRows),
-    after: agg(afterRows),
-    lowSample: Math.min(beforeRows.length, afterRows.length) < 3,
   };
 }
 
@@ -282,4 +233,140 @@ export function modelColors(rows: SessionSeriesRowDto[]): Map<string, string> {
     }
   }
   return map;
+}
+
+/* ── 코호트 경계 랭킹 (스펙 §2 3차 개정) ─────────────────────────────
+ * 도구는 차원을 고르지 않는다: fingerprint 5차원 전부에서 경계를 검출하고,
+ * "유의"는 결정론 통계(임의 분할 대비 초과율)로만 정한다. 상수 3개의 SSOT는
+ * 스펙 §2 — detector 임계값과 같은 지위. */
+export const COHORT_MIN_N = 3;
+export const COHORT_EXCEED_MAX = 0.1;
+export const COHORT_TOP_K = 3;
+
+export type CohortDim = 'models' | 'cc' | 'branch' | 'cwd' | 'entrypoint';
+export const COHORT_DIMS: CohortDim[] = ['models', 'cc', 'branch', 'cwd', 'entrypoint'];
+
+const DIM_PICK: Record<CohortDim, (r: SessionSeriesRowDto) => string[]> = {
+  models: (r) => cohortModels(r.fingerprint),
+  cc: (r) => r.fingerprint.cc_versions,
+  branch: (r) => r.fingerprint.git_branches,
+  cwd: (r) => r.fingerprint.cwds,
+  entrypoint: (r) => r.fingerprint.entrypoints,
+};
+
+export type CohortMetric = 'unitRate' | 'passRate' | 'signals' | 'cacheHit';
+const METRIC_ORDER: CohortMetric[] = ['unitRate', 'passRate', 'signals', 'cacheHit'];
+
+function metricOf(a: CohortAgg, m: CohortMetric): number | null {
+  switch (m) {
+    case 'unitRate':
+      return a.unitRatePerM;
+    case 'passRate':
+      return a.passRatePct;
+    case 'signals':
+      return a.signalsPerSession;
+    case 'cacheHit':
+      return a.cacheHitPct;
+  }
+}
+
+export type RankedBoundary = {
+  dim: CohortDim;
+  /** after가 시작하는 rows 인덱스. */
+  index: number;
+  date: string;
+  added: string[];
+  removed: string[];
+  before: CohortAgg;
+  after: CohortAgg;
+  /** 초과율이 가장 낮은(가장 두드러진) 지표와 그 |Δ|·초과율. 표본 게이트
+   *  미달이거나 지표 계산 불가면 null — "표본 부족" 표기용. */
+  bestMetric: CohortMetric | null;
+  bestDelta: number | null;
+  exceed: number | null;
+  /** 같은 인덱스에서 함께 변한 다른 차원(효과 분리 불가 각주). */
+  alsoChanged: CohortDim[];
+};
+
+/** 창의 모든 유효 분할점 통계(prefix/suffix |Δ|)를 지표별로 전수 계산. */
+function splitStats(rows: SessionSeriesRowDto[]): Map<CohortMetric, Map<number, number>> {
+  const out = new Map<CohortMetric, Map<number, number>>(METRIC_ORDER.map((m) => [m, new Map()]));
+  for (let k = COHORT_MIN_N; k <= rows.length - COHORT_MIN_N; k++) {
+    const L = agg(rows.slice(0, k));
+    const R = agg(rows.slice(k));
+    for (const m of METRIC_ORDER) {
+      const a = metricOf(L, m);
+      const b = metricOf(R, m);
+      if (a !== null && b !== null) out.get(m)!.set(k, Math.abs(b - a));
+    }
+  }
+  return out;
+}
+
+export function rankCohorts(rows: SessionSeriesRowDto[]): {
+  surfaced: RankedBoundary[];
+  all: RankedBoundary[];
+} {
+  if (rows.length === 0) return { surfaced: [], all: [] };
+  const stats = splitStats(rows);
+  const dimBoundaries = new Map<CohortDim, Set<number>>();
+  const all: RankedBoundary[] = [];
+
+  for (const dim of COHORT_DIMS) {
+    const segs = cohortSegments(rows, DIM_PICK[dim]);
+    const bs = cohortBoundaries(segs);
+    dimBoundaries.set(dim, new Set(bs.map((b) => b.index)));
+    for (const b of bs) {
+      const setOf = (label: string) => new Set(label.split(' + ').filter(Boolean));
+      const beforeSet = setOf(b.from);
+      const afterSet = setOf(b.to);
+      const fmt = dim === 'models' ? displayModel : (v: string) => v;
+      const before = agg(rows.slice(0, b.index));
+      const after = agg(rows.slice(b.index));
+      const gated = b.index >= COHORT_MIN_N && rows.length - b.index >= COHORT_MIN_N;
+      let bestMetric: CohortMetric | null = null;
+      let bestDelta: number | null = null;
+      let exceed: number | null = null;
+      if (gated) {
+        for (const m of METRIC_ORDER) {
+          const perK = stats.get(m)!;
+          const mine = perK.get(b.index);
+          if (mine === undefined || perK.size === 0) continue;
+          // 자기 제외 초과율 — 자기 포함이면 분할 수가 적은 창에서 최솟값이
+          // 1/#k로 바닥나 임계(0.10)를 구조적으로 못 넘는다(스펙 §2).
+          let ge = 0;
+          for (const [k, v] of perK) if (k !== b.index && v >= mine) ge++;
+          const ex = ge / perK.size;
+          if (exceed === null || ex < exceed) {
+            exceed = ex;
+            bestMetric = m;
+            bestDelta = Math.round(mine * 100) / 100;
+          }
+        }
+      }
+      all.push({
+        dim,
+        index: b.index,
+        date: rows[b.index].first_observed_at.slice(5, 10),
+        added: [...afterSet].filter((v) => !beforeSet.has(v)).map(fmt),
+        removed: [...beforeSet].filter((v) => !afterSet.has(v)).map(fmt),
+        before,
+        after,
+        bestMetric,
+        bestDelta,
+        exceed,
+        alsoChanged: [],
+      });
+    }
+  }
+  for (const b of all) {
+    b.alsoChanged = COHORT_DIMS.filter(
+      (d) => d !== b.dim && dimBoundaries.get(d)!.has(b.index),
+    );
+  }
+  const surfaced = all
+    .filter((b) => b.exceed !== null && b.exceed <= COHORT_EXCEED_MAX)
+    .sort((a, b) => a.exceed! - b.exceed! || b.index - a.index)
+    .slice(0, COHORT_TOP_K);
+  return { surfaced, all };
 }
