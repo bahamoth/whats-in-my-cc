@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { BarChart3, PanelTopOpen } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { MetaStrip } from '../components/MetaStrip';
@@ -32,6 +32,17 @@ import { TeamLinkProvider } from '../components/replay/stream/TeamLinkContext';
 import { useSessionWindow } from '../hooks/useSessionWindow';
 import { ConversationStream } from '../components/replay/stream/ConversationStream';
 import { UntaggedBashPanel } from '../components/replay/stream/UntaggedBashPanel';
+import { FilterBar } from '../components/replay/stream/FilterBar';
+import {
+  EMPTY_FILTER,
+  filterFromSearch,
+  filterKey,
+  filterToSearch,
+  isFilterActive,
+  jumpNeedsFilterClear,
+  toEventFilterParams,
+  type FilterState,
+} from '../components/replay/stream/filterState';
 import { buildStreamModel } from '../components/replay/stream/streamModel';
 import { insertInstructionMarkers } from '../components/replay/stream/streamInstructionMarkers';
 import { getSessionInstructions } from '../api/client';
@@ -58,6 +69,32 @@ const LEGEND_DISMISS_KEY = 'wimcc.streamLegend.dismissed';
 function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const t = useT();
   const sel = useReplaySelection();
+
+  // Event filter (§1.4) — URL-backed (`f_*` params) so a filtered view is
+  // deep-linkable/shareable. `applyFilter` round-trips through `filterToSearch`
+  // onto the CURRENT search params (functional updater) so it never clobbers
+  // other keys (`selected`, `finding`) a sibling hook (ReplaySelection) may be
+  // writing in the same tick.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filter = useMemo(() => filterFromSearch(searchParams), [searchParams]);
+  const filterActive = isFilterActive(filter);
+  const applyFilter = useCallback(
+    (f: FilterState) => {
+      setSearchParams(
+        (sp) => {
+          const next = new URLSearchParams(sp);
+          filterToSearch(f, next);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+  // Transient notice shown in the FilterBar when a jump (signal evidence, etc.)
+  // forces the filter to clear because its target isn't in the filtered
+  // buffer (§1.4) — auto-dismissed after 4s.
+  const [jumpNotice, setJumpNotice] = useState<string | null>(null);
 
   const detail = useSessionDetailQuery(sessionId);
   const signals = useSignalsQuery(sessionId);
@@ -109,7 +146,11 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   // stays stable as the user later selects other events). Drives the initial
   // around-window + detached follow so a live-session deep-link actually lands.
   const [initialDeepLinkId] = useState(() => sel.selectedNodeId);
-  const window_ = useSessionWindow(sessionId, { initialAround: initialDeepLinkId });
+  const window_ = useSessionWindow(sessionId, {
+    initialAround: initialDeepLinkId,
+    filter: filterActive ? toEventFilterParams(filter) : null,
+    filterKey: filterKey(filter),
+  });
 
   // SSE envelopes are lightweight notifications WITHOUT a payload — appending
   // them directly would yield content-less events that the stream model drops
@@ -207,11 +248,13 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   }, [sessionId]);
 
   const streamItems = useMemo(() => {
-    const base = buildStreamModel(window_.events, metricsByReq, tasksQuery.data ?? []);
+    const base = buildStreamModel(window_.events, metricsByReq, tasksQuery.data ?? [], {
+      flat: filterActive,
+    });
     if (instructionObs.length === 0) return base;
     const timeByEvent = new Map(window_.events.map((e) => [e.event_id, e.observed_at]));
     return insertInstructionMarkers(base, instructionObs, (id) => timeByEvent.get(id));
-  }, [window_.events, metricsByReq, tasksQuery.data, instructionObs]);
+  }, [window_.events, metricsByReq, tasksQuery.data, instructionObs, filterActive]);
 
   // event ids that have a signal. evidence_refs are event ids (bare-string
   // ULID or { event_id }) — resolved directly, no graph node mapping.
@@ -276,11 +319,25 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     // in the DetailPanel; only the auto-scroll-back is suppressed.
     if (followingRef.current) return;
     if (windowLoading !== 'idle') return;
-    if (windowEvents.some((e) => e.event_id === selectedEventId)) return;
+    const targetInBuffer = windowEvents.some((e) => e.event_id === selectedEventId);
+    if (targetInBuffer) return; // already loaded — the ConversationStream scroll effect handles it
+    // §1.4 jump rule: a filter-active buffer only ever holds MATCHING rows, so
+    // "outside the buffer" while filtered is undecidable from the client alone
+    // (may be filtered out, or just not yet paged in) — clear the filter first
+    // so the deterministic tail/around fetch below can find it. Clearing
+    // changes `filterKey`, which resets the useSessionWindow buffer; this same
+    // effect re-runs on the next `windowEvents` change and (now unfiltered)
+    // falls through to `loadAround`.
+    if (jumpNeedsFilterClear(filterActive, targetInBuffer)) {
+      applyFilter(EMPTY_FILTER);
+      setJumpNotice(t('filter.cleared.byJump'));
+      setTimeout(() => setJumpNotice(null), 4000);
+      return;
+    }
     if (triedAroundRef.current === selectedEventId) return;
     triedAroundRef.current = selectedEventId;
     void loadAround(selectedEventId);
-  }, [selectedEventId, windowLoading, windowEvents, loadAround]);
+  }, [selectedEventId, windowLoading, windowEvents, loadAround, filterActive, applyFilter, t]);
 
   // --- DetailPanel inputs (all event-derived; no graph) ---
   const selectedEvent = useMemo(
@@ -435,6 +492,12 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
           )}
 
           <div className={styles.stream} data-slot="stream">
+            <FilterBar
+              filter={filter}
+              onChange={applyFilter}
+              matchedCount={window_.matchedCount}
+              notice={jumpNotice}
+            />
             <StreamLegend open={legendOpen} onClose={() => setLegend(false)} />
             {window_.loading === 'older' && (
               <div className={styles.loadingOlder} role="status" aria-live="polite">
@@ -455,6 +518,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
                 onFollowingChange={handleFollowingChange}
                 initialFollow={!mountedOnDeepLink}
                 pendingNewCount={pendingNew}
+                flatMode={filterActive}
+                filterActive={filterActive}
                 footerExtra={
                   <UntaggedBashPanel events={window_.events} onJump={selectStreamCard} />
                 }

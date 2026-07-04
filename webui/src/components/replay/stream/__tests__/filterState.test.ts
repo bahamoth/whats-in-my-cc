@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   EMPTY_FILTER, filterFromSearch, filterKey, filterToSearch,
-  isFilterActive, toEventFilterParams, type FilterState,
+  isFilterActive, jumpNeedsFilterClear, toEventFilterParams, type FilterState,
 } from '../filterState';
 
 const sample: FilterState = {
@@ -43,5 +43,13 @@ describe('filterState', () => {
     const a: FilterState = { ...EMPTY_FILTER, kinds: ['tool_call', 'tool_result'] };
     const b: FilterState = { ...EMPTY_FILTER, kinds: ['tool_result', 'tool_call'] };
     expect(filterKey(a)).toBe(filterKey(b));
+  });
+
+  it('jumpNeedsFilterClear: clear only when filter active AND target outside buffer', () => {
+    // 버퍼 안 = 필터 매칭 대상(필터 창은 매칭 이벤트만 담는다) → 해제 불필요
+    expect(jumpNeedsFilterClear(true, true)).toBe(false);
+    expect(jumpNeedsFilterClear(true, false)).toBe(true);
+    expect(jumpNeedsFilterClear(false, false)).toBe(false);
+    expect(jumpNeedsFilterClear(false, true)).toBe(false);
   });
 });

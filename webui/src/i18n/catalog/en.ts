@@ -201,6 +201,9 @@ export const en = {
   'stream.autoscroll.label': 'Auto-scroll',
   'stream.autoscroll.disableAria': 'Turn off auto-scroll',
   'stream.autoscroll.enableAria': 'Turn on auto-scroll and jump to latest',
+  // filter active (§1.4): the pending count is over the filtered subset only,
+  // so it reads as approximate — shown instead of a specific number.
+  'stream.newEvents': 'new ↓',
 
   // Stream — scaffold group
   'stream.scaffold.chip': 'Commands · skills',

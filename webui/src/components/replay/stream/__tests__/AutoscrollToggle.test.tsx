@@ -58,6 +58,13 @@ describe('AutoscrollToggle', () => {
     expect(screen.queryByTestId('autoscroll-new-count')).toBeNull();
   });
 
+  it('indeterminate: shows "새 이벤트 ↓" label instead of a count', () => {
+    render(<AutoscrollToggle autoscroll={false} newCount={3} indeterminate
+      onEnable={() => {}} onDisable={() => {}} />);
+    expect(screen.queryByText('3 ↓')).toBeNull();
+    expect(screen.getByText(/새 이벤트 ↓|new ↓/)).toBeInTheDocument();
+  });
+
   it('renders a leftSlot in the footer (e.g. the untagged-Bash control)', () => {
     render(
       <AutoscrollToggle
