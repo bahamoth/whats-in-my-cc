@@ -58,6 +58,24 @@ fn starts_with_any(text: &str, prefixes: &[&str]) -> bool {
     prefixes.iter().any(|p| t.starts_with(p))
 }
 
+/// messageOrigin.ts `TEAMMATE_MESSAGE`의 이식:
+/// `/^\s*(?:Another Claude session sent a message:\s*)?<teammate-message[\s>]/`.
+/// 이는 하나의 복합 패턴이다 — optional 접두문 뒤에 `<teammate-message`가
+/// 이어지고 그 바로 뒤 문자가 공백 또는 `>`여야 한다. "Another Claude session
+/// sent a message: hi"(마커 없음)나 "<teammate-messages>foo"(접두 뒤 문자가
+/// `s`)는 매치하지 않는다 — 접두문·마커를 독립 OR로 취급하면 오탐이 난다.
+fn is_teammate_message(text: &str) -> bool {
+    let t = text.trim_start();
+    let t = t
+        .strip_prefix("Another Claude session sent a message:")
+        .map(str::trim_start)
+        .unwrap_or(t);
+    match t.strip_prefix("<teammate-message") {
+        Some(rest) => rest.starts_with(char::is_whitespace) || rest.starts_with('>'),
+        None => false,
+    }
+}
+
 /// messageOrigin.ts `hasScaffoldMarker`의 이식 — 전 마커 합집합.
 pub fn has_scaffold_marker(text: &str) -> bool {
     starts_with_any(
@@ -71,10 +89,8 @@ pub fn has_scaffold_marker(text: &str) -> bool {
             "[Request interrupted",
             "Base directory for this skill:",
             "<task-notification>",
-            "<teammate-message",
-            "Another Claude session sent a message:",
         ],
-    )
+    ) || is_teammate_message(text)
 }
 
 /// messageOrigin.ts `messageOrigin`의 이식. 마커 판정 순서는 TS와 동일하게
@@ -97,18 +113,8 @@ pub fn origin_of(payload: &Value, is_meta: bool) -> Origin {
     if starts_with_any(text, &["<task-notification>"]) {
         return Origin::Notification;
     }
-    // TS: /^\s*(?:Another Claude session sent a message:\s*)?<teammate-message[\s>]/
-    {
-        let t = text.trim_start();
-        let t = t
-            .strip_prefix("Another Claude session sent a message:")
-            .map(str::trim_start)
-            .unwrap_or(t);
-        if let Some(rest) = t.strip_prefix("<teammate-message") {
-            if rest.starts_with(char::is_whitespace) || rest.starts_with('>') {
-                return Origin::Teammate;
-            }
-        }
+    if is_teammate_message(text) {
+        return Origin::Teammate;
     }
     if starts_with_any(text, &["Base directory for this skill:"]) {
         return Origin::Skill;
@@ -186,6 +192,27 @@ mod tests {
     }
 
     #[test]
+    fn has_scaffold_marker_requires_compound_teammate_pattern() {
+        // TS TEAMMATE_MESSAGE (messageOrigin.ts:50) is a single compound regex —
+        // the optional "Another Claude session sent a message:" prefix must be
+        // immediately followed by <teammate-message[\s>], not treated as two
+        // independent alternatives. A naive prefix-OR over-matches both of
+        // these counter-examples (regression for the bug found in review).
+        assert!(!has_scaffold_marker(
+            "Another Claude session sent a message: hi"
+        ));
+        assert!(!has_scaffold_marker("<teammate-messages>foo"));
+        // Positive cases: marker present, char right after it is '>' or whitespace.
+        assert!(has_scaffold_marker("<teammate-message>x"));
+        assert!(has_scaffold_marker(
+            "<teammate-message teammate_id=\"lead\">hi"
+        ));
+        assert!(has_scaffold_marker(
+            "Another Claude session sent a message: <teammate-message teammate_id=\"lead\">hi"
+        ));
+    }
+
+    #[test]
     fn origin_real_fixture_invariants() {
         // message_origin_v01.jsonl — TS messageOrigin.test.ts와 같은 동결 표본.
         // invariant: fixture의 user 레코드 중 markerless·isMeta=false는 human,
@@ -209,7 +236,7 @@ mod tests {
                 continue;
             };
             let is_meta = rec.get("isMeta").and_then(|m| m.as_bool()).unwrap_or(false);
-            let o = origin_of(&serde_json::json!({ "content": text }), is_meta);
+            let o = origin_of(&json!({ "content": text }), is_meta);
             if text.trim_start().starts_with("<command-name>") {
                 assert_eq!(
                     o,
