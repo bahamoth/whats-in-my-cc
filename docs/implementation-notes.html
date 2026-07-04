@@ -5920,6 +5920,26 @@ vitest: 69 passed
     미측정 구분). cache 읽기 raw strip·적중률 bar strip은 제거(중복) — 파생 비율의 SSOT는
     <code>lib/seriesView.usageRatios</code>(TDD, vitest 잠금). 세로 공간은 줄고(strip 2개
     76px+라벨 → 히트 3행 51px) 답하는 질문은 늘었다(단가·i/o 신규).</p>
+    <p><b>전면 개편 구현(2026-07-04, 스펙 docs/specs/2026-07-04-dashboard-redesign.md):</b>
+    대시보드를 개요/검증 2탭으로 재작성. ① <b>ECharts 도입</b> — tree-shaken core
+    (Bar/Line/Scatter/Sankey + Grid/Tooltip/DataZoom/MarkLine/Legend만 등록). Recharts로
+    재현 불가한 dataZoom·Sankey·labelLayout이 근거. 번들 영향: 대시보드 라우트를
+    React.lazy로 분할해 메인 gzip 178kB(이전 424kB 단일이던 것을 분리), 대시보드 청크
+    245kB는 진입 시에만 로드. ② 파생 SSOT <code>lib/dashDerive</code>(vitest):
+    buildDaily·headline/Delta(분모 0 → null)·observedChanges(구조 반환 — 문구는 i18n)·
+    cohortCompare(added/removed 구조화)·laneLayout·modelColors(최초 관측순 고정).
+    ③ 백엔드 <code>GET /v1/verification/summary</code>: kind×결과·판정불가 원인 분해·
+    실패 복구/방치·실행 리듬(시간 진행률)·변경 커버리지. ④ 실데이터 스모크가 잡은
+    결함 2건: CC 전환 10회가 마커를 도배 → cc_span 압축(처음→마지막·횟수), 검증 탭
+    fetch가 effect 자기취소로 loading 고착 → deps에서 상태 제거 + 테스트를 '결과
+    렌더까지'로 강화. ⑤ 모델 표기 통일: shortModel/shortModelSet 삭제,
+    formatModel은 displayModel 위임(minor 없는 'claude-fable-5'가 원문 노출되던
+    회귀 수정). 미사용 dash.* i18n 키 45개 제거(en/ko 동기).</p>
+    <p><b>알려진 한계(후속):</b> ⓐ 변경 커버리지는 기존 covered_diff_hunk_ids의 보수
+    근사(세션에 passed run이 있으면 전 hunk 커버)라 실데이터에서 100%로 포화 —
+    정밀 시간 선행 조인은 후속. ⓑ 코호트 비교의 경계 선택은 최신 경계 고정 —
+    스펙 §2.3의 마커 클릭 전환은 미구현(후속). ⓒ 세션 리스트 헤더 문구는 기존
+    영어 하드코딩 관례를 따름(리스트 i18n 일괄 전환은 별도 작업).</p>
   </section>
 
 </main>

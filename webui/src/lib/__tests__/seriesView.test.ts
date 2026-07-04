@@ -4,8 +4,6 @@ import {
   cohortModels,
   cohortSegments,
   cohortBoundaries,
-  shortModel,
-  shortModelSet,
   usageRatios,
   type CohortSegment,
 } from '../seriesView';
@@ -158,21 +156,6 @@ describe('cohortBoundaries', () => {
   });
 });
 
-describe('shortModel / shortModelSet', () => {
-  it('abbreviates observed model name shapes deterministically', () => {
-    expect(shortModel('claude-haiku-4-5-20251001')).toBe('H4.5');
-    expect(shortModel('haiku-4-5-20251001')).toBe('H4.5');
-    expect(shortModel('claude-opus-4-8')).toBe('O4.8');
-    expect(shortModel('claude-fable-5')).toBe('F5');
-    expect(shortModel('claude-sonnet-4-6')).toBe('S4.6');
-  });
-  it('keeps unrecognised names verbatim (minus claude- prefix)', () => {
-    expect(shortModel('claude-something_odd')).toBe('something_odd');
-  });
-  it('abbreviates cohort set labels', () => {
-    expect(shortModelSet('claude-fable-5 + claude-haiku-4-5-20251001')).toBe('F5+H4.5');
-  });
-});
 
 describe('usageRatios', () => {
   it('derives cache-hit %, output share %, and blended $/1M billed', () => {

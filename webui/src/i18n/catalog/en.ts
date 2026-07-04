@@ -283,7 +283,6 @@ export const en = {
   'dash.head.rate': 'Blended unit rate',
   'dash.head.hit': 'Cache hit',
   'dash.head.toolfail': 'Tool failure rate',
-  'dash.head.prevWindow': (v: string) => `previous window ${v}`,
   'dash.head.noCompare': 'no comparison (all window)',
   'dash.head.costBasis': 'public price list ≈ · floor',
   'dash.head.ratePer': 'per 1M billed tokens',
@@ -296,7 +295,6 @@ export const en = {
   'dash.observed.ccSpan': (a: { from: string; to: string; count: number }) =>
     a.count > 1 ? `CC ${a.from} → ${a.to} · ${a.count} transitions` : `CC ${a.from} → ${a.to}`,
   'dash.observed.topSignals': (a: { name: string; n: number }) => `most signals ${a.name} (${a.n})`,
-  'dash.ver.loading': 'Loading verification summary…',
   'dash.ver.error': 'Failed to load the verification summary.',
   'dash.daily.ver.title': 'Verification — daily',
   'dash.daily.ver.zeroGuards': (n: number) => `sessions with 0 guards: ${n}`,
@@ -370,81 +368,10 @@ export const en = {
   'dash.emptyHint': 'Ingest transcripts first: wimcc ingest --all',
   'dash.error': 'Failed to load the series.',
   'dash.loading': 'Loading series…',
-  'dash.cohort.title': 'Model cohorts',
-  'dash.cohort.tip':
-    'The models that actually responded in each session; multiple models join with +.\n' +
-    'Dashed rule — the model mix changed here\n' +
-    'Dashed box — sessions with no model record (shown as continuing the previous mix)',
-  'dash.cohort.models': 'model',
-  'dash.cohort.ccTip':
-    'The Claude Code version each session ran on.\n' +
-    'Alternating shades separate adjacent version spans; sessions without a version record ' +
-    'continue the previous span (dashed box).',
-  'dash.cohort.cc': 'CC version',
-  'dash.cohort.unknown': 'not observed yet',
-  'dash.outcome.title': 'Verification outcomes',
-  'dash.outcome.tip':
-    'How each session\'s verification commands (tests, builds, lints) ended.\n' +
-    'passed — confirmed success\n' +
-    'failed — confirmed failure\n' +
-    'unknown — ran, but the output was cut before a result could be read\n' +
-    'Commands that never ran (rejected, cancelled) are excluded.',
   'dash.outcome.passed': 'passed',
   'dash.outcome.failed': 'failed',
   'dash.outcome.unknown': 'unknown',
-  'dash.outcome.none': 'no verification runs in this window',
-  'dash.multiples.title': 'Process signals',
-  'dash.multiples.tip':
-    'Counts of what happened during each session.\n' +
-    'Example: rising tool failures with steady passed outcomes above reads as more trial and ' +
-    'error that still landed.',
-  'dash.metric.tool_failure_count': 'tool failures',
-  'dash.metric.context_bloat_count': 'context bloat signals',
-  'dash.metric.api_error_count': 'API errors',
-  'dash.metric.user_interruption_count': 'user interruptions',
-  'dash.metric.compact_boundary_count': 'context compactions',
-  'dash.metric.tool_result_truncated_count': 'truncated tool results',
-  'dash.metric.api_rate_limit_count': 'rate limits (429)',
-  'dash.tokens.title': 'Token usage',
-  'dash.tokens.tip':
-    'Tokens each session consumed.\n' +
-    'input — fresh input sent\n' +
-    'cache write — input newly stored in cache\n' +
-    'output — model output\n' +
-    'cache read — input reused from cache (dwarfs the rest, so it gets its own strip)\n' +
-    'The API does not report remaining quota, so this stops at usage.',
-  'dash.tokens.empty': 'usage data is empty — the running serve predates these fields (restart with the new build) or usage facets need re-ingest.',
-  'dash.eff.title': 'Efficiency',
-  'dash.eff.tip':
-    'Per-session usage ratios — darker cell = higher value.\n' +
-    'cache%: share of input context served from cache (cache read ÷ input + cache write + cache read). Higher is cheaper.\n' +
-    'out%: output share of billed tokens (output ÷ input + cache write + output). How much of the spend became output.\n' +
-    '$/1M: blended cost per 1M billed tokens — rises with expensive-model mix.\n' +
-    'Sessions without usage data draw no cell.',
-  'dash.eff.hit.name': 'Cache hit ratio',
-  'dash.eff.hit.short': 'hit%',
-  'dash.eff.out.name': 'Output share of billed tokens',
-  'dash.eff.out.short': 'out%',
-  'dash.eff.rate.name': 'Blended cost per 1M billed tokens',
-  'dash.eff.rate.short': '$/1M',
-  'dash.cost.title': 'Estimated cost (≈$)',
-  'dash.cost.tip':
-    'Per-session cost estimated from the public price list.\n' +
-    'Not a bill — subscription discounts and service tiers are not visible locally, and models ' +
-    'missing from the price list are excluded, so this is a floor.',
   'dash.cost.total': (v: string) => `total ≈$${v}`,
-  'dash.tokens.input': 'input',
-  'dash.tokens.output': 'output',
-  'dash.tokens.cacheCreation': 'cache write',
-  'dash.tokens.cacheRead': 'cache read',
-  'dash.axis.max': (n: number | string) => `max ${n}`,
-  'dash.tab.charts': 'Charts',
-  'dash.table.summary': 'Data table',
-  'dash.table.session': 'session',
-  'dash.table.date': 'first observed',
-  'dash.table.events': 'events',
-  'dash.tooltip.events': (n: number) => `${n} events`,
-  'dash.openSession': (id: string) => `Open session ${id}`,
 };
 
 export type Messages = typeof en;

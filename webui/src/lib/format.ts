@@ -1,3 +1,4 @@
+import { displayModel } from './seriesView';
 /**
  * PR-3 — display formatters. Always return "—" for null / undefined /
  * NaN / negative values so the UI never shows raw `NaN` or `undefined`.
@@ -108,8 +109,7 @@ export function relativeTime(
 export function formatModel(id: string | null | undefined): string {
   if (!id) return PLACEHOLDER;
   const cleaned = id.replace(/\[[^\]]*\]$/, '');
-  const m = cleaned.match(/^claude-(opus|sonnet|haiku|fable)-(\d+)-(\d+)/);
-  if (!m) return id;
-  const family = m[1].charAt(0).toUpperCase() + m[1].slice(1);
-  return `${family} ${m[2]}.${m[3]}`;
+  // 표시명 규칙의 SSOT는 seriesView.displayModel — minor 없는 이름
+  // ('claude-fable-5')과 날짜 접미까지 한 곳에서 처리한다(2026-07-04 통일).
+  return displayModel(cleaned);
 }
