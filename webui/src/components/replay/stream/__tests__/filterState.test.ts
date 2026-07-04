@@ -38,4 +38,10 @@ describe('filterState', () => {
     expect(filterKey(sample)).not.toBe(filterKey(EMPTY_FILTER));
     expect(filterKey({ ...sample })).toBe(filterKey(sample));
   });
+
+  it('filterKey is order-insensitive within an axis (no spurious window reset)', () => {
+    const a: FilterState = { ...EMPTY_FILTER, kinds: ['tool_call', 'tool_result'] };
+    const b: FilterState = { ...EMPTY_FILTER, kinds: ['tool_result', 'tool_call'] };
+    expect(filterKey(a)).toBe(filterKey(b));
+  });
 });
