@@ -131,3 +131,14 @@ export function usageRatios(m: {
     measured: billed + read > 0,
   };
 }
+
+/** 모델 전체 표시명 (2026-07-04 전면 개편 — 약칭 UI 표기 금지 원칙).
+ *  'claude-fable-5' → 'Fable 5', 'haiku-4-5-20251001' → 'Haiku 4.5'.
+ *  패턴 밖 이름은 claude- 접두사만 벗겨 원문 유지. */
+export function displayModel(name: string): string {
+  const stripped = name.replace(/^claude-/, '');
+  const m = stripped.match(/^([a-z]+)-(\d+)(?:-(\d+))?(?:-\d{6,})?$/);
+  if (!m) return stripped;
+  const [, family, major, minor] = m;
+  return family.charAt(0).toUpperCase() + family.slice(1) + ' ' + major + (minor ? `.${minor}` : '');
+}
