@@ -59,6 +59,10 @@ interface ConversationStreamProps {
   /** Start detached (autoscroll off) — set on a `?selected=` deep-link mount so
    *  the around-window the page loads isn't yanked to the live tip. Default true. */
   initialFollow?: boolean;
+  /** flat 모드(필터 활성 — buildStreamModel opts.flat): 그룹핑이 비활성이라
+   *  sidechain 카드/스택에 출처 배지(⑂)를 붙이도록 MessageCard/ActivityStack에
+   *  전달한다. */
+  flatMode?: boolean;
 }
 
 /** True when the item is a message with the given eventId, or an activity-run
@@ -100,6 +104,7 @@ export function ConversationStream({
   pendingNewCount,
   footerExtra,
   initialFollow = true,
+  flatMode = false,
 }: ConversationStreamProps) {
   const t = useT();
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -430,6 +435,7 @@ export function ConversationStream({
           selected={item.eventId === selectedEventId}
           onSelect={onSelect}
           hasFinding={findingEventIds.has(item.eventId)}
+          flatMode={flatMode}
         />
       );
     }
@@ -517,6 +523,7 @@ export function ConversationStream({
         stack={{ events: item.events }}
         selectedEventId={selectedEventId}
         onSelect={onSelect}
+        flatMode={flatMode}
       />
     );
   };

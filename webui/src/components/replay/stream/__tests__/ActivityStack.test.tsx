@@ -165,3 +165,33 @@ describe('ActivityStack', () => {
     expect(screen.queryByText('control')).toBeNull();
   });
 });
+
+describe('ActivityStack — flat mode ⑂ sidechain badge', () => {
+  const scEvent = (id: string) =>
+    ({ event_id: id, kind: 'tool_call', observed_at: 'z', tool_name: 'Read', is_sidechain: true, payload: { tool_name: 'Read', input: {} } } as any);
+  const singleScStack: ActivityStackData = { events: [{ event: scEvent('sc1'), result: null }] };
+  const multiScStack: ActivityStackData = { events: [
+    { event: scEvent('sc1'), result: null },
+    { event: scEvent('sc2'), result: null },
+  ] };
+
+  it('omits the badge when flatMode is false/absent, even for a sidechain stack', () => {
+    render(<ActivityStack stack={singleScStack} selectedEventId={null} onSelect={() => {}} />);
+    expect(screen.queryByTestId('flat-sidechain-badge')).toBeNull();
+  });
+
+  it('shows the badge once for a single-item sidechain stack when flatMode is true', () => {
+    render(<ActivityStack stack={singleScStack} selectedEventId={null} onSelect={() => {}} flatMode />);
+    expect(screen.getAllByTestId('flat-sidechain-badge')).toHaveLength(1);
+  });
+
+  it('shows the badge once in the fold header for a multi-item sidechain stack when flatMode is true', () => {
+    render(<ActivityStack stack={multiScStack} selectedEventId={null} onSelect={() => {}} flatMode />);
+    expect(screen.getAllByTestId('flat-sidechain-badge')).toHaveLength(1);
+  });
+
+  it('omits the badge when flatMode is true but the stack is NOT sidechain', () => {
+    render(<ActivityStack stack={stack} selectedEventId={null} onSelect={() => {}} flatMode />);
+    expect(screen.queryByTestId('flat-sidechain-badge')).toBeNull();
+  });
+});

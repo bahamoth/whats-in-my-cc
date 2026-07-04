@@ -1129,7 +1129,16 @@ export function buildStreamModel(
   events: ObservedEventDto[],
   metricsByReq?: Map<string, LlmRequestMetrics>,
   tasks: TaskDto[] = [],
+  opts?: { flat?: boolean },
 ): StreamItem[] {
+  // flat mode (filter active, spec §1.4): sidechain-group/batch-group/
+  // workflow-group/scaffold-group are never assembled — matched cards render
+  // as a flat time-ordered list instead (context preserved via the ⑂ badge on
+  // MessageCard/ActivityStack, driven by the existing `sidechain` flag). End
+  // cards (subagent-end/workflow-end) are NOT in this disabled list — they
+  // still form when a task-notification joins (syncTaskNotifications), same
+  // as grouped mode.
+  const flat = !!opts?.flat;
   const resultByUse = new Map<string, ObservedEventDto>();
   // Caller-linkage prepass: sidecar meta per agent, tool_call event ids per
   // tool_use_id (jump target lookup), and the attribution_agent fallback from
@@ -1393,9 +1402,13 @@ export function buildStreamModel(
     agentId: string | null,
     flushMain: boolean,
   ) => {
-    if (sidechain) {
+    if (sidechain && !flat) {
       emitSidechain(it, agentId);
     } else {
+      // flat mode: a sidechain item is never buffered into a SidechainGroup —
+      // it straight-throughs onto the main spine like any other item, keeping
+      // chronological order (its `sidechain`/`is_sidechain` flag survives on
+      // the produced MessageItem/ActivityEvent for the ⑂ badge to key off).
       if (flushMain) flushSidechain();
       items.push(it);
     }
@@ -1517,21 +1530,21 @@ export function buildStreamModel(
   const wfNameByToolUse = new Map<string, string | null>();
   for (const c of wfCalls) wfNameByToolUse.set(c.toolUseId, c.name);
 
-  return buildTaskList(
-    insertSubagentEndCards(
-      groupScaffold(
-        syncTaskNotifications(
-          annotateConcurrency(mergeConcurrentGroups(items)),
-          notiByToolUse,
-          wfToolUseByEvent,
-          agentDispatchToolUse,
-          callMetaByUse,
-          wfNameByToolUse,
-          notiByTaskId,
-        ),
-      ),
-    ),
-    tasks,
+  const notified = syncTaskNotifications(
+    annotateConcurrency(mergeConcurrentGroups(items)),
+    notiByToolUse,
+    wfToolUseByEvent,
+    agentDispatchToolUse,
+    callMetaByUse,
+    wfNameByToolUse,
+    notiByTaskId,
   );
+  // flat mode: never fold top-level user-side scaffold runs into a
+  // ScaffoldGroup (one of the four disabled group types) — messages stay
+  // individually flat. (mergeConcurrentGroups/annotateConcurrency/
+  // syncTaskNotifications above are harmless no-ops in flat mode: they key
+  // off sidechain-group/batch-group/workflow-group, none of which exist here.)
+  const scaffolded = flat ? notified : groupScaffold(notified);
+  return buildTaskList(insertSubagentEndCards(scaffolded), tasks);
 }
 

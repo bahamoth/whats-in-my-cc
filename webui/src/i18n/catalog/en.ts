@@ -193,6 +193,9 @@ export const en = {
   'stream.laneExpandTitle': (label: string) => `${label} — click to expand`,
   'stream.conversationStart': 'Conversation start',
   'stream.workflow.agentN': (n: number) => `Agent ${n}`,
+  // flat mode (filter active): grouping disabled — sidechain cards/stacks
+  // carry this instead, so context is not lost (spec §1.4).
+  'stream.flatSidechainBadge': '⑂ inside subagent',
 
   // Stream — autoscroll
   'stream.autoscroll.label': 'Auto-scroll',

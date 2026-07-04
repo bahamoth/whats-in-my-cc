@@ -313,6 +313,33 @@ describe('buildStreamModel — sidechain grouping (#3)', () => {
     ]);
     expect(items.map((i: any) => i.type)).toEqual(['sidechain-group', 'message', 'sidechain-group']);
   });
+
+  it('flat mode: no group items, sidechain events render as flat cards', () => {
+    // Same seed as the sidechain-group cases above — reused for both calls so
+    // grouped vs flat differ only in the `opts.flat` gate, not the input.
+    const events = [
+      ev({ event_id: 'E1', kind: 'user_message', payload: { content: 'go' } }),
+      ev({ event_id: 'E2', kind: 'tool_call', tool_name: 'Agent', tool_use_id: 'T1',
+        payload: { tool_name: 'Agent', input: {} } }),
+      ev({ event_id: 'E3', kind: 'user_message', is_sidechain: true, agent_id: 'a1',
+        payload: { content: 'sub task' } }),
+      ev({ event_id: 'E4', kind: 'assistant_message', is_sidechain: true, agent_id: 'a1',
+        payload: { text: 'sub reply', model: 'claude-fable-5' } }),
+      ev({ event_id: 'E5', kind: 'tool_result', tool_use_id: 'T1',
+        payload: { tool_result: { is_error: false, content: 'done' } } }),
+    ];
+    const grouped = buildStreamModel(events, new Map(), []);
+    expect(grouped.some((i) => i.type === 'sidechain-group')).toBe(true);
+    const flat = buildStreamModel(events, new Map(), [], { flat: true });
+    expect(flat.some((i) =>
+      i.type === 'sidechain-group' || i.type === 'batch-group' ||
+      i.type === 'workflow-group' || i.type === 'scaffold-group',
+    )).toBe(false);
+    // 그룹에 갇혀 있던 sidechain 메시지(E3·E4)가 평면 카드로 등장
+    const flatMessages = flat.filter((i) => i.type === 'message');
+    const groupedTopMessages = grouped.filter((i) => i.type === 'message');
+    expect(flatMessages.length).toBeGreaterThan(groupedTopMessages.length);
+  });
 });
 
 describe('buildStreamModel — sidechain agent attribution (agent_id)', () => {
