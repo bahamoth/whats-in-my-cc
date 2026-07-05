@@ -1,5 +1,5 @@
 {
-  "version": "pricing_estimate@2026-06-11",
+  "version": "pricing_estimate@2026-07-05",
   "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
   "models": {
     "claude-fable-5": {
@@ -25,6 +25,12 @@
       "cache_creation_per_mtok": 6.25,
       "cache_read_per_mtok": 0.5,
       "output_per_mtok": 25.0
+    },
+    "claude-sonnet-5": {
+      "input_per_mtok": 2.0,
+      "cache_creation_per_mtok": 2.5,
+      "cache_read_per_mtok": 0.2,
+      "output_per_mtok": 10.0
     },
     "claude-sonnet-4-6": {
       "input_per_mtok": 3.0,
