@@ -118,6 +118,11 @@ export const ko: Messages = {
   'analysis.rhythm.tip':
     '**x = 세션 진행률(시간 기준)**, 점 하나가 검증 실행 하나이고 색이 결과입니다.\n' +
     '점을 클릭하면 그 실행을 유발한 이벤트 카드로 이동합니다.',
+  'analysis.cov.title': '변경 커버리지 — 검증 통과가 거친 diff hunk',
+  'analysis.cov.summary': (a: { pct: number; n: number }) => `커버 ${a.pct}% · 미커버 ${a.n}`,
+  'analysis.cov.tip':
+    '이 세션의 [green]커버[/green] / [amber]미커버[/amber] diff hunk 비율입니다.\n' +
+    '**도입 이후 통과한 검증이 있는 hunk**만 커버로 셉니다 — 집계 기준은 서버 verification summary와 동일합니다.',
 
   // Detail — event provenance badge
   'detail.provenance.native': '원본',

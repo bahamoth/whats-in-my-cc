@@ -120,6 +120,11 @@ export const en = {
   'analysis.rhythm.tip':
     '**x = session progress (time-based)**; each dot is one verification run and its color is the outcome.\n' +
     'Click a dot to jump to the event card that triggered the run.',
+  'analysis.cov.title': 'Change coverage — diff hunks a passing verification ran after',
+  'analysis.cov.summary': (a: { pct: number; n: number }) => `covered ${a.pct}% · ${a.n} uncovered`,
+  'analysis.cov.tip':
+    'The [green]covered[/green] / [amber]uncovered[/amber] diff hunk ratio of this session.\n' +
+    'A hunk counts as covered only when **a passing verification ran after it was introduced** — same definition as the server verification summary.',
 
   // Detail — event provenance badge
   'detail.provenance.native': 'Native',

@@ -10,6 +10,7 @@ import type { SessionMetricsDto, SignalDto, EvidenceRef, VerificationRunDto } fr
 import { useT, type TFunction } from '../../../i18n';
 import { InfoTip } from '../insight-strip/InfoTip';
 import { RhythmStrip } from '../../dash/RhythmStrip';
+import { CoverageBar } from '../../dash/CoverageBar';
 import styles from './AnalysisPanel.module.css';
 
 interface AnalysisPanelProps {
@@ -20,6 +21,8 @@ interface AnalysisPanelProps {
   verificationRuns?: VerificationRunDto[];
   /** 세션 시간 범위(first/last observed_at) — pct 분모. */
   sessionSpan?: { first: string; last: string } | null;
+  /** §3c 변경 커버리지 — summary?session_id 응답의 coverage 합계. */
+  coverage?: { covered: number; total: number } | null;
   /** Select/deep-link an evidence event when a drilled signal is clicked. */
   onSelectEvent?: (eventId: string) => void;
   /** Forwarded to root div for test selection (e.g. data-testid). */
@@ -88,6 +91,7 @@ export function AnalysisPanel({
   signals,
   verificationRuns,
   sessionSpan,
+  coverage,
   onSelectEvent,
   'data-testid': testId,
 }: AnalysisPanelProps) {
@@ -195,6 +199,27 @@ export function AnalysisPanel({
               <span>100%</span>
             </div>
           </>
+        )}
+      </div>
+
+      {/* --- 변경 커버리지 (§3c) — hunk 0건은 미측정(—), 0%가 아니다 --- */}
+      <div className={styles.detectorSection}>
+        <div className={styles.sectionTitle}>
+          {t('analysis.cov.title')}
+          <InfoTip label={t('analysis.cov.title')} text={t('analysis.cov.tip')} />
+        </div>
+        {!coverage || coverage.total === 0 ? (
+          <p className={styles.noDetectors} data-testid="coverage-empty">—</p>
+        ) : (
+          <div className={styles.covRow}>
+            <CoverageBar covered={coverage.covered} total={coverage.total} />
+            <span className={styles.covLabel}>
+              {t('analysis.cov.summary', {
+                pct: Math.round((coverage.covered / coverage.total) * 100),
+                n: coverage.total - coverage.covered,
+              })}
+            </span>
+          </div>
         )}
       </div>
 

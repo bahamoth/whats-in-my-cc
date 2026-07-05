@@ -193,3 +193,16 @@
   font-size: 9.5px;
   color: var(--wimcc-fg-subtle);
 }
+
+.covRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.covLabel {
+  flex: none;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  color: var(--wimcc-fg-muted);
+}
