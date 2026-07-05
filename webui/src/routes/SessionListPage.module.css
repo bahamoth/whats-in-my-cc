@@ -98,7 +98,9 @@
   color: var(--wimcc-fg-muted);
   font-size: 12.5px;
   line-height: 1.5;
-  max-width: 56ch;
+  /* span 컬럼 추가로 표가 넓어져 sources 태그가 줄바꿈되던 문제(2026-07-05) —
+     미리보기 폭을 줄여 세션 컬럼을 좁히고 다른 컬럼에 여유를 준다. */
+  max-width: 38ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -118,7 +120,9 @@
   white-space: nowrap;
 }
 
-.mix { display: flex; flex-wrap: wrap; gap: 4px; }
+/* sources 태그는 한 줄로 유지 — 줄바꿈되면 행 높이가 들쭉날쭉해 미감이 떨어진다.
+   세션 컬럼(.prev)을 좁혀 확보한 여유로 한 줄에 담긴다(2026-07-05). */
+.mix { display: flex; flex-wrap: nowrap; gap: 4px; white-space: nowrap; }
 .tag {
   display: inline-block;
   padding: 1px 6px;
