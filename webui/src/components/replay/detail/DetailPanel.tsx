@@ -1,7 +1,7 @@
 // webui/src/components/replay/detail/DetailPanel.tsx
 import { useState } from 'react';
 import { Braces } from 'lucide-react';
-import type { SignalDto, ObservedEventDto } from '../../../api/types';
+import type { SignalDto, ObservedEventDto, LlmRequestP50Dto } from '../../../api/types';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import type { ToolMetrics } from './toolMetrics';
 import { InsightTab } from './InsightTab';
@@ -22,6 +22,9 @@ interface DetailPanelProps {
   /** Per-response metrics for a selected `assistant_message` / `thinking`
    *  (Insight tab), derived from events by request_id. */
   llmMetrics?: LlmRequestMetrics | null;
+  /** Session-wide p50 baselines for the request-metric rows (PR-3 §3d) —
+   *  drives the "세션 중앙값의 x.x×" badge in the Insight tab. */
+  llmP50?: LlmRequestP50Dto | null;
   /** Source-split blocks for the Raw tab (entity + correlated sources).
    *  Falls back to the single `record` when absent. */
   rawBlocks?: RawBlock[];
@@ -32,7 +35,17 @@ interface DetailPanelProps {
   onSelectEvent?: (eventId: string) => void;
 }
 
-export function DetailPanel({ event, record, signals, toolMetrics, llmMetrics, rawBlocks, matchedResult, onSelectEvent }: DetailPanelProps) {
+export function DetailPanel({
+  event,
+  record,
+  signals,
+  toolMetrics,
+  llmMetrics,
+  llmP50,
+  rawBlocks,
+  matchedResult,
+  onSelectEvent,
+}: DetailPanelProps) {
   const [chosen, setChosen] = useState<TabId | null>(null);
   const active = chosen ?? 'insight';
 
@@ -84,6 +97,7 @@ export function DetailPanel({ event, record, signals, toolMetrics, llmMetrics, r
             event={event}
             toolMetrics={toolMetrics ?? null}
             llmMetrics={llmMetrics ?? null}
+            llmP50={llmP50 ?? null}
             matchedResult={matchedResult ?? null}
             onSelectEvent={onSelectEvent}
           />

@@ -148,4 +148,36 @@ describe('EntityMetricsPanel', () => {
     expect(screen.getByText('도구 실행')).toBeInTheDocument();
     expect(screen.getByTestId('provenance-badge')).toHaveTextContent('측정');
   });
+
+  // ---- PR-3 §3d — request-metric rows show a "세션 중앙값의 x.x×" badge ----
+
+  it('llmP50이 있으면 소요시간 행에 세션 중앙값 배지를 렌더한다 (PR-3 §3d)', () => {
+    render(
+      <EntityMetricsPanel
+        kind="assistant_message"
+        toolMetrics={null}
+        llmMetrics={{
+          requestId: 'r',
+          durationMs: 3000,
+          ttftMs: 3100,
+          inputTokens: 2,
+          outputTokens: 2300,
+          cacheReadTokens: 290000,
+          cacheCreationTokens: 2200,
+          stopReason: 'tool_use',
+          attempt: 1,
+          success: true,
+          model: 'claude-opus-4-8',
+          costUsd: null,
+        }}
+        llmP50={{
+          ttft_ms: { p50: null, n: 0 },
+          duration_ms: { p50: 1000, n: 10 },
+          output_tokens: { p50: null, n: 0 },
+          cost_usd: { p50: null, n: 0 },
+        }}
+      />,
+    );
+    expect(screen.getByText(/세션 중앙값의 3.0×/)).toBeInTheDocument();
+  });
 });

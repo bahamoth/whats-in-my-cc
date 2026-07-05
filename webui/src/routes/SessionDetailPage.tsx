@@ -142,7 +142,13 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
 
   // Analysis surface — separate from replay (spec §8.3, 원칙 7)
   const [analysisOpen, setAnalysisOpen] = useState(false);
-  const metricsQuery = useSessionMetricsQuery(sessionId, { enabled: analysisOpen && !!sessionId });
+  // PR-3 §3d — also fetch when a node is selected (not just when the Analysis
+  // panel is open) so the DetailPanel's request-metric rows can show a "세션
+  // 중앙값의 x.x×" badge; the backend keeps an in-memory cache so repeat calls
+  // as selection changes are cheap.
+  const metricsQuery = useSessionMetricsQuery(sessionId, {
+    enabled: (analysisOpen || sel.selectedNodeId !== null) && !!sessionId,
+  });
   // §3c 변경 커버리지 — session-scoped summary, 분석 패널이 열려 있을 때만 fetch
   // (metrics와 동일한 lazy-fetch 패턴).
   const verificationSummary = useSessionVerificationSummaryQuery(sessionId, {
@@ -576,6 +582,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               signals={selectedNodeSignals}
               toolMetrics={selectedToolMetrics}
               llmMetrics={selectedLlmMetrics}
+              llmP50={metricsQuery.data?.llm_request_p50 ?? null}
               rawBlocks={rawBlocks}
               matchedResult={matchedToolResult}
               onSelectEvent={selectStreamCard}

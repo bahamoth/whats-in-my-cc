@@ -5,7 +5,7 @@
 // plain-language ⓘ tooltips) + that event's Signals. The full raw payload
 // lives in the Raw tab.
 import { useState } from 'react';
-import type { SignalDto, ObservedEventDto, EvidenceRef } from '../../../api/types';
+import type { SignalDto, ObservedEventDto, EvidenceRef, LlmRequestP50Dto } from '../../../api/types';
 import type { LlmRequestMetrics } from '../stream/llmRequestMetrics';
 import { nodeLabel } from '../stream/nodeLabel';
 import type { ToolMetrics } from './toolMetrics';
@@ -21,6 +21,8 @@ interface InsightTabProps {
   event: ObservedEventDto | null;
   toolMetrics: ToolMetrics | null;
   llmMetrics: LlmRequestMetrics | null;
+  /** Session-wide p50 baselines for the request-metric rows (PR-3 §3d). */
+  llmP50?: LlmRequestP50Dto | null;
   /** The matching tool_result event when the selected event is a tool_call. */
   matchedResult?: ObservedEventDto | null;
   /** S7 — jump the stream + detail to an evidence event id (clicking a Signal).
@@ -117,7 +119,15 @@ function SignalsList({
   );
 }
 
-export function InsightTab({ signals, event, toolMetrics, llmMetrics, matchedResult, onSelectEvent }: InsightTabProps) {
+export function InsightTab({
+  signals,
+  event,
+  toolMetrics,
+  llmMetrics,
+  llmP50 = null,
+  matchedResult,
+  onSelectEvent,
+}: InsightTabProps) {
   const t = useT();
   if (!event && signals.length === 0) {
     return (
@@ -174,6 +184,7 @@ export function InsightTab({ signals, event, toolMetrics, llmMetrics, matchedRes
               toolMetrics={toolMetrics}
               llmMetrics={llmMetrics}
               payload={event.payload}
+              llmP50={llmP50}
             />
           </div>
 

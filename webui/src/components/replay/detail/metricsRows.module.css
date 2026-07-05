@@ -60,3 +60,20 @@
 .row[data-warn='true'] .v {
   color: var(--wimcc-warn, #e0a23b);
 }
+
+/* PR-3 §3d — "세션 중앙값의 x.x×" badge next to a request-metric value.
+ * n<3 renders "표본 부족" with a transparent background (not the value chip
+ * look) so it doesn't read as a real ratio. */
+.p50Badge {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-family: var(--wimcc-mono, monospace);
+  color: var(--wimcc-fg-subtle);
+  background: var(--wimcc-surface-2);
+  white-space: nowrap;
+}
+.p50Badge[data-low='true'] {
+  background: transparent;
+}

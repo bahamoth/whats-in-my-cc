@@ -23,6 +23,8 @@ import { InfoTip } from '../insight-strip/InfoTip';
 import { ProvenanceBadge } from '../insight-strip/ProvenanceBadge';
 import type { Provenance } from '../insight-strip/provenance';
 import { useT, type MessageKey } from '../../../i18n';
+import { p50Badge, type P50Badge } from './p50Badge';
+import type { LlmRequestP50Dto } from '../../../api/types';
 import styles from './metricsRows.module.css';
 
 // l10n — a row's label and (optional) explanatory tip are both catalog keys;
@@ -34,11 +36,13 @@ export function Row({
   tipKey,
   value,
   warn = false,
+  badge = null,
 }: {
   labelKey: MessageKey;
   tipKey?: MessageKey;
   value: string;
   warn?: boolean;
+  badge?: P50Badge | null;
 }) {
   const t = useT();
   const label = t(labelKey);
@@ -48,7 +52,14 @@ export function Row({
         {label}
         {tipKey && <InfoTip label={label} text={t(tipKey)} />}
       </span>
-      <span className={styles.v}>{value}</span>
+      <span className={styles.v}>
+        {value}
+        {badge && (
+          <span className={styles.p50Badge} data-low={String(badge.lowSample)}>
+            {badge.text}
+          </span>
+        )}
+      </span>
     </div>
   );
 }
@@ -94,13 +105,27 @@ export function MetricGroup({
  *  groups are `measured`: timing/stop_reason/attempts come from the OTel
  *  `llm_request` span, tokens from the same span, and cost from the reported
  *  `api_request_log` value. */
-export function ResponseMetricsRows({ metrics }: { metrics: LlmRequestMetrics }) {
+export function ResponseMetricsRows({
+  metrics,
+  p50 = null,
+}: {
+  metrics: LlmRequestMetrics;
+  p50?: LlmRequestP50Dto | null;
+}) {
   const t = useT();
   return (
     <>
       <MetricGroup title={t('metric.group.llmActivity')} provenance="measured">
-        <Row labelKey="metric.label.duration" value={formatDuration(metrics.durationMs) ?? '—'} />
-        <Row labelKey="metric.label.ttft" value={formatDuration(metrics.ttftMs) ?? '—'} />
+        <Row
+          labelKey="metric.label.duration"
+          value={formatDuration(metrics.durationMs) ?? '—'}
+          badge={p50Badge(metrics.durationMs, p50?.duration_ms, t)}
+        />
+        <Row
+          labelKey="metric.label.ttft"
+          value={formatDuration(metrics.ttftMs) ?? '—'}
+          badge={p50Badge(metrics.ttftMs, p50?.ttft_ms, t)}
+        />
         <Row
           labelKey="metric.label.stopReason"
           value={metrics.stopReason ?? '—'}
@@ -131,6 +156,7 @@ export function ResponseMetricsRows({ metrics }: { metrics: LlmRequestMetrics })
           labelKey="metric.label.outputTokens"
           tipKey="metric.tip.outputTokens"
           value={formatTokens(metrics.outputTokens) ?? '—'}
+          badge={p50Badge(metrics.outputTokens, p50?.output_tokens, t)}
         />
         {formatThroughput(metrics.outputTokens, metrics.durationMs) && (
           <Row
@@ -162,6 +188,7 @@ export function ResponseMetricsRows({ metrics }: { metrics: LlmRequestMetrics })
             labelKey="metric.label.billedCost"
             tipKey="metric.tip.billedCost"
             value={formatUsd(metrics.costUsd) ?? '—'}
+            badge={p50Badge(metrics.costUsd, p50?.cost_usd, t)}
           />
         </MetricGroup>
       )}
