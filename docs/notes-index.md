@@ -17,6 +17,7 @@ CLAUDE.md의 python 스니펫.
 | verification 파싱 | `#verification-tsc-2026-07-04` (tsc 승격, 패턴 17) | `#unknown-verification-loop` |
 | Teammate·Subagent 관측 | `#teammate-followups-2026-07-04` (B-6 종결: preview·북엔드·agent-setting·표본 2) | `#teammate-observability-2026-07-03` · `#teammate-in-session-2026-07-03` · `#bg-subagent-hairline-gutter-2026-06-14` · `#task-notification-sync-2026-06-14` |
 | WebUI replay·목록 | `#session-filtering-2026-07-04` (PR-1: 4축 서버 필터·FilterBar·flat 모드·점프 규칙) | `#analysis-verification-panels-2026-07-05` (분석 패널 검증 리듬·커버리지) · `#session-list-perf-2026-06-29` · `#scroll-scrollbar-fix` · `#autoscroll-model` · `#pr33-regression-review` · `#tool-metrics-transcript-fallback` |
+| 세션 상세·인사이트 스트립 | `#insight-baseline-p50-2026-07-05` (DeltaChip 공용화·프로젝트 중앙값 대비 5지표+표본 n·블렌디드 단가 + DetailPanel p50 배지) | `#llm-request-p50-2026-07-05` · `#insight-surface-slice-1` |
 | 툴팁 카피·i18n 게이트 | `#cost-tooltip-dynamic-2026-07-05` (비용 툴팁 동적 조립; 함수형 tip-fragment 키는 tipStyle 게이트 우회 — 손 검증) | — |
 | 비용·가격표 | `#pricing-json-2026-07-05` (pricing.json 분리 + include_str! 임베드, /usage rates, update-pricing.ts + 주간 cron, 동결 fixture가 파서 열 순서·alias 잠금) | `#cost-tooltip-dynamic-2026-07-05` |
 | 프로젝트 대시보드 | `#dashboard-feedback-2026-07-04` (전면 개편: ECharts 2탭·코호트 랭킹·instruction 관측·B-12/13/14) | `#project-dashboard-2026-07-04` · `#dashboard-shadcn-2026-07-04` |
