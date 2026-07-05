@@ -132,7 +132,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   }, [sessionsList.data, sessionId]);
   const verificationRuns = useVerificationRunsQuery(sessionId);
   const usage = useSessionUsageQuery(sessionId);
-  const baseline = useUsageBaselineQuery();
+  const baseline = useUsageBaselineQuery(sessionId);
   const turns = useSessionTurnsQuery(sessionId);
 
   // Per-task summaries (status·duration·work-span aggregations), computed

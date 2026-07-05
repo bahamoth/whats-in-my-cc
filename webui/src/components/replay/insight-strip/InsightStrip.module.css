@@ -74,8 +74,13 @@
   gap: 6px;
   flex-wrap: wrap;
 }
-.baselineDelta {
-  font-size: 10px;
+.baselinePos {
+  font-size: 11px;
+  color: var(--wimcc-fg-subtle);
+  white-space: nowrap;
+}
+.baselineLow {
+  font-size: 11px;
   color: var(--wimcc-fg-subtle);
 }
 

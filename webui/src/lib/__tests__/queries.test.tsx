@@ -103,7 +103,7 @@ describe('useSignalsQuery', () => {
 });
 
 describe('useUsageBaselineQuery', () => {
-  it('caches the baseline under usageKeys.baseline()', async () => {
+  it('caches the store-wide baseline under [...usageKeys.baseline(), "store"] when no sessionId is given', async () => {
     const payload = {
       session_count: 2,
       cache_hit_ratio: { p25: 0.0, median: 0.45, p75: 0.9 },
@@ -115,6 +115,22 @@ describe('useUsageBaselineQuery', () => {
     const qc = createQueryClient();
     const { result } = renderHook(() => useUsageBaselineQuery(), { wrapper: wrap(qc) });
     await waitFor(() => expect(result.current.data).toEqual(payload));
-    expect(qc.getQueryData(usageKeys.baseline())).toEqual(payload);
+    expect(qc.getQueryData([...usageKeys.baseline(), 'store'])).toEqual(payload);
+  });
+
+  it('PR-3 §3a — scopes by sessionId: distinct cache key + session_id query param', async () => {
+    const payload = {
+      session_count: 2,
+      cache_hit_ratio: { p25: 0.0, median: 0.45, p75: 0.9 },
+      billed_tokens: { p25: 200, median: 300, p75: 400 },
+      assistant_events: { p25: 1, median: 1, p75: 1 },
+      output_tokens: { p25: 100, median: 200, p75: 300 },
+    };
+    fetchSpy.mockResolvedValue(mockOk(ENVELOPE(payload)));
+    const qc = createQueryClient();
+    const { result } = renderHook(() => useUsageBaselineQuery('s1'), { wrapper: wrap(qc) });
+    await waitFor(() => expect(result.current.data).toEqual(payload));
+    expect(fetchSpy).toHaveBeenCalledWith('/v1/usage/baseline?session_id=s1', expect.any(Object));
+    expect(qc.getQueryData([...usageKeys.baseline(), 's1'])).toEqual(payload);
   });
 });

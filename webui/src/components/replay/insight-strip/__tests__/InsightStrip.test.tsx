@@ -94,6 +94,34 @@ describe('InsightStrip', () => {
     expect(within(card).getByRole('tooltip')).toBeInTheDocument();
   });
 
+  it('baseline 비교가 있으면 DeltaChip과 위치·n을 렌더한다 (PR-3 §3a)', () => {
+    render(
+      <InsightStrip
+        usage={usage}
+        verificationRuns={[]}
+        signals={[]}
+        baseline={{
+          cache_hit_ratio: { median: 0.5, n: 12 },
+          billed_tokens: { median: 1_000_000, n: 12 },
+        }}
+      />,
+    );
+    // 위치 텍스트("프로젝트 중앙값의 …× · n 12")가 카드 foot에 나타난다.
+    expect(screen.getAllByText(/프로젝트 중앙값의 .+× · n 12/).length).toBeGreaterThan(0);
+  });
+
+  it('n<3이면 칩 대신 표본 부족을 렌더한다 (PR-3 §3a)', () => {
+    render(
+      <InsightStrip
+        usage={usage}
+        verificationRuns={[]}
+        signals={[]}
+        baseline={{ billed_tokens: { median: 1_000_000, n: 2 } }}
+      />,
+    );
+    expect(screen.getByText(/표본 부족 \(n 2\)/)).toBeInTheDocument();
+  });
+
   it('tool_failure card counts signals with detector=tool_failure', () => {
     render(
       <InsightStrip

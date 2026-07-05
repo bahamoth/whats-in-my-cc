@@ -111,10 +111,14 @@ export const getVerificationRuns = (id: string): Promise<VerificationRunDto[]> =
 export const getSessionUsage = (id: string): Promise<SessionUsageDto> =>
   jsonGet<SessionUsageDto>(`/v1/sessions/${encodeURIComponent(id)}/usage`);
 
-/** insight-redesign #6 — cross-session usage baseline (no session id; this is
- *  a store-wide aggregate). The UI computes per-session deltas client-side. */
-export const getUsageBaseline = (): Promise<UsageBaselineDto> =>
-  jsonGet<UsageBaselineDto>('/v1/usage/baseline');
+/** insight-redesign #6 + PR-3 §3a — cross-session usage baseline. Omitting
+ *  `sessionId` keeps the store-wide aggregate (legacy behaviour); passing it
+ *  scopes the distribution to that session's project (server falls back to
+ *  store when the project is unknown — see `usage_baseline` route). */
+export const getUsageBaseline = (sessionId?: string): Promise<UsageBaselineDto> =>
+  jsonGet<UsageBaselineDto>(
+    `/v1/usage/baseline${sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''}`,
+  );
 
 export const getDiffHunks = (id: string): Promise<DiffHunkDto[]> =>
   jsonGet<{ hunks: DiffHunkDto[] }>(`/v1/sessions/${encodeURIComponent(id)}/diff-hunks`).then(
