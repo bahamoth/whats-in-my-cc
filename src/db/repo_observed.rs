@@ -1582,6 +1582,41 @@ mod tests {
         let got: Vec<&str> = collected.iter().map(|e| e.event_id.as_str()).collect();
         assert_eq!(got, expected.iter().map(String::as_str).collect::<Vec<_>>());
 
+        // (2b) 술어 all-true 전량 수집 — 경계 중복은 경계 행이 술어 매칭일 때만
+        // matched에 드러나므로, 희소 술어(hit)만으론 커서 경계 mutation(<→<=)이
+        // 살아남는다(mutation check 실증, 2026-07-05). 전 행 매칭 + 청크와
+        // 어긋나는 페이지 크기(999)로 수집하면 어떤 경계의 중복/누락도 잡힌다.
+        let every = |_: &ObservedEvent| true;
+        let mut all_rows: Vec<String> = Vec::new();
+        let mut before_all: Option<Cursor> = None;
+        loop {
+            let page = list_session_window_scan(
+                &pool,
+                "sess-chunk",
+                None,
+                None,
+                None,
+                &every,
+                before_all.as_ref(),
+                None,
+                999,
+            )
+            .await
+            .unwrap();
+            if page.is_empty() {
+                break;
+            }
+            before_all = Some(Cursor {
+                observed_at: page[0].observed_at,
+                event_id: page[0].event_id.clone(),
+            });
+            let mut next: Vec<String> = page.into_iter().map(|e| e.event_id).collect();
+            next.extend(all_rows);
+            all_rows = next;
+        }
+        let expected_all: Vec<String> = (0..TOTAL).map(|i| format!("evscan-{i:04}")).collect();
+        assert_eq!(all_rows, expected_all, "no loss/dup across every chunk boundary");
+
         // (3-pre) sql_ids 푸시다운(§1.2 확장, 2026-07-05 성능): verification/
         // signal 축은 매칭 가능한 이벤트 id 집합을 호출자가 이미 알고 있어
         // event_id IN 으로 스캔을 후보 행으로 좁힌다 — 술어-only 결과와 동일해야
