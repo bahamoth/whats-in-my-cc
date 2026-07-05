@@ -561,4 +561,47 @@ describe('useSessionWindow', () => {
     const initUrl = f.mock.calls.at(-1)?.[0] as string;
     expect(initUrl).toContain(`around=${encodeURIComponent(makeEvent(10).event_id)}`);
   });
+
+  // Browser smoke (2026-07-05, session 653ea169) caught this live: jump-to-event
+  // clears the filter (SessionDetailPage's jumpNeedsFilterClear), which — with
+  // `initialAround` still set — re-enters doInitial's AROUND branch (filter now
+  // falsy). That branch never called `setMatchedCount`, so the stale N from the
+  // prior FILTERED tail fetch kept rendering ("N건 매칭") under the now-cleared
+  // filter indefinitely (until some other fetch path happened to run). The
+  // around branch is unfiltered by construction (`!filter` is its own guard),
+  // so matchedCount must reset to null once it resolves.
+  it('clears a stale matchedCount when a jump-triggered filter clear falls into the around branch', async () => {
+    const f = fetch as unknown as ReturnType<typeof vi.fn>;
+    const filter: EventFilterParams | null = { q: 'deploy' };
+    // 1) Initial mount: filter active → filtered tail, matched_count present.
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(1)], prev_cursor: 'pc', next_cursor: null, matched_count: 985 }),
+    );
+    const { result, rerender } = renderHook<
+      ReturnType<typeof useSessionWindow>,
+      { filter: EventFilterParams | null }
+    >(
+      ({ filter: fl }) =>
+        useSessionWindow('s1', {
+          initialAround: makeEvent(10).event_id,
+          filter: fl,
+          filterKey: fl ? 'k' : '',
+        }),
+      { initialProps: { filter } },
+    );
+    await waitFor(() => expect(result.current.matchedCount).toBe(985));
+
+    // 2) Jump clears the filter (SessionDetailPage.applyFilter(EMPTY_FILTER)) —
+    // filterKey changes, initialAround is still set → falls into the AROUND
+    // branch (unfiltered by construction).
+    f.mockResolvedValueOnce(
+      envelope({ events: [makeEvent(9), makeEvent(10)], prev_cursor: 'pc2', next_cursor: 'nc2' }),
+    );
+    rerender({ filter: null });
+    await waitFor(() => {
+      const lastUrl = f.mock.calls.at(-1)?.[0] as string;
+      expect(lastUrl).toContain('around=');
+    });
+    await waitFor(() => expect(result.current.matchedCount).toBeNull());
+  });
 });
