@@ -2,6 +2,11 @@
   "_readme": "tagging-gate(B-7d)의 보류 토큰 목록 — 토큰: 보류 사유. 여기 추가하는 것이 곧 '보류'이며 PR 리뷰에 보이는 편집이다. 보편 CLI/확장자는 보류 금지(사전 추가가 원칙).",
   "tokens": {
     "vite": "실행 아님 — pgrep -f \"vite|npm run dev\" 패턴 문자열의 토크나이저 파편 (2026-07-04)",
-    "splitrunbyphase": "실행 아님 — grep -rn \"phaseOf\\|splitRunByPhase\\|…\" 패턴 문자열의 토크나이저 파편 (2026-07-04)"
+    "splitrunbyphase": "실행 아님 — grep -rn \"phaseOf\\|splitRunByPhase\\|…\" 패턴 문자열의 토크나이저 파편 (2026-07-04)",
+    "a299522d": "실행 아님 — echo \"…(사이드카 있는 a692eb 등 = Agent툴 → run 없어야 정상; a299522d = workflow)…\" 디버그 라벨 문자열의 `;` 토크나이저 파편 (2026-07-05, 세션 00fae5d9)",
+    "determine_splits": "실행이지만 비보편 — 사용자 개인 dotfiles(~/.local/bin/layout_thesharp.sh)가 정의하는 셸 함수 호출. 공개 CLI/공식 plugin이 아니라 회사/개인 one-off (2026-07-05, 세션 809b7780)",
+    "doc-tests": "실행 아님 — grep -qE 'test result…|Doc-tests|^error' 정규식 대체(alternation) 문자열의 `|` 토크나이저 파편 (2026-07-05, 세션 b4196731)",
+    "expect": "실행 아님 — echo \"…; expect now exploration/diagnosis, NOT action)\" 영문 코멘트 문장의 `;` 토크나이저 파편 (2026-07-05, 세션 01fe9550)",
+    "will": "실행 아님 — echo \"…will proceed once notified.\" 상태 메시지 문자열의 토크나이저 파편 (2026-07-05, 이 세션 대기 로그)"
   }
 }

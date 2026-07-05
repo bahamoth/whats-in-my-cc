@@ -44,6 +44,20 @@ fn read_proc_db_web_and_date() {
         tag(&bash("date -u +\"%Y-%m-%dT%H:%M:%SZ\"")),
         Some("read.proc")
     );
+    // `jobs` (POSIX shell builtin — list background jobs) is a `ps`/`uptime`
+    // system-status-listing peer, not process control like pgrep/kill/wait
+    // (CONTROL_TOKENS) — surfaced by the tagging loop (2026-07-05, session
+    // 31f1fb03..., count 3).
+    assert_eq!(
+        tag(&bash("jobs -l 2>/dev/null; echo done")),
+        Some("read.proc")
+    );
+    // `top` (process/system activity monitor) is a ps/uptime peer — read.proc.
+    // Surfaced by the tagging loop (2026-07-05, real sample `top -l 1 -n 5 -o cpu`).
+    assert_eq!(
+        tag(&bash("top -l 1 -n 5 -o cpu | head -20")),
+        Some("read.proc")
+    );
 }
 
 #[test]
@@ -870,4 +884,19 @@ fn real_poll_loop_subshell_classifies_gh() {
     let cmd = "cd /Users/bahamoth/projects/whats-in-my-cc\nsleep 10\nfor i in $(seq 1 12); do\n  out=$(gh pr checks 60 2>&1)\n  echo \"[poll $i]\"; echo \"$out\"\n  echo \"$out\" | grep -qi pending || { echo \"=== DONE ===\"; break; }\n  sleep 40\ndone";
     let o = bash(cmd);
     assert_eq!(tag(&o), Some("write.vcs"), "token={:?}", o.token);
+}
+
+/// 태깅 루프 2026-07-05 (session-filtering PR-12 브라우저 smoke) — `env` (POSIX
+/// 유틸리티, 환경변수 지정 후 명령 실행)는 nohup/time/command 동형의 투명
+/// wrapper: 내부 명령을 재분류한다. 실 표본: `env WIMCC_PROXY_TARGET=…
+/// npx vite --port 5174`(이 세션이 스크래치 smoke 스택을 띄운 실제 명령).
+#[test]
+fn env_wrapper_unwrapped() {
+    assert_eq!(
+        tag(&bash(
+            "env WIMCC_PROXY_TARGET=http://127.0.0.1:7999 npx vite --port 5174"
+        )),
+        Some("run.code")
+    );
+    assert_eq!(tag(&bash("env FOO=bar cargo build")), Some("build.code"));
 }
