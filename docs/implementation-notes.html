@@ -6110,6 +6110,41 @@ vitest: 69 passed
     <code>sampleContentTail</code> 빈 문자열 — 구조적 바닥, 기존
     <code>#verification-tsc-2026-07-04</code> 종결 상태와 동일 클래스). 게이트
     exit 0.</p>
+  <section id="cost-tooltip-dynamic-2026-07-05">
+    <h2>비용 툴팁 동적 조립 + tipStyle 게이트 우회 (2026-07-05)</h2>
+    <p><b>정적 문자열 → 동적 조립:</b> insight strip 비용 카드의 <code>tooltip</code>을
+    단일 정적 i18n 키(<code>insight.cost.tip</code>)에서 <b>런타임 조립 문자열</b>로 전환.
+    <code>GET /v1/sessions/:id/usage</code>가 모델별 <code>rates</code>
+    (<code>input/cache_creation/cache_read/output_per_mtok</code>, 미가격 모델은 null)와
+    세션 레벨 <code>pricing_version</code>(<code>pricing_estimate@YYYY-MM-DD</code>)을
+    실으면서, 프론트가 <b>이 세션에서 실제 관측된 모델</b>만 단가 줄로 조립한다
+    (스펙 docs/specs/2026-07-04-session-detail-improvements.md §2.3, PR-2 Task 4).
+    타입은 <code>ModelRatesDto</code> 신설 + <code>ModelUsageDto.rates</code> 추가
+    (webui/src/api/types.ts).</p>
+    <p><b>조립 구조:</b> <code>tipLines = [정적 추정 근거]</code>에
+    관측 모델마다 한 줄(가격 있으면 <code>insight.cost.tipRateLine</code>
+    "<code>`model`</code> 입력 <b>$X</b> · 출력 <b>$Y</b> · cache-read $Z · cache-write $W /1M",
+    미가격이면 <code>insight.cost.tipRateLineUnpriced</code> "가격표 없음 — 합계에서 제외")을
+    push하고, 마지막에 <code>pricing_version.split('@')[1]</code>로 뽑은 기준일 줄
+    (<code>insight.cost.tipPricingDate</code> "공개 가격표 <b>YYYY-MM-DD</b> 기준")을 붙여
+    <code>\n</code>으로 join. <b>미측정≠0 원칙</b>: 미가격 모델은 $0/$undefined 단가 대신
+    "가격표 없음" 문장만 낸다 — insightCards.test.ts가 fallthrough 시 $0/$undefined가 새면
+    실패하도록 <code>.not.toMatch(/model[^\n]*\$(0\b|undefined)/)</code>로 잠갔다.</p>
+    <div class="callout warn">
+      <p><b>편차 — 함수형 tip-fragment 키가 tipStyle 게이트를 우회:</b>
+      CLAUDE.md '툴팁 카피 규칙'의 강제 장치인 <code>tipStyle.test.ts</code>는
+      <code>k.endsWith('.tip') &amp;&amp; typeof v === 'string'</code>인 키만 검사한다.
+      신설 3키(<code>tipRateLine</code>·<code>tipRateLineUnpriced</code>·<code>tipPricingDate</code>)는
+      <b>두 조건 모두</b> 벗어난다 — 이름이 <code>.tip</code>로 끝나지 않고(RateLine/…),
+      값이 함수형(인자 받음)이라 <code>typeof v === 'string'</code> 필터에도 안 걸린다.
+      따라서 이 3키의 강조·줄바꿈·긍정문 규칙은 <b>현재 손 검증</b>이다(각 rate 줄은 모델명
+      <code>`code`</code>칩 + $값 <b>굵게</b>, 기준일 줄은 날짜 굵게, 부정문 없음, ~90자).
+      조립된 최종 <code>cost.tooltip</code>은 렌더 시점엔 규칙을 만족하지만 이 3키에 대한
+      <b>CI 자동 강제는 없다</b>.</p>
+      <p><b>열린 질문:</b> tipStyle 게이트를 함수형 키까지 확장할지(예: 함수를 대표 인자로
+      호출해 반환 문자열을 검사, 또는 <code>tip</code> prefix 키도 포함). 이번 PR 범위 밖이라
+      게이트 자체는 손대지 않았고, 향후 게이트 하드닝 시 후보로 남긴다.</p>
+    </div>
   </section>
 
 </main>
