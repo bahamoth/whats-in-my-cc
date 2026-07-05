@@ -68,7 +68,7 @@ function toolArg(input: unknown, commandDisplay?: string): string {
  *  for non-MCP names. server = the last underscore-segment of the server-id
  *  (matches the Rust tagger: `plugin_serena_serena` → `serena`,
  *  `claude_ai_Slack` → `Slack`, `claude-in-chrome` → unchanged). */
-function parseMcpName(name: string): { server: string; tool: string } | null {
+export function parseMcpName(name: string): { server: string; tool: string } | null {
   if (!name.startsWith('mcp__')) return null;
   const rest = name.slice('mcp__'.length);
   const idx = rest.indexOf('__');

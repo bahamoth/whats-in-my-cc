@@ -108,3 +108,60 @@ describe('FilterBar', () => {
     expect(screen.getByRole('status')).toHaveTextContent('필터를 해제했습니다');
   });
 });
+
+// 필터 값 발견성 (2026-07-05 사용자 피드백: "도구/모델에 뭘 써야 하는지 알 수
+// 없다", "MCP 도구를 모아보고 싶은데 필터를 걸 방법이 마땅치 않다").
+// 세션에 등장한 도구·모델을 토글 목록으로 제시하고, MCP 도구는 서버별 그룹
+// 원클릭 토글(축 내 CSV OR)을 제공한다.
+describe('FilterBar — 도구·모델 후보 목록', () => {
+  const tools = ['Bash', 'Edit', 'mcp__plugin_serena_serena__find_symbol', 'mcp__plugin_serena_serena__read_file', 'mcp__github__get_me'];
+  const models = ['claude-opus-4-8', 'claude-sonnet-5'];
+
+  it('세션 등장 도구가 토글 버튼으로 나열되고 클릭 시 tools에 추가된다', () => {
+    const onChange = vi.fn();
+    render(
+      <FilterBar filter={EMPTY_FILTER} onChange={onChange} matchedCount={null} notice={null}
+        availableTools={tools} availableModels={models} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Bash' }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ tools: ['Bash'] }));
+  });
+
+  it('MCP 서버 그룹 토글 하나로 그 서버의 도구 전체가 tools에 들어간다', () => {
+    const onChange = vi.fn();
+    render(
+      <FilterBar filter={EMPTY_FILTER} onChange={onChange} matchedCount={null} notice={null}
+        availableTools={tools} availableModels={models} />,
+    );
+    fireEvent.click(screen.getByTestId('mcp-group-serena'));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: ['mcp__plugin_serena_serena__find_symbol', 'mcp__plugin_serena_serena__read_file'],
+      }),
+    );
+  });
+
+  it('그룹이 이미 전부 선택돼 있으면 그룹 토글이 그 서버 도구를 전부 제거한다', () => {
+    const onChange = vi.fn();
+    const active = {
+      ...EMPTY_FILTER,
+      tools: ['Bash', 'mcp__plugin_serena_serena__find_symbol', 'mcp__plugin_serena_serena__read_file'],
+    };
+    render(
+      <FilterBar filter={active} onChange={onChange} matchedCount={null} notice={null}
+        availableTools={tools} availableModels={models} />,
+    );
+    fireEvent.click(screen.getByTestId('mcp-group-serena'));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ tools: ['Bash'] }));
+  });
+
+  it('관측 모델이 토글 버튼으로 나열되고 클릭 시 models에 추가된다', () => {
+    const onChange = vi.fn();
+    render(
+      <FilterBar filter={EMPTY_FILTER} onChange={onChange} matchedCount={null} notice={null}
+        availableTools={tools} availableModels={models} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'claude-sonnet-5' }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ models: ['claude-sonnet-5'] }));
+  });
+});

@@ -94,6 +94,29 @@
   color: var(--wimcc-fg-subtle);
 }
 
+/* MCP 서버 그룹 원클릭 토글 — 옵션보다 반 단계 굵은 그룹 헤더 버튼. */
+.groupToggle {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  color: var(--wimcc-fg-muted);
+  background: none;
+  border: 1px dashed var(--wimcc-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.groupToggle:hover { color: var(--wimcc-fg); border-color: var(--wimcc-border-strong); }
+.groupToggle[aria-pressed='true'] {
+  color: var(--wimcc-fg);
+  background: var(--wimcc-surface-2);
+  border-style: solid;
+  border-color: var(--wimcc-border-strong);
+}
+
 .miniInput {
   width: 100%;
   padding: 3px 6px;
