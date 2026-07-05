@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { screen, fireEvent, within } from '@testing-library/react';
 import { renderWithI18n as render } from '../../../../test/i18nRender';
-import { InsightStrip } from '../InsightStrip';
+import { InsightStrip, downsampleBars, SPARK_MAX_BARS } from '../InsightStrip';
 import type { SessionUsageDto, VerificationRunDto, SignalDto } from '../../../../api/types';
 
 const usage: SessionUsageDto = {
@@ -166,5 +166,41 @@ describe('InsightStrip — S8 sparklines', () => {
     render(<InsightStrip usage={usage} verificationRuns={[]} signals={[]} />);
     const card = screen.getByTestId('insight-card-tokens');
     expect(within(card).queryByTestId('sparkline')).toBeNull();
+  });
+
+  // 롱세션(2일+, 수백 턴)에서 바 개수 상한이 없어 .spark가 카드 폭을 넘어 오버플로우.
+  it('caps sparkline bars for a very long session so it cannot overflow its card', () => {
+    const many = Array.from({ length: 300 }, (_, i) => ({
+      turn_id: `t${i}`, first_observed_at: '', last_observed_at: '',
+      tool_call_total: 0, tool_histogram: {}, tag_histogram: {}, files_edited: [],
+      tokens: { input_tokens: 100 + i, cache_creation_input_tokens: 0, cache_read_input_tokens: 900, output_tokens: 50 },
+    }));
+    render(<InsightStrip usage={usage} verificationRuns={[]} signals={[]} turns={many} />);
+    const card = screen.getByTestId('insight-card-tokens');
+    const spark = within(card).getByTestId('sparkline');
+    const bars = spark.querySelectorAll('[data-bar]');
+    expect(bars.length).toBeLessThanOrEqual(SPARK_MAX_BARS);
+    expect(bars.length).toBeGreaterThan(0);
+  });
+});
+
+describe('downsampleBars', () => {
+  it('returns the series unchanged when within the cap', () => {
+    expect(downsampleBars([1, 2, 3], 32)).toEqual([1, 2, 3]);
+  });
+
+  it('caps a long series to exactly maxBars buckets, preserving trend shape', () => {
+    const values = Array.from({ length: 200 }, (_, i) => i); // monotone increasing
+    const out = downsampleBars(values, 32);
+    expect(out).toHaveLength(32);
+    // bucket means of a monotone series stay monotone: first < last.
+    expect(out[0]).toBeLessThan(out[out.length - 1]);
+    // each bucket is a mean of the source, so within source range.
+    expect(Math.min(...out)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...out)).toBeLessThanOrEqual(199);
+  });
+
+  it('never returns more bars than the cap regardless of length', () => {
+    expect(downsampleBars(Array.from({ length: 5000 }, () => 1), 32)).toHaveLength(32);
   });
 });

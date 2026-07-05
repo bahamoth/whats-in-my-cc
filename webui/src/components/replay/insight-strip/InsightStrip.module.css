@@ -91,6 +91,9 @@
   gap: 2px;
   height: 22px;
   margin-top: 8px;
+  /* Bar count is capped by downsampling; overflow:hidden is a defensive clip so
+     the strip can never escape its card even on the narrowest layout. */
+  overflow: hidden;
 }
 .spark i {
   flex: 1 1 0;
