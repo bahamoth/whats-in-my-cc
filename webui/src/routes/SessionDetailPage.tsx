@@ -45,7 +45,7 @@ import {
   toEventFilterParams,
   type FilterState,
 } from '../components/replay/stream/filterState';
-import { buildStreamModel } from '../components/replay/stream/streamModel';
+import { buildStreamModel, isSyntheticStreamId } from '../components/replay/stream/streamModel';
 import { insertInstructionMarkers } from '../components/replay/stream/streamInstructionMarkers';
 import { getSessionInstructions } from '../api/client';
 import type { InstructionObservationDto } from '../api/types';
@@ -361,6 +361,12 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   const loadAround = window_.loadAround;
   useEffect(() => {
     if (!selectedEventId) return;
+    // Synthetic stream nodes (thinking `th-…`, groups, end cards, task-list)
+    // are not ObservedEvents: they can never be "in the buffer", so treating
+    // them as a jump target would clear an active filter ("특정 카드 클릭 시
+    // 필터 해제" 오발동, 2026-07-05) and 404 on `?around=`. Selection still
+    // works (the stream owns it); we just never refetch/clear for them.
+    if (isSyntheticStreamId(selectedEventId)) return;
     const targetInBuffer = windowEvents.some((e) => e.event_id === selectedEventId);
     if (targetInBuffer) {
       // Seen in the buffer at least once → any later eviction is not a fresh jump.
