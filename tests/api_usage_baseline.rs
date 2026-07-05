@@ -5,8 +5,11 @@ use axum_test::TestServer;
 use serde_json::Value;
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::api::{router, AppState};
+use wimcc::db::repo_signal::SignalRow;
 use wimcc::db::repo_usage_facet::UsageFacetRow;
-use wimcc::db::{migrate, repo_usage_facet};
+use wimcc::db::repo_verification_run::VerificationRunRow;
+use wimcc::db::{migrate, repo_raw, repo_signal, repo_usage_facet, repo_verification_run};
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
 
 async fn empty_pool() -> sqlx::SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -90,4 +93,195 @@ async fn baseline_endpoint_empty_store_returns_nulls() {
     assert_eq!(data["session_count"].as_i64().unwrap(), 0);
     assert!(data["billed_tokens"]["median"].is_null());
     assert!(data["cache_hit_ratio"]["median"].is_null());
+}
+
+// ---------------------------------------------------------------------------
+// PR-3 §3a — session_id project scope + 5-metric sample n
+// ---------------------------------------------------------------------------
+
+/// observed_event 1건 seed (raw FK 포함) — cwd를 채워 project 파생을 만든다.
+async fn seed_event_with_cwd(
+    pool: &sqlx::SqlitePool,
+    session_id: &str,
+    event_id: &str,
+    kind: EventKind,
+    cwd: &str,
+) {
+    // ingest_run FK for raw_event — idempotent so the helper can be called per event.
+    sqlx::query(
+        "INSERT OR IGNORE INTO ingest_run(run_id, started_at, status) VALUES(?, ?, 'running')",
+    )
+    .bind("run_baseline_test")
+    .bind(chrono::Utc::now().to_rfc3339())
+    .execute(pool)
+    .await
+    .unwrap();
+    let raw_id = format!("raw_{event_id}");
+    repo_raw::insert_dedup(
+        pool,
+        &repo_raw::NewRaw {
+            raw_event_id: raw_id.clone(),
+            ingest_run_id: "run_baseline_test".into(),
+            source_type: "claude_transcript".into(),
+            source_uri: "/tmp/test.jsonl".into(),
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: format!("sha_{event_id}"),
+            payload: b"{}".to_vec(),
+            parse_error: None,
+            captured_at: chrono::Utc::now(),
+            redaction_state: "not_applicable".into(),
+            redaction_manifest: None,
+        },
+    )
+    .await
+    .unwrap();
+    let e = ObservedEvent {
+        event_id: event_id.into(),
+        raw_event_id: raw_id,
+        schema_version: "observed_event.v1".into(),
+        session_id: session_id.into(),
+        observed_at: chrono::Utc::now(),
+        actor: Actor::Assistant,
+        kind,
+        cwd: Some(cwd.into()),
+        parser_version: "test@v0".into(),
+        ..Default::default()
+    };
+    wimcc::db::repo_observed::insert(pool, &e).await.unwrap();
+}
+
+fn make_signal(session_id: &str, signal_id: &str, detector: &str) -> SignalRow {
+    SignalRow {
+        signal_id: signal_id.into(),
+        schema_version: "signal.v1".into(),
+        session_id: session_id.into(),
+        detector: detector.into(),
+        subkind: None,
+        summary: format!("{detector} fired"),
+        evidence_refs: "[]".into(),
+        facts: "{}".into(),
+        provenance: format!("{{\"detector\":\"{detector}@v1\"}}"),
+        created_at: "2026-06-07T00:00:00Z".into(),
+    }
+}
+
+fn make_vrun(session_id: &str, id: &str, status: &str) -> VerificationRunRow {
+    VerificationRunRow {
+        verification_run_id: id.into(),
+        schema_version: "verification_run.v1".into(),
+        session_id: session_id.into(),
+        source: "bash".into(),
+        command: "cargo test".into(),
+        command_kind: "test_suite_rust".into(),
+        trigger_event_id: format!("ev_{id}"),
+        trigger_tool_use_id: None,
+        status: status.into(),
+        status_provenance: Some("measured".into()),
+        detection_basis: "known_tool".into(),
+        status_basis: "exit".into(),
+        started_at: "2026-06-07T00:00:01Z".into(),
+        ended_at: Some("2026-06-07T00:00:02Z".into()),
+        exit_code: Some(if status == "passed" { 0 } else { 1 }),
+        failure_summary: None,
+        raw_event_id: format!("raw_vr_{id}"),
+        parser_version: "verification_run@v1".into(),
+    }
+}
+
+#[tokio::test]
+async fn baseline_stat_carries_sample_n() {
+    let pool = empty_pool().await;
+    repo_usage_facet::insert(&pool, &uf("r1", "s1", 100, 0, 0, 100))
+        .await
+        .unwrap();
+    repo_usage_facet::insert(&pool, &uf("r2", "s2", 100, 0, 900, 300))
+        .await
+        .unwrap();
+
+    let state = AppState::new_for_tests(pool);
+    let server = TestServer::new(router(state)).unwrap();
+    let body = server.get("/v1/usage/baseline").await.json::<Value>();
+    let data = &body["data"];
+    // usage 4지표: n = usage 세션 수. cache_hit_ratio도 두 세션 모두 분모>0이라 n=2.
+    assert_eq!(data["billed_tokens"]["n"].as_i64().unwrap(), 2);
+    assert_eq!(data["cache_hit_ratio"]["n"].as_i64().unwrap(), 2);
+    // 파라미터 없음 → store 스코프.
+    assert_eq!(data["scope"].as_str().unwrap(), "store");
+    assert!(data["project"].is_null());
+}
+
+#[tokio::test]
+async fn baseline_new_stats_gate_their_denominators() {
+    let pool = empty_pool().await;
+    // s1: 검증 passed 1 + failed 1 (측정 2), tool_call 2회 + tool_failure 시그널 1.
+    repo_usage_facet::insert(&pool, &uf("r1", "s1", 100, 0, 0, 100))
+        .await
+        .unwrap();
+    seed_event_with_cwd(&pool, "s1", "e1", EventKind::ToolCall, "/proj/a").await;
+    seed_event_with_cwd(&pool, "s1", "e2", EventKind::ToolCall, "/proj/a").await;
+    repo_signal::insert(&pool, &make_signal("s1", "sig1", "tool_failure"))
+        .await
+        .unwrap();
+    repo_verification_run::insert(&pool, &make_vrun("s1", "v1", "passed"))
+        .await
+        .unwrap();
+    repo_verification_run::insert(&pool, &make_vrun("s1", "v2", "failed"))
+        .await
+        .unwrap();
+    // s2: usage만 있음 — 검증 0건·tool_call 0건 → pass_rate/tool_failure 분포에서 제외.
+    repo_usage_facet::insert(&pool, &uf("r2", "s2", 100, 0, 900, 300))
+        .await
+        .unwrap();
+
+    let state = AppState::new_for_tests(pool);
+    let server = TestServer::new(router(state)).unwrap();
+    let body = server.get("/v1/usage/baseline").await.json::<Value>();
+    let data = &body["data"];
+    // pass_rate: s1만 측정(1/2=0.5), n=1.
+    assert_eq!(data["verification_pass_rate"]["n"].as_i64().unwrap(), 1);
+    assert!((data["verification_pass_rate"]["median"].as_f64().unwrap() - 0.5).abs() < 1e-9);
+    // tool_failure_count: tool_call>0인 s1만, 값 1, n=1.
+    assert_eq!(data["tool_failure_count"]["n"].as_i64().unwrap(), 1);
+    assert_eq!(data["tool_failure_count"]["median"].as_f64().unwrap(), 1.0);
+    // estimated_cost_usd: billed>0인 s1·s2, n=2, median>0 (opus-4-8 가격표 有).
+    assert_eq!(data["estimated_cost_usd"]["n"].as_i64().unwrap(), 2);
+    assert!(data["estimated_cost_usd"]["median"].as_f64().unwrap() > 0.0);
+}
+
+#[tokio::test]
+async fn baseline_scopes_to_the_sessions_project() {
+    let pool = empty_pool().await;
+    // 프로젝트 A 세션 2개, 프로젝트 B 세션 1개 — usage 값이 뚜렷이 다름.
+    repo_usage_facet::insert(&pool, &uf("r1", "sa1", 100, 0, 0, 100))
+        .await
+        .unwrap(); // billed 200
+    repo_usage_facet::insert(&pool, &uf("r2", "sa2", 200, 0, 0, 200))
+        .await
+        .unwrap(); // billed 400
+    repo_usage_facet::insert(&pool, &uf("r3", "sb1", 9000, 0, 0, 9000))
+        .await
+        .unwrap(); // billed 18000
+    seed_event_with_cwd(&pool, "sa1", "ea1", EventKind::AssistantMessage, "/proj/a").await;
+    seed_event_with_cwd(&pool, "sa2", "ea2", EventKind::AssistantMessage, "/proj/a").await;
+    seed_event_with_cwd(&pool, "sb1", "eb1", EventKind::AssistantMessage, "/proj/b").await;
+    for sid in ["sa1", "sa2", "sb1"] {
+        wimcc::db::repo_observed::upsert_session_summary(&pool, sid)
+            .await
+            .unwrap();
+    }
+
+    let state = AppState::new_for_tests(pool);
+    let server = TestServer::new(router(state)).unwrap();
+    let body = server
+        .get("/v1/usage/baseline")
+        .add_query_param("session_id", "sa1")
+        .await
+        .json::<Value>();
+    let data = &body["data"];
+    assert_eq!(data["scope"].as_str().unwrap(), "project");
+    assert_eq!(data["project"].as_str().unwrap(), "/proj/a");
+    // 프로젝트 A만: billed [200,400] → median 300 (B의 18000이 섞이면 400).
+    assert_eq!(data["billed_tokens"]["median"].as_f64().unwrap(), 300.0);
+    assert_eq!(data["session_count"].as_i64().unwrap(), 2);
 }

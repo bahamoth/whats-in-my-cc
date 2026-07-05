@@ -1170,6 +1170,16 @@ pub async fn session_summary(
     }))
 }
 
+/// PR-3 §3a — baseline 스코프 해석용 단건 조회: session_summary facet의 project.
+/// 행이 없거나 project가 NULL이면 None(→ store 폴백).
+pub async fn session_project(pool: &SqlitePool, session_id: &str) -> Result<Option<String>> {
+    let row = sqlx::query("SELECT project FROM session_summary WHERE session_id = ?")
+        .bind(session_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.and_then(|r| r.try_get::<Option<String>, _>("project").ok().flatten()))
+}
+
 fn row_to_observed(r: sqlx::sqlite::SqliteRow) -> ObservedEvent {
     let actor: String = r.get("actor");
     let kind: String = r.get("kind");
