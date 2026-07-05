@@ -6,14 +6,20 @@
  * props: { metrics: SessionMetricsDto | null }
  */
 import { useMemo, useState } from 'react';
-import type { SessionMetricsDto, SignalDto, EvidenceRef } from '../../../api/types';
+import type { SessionMetricsDto, SignalDto, EvidenceRef, VerificationRunDto } from '../../../api/types';
 import { useT, type TFunction } from '../../../i18n';
+import { InfoTip } from '../insight-strip/InfoTip';
+import { RhythmStrip } from '../../dash/RhythmStrip';
 import styles from './AnalysisPanel.module.css';
 
 interface AnalysisPanelProps {
   metrics: SessionMetricsDto | null;
   /** Session signals — drive the detector drill-down (grouped by detector). */
   signals?: SignalDto[];
+  /** §3b 검증 리듬 — 세션 run 목록(기존 /verification-runs 재사용). */
+  verificationRuns?: VerificationRunDto[];
+  /** 세션 시간 범위(first/last observed_at) — pct 분모. */
+  sessionSpan?: { first: string; last: string } | null;
   /** Select/deep-link an evidence event when a drilled signal is clicked. */
   onSelectEvent?: (eventId: string) => void;
   /** Forwarded to root div for test selection (e.g. data-testid). */
@@ -54,9 +60,34 @@ function signalLabel(s: SignalDto, t: TFunction): string {
   return s.summary;
 }
 
+/** 백엔드 rhythm pct와 동일 정의: (started_at−first)/(last−first)×100,
+ *  소수 1자리, span 0 → 50 (SSOT: tests/api_verification_summary.rs). */
+function rhythmRunsOf(
+  runs: VerificationRunDto[],
+  span: { first: string; last: string },
+): Array<{ pct: number; status: string; eventId: string }> {
+  const a = Date.parse(span.first);
+  const b = Date.parse(span.last);
+  if (Number.isNaN(a) || Number.isNaN(b)) return [];
+  const ms = b - a;
+  return runs
+    .filter((r) => !Number.isNaN(Date.parse(r.started_at)))
+    .sort((x, y) => x.started_at.localeCompare(y.started_at))
+    .map((r) => ({
+      pct:
+        ms > 0
+          ? Math.min(100, Math.max(0, Math.round(((Date.parse(r.started_at) - a) / ms) * 1000) / 10))
+          : 50,
+      status: r.status,
+      eventId: r.trigger_event_id,
+    }));
+}
+
 export function AnalysisPanel({
   metrics,
   signals,
+  verificationRuns,
+  sessionSpan,
   onSelectEvent,
   'data-testid': testId,
 }: AnalysisPanelProps) {
@@ -69,6 +100,11 @@ export function AnalysisPanel({
     for (const s of signals ?? []) (m[s.detector] ??= []).push(s);
     return m;
   }, [signals]);
+
+  const rhythmRuns = useMemo(
+    () => (verificationRuns && sessionSpan ? rhythmRunsOf(verificationRuns, sessionSpan) : []),
+    [verificationRuns, sessionSpan],
+  );
 
   if (!metrics) {
     return (
@@ -126,6 +162,40 @@ export function AnalysisPanel({
             <span className={styles.metricRate} />
           </div>
         </div>
+      </div>
+
+      {/* --- 검증 실행 리듬 (§3b) — 진행률은 시간 기준(대시보드 rhythm과 동일) --- */}
+      <div className={styles.detectorSection}>
+        <div className={styles.sectionTitle}>
+          {t('analysis.rhythm.title')}
+          <InfoTip label={t('analysis.rhythm.title')} text={t('analysis.rhythm.tip')} />
+        </div>
+        {rhythmRuns.length === 0 ? (
+          <p className={styles.noDetectors} data-testid="rhythm-empty">—</p>
+        ) : (
+          <>
+            <div className={styles.rhythmMeta}>
+              {t('analysis.rhythm.meta', {
+                g: rhythmRuns.length,
+                p: rhythmRuns.filter((r) => r.status === 'passed').length,
+              })}
+            </div>
+            <RhythmStrip
+              runs={rhythmRuns}
+              onRunClick={(i) => {
+                const eid = rhythmRuns[i]?.eventId;
+                if (eid) onSelectEvent?.(eid);
+              }}
+            />
+            <div className={styles.rhythmAxis}>
+              <span>0%</span>
+              <span>25%</span>
+              <span>50%</span>
+              <span>75%</span>
+              <span>100%</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* --- Detector signal distribution --- */}

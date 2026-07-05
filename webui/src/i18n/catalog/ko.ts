@@ -113,6 +113,11 @@ export const ko: Messages = {
   'analysis.detectorDistribution': 'Detector 신호 분포',
   'analysis.noSignals': '감지된 신호 없음',
   'analysis.reReadLabel': (a: { file: string; count: string }) => `${a.file} · ${a.count}회`,
+  'analysis.rhythm.title': '검증 실행 리듬 — 세션 진행률 위 실행 위치',
+  'analysis.rhythm.meta': (a: { g: number; p: number }) => `가드 ${a.g} · 통과 ${a.p}`,
+  'analysis.rhythm.tip':
+    '**x = 세션 진행률(시간 기준)**, 점 하나가 검증 실행 하나이고 색이 결과입니다.\n' +
+    '점을 클릭하면 그 실행을 유발한 이벤트 카드로 이동합니다.',
 
   // Detail — event provenance badge
   'detail.provenance.native': '원본',

@@ -3,7 +3,7 @@ import { renderWithI18n as render } from '../../../../test/i18nRender';
 import '@testing-library/jest-dom/vitest';
 import { describe, expect, test, vi } from 'vitest';
 import { AnalysisPanel } from '../AnalysisPanel';
-import type { SessionMetricsDto, SignalDto } from '../../../../api/types';
+import type { SessionMetricsDto, SignalDto, VerificationRunDto } from '../../../../api/types';
 
 const m: SessionMetricsDto = {
   session_id: 's1',
@@ -125,5 +125,68 @@ describe('AnalysisPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /re_read/ }));
     fireEvent.click(screen.getByText(/src\/big\.rs/));
     expect(onSelectEvent).toHaveBeenCalledWith('ev_read_1');
+  });
+});
+
+function mkRun(over: Partial<VerificationRunDto>): VerificationRunDto {
+  return {
+    verification_run_id: 'vr1',
+    schema_version: 'verification_run.v1',
+    session_id: 's1',
+    source: 'bash',
+    command: 'cargo test',
+    command_kind: 'test_suite_rust',
+    trigger_event_id: 'ev_t1',
+    trigger_tool_use_id: null,
+    status: 'passed',
+    status_provenance: 'measured',
+    detection_basis: 'known_tool',
+    status_basis: 'exit',
+    started_at: '2026-06-10T02:30:00+00:00',
+    ended_at: null,
+    exit_code: 0,
+    failure_summary: null,
+    covered_diff_hunk_ids: [],
+    ...over,
+  };
+}
+
+const SPAN = { first: '2026-06-10T00:00:00+00:00', last: '2026-06-10T10:00:00+00:00' };
+
+describe('AnalysisPanel — 검증 리듬 (§3b)', () => {
+  test('run을 시간 기준 pct 점으로 렌더한다 (02:30/10h → 25%)', () => {
+    render(
+      <AnalysisPanel
+        metrics={m}
+        verificationRuns={[
+          mkRun({ verification_run_id: 'vr1', started_at: '2026-06-10T02:30:00+00:00', status: 'failed', trigger_event_id: 'ev_f' }),
+          mkRun({ verification_run_id: 'vr2', started_at: '2026-06-10T05:00:00+00:00', status: 'passed', trigger_event_id: 'ev_p' }),
+        ]}
+        sessionSpan={SPAN}
+      />,
+    );
+    const dots = document.querySelectorAll('[data-dot]');
+    expect(dots).toHaveLength(2);
+    expect((dots[0] as HTMLElement).style.left).toBe('25%');
+    expect((dots[1] as HTMLElement).style.left).toBe('50%');
+  });
+
+  test('점 클릭 → onSelectEvent(trigger_event_id)', () => {
+    const onSelect = vi.fn();
+    render(
+      <AnalysisPanel
+        metrics={m}
+        verificationRuns={[mkRun({ trigger_event_id: 'ev_jump' })]}
+        sessionSpan={SPAN}
+        onSelectEvent={onSelect}
+      />,
+    );
+    fireEvent.click(document.querySelector('button[data-dot]')!);
+    expect(onSelect).toHaveBeenCalledWith('ev_jump');
+  });
+
+  test('run 0건이면 리듬 값 자리에 —', () => {
+    render(<AnalysisPanel metrics={m} verificationRuns={[]} sessionSpan={SPAN} />);
+    expect(screen.getByTestId('rhythm-empty')).toHaveTextContent('—');
   });
 });
