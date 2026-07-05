@@ -1,0 +1,78 @@
+name: Pricing refresh
+
+# 주 1회 공식 가격 페이지와 pricing.json을 대조한다(스펙 §2.4).
+# 변동 → PR 자동 생성(병합은 사람이 — no-self-merge), 파싱 실패 → 이슈, 무변동 → no-op.
+on:
+  schedule:
+    - cron: '17 0 * * 1' # 매주 월 00:17 UTC (정시 혼잡 회피)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 단일 호출로 세 가지를 동시에 얻는다(scripts/update-pricing.ts 계약):
+      #   - drift 있으면 pricing.json을 그 자리에서 갱신(--write)
+      #   - 마크다운 diff 표를 stdout에(--markdown, PR 본문으로 사용)
+      #   - exit 코드로 무변동(0)/drift 또는 파싱 실패(1)를 신호(--check)
+      # drift와 파싱 실패는 둘 다 exit 1이라 stdout 유무로 구분한다: 파서가
+      # 표 앵커/모델을 못 찾으면 throw가 콘솔 출력 이전에 발생해 stdout이
+      # 비어 있고(파싱 실패), 실 drift는 diff 표를 먼저 출력한 뒤 1을 반환한다
+      # (로컬 검증 완료 — 두 경로 모두 재현해 확인).
+      - name: Check & update pricing.json
+        id: pricing
+        run: |
+          set +e
+          node scripts/update-pricing.ts --check --write --markdown > /tmp/pricing-diff.md
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -eq 0 ]; then
+            echo "no drift"
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+          elif [ "$code" -eq 1 ] && [ -s /tmp/pricing-diff.md ]; then
+            echo "drift detected:"
+            cat /tmp/pricing-diff.md
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::pricing page parse failed (exit $code) without producing a diff — treating as parse failure, not drift"
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Open PR with updated pricing.json
+        if: steps.pricing.outputs.drift == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DATE="$(date -u +%F)"
+          BRANCH="auto/pricing-refresh-${DATE}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add pricing.json
+          git commit -m "fix(pricing): 공개 가격표 갱신 ${DATE}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "fix(pricing): 공개 가격표 갱신 ${DATE}" \
+            --body-file /tmp/pricing-diff.md
+
+      - name: Open issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "pricing-refresh 실패 $(date -u +%F)" \
+            --body "주간 가격표 대조가 실패했습니다 — 페이지 구조 변경/네트워크 오류 가능. 파서(scripts/update-pricing.ts)와 fixture 재동결을 검토하세요. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
