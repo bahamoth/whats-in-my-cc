@@ -6147,6 +6147,56 @@ vitest: 69 passed
     </div>
   </section>
 
+  <section id="pricing-json-2026-07-05">
+    <h2>pricing.json 분리 + /usage 단가 노출 + 주간 갱신 cron (PR-2, 2026-07-05)</h2>
+    <p><b>데이터/코드 분리 결정:</b> 가격표를 <code>src/insight/pricing.rs</code> 하드코딩에서
+    저장소 루트 <code>pricing.json</code>으로 분리하고, Rust는
+    <code>include_str!("../../pricing.json")</code>로 컴파일 타임 임베드 + 최초 접근 시
+    <code>once_cell::Lazy</code> 파싱만 한다 — <b>런타임 외부 fetch는 절대 없다</b>(local-first,
+    스펙 §2.4-6). 분리 목적은 순수 리팩터가 아니라 <b>자동화</b>: JSON은 사람이 아니라
+    <code>scripts/update-pricing.ts</code>(파서/diff)와 <code>.github/workflows/pricing-refresh.yml</code>
+    (주 1회, 월 00:17 UTC + workflow_dispatch)이 갱신하는 대상이 되어야 하고, Rust 소스
+    파일은 리뷰 대상 코드로 남아야 한다 — 둘을 같은 파일에 두면 자동 PR이 코드 리뷰
+    노이즈(들여쓰기·주석 등)까지 diff에 얹는다. cron 계약: <code>update-pricing.ts --check
+    --write --markdown</code> 단일 호출로 (a) drift 있으면 그 자리에서
+    <code>pricing.json</code> 갱신, (b) 마크다운 diff 표를 stdout에, (c) exit code로
+    무변동(0)/drift-or-parse-fail(1)을 신호 — 워크플로우는 drift가 실제로 있었는지를
+    <b>stdout 유무</b>로 구분한다(파서가 표 앵커/등록 모델을 못 찾으면 diff 출력 이전에
+    throw → stdout 비어 있음 = 파싱 실패로 분류해 이슈 생성; 실 drift는 diff 표를 먼저
+    찍고 1을 반환 → PR 생성). 두 경로 모두 로컬에서 재현해 검증했다(fixture 조작 —
+    <code>update-pricing.test.ts</code> subprocess 테스트 4종).</p>
+    <p><b>파서 가정은 동결 fixture가 잠근다:</b>
+    <code>tests/fixtures/pricing/real/pricing-page-2026-07-05.html</code>은 실제 공개
+    가격 페이지를 그대로 동결한 표본이다 — 이 페이지 실물을 보기 전에는 확정할 수 없던
+    두 가정을 이 fixture가 굳힌다. ① <b>표 영역 앵커</b>: "Model pricing" 표제가 페이지
+    안에 여러 번 나타나는데(사이드바 TOC 등) 첫 occurrence만으로 표 시작을 잡으면 표
+    앞 nav 링크의 모델 표시명과 표 안 값이 뒤섞인다 — 그래서 시작~끝 앵커로 검색 범위를
+    좁힌 뒤에만 모델명을 찾는다(둘 중 하나라도 없으면 throw, 침묵 실패 금지). ②
+    <b>모델 표시명 alias</b>: 페이지는 원본 모델 id 문자열을 쓰지 않고 표시명만 쓴다
+    ("Claude Fable 5" 등) — <code>PAGE_ALIASES</code>가 id→표시명 후보(우선순위 순)를
+    매핑하고, 원본 id 자체도 폴백 후보로 남겨 향후 페이지가 id를 노출해도 깨지지 않게
+    했다. 이 두 가정 다 "미리 설계"가 아니라 <b>fixture 동결 시점에 실물을 보고
+    확정</b>한 것 — real-data anchoring 원칙(CLAUDE.md)의 실례다.</p>
+    <p><b>api_usage 버전 테스트 완화:</b> <code>tests/api_usage.rs</code>의
+    <code>pricing_version</code> 검증을 리터럴 문자열 고정(<code>"pricing_estimate@2026-06-11"</code>)에서
+    (a) 엔드포인트가 소스 상수(<code>wimcc::insight::pricing::pricing_version()</code>)를
+    그대로 노출하는지, (b) 값이 <code>pricing_estimate@YYYY-MM-DD</code> 형식이고 날짜가
+    <code>chrono::NaiveDate</code>로 파싱 가능한지로 교체했다. 이유: pricing.json이 주간
+    cron으로 갱신되면 버전 날짜가 바뀌므로, 리터럴 고정 테스트는 정상 갱신마다 깨져
+    수동 추종이 필요해진다 — 형식+소스 일치 검증은 실제 회귀(하드코딩 이탈·형식 붕괴)만
+    잡고 정상 드리프트는 통과시킨다.</p>
+    <p><b>version은 "마지막 갱신일":</b> <code>pricing.json</code>의
+    <code>version</code>은 <code>pricing_estimate@&lt;최근 갱신일&gt;</code>이고 임의
+    v-번호가 아니다 — API/UI에 그대로 노출돼 추정치의 신선도가 직접 보인다. 무변동
+    주간 실행은 <b>날짜를 bump하지 않는다</b>(파일 내용이 그대로면 커밋 자체가 없다 —
+    workflow는 drift가 있을 때만 커밋·PR을 만든다) — 매주 기계적 버전 커밋이 쌓여
+    실제 가격 변경 이력을 git log에서 찾기 어려워지는 소음을 막는다.</p>
+    <p><b>/usage rates 노출:</b> <code>GET /v1/sessions/:id/usage</code>가 모델별
+    <code>rates</code>(input/cache_creation/cache_read/output_per_mtok, 미가격 모델은
+    전부 null)를 실어 프론트가 비용 툴팁을 동적 조립하게 한다 — 상세는
+    <a href="#cost-tooltip-dynamic-2026-07-05">#cost-tooltip-dynamic-2026-07-05</a>.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
