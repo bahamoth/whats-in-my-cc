@@ -1,16 +1,9 @@
 /** 가드 실행 리듬 — 세션 진행률(시간 기준) 위 outcome 점 스트립(스펙 §3).
  *  패턴(빨강→초록 교차 / 끝몰림 / 마스킹 회색)이 스스로 말한다 — 판정 없음. */
 import type { VerificationSummaryDto } from '../../api/types';
-import { OUTCOME_COLORS } from './echartsBase';
 import { useT } from '../../i18n';
 import { InfoTip } from '../replay/insight-strip/InfoTip';
-
-const DOT: Record<string, string> = {
-  passed: OUTCOME_COLORS.passed,
-  failed: OUTCOME_COLORS.failed,
-  unknown: OUTCOME_COLORS.unknown,
-  not_executed: OUTCOME_COLORS.not_executed,
-};
+import { RhythmStrip } from './RhythmStrip';
 
 export function GuardRhythm({
   rhythm,
@@ -46,17 +39,7 @@ export function GuardRhythm({
                 {t('dash.ver.rhythm.meta', { g: r.guards, p: r.passed })}
               </div>
             </div>
-            <div className="relative h-[26px] min-w-0 flex-1 rounded-md bg-(--wimcc-surface-2)">
-              {r.runs.map((run, i) => (
-                <b
-                  key={i}
-                  data-dot
-                  title={`${run.pct}% · ${run.status}`}
-                  className="absolute top-[5px] h-4 w-2 -translate-x-1 rounded-[2.5px]"
-                  style={{ left: `${run.pct}%`, background: DOT[run.status] ?? OUTCOME_COLORS.unknown }}
-                />
-              ))}
-            </div>
+            <RhythmStrip runs={r.runs} />
           </div>
         ))}
         <div className="mt-1.5 ml-[210px] flex justify-between font-mono text-[9.5px] text-(--wimcc-fg-subtle)">
