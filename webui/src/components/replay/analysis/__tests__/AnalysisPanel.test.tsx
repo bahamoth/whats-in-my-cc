@@ -1,4 +1,4 @@
-import { screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent, cleanup } from '@testing-library/react';
 import { renderWithI18n as render } from '../../../../test/i18nRender';
 import '@testing-library/jest-dom/vitest';
 import { describe, expect, test, vi } from 'vitest';
@@ -175,6 +175,34 @@ describe('AnalysisPanel — 검증 리듬 (§3b)', () => {
     expect(dots).toHaveLength(2);
     expect((dots[0] as HTMLElement).style.left).toBe('25%');
     expect((dots[1] as HTMLElement).style.left).toBe('50%');
+  });
+
+  // 머지-후 감사 F3(2026-07-05): clamp(0/100)·degenerate span(0→50%) 경계가
+  // 미잠금 — clamp 제거/폴백 변경 회귀를 잡는다(정의 SSOT: 백엔드 rhythm pct).
+  test('경계 사영: span 밖 run은 0%/100%로 clamp, span 0은 50%', () => {
+    render(
+      <AnalysisPanel
+        metrics={m}
+        verificationRuns={[
+          mkRun({ verification_run_id: 'vb', started_at: '2026-06-09T23:00:00+00:00', trigger_event_id: 'e0' }),
+          mkRun({ verification_run_id: 'va', started_at: '2026-06-10T11:00:00+00:00', trigger_event_id: 'e1' }),
+        ]}
+        sessionSpan={SPAN}
+      />,
+    );
+    const dots = document.querySelectorAll('[data-dot]');
+    expect((dots[0] as HTMLElement).style.left).toBe('0%');
+    expect((dots[1] as HTMLElement).style.left).toBe('100%');
+    cleanup();
+    render(
+      <AnalysisPanel
+        metrics={m}
+        verificationRuns={[mkRun({ trigger_event_id: 'ez' })]}
+        sessionSpan={{ first: SPAN.first, last: SPAN.first }}
+      />,
+    );
+    const dot = document.querySelector('[data-dot]') as HTMLElement;
+    expect(dot.style.left).toBe('50%');
   });
 
   test('점 클릭 → onSelectEvent(trigger_event_id)', () => {

@@ -37,6 +37,10 @@ export interface BaselineMedian {
 /** Optional cross-session baseline (slice 6 + PR-3 §3a). Absent fields → no
  *  comparison for that card. */
 export interface InsightBaseline {
+  /** "project" | "store" — 백엔드가 내려주는 스코프 관측 사실(감사 F1,
+   *  2026-07-05). store 폴백(프로젝트 미상)이면 위치 문구가 전체 세션 기준을
+   *  명시해야 한다 — '프로젝트 중앙값' 하드코딩은 §0 표본 정직성 위반. */
+  scope?: string;
   cache_hit_ratio?: BaselineMedian;
   billed_tokens?: BaselineMedian;
   verification_pass_rate?: BaselineMedian;
@@ -63,6 +67,7 @@ export interface BaselineComparison {
 export function toInsightBaseline(dto: UsageBaselineDto): InsightBaseline {
   const m = (s: BaselineStat): BaselineMedian => ({ median: s.median, n: s.n });
   return {
+    scope: dto.scope,
     cache_hit_ratio: m(dto.cache_hit_ratio),
     billed_tokens: m(dto.billed_tokens),
     verification_pass_rate: m(dto.verification_pass_rate),
@@ -86,14 +91,17 @@ function compareToBaseline(
   base: BaselineMedian | undefined,
   chip: { v: (value: number, median: number) => number; unit: string; betterUp: boolean },
   t: TFunction,
+  scope?: string,
 ): BaselineComparison | undefined {
   if (!base || base.median === null) return undefined;
   if (base.n < 3) {
     return { chip: { v: 0, unit: chip.unit, betterUp: chip.betterUp }, n: base.n, lowSample: true };
   }
+  const positionKey =
+    scope === 'store' ? 'insight.baselinePositionStoreN' : 'insight.baselinePositionN';
   const position =
     base.median > 0
-      ? t('insight.baselinePositionN', { x: (value / base.median).toFixed(1), n: base.n })
+      ? t(positionKey, { x: (value / base.median).toFixed(1), n: base.n })
       : undefined;
   return {
     chip: { v: chip.v(value, base.median), unit: chip.unit, betterUp: chip.betterUp },
@@ -223,6 +231,7 @@ function contextCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
       inputs.baseline?.cache_hit_ratio,
       { v: (s, m) => (s - m) * 100, unit: '%p', betterUp: true },
       t,
+      inputs.baseline?.scope,
     );
   }
   if (inputs.turns) {
@@ -269,6 +278,7 @@ function tokensCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
     inputs.baseline?.billed_tokens,
     { v: (s, m) => (m > 0 ? (s / m - 1) * 100 : 0), unit: '%', betterUp: false },
     t,
+    inputs.baseline?.scope,
   );
   if (inputs.turns) {
     const spark = perTurnBilled(inputs.turns);
@@ -341,6 +351,7 @@ function verificationCard(inputs: InsightInputs, t: TFunction): InsightCardModel
       inputs.baseline?.verification_pass_rate,
       { v: (s, m) => (s - m) * 100, unit: '%p', betterUp: true },
       t,
+      inputs.baseline?.scope,
     );
   }
   return card;
@@ -365,6 +376,7 @@ function toolFailureCard(inputs: InsightInputs, t: TFunction): InsightCardModel 
     inputs.baseline?.tool_failure_count,
     { v: (s, m) => s - m, unit: '', betterUp: false },
     t,
+    inputs.baseline?.scope,
   );
   return card;
 }
@@ -424,6 +436,7 @@ function costCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
     inputs.baseline?.estimated_cost_usd,
     { v: (s, m) => (m > 0 ? (s / m - 1) * 100 : 0), unit: '%', betterUp: false },
     t,
+    inputs.baseline?.scope,
   );
   // S8 — cost has no per-turn pricing breakdown; bill ∝ cost, so the per-turn
   // billed-tokens series is an honest *shape* proxy for the cost trend.

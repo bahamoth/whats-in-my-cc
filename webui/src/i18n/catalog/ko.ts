@@ -37,6 +37,8 @@ export const ko: Messages = {
   'insight.loading': '로딩 중',
   'insight.baselinePositionN': (p: { x: string; n: number }) =>
     `프로젝트 중앙값의 ${p.x}× · n ${p.n}`,
+  'insight.baselinePositionStoreN': (p: { x: string; n: number }) =>
+    `전체 세션 중앙값의 ${p.x}× · n ${p.n}`,
   'insight.baselineLowSample': (n: number) => `표본 부족 (n ${n})`,
   'insight.provenance.measured': '측정',
   'insight.provenance.mixed': '혼합',
