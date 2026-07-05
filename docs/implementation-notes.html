@@ -6195,6 +6195,77 @@ vitest: 69 passed
     <code>rates</code>(input/cache_creation/cache_read/output_per_mtok, 미가격 모델은
     전부 null)를 실어 프론트가 비용 툴팁을 동적 조립하게 한다 — 상세는
     <a href="#cost-tooltip-dynamic-2026-07-05">#cost-tooltip-dynamic-2026-07-05</a>.</p>
+  <section id="analysis-verification-panels-2026-07-05">
+    <h2>세션 분석 패널 — 검증 리듬·변경 커버리지 이식 (2026-07-05, PR-4)</h2>
+    <p><b>배경:</b> 대시보드 검증 탭(2026-07-04 전면 개편)의 <b>가드 실행 리듬</b>·
+    <b>변경 커버리지</b> 시각 언어를 세션 상세의 <code>AnalysisPanel</code>로 이식 —
+    세션 하나의 검증 활동을 그 세션 안에서(다른 세션과 섞이지 않고) 보게 한다.
+    백엔드는 기존 <code>GET /v1/verification/summary</code>에 <code>session_id</code>
+    스코프(2026-07-04 구현, <code>tests/api_verification_summary.rs</code>
+    <code>summary_session_scope_*</code> 계열)를 그대로 재사용 — 프런트 전용
+    변경이다.</p>
+    <p><b>§3b 검증 실행 리듬:</b> AnalysisPanel에 리듬 스트립 섹션 추가. run 목록은
+    페이지가 이미 불러온 <code>/verification-runs</code> 쿼리를 재사용(신규 fetch
+    없음), pct는 <code>rhythmRunsOf()</code>가 세션
+    <code>first_observed_at</code>/<code>last_observed_at</code> 스팬 위에서 로컬
+    계산한다. run 없음(0건)은 <code>0%</code>가 아니라 <code>—</code>
+    (<code>data-testid="rhythm-empty"</code>) — "미측정 ≠ 0" 원칙(CLAUDE.md WebUI
+    표기 원칙).</p>
+    <p><b>편차 — 진행률 축을 시간 기준으로:</b> 스펙 표현은 "이벤트 순서 기준"을
+    상정했으나 구현은 <b>시간 기준</b>(<code>(started_at−first)/(last−first)×100</code>)
+    으로 조정했다. 사유: ① 세션 상세 스트림은 창(window) 버퍼만 로드하므로 리듬
+    run의 trigger 이벤트가 현재 로드된 창 밖에 있으면 "전체 이벤트 중 몇 번째"라는
+    서수(ordinal)를 알 방법이 없다(그 이벤트 자체를 아직 불러오지 않았으므로).
+    ② 대시보드 GuardRhythm이 이미 이 시간-기준 정의로 구현·테스트돼 있다
+    (<code>tests/api_verification_summary.rs</code> 주석: "rhythm pct:
+    (started_at − session.first) / (last − first) × 100") — 세션판이 같은 정의를
+    재사용하면 두 화면(대시보드 vs 세션 상세)의 "리듬"이 동일한 의미를 갖는다(대시보드는
+    세션 간 비교, 세션판은 세션 내부 비교로 축만 다르고 계산은 하나의 SSOT).
+    ③ pct 계산 자체가 순수 함수(<code>rhythmRunsOf</code>, AnalysisPanel.tsx)라
+    서버 재왕복 없이 프런트에서 바로 그릴 수 있다.</p>
+    <p><b>리듬 점 클릭 → 이벤트 점프:</b> <code>onRunClick(i)</code>가
+    <code>trigger_event_id</code>를 기존 <code>selectStreamCard</code>
+    (=<code>sel.setSelectedNodeId</code>)에 넘긴다 — 이미 검증된 "드릴다운 signal
+    클릭" 경로와 동일 메커니즘(<code>SessionDetailPage.test.tsx</code> Task 7 텍스트:
+    "same as the drilled-signal click already proven above"). <b>주의(버그
+    아님, 스모크로 확인)</b>: 스트림이 "자동 스크롤"(live-tip following) 상태이면
+    클릭은 선택 상태·URL(<code>?selected=</code>)만 갱신하고 창을 그 이벤트로
+    강제 이동하지 않는다 — 기존 deep-link 가드(<code>followingRef.current</code>가
+    true인 동안 <code>loadAround</code> 호출을 보류, "라이브 tail을 읽는 중에
+    과거 이벤트로 뷰가 끌려가지 않게") 때문이다. 자동 스크롤을 끄면(또는 대상
+    이벤트가 이미 로드된 창 안에 있으면) 클릭이 그 카드를 즉시 선택·스크롤한다 —
+    실제 스크래치 세션(316 run)에서 재현·확인.</p>
+    <p><b>§3c 변경 커버리지:</b> <code>verification/summary?session_id=</code>
+    응답의 <code>coverage</code>(covered/total diff hunk) 합계를 그대로 그린다.
+    hunk 0건(<code>coverage.total === 0</code>)은 <code>—</code>
+    (<code>data-testid="coverage-empty"</code>) — 0%와 구분(검증 안 된 변경을
+    "0% 커버"로 오독하지 않도록).</p>
+    <p><b>RhythmStrip/CoverageBar 추출(재사용을 위한 리팩터):</b> 대시보드 전용
+    <code>GuardRhythm.tsx</code>/<code>ChangeCoverage.tsx</code> 내부의 점 스트립·
+    바 렌더링을 <code>dash/RhythmStrip.tsx</code>·<code>dash/CoverageBar.tsx</code>로
+    추출해 대시보드(다중 세션, 세션당 1행)와 세션 AnalysisPanel(단일 세션, run당
+    점 1개)이 같은 컴포넌트·같은 색 SSOT(<code>OUTCOME_COLORS</code>)를 공유한다.
+    <code>RhythmStrip</code>은 <code>onRunClick</code>이 없으면 정적 렌더(대시보드
+    용도), 있으면 클릭 가능한 <code>&lt;button&gt;</code> 점(세션판 점프용)으로
+    분기 — 컴포넌트 하나가 두 상호작용 모드를 다 감당한다.</p>
+    <p><b>브라우저 스모크(2026-07-05, scratch serve :7999 + vite :5174,
+    <code>--no-watch-transcripts</code>, 운영 :7878 무재시작):</b> 실 세션 2건으로
+    확인 — ① <code>190a23db-…</code>(가드 316·통과 102, 변경 커버리지 87/88):
+    리듬 스트립에 outcome 색 점 렌더, 점 클릭 → 이벤트 점프(자동 스크롤 해제 후)
+    확인, 커버리지 바 렌더. ② <code>dad4d155-…</code>(검증 run 0·hunk 0, 소형
+    세션): 두 섹션 모두 <code>—</code> 렌더 확인. InfoTip 2종 hover/클릭 시
+    툴팁 카피 규칙 준수(강조 볼드·<code>[green]커버[/green]</code>/
+    <code>[red]미커버[/red]</code> 의미색·문장 단위 줄바꿈) 확인. 대시보드
+    검증 탭(가드 실행 리듬·변경 커버리지 카드)도 같은 컴포넌트로 시각 무회귀
+    확인.</p>
+    <p><b>개선 루프(2026-07-05):</b> untagged-bash 전체 스캔에서 신규 후보 2건
+    (count≥2) — <code>top</code>(<code>top -l 1 -n 5 -o cpu</code>, 보편 CLI,
+    ps/lsof/uptime과 같은 <code>read.proc</code>로 사전 추가+TDD) ·
+    <code>port</code>(<code>pgrep -f "port 7999|port 5174|…"</code> 패턴 문자열의
+    토크나이저 파편, vite/splitRunByPhase와 동족 — baseline 보류). 재빌드 후
+    scratch serve(session 31f1fb03+b4196731 재ingest)로 재확인, tagging-gate
+    exit 0. unidentified-plugins 0건, unknown-verification은 기존 미해소
+    버킷(format_check/exit·build/piped)과 동일해 신규 아님.</p>
   </section>
 
 </main>
