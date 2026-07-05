@@ -509,6 +509,9 @@ pub struct EventsQuery {
     pub tool: Option<String>,
     /// §1.2 model axis — CSV of exact model name matches (assistant_message).
     pub model: Option<String>,
+    /// tag axis (2026-07-05 사후 확장) — CSV of deterministic `verb.object`
+    /// tool-call tags (`classify_tool_call`, same source as turn tag_histogram).
+    pub tag: Option<String>,
     /// §1.2 free-text search — case-insensitive substring over message/tool
     /// input/result text.
     pub q: Option<String>,
@@ -559,6 +562,7 @@ pub async fn session_events(
         verification: q.verification.as_deref(),
         tool: q.tool.as_deref(),
         model: q.model.as_deref(),
+        tag: q.tag.as_deref(),
         q: q.q.as_deref(),
     })
     .map_err(|detail| {

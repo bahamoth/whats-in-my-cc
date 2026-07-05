@@ -257,6 +257,7 @@ export const ko: Messages = {
   'filter.axis.kind': '종류',
   'filter.axis.origin': '출처',
   'filter.axis.outcome': '실행 결과',
+  'filter.axis.tag': '태그',
   'filter.axis.content': '도구·모델·텍스트',
   'filter.outcome.error': '에러난 도구',
   'filter.outcome.signal': '시그널 있음',

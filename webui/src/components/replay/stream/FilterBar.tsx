@@ -43,6 +43,8 @@ export interface FilterBarProps {
   availableTools?: string[];
   /** 세션에서 관측된 모델 id(usage.by_model). */
   availableModels?: string[];
+  /** 세션 등장 태그(verb.object — turns.tag_histogram 합산, tag 축 후보). */
+  availableTags?: string[];
 }
 
 export function FilterBar({
@@ -52,6 +54,7 @@ export function FilterBar({
   notice,
   availableTools,
   availableModels,
+  availableTags,
 }: FilterBarProps) {
   const t = useT();
   const [qDraft, setQDraft] = useState(filter.q);
@@ -210,6 +213,28 @@ export function FilterBar({
           </div>
         </details>
 
+        {(availableTags ?? []).length > 0 && (
+          <details className={styles.dropdown}>
+            <summary className={styles.summary}>
+              {t('filter.axis.tag')}
+              {filter.tags.length > 0 && <span className={styles.badge}>{filter.tags.length}</span>}
+            </summary>
+            <div className={styles.menu}>
+              {(availableTags ?? []).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={filter.tags.includes(v)}
+                  className={styles.option}
+                  onClick={() => onChange({ ...filter, tags: toggle(filter.tags, v) })}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </details>
+        )}
+
         <details className={styles.dropdown}>
           <summary className={styles.summary}>
             {t('filter.axis.content')}
@@ -344,6 +369,11 @@ export function FilterBar({
         ))}
         {filter.models.map((v) => (
           <button key={`m:${v}`} type="button" className={styles.chip} onClick={() => onChange({ ...filter, models: filter.models.filter((x) => x !== v) })}>
+            {v} ×
+          </button>
+        ))}
+        {filter.tags.map((v) => (
+          <button key={`tg:${v}`} type="button" className={styles.chip} onClick={() => onChange({ ...filter, tags: filter.tags.filter((x) => x !== v) })}>
             {v} ×
           </button>
         ))}
