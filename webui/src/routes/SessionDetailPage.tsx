@@ -351,11 +351,22 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   // (#doc-audit-2026-06-10 backlog). One attempt per event id — a 404 (event
   // gone via retention / wrong session) must not retry forever.
   const triedAroundRef = useRef<string | null>(null);
+  // Last selectedEventId we have OBSERVED present in the (filtered) buffer. Used
+  // to tell a genuine cross-filter jump (never in the buffer) from a selection
+  // that WAS in the buffer and got evicted by streaming append/trim — the latter
+  // must NOT clear the filter ("스트리밍 갱신 시 필터 풀림" 버그, 2026-07-05).
+  const resolvedSelectionRef = useRef<string | null>(null);
   const windowLoading = window_.loading;
   const windowEvents = window_.events;
   const loadAround = window_.loadAround;
   useEffect(() => {
     if (!selectedEventId) return;
+    const targetInBuffer = windowEvents.some((e) => e.event_id === selectedEventId);
+    if (targetInBuffer) {
+      // Seen in the buffer at least once → any later eviction is not a fresh jump.
+      resolvedSelectionRef.current = selectedEventId;
+      return; // already loaded — the ConversationStream scroll effect handles it
+    }
     // While FOLLOWING the live tip, do NOT drag the window back to the selected
     // event. Resuming follow (autoscroll toggle ON) reloads to the tail on
     // purpose — the reader chose "latest" over the deep-linked event. Without
@@ -365,20 +376,23 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     // in the DetailPanel; only the auto-scroll-back is suppressed.
     if (followingRef.current) return;
     if (windowLoading !== 'idle') return;
-    const targetInBuffer = windowEvents.some((e) => e.event_id === selectedEventId);
-    if (targetInBuffer) return; // already loaded — the ConversationStream scroll effect handles it
-    // §1.4 jump rule: a filter-active buffer only ever holds MATCHING rows, so
-    // "outside the buffer" while filtered is undecidable from the client alone
-    // (may be filtered out, or just not yet paged in) — clear the filter first
-    // so the deterministic tail/around fetch below can find it. Clearing
-    // changes `filterKey`, which resets the useSessionWindow buffer; this same
-    // effect re-runs on the next `windowEvents` change and (now unfiltered)
-    // falls through to `loadAround`.
-    if (jumpNeedsFilterClear(filterActive, targetInBuffer)) {
+    // §1.4 jump rule: a filter-active buffer only ever holds MATCHING rows, so a
+    // FRESH jump (signal evidence / verification dot) to a target outside the
+    // buffer clears the filter first so the deterministic tail/around fetch below
+    // can find it. But a selection that was previously IN the buffer and got
+    // evicted by streaming append/trim is not a jump — clearing the filter there
+    // is the reported bug. `isFreshJump` distinguishes the two.
+    const isFreshJump = resolvedSelectionRef.current !== selectedEventId;
+    if (jumpNeedsFilterClear(filterActive, targetInBuffer, isFreshJump)) {
+      // Clearing changes `filterKey`, which resets the useSessionWindow buffer;
+      // this same effect re-runs on the next `windowEvents` change and (now
+      // unfiltered) falls through to `loadAround`.
       applyFilter(EMPTY_FILTER);
       showJumpNotice(t('filter.cleared.byJump'));
       return;
     }
+    // Filter active + evicted selection (not a fresh jump): leave the filter be.
+    if (filterActive && !isFreshJump) return;
     if (triedAroundRef.current === selectedEventId) return;
     triedAroundRef.current = selectedEventId;
     void loadAround(selectedEventId);
