@@ -6451,6 +6451,34 @@ vitest: 69 passed
     별도 작업(#24)으로 진행.</p>
   </section>
 
+  <section id="session-detail-followups-2-2026-07-05">
+    <h2>세션 상세 후속 2차 — tag 필터 축·verification 성능·빈상태 오독·감사 findings (2026-07-05)</h2>
+    <p><b>tag 필터 축</b>(24d7f28): 사용자 요청("애써 달아둔 태그를 필터에서 쓸 수
+    없음")으로 §1.2 사후 확장. 백엔드 <code>EventFilter.tags</code>(tool_call의
+    <code>classify_tool_call().value</code> 일치, 형식오류 400·미존재 0건), 프론트
+    f_tag URL 왕복 + FilterBar 태그 드롭다운(후보 = turns.tag_histogram 합산).
+    스크래치 스택(:7999/:5174) 스모크: 세션 등장 태그 21종 렌더, test.code 토글 →
+    "68건 매칭" = API 검증치와 일치.</p>
+    <p><b>verification=unknown 실사고 2건</b>: 사용자가 "197건 매칭인데 메시지가 안
+    보인다"고 보고 — 진단 결과 ① 50k 이벤트 세션에서 verification 필터 쿼리가
+    <b>7.2초</b>(count+window 풀스캔 2회 × 행별 payload 파싱), 그동안 스트림이
+    'No conversation events yet.'를 보여줘 <b>매칭 없음으로 오독</b>. ② 해소:
+    <b>event_id IN 푸시다운</b>(38ba873 — verification/signal 축은 매칭 가능
+    이벤트가 ctx 집합 원소로 한정, 둘 다 활성이면 교집합; 실측 7.2s→0.39s 18×) +
+    <b>로딩/필터드-빈/무필터-빈 3분기</b>(8a85c3b). buildStreamModel 자체는
+    정상이었다(실데이터 196이벤트→23 아이템 진단으로 확인).</p>
+    <p><b>다중청크 테스트의 mutation 내성</b>(47433f9): mutation check에서 커서
+    경계 &lt;→&lt;= 변이가 살아남는 걸 발견 — 희소 술어(7배수 hit)는 청크 경계
+    행과 안 겹쳤다. all-true 전량 수집(페이지 999) 단계를 추가; 재검증에서 변이는
+    마지막 페이지 커서 행을 영원히 재반환(hang)해 통과 불가임을 실증.</p>
+    <p><b>§2 감사 finding 수정</b>(c1bab43): 비용 툴팁 정적부의 "cache_read(무료)는
+    비용에서 제외"가 실제 계산(cache_read 단가 포함)·동적 단가 줄과 정면 모순 —
+    사실로 교정 + 모순 문구 금지 단언. <b>감사 잔여(수정 안 함, 인지)</b>:
+    tipStyle 게이트가 함수형 tip-fragment 키(tipRateLine 등)를 못 검사(기존 편차
+    문서화됨) · api_usage 버전 assert가 순환(형식 체크만 실효) · blended $/1M
+    분자(비용, cache_read 포함)/분모(billed, 제외) 불일치는 by-design 소견.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
