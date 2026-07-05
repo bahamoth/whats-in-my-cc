@@ -194,6 +194,14 @@ export function useSessionWindow(
       setOldest(resp.prev_cursor);
       setNewest(resp.next_cursor);
       setAtLiveTip(resp.next_cursor === null);
+      // This branch only runs when `!filter` (its own guard above) — always
+      // unfiltered, so matchedCount is always null here. Without this, a
+      // filter cleared by a jump (SessionDetailPage's jumpNeedsFilterClear)
+      // re-enters this branch (initialAround still set) and the matchedCount
+      // from the prior FILTERED tail fetch is never reset — "N건 매칭" keeps
+      // rendering under a filter that's no longer active (caught by browser
+      // smoke, 2026-07-05, session 653ea169).
+      setMatchedCount(null);
       setLoadingBoth('idle');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
