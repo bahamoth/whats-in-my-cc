@@ -396,10 +396,14 @@ describe('costCard tooltip — 단가표 동적 조립 (§2.3)', () => {
     expect(cost.tooltip).toContain('2026-06-11');
   });
 
-  it('미가격 모델은 가격표 없음 줄로 표기된다', () => {
+  it('미가격 모델은 가격표 없음 줄로만 표기되고 $0/$undefined 단가가 새지 않는다 (미측정≠0)', () => {
     const cards = byId({ ...EMPTY, usage: usageWithRates });
     const cost = cards.get('cost')!;
     expect(cost.tooltip).toContain('`some-future-model-x`');
+    // unpriced 브랜치만 내는 문구 — rate-line로 fallthrough하면 이 문구가 사라진다.
+    expect(cost.tooltip).toContain('가격표 없음');
+    // 그 모델 줄에 $0/$undefined 단가가 렌더되면 안 됨 (미측정을 0으로 표기 금지).
+    expect(cost.tooltip).not.toMatch(/some-future-model-x[^\n]*\$(0\b|undefined)/);
   });
 
   it('usage 미수집이면 기존 정적 툴팁 그대로', () => {
