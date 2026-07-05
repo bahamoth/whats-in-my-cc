@@ -882,6 +882,7 @@ const SCAN_CHUNK: i64 = 1000;
 fn scan_sql(
     sql_kinds: Option<&[String]>,
     sql_tools: Option<&[String]>,
+    sql_ids: Option<&[String]>,
     before: bool,
     after: bool,
     desc: bool,
@@ -894,6 +895,10 @@ fn scan_sql(
     if let Some(ts) = sql_tools {
         let ph = (0..ts.len()).map(|_| "?").collect::<Vec<_>>().join(",");
         sql.push_str(&format!(" AND tool_name IN ({ph})"));
+    }
+    if let Some(ids) = sql_ids {
+        let ph = (0..ids.len()).map(|_| "?").collect::<Vec<_>>().join(",");
+        sql.push_str(&format!(" AND event_id IN ({ph})"));
     }
     if after {
         sql.push_str(" AND (observed_at > ? OR (observed_at = ? AND event_id > ?))");
@@ -912,12 +917,17 @@ fn scan_sql(
 /// 필터 창(§1.2 실행 전략): kind/tool은 SQL WHERE 푸시다운, 나머지는 호출자
 /// 술어. 커서 순서로 CHUNK(1000)행씩 스캔하며 술어 통과분을 모으고 limit
 /// 충족 시 중단. 반환 순서는 다른 창과 동일하게 ASC.
+/// `sql_ids`(2026-07-05): verification/signal 축처럼 매칭 가능한 이벤트 id
+/// 집합을 호출자가 미리 아는 경우 `event_id IN` 푸시다운으로 스캔을 후보 행에
+/// 한정한다 — 50k행 세션에서 payload 파싱 풀스캔(수 초)이 후보 수백 행 조회로
+/// 준다. 술어는 그대로 적용되므로 순수 최적화(결과 동치).
 #[allow(clippy::too_many_arguments)]
 pub async fn list_session_window_scan(
     pool: &SqlitePool,
     session_id: &str,
     sql_kinds: Option<&[String]>,
     sql_tools: Option<&[String]>,
+    sql_ids: Option<&[String]>,
     pred: &(dyn Fn(&ObservedEvent) -> bool + Send + Sync),
     before: Option<&Cursor>,
     after: Option<&Cursor>,
@@ -944,6 +954,7 @@ pub async fn list_session_window_scan(
         let sql = scan_sql(
             sql_kinds,
             sql_tools,
+            sql_ids,
             eff_before.is_some(),
             eff_after.is_some(),
             desc,
@@ -957,6 +968,11 @@ pub async fn list_session_window_scan(
         if let Some(ts) = sql_tools {
             for t in ts {
                 q = q.bind(t);
+            }
+        }
+        if let Some(ids) = sql_ids {
+            for i in ids {
+                q = q.bind(i);
             }
         }
         if let Some(a) = eff_after {
@@ -1000,12 +1016,13 @@ pub async fn count_session_scan(
     session_id: &str,
     sql_kinds: Option<&[String]>,
     sql_tools: Option<&[String]>,
+    sql_ids: Option<&[String]>,
     pred: &(dyn Fn(&ObservedEvent) -> bool + Send + Sync),
 ) -> Result<i64> {
     let mut count = 0i64;
     let mut resume: Option<Cursor> = None;
     loop {
-        let sql = scan_sql(sql_kinds, sql_tools, false, resume.is_some(), false);
+        let sql = scan_sql(sql_kinds, sql_tools, sql_ids, false, resume.is_some(), false);
         let mut q = sqlx::query(&sql).bind(session_id);
         if let Some(ks) = sql_kinds {
             for k in ks {
@@ -1015,6 +1032,11 @@ pub async fn count_session_scan(
         if let Some(ts) = sql_tools {
             for t in ts {
                 q = q.bind(t);
+            }
+        }
+        if let Some(ids) = sql_ids {
+            for i in ids {
+                q = q.bind(i);
             }
         }
         if let Some(a) = &resume {
@@ -1391,6 +1413,7 @@ mod tests {
             "sess-scan",
             Some(&["user_message".into()]),
             None,
+            None,
             &deploy,
             None,
             None,
@@ -1410,6 +1433,7 @@ mod tests {
             &pool,
             "sess-scan",
             Some(&["user_message".into()]),
+            None,
             None,
             &deploy,
             Some(&c),
@@ -1438,6 +1462,7 @@ mod tests {
             "sess-scan",
             Some(&["user_message".into()]),
             None,
+            None,
             &deploy,
             None,
             Some(&c2),
@@ -1453,6 +1478,7 @@ mod tests {
             "sess-scan",
             None,
             Some(&["Bash".into()]),
+            None,
             &any,
             None,
             None,
@@ -1467,6 +1493,7 @@ mod tests {
             &pool,
             "sess-scan",
             Some(&["user_message".into()]),
+            None,
             None,
             &deploy,
         )
@@ -1518,7 +1545,7 @@ mod tests {
         };
 
         // (1) count — ASC resume 루프가 청크 경계를 넘어 전량을 센다.
-        let cnt = count_session_scan(&pool, "sess-chunk", None, None, &hit)
+        let cnt = count_session_scan(&pool, "sess-chunk", None, None, None, &hit)
             .await
             .unwrap();
         assert_eq!(cnt, expected.len() as i64);
@@ -1530,6 +1557,7 @@ mod tests {
             let page = list_session_window_scan(
                 &pool,
                 "sess-chunk",
+                None,
                 None,
                 None,
                 &hit,
@@ -1554,6 +1582,43 @@ mod tests {
         let got: Vec<&str> = collected.iter().map(|e| e.event_id.as_str()).collect();
         assert_eq!(got, expected.iter().map(String::as_str).collect::<Vec<_>>());
 
+        // (3-pre) sql_ids 푸시다운(§1.2 확장, 2026-07-05 성능): verification/
+        // signal 축은 매칭 가능한 이벤트 id 집합을 호출자가 이미 알고 있어
+        // event_id IN 으로 스캔을 후보 행으로 좁힌다 — 술어-only 결과와 동일해야
+        // 한다(정확성 잠금; 50k 세션 7초 스캔이 후보 조회로 줄어드는 건 실측).
+        let ids: Vec<String> = expected.clone();
+        let by_ids = list_session_window_scan(
+            &pool,
+            "sess-chunk",
+            None,
+            None,
+            Some(&ids),
+            &hit,
+            None,
+            None,
+            1000,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            by_ids
+                .iter()
+                .map(|e| e.event_id.as_str())
+                .collect::<Vec<_>>(),
+            expected.iter().map(String::as_str).collect::<Vec<_>>()
+        );
+        let cnt_ids = count_session_scan(&pool, "sess-chunk", None, None, Some(&ids), &hit)
+            .await
+            .unwrap();
+        assert_eq!(cnt_ids, expected.len() as i64);
+        // ids 밖 이벤트는 술어가 참이어도 제외된다.
+        let only_two: Vec<String> = expected.iter().take(2).cloned().collect();
+        let narrowed =
+            count_session_scan(&pool, "sess-chunk", None, None, Some(&only_two), &|_e| true)
+                .await
+                .unwrap();
+        assert_eq!(narrowed, 2);
+
         // (3) after 페이징 전진으로도 동일 집합. after-only가 ASC 전진 계약이므로
         // "세션 시작 이전" 인공 커서에서 출발한다(after=None은 최신 앵커 DESC).
         let mut forward: Vec<String> = Vec::new();
@@ -1565,6 +1630,7 @@ mod tests {
             let page = list_session_window_scan(
                 &pool,
                 "sess-chunk",
+                None,
                 None,
                 None,
                 &hit,
