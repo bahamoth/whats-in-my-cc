@@ -43,9 +43,10 @@ export const ko: Messages = {
   'insight.provenance.estimated': '추정',
   'insight.provenance.uncollected': '미수집·예정',
 
-  'insight.context.title': '컨텍스트 효율',
+  'insight.context.title': '캐시 읽기 비중',
   'insight.context.tip':
-    '캐시 적중률 = **cache_read / (cache_read + cache_creation + input)** — 측정값(usage facet).\n' +
+    '캐시 읽기 비중 = **cache_read / (cache_read + cache_creation + input)** — 측정값(usage facet).\n' +
+    '매 턴 대화 prefix를 캐시에서 재사용해 값은 대체로 **높게** 유지됩니다 — 비용은 `billed tokens`로 봅니다.\n' +
     '고정 캐시 컨텍스트 크기·증가·캐시 미스는 펼쳐서 확인합니다.\n' +
     '시스템 프롬프트/스킬/메모리 단위 분해와 "오염" 판정은 데이터에 없어 제공 범위 밖입니다(설계 §8).',
   'insight.context.detailCacheRead': (v: string) => `캐시 읽기 ${v}`,
