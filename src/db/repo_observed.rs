@@ -1022,7 +1022,14 @@ pub async fn count_session_scan(
     let mut count = 0i64;
     let mut resume: Option<Cursor> = None;
     loop {
-        let sql = scan_sql(sql_kinds, sql_tools, sql_ids, false, resume.is_some(), false);
+        let sql = scan_sql(
+            sql_kinds,
+            sql_tools,
+            sql_ids,
+            false,
+            resume.is_some(),
+            false,
+        );
         let mut q = sqlx::query(&sql).bind(session_id);
         if let Some(ks) = sql_kinds {
             for k in ks {
@@ -1615,7 +1622,10 @@ mod tests {
             all_rows = next;
         }
         let expected_all: Vec<String> = (0..TOTAL).map(|i| format!("evscan-{i:04}")).collect();
-        assert_eq!(all_rows, expected_all, "no loss/dup across every chunk boundary");
+        assert_eq!(
+            all_rows, expected_all,
+            "no loss/dup across every chunk boundary"
+        );
 
         // (3-pre) sql_ids 푸시다운(§1.2 확장, 2026-07-05 성능): verification/
         // signal 축은 매칭 가능한 이벤트 id 집합을 호출자가 이미 알고 있어
