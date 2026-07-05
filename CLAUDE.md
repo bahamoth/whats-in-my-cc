@@ -74,6 +74,14 @@ schema-versioning·deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html` �
   업로드. 버전(`Cargo.toml`·`webui/package.json`·`package-lock.json`)은 자동 bump —
   **손으로 수정 금지**. **PR 병합은 rebase**(merge commit 없는 linear history, squash 금지) —
   개별 conventional commit을 보존해 release-please가 type별로 버전을 산정한다.
+- **PR 단위: 관련 기능은 하나의 PR로 취합**(기능별·영역별 분할·스택 PR 지양). 한 스펙의
+  여러 영역이라도 단일 브랜치에 순차 커밋해 한 PR로 낸다 — 개별 conventional commit은 그
+  안에서 보존(release-please가 type별 버전 산정). 쪼개면 각 PR의 베이스가 rebase 머지 시
+  SHA가 재작성돼 append-only 원장(`implementation-notes`·`notes-index`)·태깅 사전
+  (`event_tags`·`tagging-gate-baseline`)·공유 파일(`SessionDetailPage` 등)에서 반복 충돌이
+  나 머지 취합 비용이 폭증한다 — worktree 격리나 강한 멀티에이전트 병렬 없이는 특히 비효율
+  (2026-07-05 4-PR 분할 실사고). 분할이 꼭 필요하면 worktree 격리를 전제로 하고, 아니면
+  단일 PR을 기본으로 한다.
 - **인증**: 기본 `--auth off`(단일 사용자 dev). `--auth on`이면 `/v1/*`+`/mcp`에
   `Authorization: Bearer <token>` 필요(`/v1/stream`·collectors·SPA는 예외).
   token은 `dirs::config_dir()/wimcc/token`(0600).
