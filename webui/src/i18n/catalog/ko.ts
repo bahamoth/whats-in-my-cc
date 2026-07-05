@@ -35,8 +35,9 @@ export const ko: Messages = {
   'insight.infoTipAria': '{label} 설명',
   'insight.recollectUsage': 'usage facet 재수집 필요',
   'insight.loading': '로딩 중',
-  'insight.baselineDeltaPp': (sd: string) => `${sd}%p vs 중앙값`,
-  'insight.baselineDeltaPct': (sd: string) => `${sd}% vs 중앙값`,
+  'insight.baselinePositionN': (p: { x: string; n: number }) =>
+    `프로젝트 중앙값의 ${p.x}× · n ${p.n}`,
+  'insight.baselineLowSample': (n: number) => `표본 부족 (n ${n})`,
   'insight.provenance.measured': '측정',
   'insight.provenance.mixed': '혼합',
   'insight.provenance.estimated': '추정',
@@ -89,6 +90,8 @@ export const ko: Messages = {
     'OTel claude_code.cost.usage 메트릭이 들어오면 대체됩니다. cache_read(무료)는 비용에서 제외.',
   'insight.cost.detailEstimate': '공개 가격표 추정 (≈)',
   'insight.cost.detailEstimateUnpriced': (n: number) => `공개 가격표 추정 (≈) · 미가격 ${n}`,
+  'insight.cost.detailUnitRate': (r: string) => `블렌디드 $${r}/1M`,
+  'insight.cost.detailUnitRateNone': '블렌디드 —',
   'insight.cost.noPricing': '가격표 없음',
   'insight.cost.tipRateLine': (a: {
     model: string;

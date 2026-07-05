@@ -92,9 +92,8 @@ export function InsightStrip(props: InsightStripProps) {
               </button>
               <div className={styles.cardFoot}>
                 <ProvenanceBadge provenance={card.provenance} />
-                {card.baselineDelta && (
-                  <span className={styles.baselineDelta}>{card.baselineDelta}</span>
-                )}
+                {/* PR-3 §3a — baselineDelta replaced by card.baseline (chip +
+                    position + n + lowSample); render wiring lands in Task 4. */}
               </div>
               {card.sparkline && card.sparkline.length > 0 && (
                 <Sparkline values={card.sparkline} tint={card.sparklineTint} />

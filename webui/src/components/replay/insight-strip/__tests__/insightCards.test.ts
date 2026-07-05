@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildInsightCards, type InsightInputs } from '../insightCards';
+import {
+  buildInsightCards,
+  blendedRatePerMTok,
+  toInsightBaseline,
+  type InsightInputs,
+} from '../insightCards';
 import { translate } from '../../../../i18n/t';
 import { en } from '../../../../i18n/catalog/en';
 import { ko } from '../../../../i18n/catalog/ko';
@@ -279,14 +284,80 @@ describe('buildInsightCards — cost (Q2, 추정)', () => {
   });
 });
 
-describe('buildInsightCards — baseline delta (slice 6, optional)', () => {
-  it('attaches a vs-median delta to the context card when a baseline is supplied', () => {
-    const c = byId({ ...EMPTY, usage, baseline: { cache_hit_ratio: 0.9 } }).get('context')!;
-    expect(c.baselineDelta).toBeDefined();
+describe('buildInsightCards — baseline comparison (PR-3 §3a)', () => {
+  const baseline = {
+    cache_hit_ratio: { median: 0.5, n: 12 },
+    billed_tokens: { median: 1_000_000, n: 12 },
+    verification_pass_rate: { median: 0.8, n: 5 },
+    tool_failure_count: { median: 2, n: 12 },
+    estimated_cost_usd: { median: 1.0, n: 12 },
+  };
+
+  it('context 카드: pp 칩 + 위치 + n', () => {
+    // usage fixture의 cache_hit_ratio가 0.75라면 chip.v = 25(pp), position 1.5×.
+    const c = byId({ ...EMPTY, usage, baseline }).get('context')!;
+    expect(c.baseline).toBeDefined();
+    expect(c.baseline!.chip.unit).toBe('%p');
+    expect(c.baseline!.chip.betterUp).toBe(true);
+    expect(c.baseline!.n).toBe(12);
+    expect(c.baseline!.lowSample).toBe(false);
+    expect(c.baseline!.position).toContain('×');
   });
-  it('omits the delta gracefully when no baseline is supplied', () => {
+
+  it('n<3이면 lowSample=true로 강조를 해제한다', () => {
+    const low = { ...baseline, billed_tokens: { median: 1_000_000, n: 2 } };
+    const c = byId({ ...EMPTY, usage, baseline: low }).get('tokens')!;
+    expect(c.baseline!.lowSample).toBe(true);
+  });
+
+  it('median이 null이면 baseline을 붙이지 않는다', () => {
+    const none = { ...baseline, estimated_cost_usd: { median: null, n: 0 } };
+    const c = byId({ ...EMPTY, usage, baseline: none }).get('cost')!;
+    expect(c.baseline).toBeUndefined();
+  });
+
+  it('baseline이 없으면 종전처럼 생략한다', () => {
     const c = byId({ ...EMPTY, usage }).get('context')!;
-    expect(c.baselineDelta).toBeUndefined();
+    expect(c.baseline).toBeUndefined();
+  });
+
+  it('tool_failure 카드: count−median 칩(단위 없음, 상승=앰버 방향)', () => {
+    const sigs = [signal('tool_failure'), signal('tool_failure'), signal('tool_failure')];
+    const c = byId({ ...EMPTY, usage, signals: sigs, baseline }).get('tool_failure')!;
+    expect(c.baseline!.chip.v).toBe(1); // 3 − 2
+    expect(c.baseline!.chip.betterUp).toBe(false);
+  });
+});
+
+describe('blendedRatePerMTok + 비용 카드 부제 (PR-3 §3a)', () => {
+  it('비용/과금토큰 → $/1M', () => {
+    expect(blendedRatePerMTok(2, 1_000_000)).toBe(2);
+    expect(blendedRatePerMTok(1, 500_000)).toBe(2);
+  });
+  it('분모 0이면 null', () => {
+    expect(blendedRatePerMTok(2, 0)).toBeNull();
+  });
+  it('비용 카드 detail에 블렌디드 단가가 병기된다', () => {
+    const c = byId({ ...EMPTY, usage }).get('cost')!;
+    expect(c.detail).toContain('블렌디드');
+  });
+});
+
+describe('toInsightBaseline (PR-3 §3a)', () => {
+  it('DTO 7지표 중 카드 5지표를 median+n으로 사상한다', () => {
+    const dto = {
+      session_count: 3, scope: 'project', project: '/p',
+      cache_hit_ratio: { p25: 0.1, median: 0.5, p75: 0.9, n: 3 },
+      billed_tokens: { p25: 1, median: 2, p75: 3, n: 3 },
+      assistant_events: { p25: 1, median: 1, p75: 1, n: 3 },
+      output_tokens: { p25: 1, median: 1, p75: 1, n: 3 },
+      verification_pass_rate: { p25: null, median: null, p75: null, n: 0 },
+      tool_failure_count: { p25: 0, median: 1, p75: 2, n: 3 },
+      estimated_cost_usd: { p25: 0.5, median: 1, p75: 2, n: 3 },
+    };
+    const b = toInsightBaseline(dto);
+    expect(b.cache_hit_ratio).toEqual({ median: 0.5, n: 3 });
+    expect(b.verification_pass_rate).toEqual({ median: null, n: 0 });
   });
 });
 
@@ -329,13 +400,17 @@ describe('buildInsightCards — S8 sparklines (per-turn tokens)', () => {
     expect(c.sparkline).toBeUndefined();
   });
 
-  it('attaches a billed-tokens vs-median delta to the tokens card', () => {
+  it('attaches a billed-tokens vs-median comparison to the tokens card', () => {
     const c = byId({
       ...EMPTY, usage,
-      baseline: { cache_hit_ratio: 0.9, billed_tokens: 2_700_000 },
+      baseline: {
+        cache_hit_ratio: { median: 0.9, n: 12 },
+        billed_tokens: { median: 2_700_000, n: 12 },
+      },
     }).get('tokens')!;
     // usage.billed_tokens = 5.4M vs median 2.7M → +100%
-    expect(c.baselineDelta).toBe('+100% vs 중앙값');
+    expect(c.baseline!.chip.v).toBe(100);
+    expect(c.baseline!.chip.unit).toBe('%');
   });
 });
 
