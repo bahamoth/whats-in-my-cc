@@ -9,7 +9,7 @@ use wimcc::db::repo_usage_facet;
 use wimcc::db::repo_verification_run::VerificationRunRow;
 use wimcc::db::{migrate, repo_observed, repo_raw, repo_runs, repo_signal, repo_verification_run};
 use wimcc::insight::metrics::compute_session_metrics;
-use wimcc::model::observed::{Actor, EventKind, ObservedEvent};
+use wimcc::model::observed::{Actor, EventKind, ObservedEvent, TelemetryFacet};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -26,16 +26,11 @@ async fn test_pool() -> sqlx::SqlitePool {
 }
 
 /// Insert a minimal `ingest_run` + `raw_event` row so `observed_event` FK is
-/// satisfied, then insert the event. One raw row is reused per (pool, event_id)
-/// by using the event_id as the raw_event_id; duplicates are ignored via
-/// `insert_dedup`.
-async fn seed_event(
-    pool: &sqlx::SqlitePool,
-    run_id: &str,
-    session_id: &str,
-    event_id: &str,
-    kind: EventKind,
-) {
+/// satisfied. One raw row is reused per (pool, event_id) by using the
+/// event_id as the raw_event_id; duplicates are ignored via `insert_dedup`.
+/// Extracted so telemetry/payload-bearing seed helpers (llm span, api_request
+/// log) can share the same raw-seed procedure as `seed_event`.
+async fn seed_raw(pool: &sqlx::SqlitePool, run_id: &str, event_id: &str) {
     let raw_id = format!("raw_{event_id}");
     repo_raw::insert_dedup(
         pool,
@@ -56,15 +51,99 @@ async fn seed_event(
     )
     .await
     .unwrap();
+}
 
+/// Insert a minimal event using the shared `seed_raw` procedure.
+async fn seed_event(
+    pool: &sqlx::SqlitePool,
+    run_id: &str,
+    session_id: &str,
+    event_id: &str,
+    kind: EventKind,
+) {
+    seed_raw(pool, run_id, event_id).await;
     let e = ObservedEvent {
         event_id: event_id.into(),
-        raw_event_id: raw_id,
+        raw_event_id: format!("raw_{event_id}"),
         schema_version: "observed_event.v1".into(),
         session_id: session_id.into(),
         observed_at: chrono::Utc::now(),
         actor: Actor::Assistant,
         kind,
+        parser_version: "test@v0".into(),
+        ..Default::default()
+    };
+    repo_observed::insert(pool, &e).await.unwrap();
+}
+
+/// llm_request otel_span seed — telemetry facet의 flat attributes에 메트릭
+/// (real fixture `tests/fixtures/otel/real/traces_v01.json`과 동일 속성명:
+/// duration_ms·output_tokens·ttft_ms·request_id).
+#[allow(clippy::too_many_arguments)]
+async fn seed_llm_span(
+    pool: &sqlx::SqlitePool,
+    run_id: &str,
+    session_id: &str,
+    event_id: &str,
+    rid: &str,
+    ttft_ms: Option<f64>,
+    duration_ms: f64,
+    output_tokens: f64,
+) {
+    seed_raw(pool, run_id, event_id).await;
+    let mut attrs = serde_json::json!({
+        "request_id": rid,
+        "duration_ms": duration_ms,
+        "output_tokens": output_tokens,
+    });
+    if let Some(t) = ttft_ms {
+        attrs["ttft_ms"] = serde_json::json!(t);
+    }
+    let e = ObservedEvent {
+        event_id: event_id.into(),
+        raw_event_id: format!("raw_{event_id}"),
+        schema_version: "observed_event.v1".into(),
+        session_id: session_id.into(),
+        observed_at: chrono::Utc::now(),
+        actor: Actor::Assistant,
+        kind: EventKind::OtelSpan,
+        request_id: Some(rid.into()),
+        telemetry: Some(TelemetryFacet {
+            span_name: "claude_code.llm_request".into(),
+            attributes: attrs,
+            ..Default::default()
+        }),
+        parser_version: "test@v0".into(),
+        ..Default::default()
+    };
+    repo_observed::insert(pool, &e).await.unwrap();
+}
+
+/// api_request log_record seed — payload.attributes.cost_usd (Claude Code
+/// 자체 실측 비용; LogFacet 직렬화 형태는 `src/ingest/otel_logs.rs`와 동일—
+/// event_name/attributes가 top-level payload 필드).
+async fn seed_api_request_log(
+    pool: &sqlx::SqlitePool,
+    run_id: &str,
+    session_id: &str,
+    event_id: &str,
+    rid: &str,
+    cost_usd: f64,
+) {
+    seed_raw(pool, run_id, event_id).await;
+    let e = ObservedEvent {
+        event_id: event_id.into(),
+        raw_event_id: format!("raw_{event_id}"),
+        schema_version: "observed_event.v1".into(),
+        session_id: session_id.into(),
+        observed_at: chrono::Utc::now(),
+        actor: Actor::Assistant,
+        kind: EventKind::LogRecord,
+        request_id: Some(rid.into()),
+        payload: serde_json::json!({
+            "event_name": "api_request",
+            "attributes": { "request_id": rid, "cost_usd": cost_usd }
+        }),
         parser_version: "test@v0".into(),
         ..Default::default()
     };
@@ -676,4 +755,117 @@ async fn rate_limit_and_token_totals() {
         "usage facet이 있으면 추정 비용이 계산된다: {}",
         m.estimated_cost_usd
     );
+}
+
+// ---------------------------------------------------------------------------
+// PR-3 §3d — llm_request_p50 (ttft_ms · duration_ms · output_tokens · cost_usd)
+// F1 예외: 분포 통계(p50)라 SessionMetrics 반환 대상(03 스펙 footnote 참고).
+// 소스는 두 갈래: otel_span(claude_code.llm_request) telemetry facet의 flat
+// attributes(ttft_ms/duration_ms/output_tokens) + log_record(api_request)
+// payload.attributes.cost_usd. request_id 당 최초 1건만 센다.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn llm_request_p50_odd_sample_is_middle() {
+    let pool = test_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    seed_llm_span(
+        &pool,
+        &run_id,
+        "s_p50_odd",
+        "sp1",
+        "r1",
+        Some(100.0),
+        1000.0,
+        10.0,
+    )
+    .await;
+    seed_llm_span(
+        &pool,
+        &run_id,
+        "s_p50_odd",
+        "sp2",
+        "r2",
+        Some(300.0),
+        3000.0,
+        30.0,
+    )
+    .await;
+    seed_llm_span(
+        &pool,
+        &run_id,
+        "s_p50_odd",
+        "sp3",
+        "r3",
+        Some(200.0),
+        2000.0,
+        20.0,
+    )
+    .await;
+    let m = compute_session_metrics(&pool, "s_p50_odd").await.unwrap();
+    assert_eq!(m.llm_request_p50.ttft_ms.n, 3);
+    assert_eq!(m.llm_request_p50.ttft_ms.p50, Some(200.0));
+    assert_eq!(m.llm_request_p50.duration_ms.p50, Some(2000.0));
+    assert_eq!(m.llm_request_p50.output_tokens.p50, Some(20.0));
+    // cost 로그가 없으므로 미측정 = null (0 위장 금지).
+    assert_eq!(m.llm_request_p50.cost_usd.n, 0);
+    assert_eq!(m.llm_request_p50.cost_usd.p50, None);
+}
+
+#[tokio::test]
+async fn llm_request_p50_even_sample_interpolates_and_dedups_by_request_id() {
+    let pool = test_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    seed_llm_span(
+        &pool,
+        &run_id,
+        "s_p50_even",
+        "sp1",
+        "r1",
+        None,
+        1000.0,
+        10.0,
+    )
+    .await;
+    seed_llm_span(
+        &pool,
+        &run_id,
+        "s_p50_even",
+        "sp2",
+        "r2",
+        None,
+        3000.0,
+        30.0,
+    )
+    .await;
+    // 같은 request_id 중복 span — 최초 1건만 세어야 한다.
+    seed_llm_span(
+        &pool,
+        &run_id,
+        "s_p50_even",
+        "sp3",
+        "r2",
+        None,
+        9999.0,
+        99.0,
+    )
+    .await;
+    seed_api_request_log(&pool, &run_id, "s_p50_even", "lg1", "r1", 0.40).await;
+    seed_api_request_log(&pool, &run_id, "s_p50_even", "lg2", "r2", 0.60).await;
+    let m = compute_session_metrics(&pool, "s_p50_even").await.unwrap();
+    assert_eq!(m.llm_request_p50.duration_ms.n, 2);
+    assert_eq!(m.llm_request_p50.duration_ms.p50, Some(2000.0)); // (1000+3000)/2
+                                                                 // ttft 미제공 → n=0, null.
+    assert_eq!(m.llm_request_p50.ttft_ms.n, 0);
+    assert_eq!(m.llm_request_p50.ttft_ms.p50, None);
+    assert_eq!(m.llm_request_p50.cost_usd.n, 2);
+    assert!((m.llm_request_p50.cost_usd.p50.unwrap() - 0.50).abs() < 1e-9);
+}
+
+#[tokio::test]
+async fn llm_request_p50_empty_session_is_all_null() {
+    let pool = test_pool().await;
+    let m = compute_session_metrics(&pool, "s_p50_none").await.unwrap();
+    assert_eq!(m.llm_request_p50.ttft_ms.n, 0);
+    assert_eq!(m.llm_request_p50.cost_usd.p50, None);
 }

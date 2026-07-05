@@ -32,6 +32,12 @@ const m: SessionMetricsDto = {
   tool_result_truncated_count: 0,
   user_interruption_count: 0,
   detector_firing: { tool_failure: 2, context_bloat: 1 },
+  llm_request_p50: {
+    ttft_ms: { p50: null, n: 0 },
+    duration_ms: { p50: null, n: 0 },
+    output_tokens: { p50: null, n: 0 },
+    cost_usd: { p50: null, n: 0 },
+  },
 };
 
 describe('AnalysisPanel', () => {

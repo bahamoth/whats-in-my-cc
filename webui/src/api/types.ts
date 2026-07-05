@@ -372,6 +372,20 @@ export type SessionMetricsDto = {
   /** `[Request interrupted by user`로 시작하는 user_message 수. */
   user_interruption_count: number;
   detector_firing: Record<string, number>;
+  /** §3d — 세션 내 LLM 요청 p50(전수 계산). p50=null이면 미측정. n<3이면 배지
+   *  대신 표본 부족. */
+  llm_request_p50: LlmRequestP50Dto;
+};
+
+/** §3d — 단일 지표의 세션 내 p50 + 표본 수. `p50`이 null이면 미측정(0 아님). */
+export type P50StatDto = { p50: number | null; n: number };
+
+/** §3d — LLM 요청 4종(ttft/duration/output_tokens/cost) p50. */
+export type LlmRequestP50Dto = {
+  ttft_ms: P50StatDto;
+  duration_ms: P50StatDto;
+  output_tokens: P50StatDto;
+  cost_usd: P50StatDto;
 };
 
 /** `/v1/sessions/:id/fingerprint` · `/v1/metrics` row 내장 — 세션 환경

@@ -12,7 +12,7 @@ CLAUDE.md의 python 스니펫.
 |------|----------------------|-----------|
 | 데이터 모델·뷰 계층 | `#event-first-redesign` (★ event-first 재설계) | `#views-without-graph` · `#conversation-anchored-window` · `#graph-removal` · `#span-dedup` · `#facet-correlation` |
 | Detector·L1 Signal | `#final-state-mismatch-removal-2026-07-03` (L1 4종, 의미 판별은 LLM) | `#judge-removal` · `#finding-to-signal` · `#episode-removal` · `#detector-improvement-loop` · `#utf8-extractor-fixes` |
-| SessionMetrics·series | `#metrics-cache-2026-07-04` (인메모리 캐시, §10.1 실측) | `#behavioral-metrics-plan3a` · `#self-improvement-loop-2026-06-12` |
+| SessionMetrics·series | `#llm-request-p50-2026-07-05` (llm_request_p50 4종 — F1 예외: 분포 통계, 두 갈래 소스 request_id 조인) | `#metrics-cache-2026-07-04` · `#behavioral-metrics-plan3a` · `#self-improvement-loop-2026-06-12` |
 | 태깅 루프·인프라 | `#tagging-infra-2026-07-04` ($() 편평화·무확장 규칙·게이트) | `#untagged-bash-loop` · `#noise-disposition-2026-06-30` · `#tagging-loop-2026-07-03` · `#tagging-loop-2026-07-04` |
 | verification 파싱 | `#verification-tsc-2026-07-04` (tsc 승격, 패턴 17) | `#unknown-verification-loop` |
 | Teammate·Subagent 관측 | `#teammate-followups-2026-07-04` (B-6 종결: preview·북엔드·agent-setting·표본 2) | `#teammate-observability-2026-07-03` · `#teammate-in-session-2026-07-03` · `#bg-subagent-hairline-gutter-2026-06-14` · `#task-notification-sync-2026-06-14` |

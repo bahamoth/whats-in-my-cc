@@ -98,6 +98,31 @@ pub struct SessionMetrics {
     pub user_interruption_count: i64,
     /// detector → number of signals fired (signal distribution, spec §6.6).
     pub detector_firing: BTreeMap<String, i64>,
+    /// §3d — 세션 내 LLM 요청 p50. count가 아닌 분포 통계로, 전수 이벤트에서만
+    /// 계산 가능해 소비자 재계산이 불가하므로 예외적으로 서버가 반환한다
+    /// (2026-07-04 세션 상세 개선 스펙). 미측정은 null.
+    pub llm_request_p50: LlmRequestP50,
+}
+
+/// §3d — 단일 지표의 세션 내 p50 + 표본 수. `n == 0`이면 `p50 == None`
+/// (미측정 ≠ 0, F1 예외 통계).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct P50Stat {
+    pub p50: Option<f64>,
+    pub n: i64,
+}
+
+/// §3d — 세션 내 LLM 요청 4종 메트릭의 p50. 소스는 두 갈래(request_id로 조인):
+/// otel_span(`claude_code.llm_request`) telemetry facet의 flat attributes에서
+/// `ttft_ms`·`duration_ms`·`output_tokens`, log_record(`api_request`)의
+/// `payload.attributes.cost_usd`(Claude Code 자체 실측). request_id 당 최초
+/// 1건만 집계(중복 span/log는 무시).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LlmRequestP50 {
+    pub ttft_ms: P50Stat,
+    pub duration_ms: P50Stat,
+    pub output_tokens: P50Stat,
+    pub cost_usd: P50Stat,
 }
 
 /// 하니스 출력 잘림 마커 — `... [N characters truncated] ...` (N = 자릿수).
@@ -129,6 +154,15 @@ fn has_truncation_marker(content: &str) -> bool {
 /// 문자열). disposition과 같은 prefix 기준이라 본문 중간 인용은 매칭되지 않는다.
 fn is_interruption_marker(text: &str) -> bool {
     text.starts_with("[Request interrupted by user")
+}
+
+/// §3d — flat telemetry/log attribute 숫자 파서. 프론트 `num()`
+/// (`llmRequestMetrics.ts`)과 동일 관용 — 숫자 또는 숫자 문자열만 인정,
+/// 그 외(누락·NaN·비수치 문자열)는 None(0 위장 금지).
+fn num_attr(attrs: &serde_json::Value, key: &str) -> Option<f64> {
+    let v = attrs.get(key)?;
+    v.as_f64()
+        .or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok()))
 }
 
 // B-8 (2026-07-04) — 프로세스 수명 인메모리 캐시. §10.1 실측(스크래치 DB):
@@ -213,6 +247,12 @@ async fn compute_session_metrics_uncached(
     let mut api_rate_limit_count = 0i64;
     let mut away_summary_count = 0i64;
     let (mut tool_result_truncated_count, mut user_interruption_count) = (0i64, 0i64);
+    // §3d — LLM 요청 p50 수집 버퍼. request_id → 첫 관측값만 유지(dedup).
+    // list_session은 observed_at ASC라 순회상 첫 삽입이 곧 최초 관측.
+    // (ttft_ms, duration_ms, output_tokens) per request_id.
+    type SpanP50Values = (Option<f64>, Option<f64>, Option<f64>);
+    let mut span_seen: BTreeMap<String, SpanP50Values> = BTreeMap::new();
+    let mut cost_seen: BTreeMap<String, f64> = BTreeMap::new(); // rid → cost_usd
     for e in &events {
         match e.kind {
             EventKind::ToolResult => {
@@ -266,6 +306,49 @@ async fn compute_session_metrics_uncached(
                     user_interruption_count += 1;
                 }
             }
+            // §3d — llm_request span: timing/토큰은 telemetry facet의 flat
+            // attributes에만 있다(payload에는 없음 — real fixture
+            // traces_v01.json으로 앵커). request_id 당 최초 1건만.
+            EventKind::OtelSpan => {
+                let Some(tf) = &e.telemetry else { continue };
+                if tf.span_name != "claude_code.llm_request" {
+                    continue;
+                }
+                let rid = tf
+                    .attributes
+                    .get("request_id")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| {
+                        tf.attributes
+                            .get("gen_ai.response.id")
+                            .and_then(|v| v.as_str())
+                    });
+                let Some(rid) = rid else { continue };
+                span_seen.entry(rid.to_string()).or_insert_with(|| {
+                    (
+                        num_attr(&tf.attributes, "ttft_ms"),
+                        num_attr(&tf.attributes, "duration_ms"),
+                        num_attr(&tf.attributes, "output_tokens"),
+                    )
+                });
+            }
+            // §3d — api_request log_record: Claude Code 자체 보고 실측 비용.
+            // request_id 당 최초 1건만.
+            EventKind::LogRecord => {
+                if e.payload.pointer("/event_name").and_then(|v| v.as_str()) != Some("api_request")
+                {
+                    continue;
+                }
+                let Some(attrs) = e.payload.pointer("/attributes") else {
+                    continue;
+                };
+                let Some(rid) = attrs.get("request_id").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                if let Some(c) = num_attr(attrs, "cost_usd") {
+                    cost_seen.entry(rid.to_string()).or_insert(c);
+                }
+            }
             _ => {}
         }
     }
@@ -283,6 +366,19 @@ async fn compute_session_metrics_uncached(
     let verification_unknown = vruns.iter().filter(|v| v.status == "unknown").count() as i64;
     let verification_not_executed =
         vruns.iter().filter(|v| v.status == "not_executed").count() as i64;
+
+    // §3d — p50 조립. 중앙값은 기존 usage-baseline quantile 계산(DRY)을 재사용.
+    fn p50_stat(values: Vec<f64>) -> P50Stat {
+        let n = values.len() as i64;
+        let p50 = crate::db::repo_usage_facet::median_p25_p75(&values).map(|q| q.median);
+        P50Stat { p50, n }
+    }
+    let llm_request_p50 = LlmRequestP50 {
+        ttft_ms: p50_stat(span_seen.values().filter_map(|v| v.0).collect()),
+        duration_ms: p50_stat(span_seen.values().filter_map(|v| v.1).collect()),
+        output_tokens: p50_stat(span_seen.values().filter_map(|v| v.2).collect()),
+        cost_usd: p50_stat(cost_seen.values().copied().collect()),
+    };
 
     Ok(SessionMetrics {
         session_id: session_id.to_string(),
@@ -312,5 +408,6 @@ async fn compute_session_metrics_uncached(
         tool_result_truncated_count,
         user_interruption_count,
         detector_firing,
+        llm_request_p50,
     })
 }

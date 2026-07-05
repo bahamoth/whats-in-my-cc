@@ -63,6 +63,12 @@ function row(
       tool_result_truncated_count: 0,
       user_interruption_count: 1,
       detector_firing: {},
+      llm_request_p50: {
+        ttft_ms: { p50: null, n: 0 },
+        duration_ms: { p50: null, n: 0 },
+        output_tokens: { p50: null, n: 0 },
+        cost_usd: { p50: null, n: 0 },
+      },
     },
     fingerprint: {
       session_id: id,
