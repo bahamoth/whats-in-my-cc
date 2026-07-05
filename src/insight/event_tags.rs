@@ -130,6 +130,12 @@ pub static BASH_FIRST_TOKEN_TAGS: &[(&str, &str)] = &[
     ("printenv", "read.proc"),
     ("sysctl", "read.proc"),
     ("uptime", "read.proc"),
+    // POSIX shell builtin — lists background jobs (ps/uptime peer, not
+    // process control like pgrep/kill/wait in CONTROL_TOKENS) (tagging loop
+    // 2026-07-05).
+    ("jobs", "read.proc"),
+    // process/system activity monitor — ps/uptime peer (tagging loop 2026-07-05).
+    ("top", "read.proc"),
     // read.db
     ("sqlite3", "read.db"),
     ("psql", "read.db"),
@@ -786,6 +792,19 @@ fn command_of(segment: &str) -> String {
         if ft == "nohup" {
             // transparent wrapper (`nohup <cmd>`) — re-tag the inner command.
             let rest = s["nohup".len()..].trim().to_string();
+            if rest.is_empty() {
+                return String::new();
+            }
+            s = rest;
+            continue;
+        }
+        if ft == "env" {
+            // transparent wrapper (POSIX `env [VAR=val...] <cmd>`) — re-tag the
+            // inner command. `is_assignment` above strips any `VAR=val` args on
+            // the next loop iterations (tagging loop 2026-07-05, real sample:
+            // `env WIMCC_PROXY_TARGET=… npx vite --port 5174`, this session's
+            // own scratch-smoke-stack command).
+            let rest = s["env".len()..].trim().to_string();
             if rest.is_empty() {
                 return String::new();
             }
