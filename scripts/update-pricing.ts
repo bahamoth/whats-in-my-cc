@@ -13,7 +13,7 @@
  *   node scripts/update-pricing.ts --source https://example.com/pricing.html
  *
  * exit 0: 성공, (--check 미지정 시) 변동 유무 무관 · exit 1: fetch/파싱 실패(등록 모델
- * 누락 포함) 또는 (--check 지정 시) 변동(drift) 발견.
+ * 누락 포함) 또는 (--check 지정 시) 변동(drift) 또는 페이지의 미등록 신규 모델 발견.
  * wimcc 바이너리는 런타임에 절대 외부 fetch하지 않는다 — 이 스크립트(개발/CI)만.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -46,8 +46,11 @@ const PAGE_ALIASES: Record<string, string[]> = {
   'claude-mythos-5': ['claude-mythos-5', 'Claude Mythos 5'],
   'claude-opus-4-8': ['claude-opus-4-8', 'Claude Opus 4.8'],
   'claude-opus-4-7': ['claude-opus-4-7', 'Claude Opus 4.7'],
+  'claude-opus-4-6': ['claude-opus-4-6', 'Claude Opus 4.6'],
+  'claude-opus-4-5': ['claude-opus-4-5', 'Claude Opus 4.5'],
   'claude-sonnet-5': ['claude-sonnet-5', 'Claude Sonnet 5'],
   'claude-sonnet-4-6': ['claude-sonnet-4-6', 'Claude Sonnet 4.6'],
+  'claude-sonnet-4-5': ['claude-sonnet-4-5', 'Claude Sonnet 4.5'],
   'claude-haiku-4-5-20251001': ['claude-haiku-4-5-20251001', 'claude-haiku-4-5', 'Claude Haiku 4.5'],
 };
 
@@ -117,6 +120,45 @@ export function parsePricingPage(html: string, modelIds: string[]): Record<strin
       cache_read_per_mtok: cacheRead,
       output_per_mtok: output,
     };
+  }
+  return out;
+}
+
+/**
+ * 페이지 가격 표에 등장하지만 어떤 PAGE_ALIASES 값에도 매핑되지 않은 모델 표시명을
+ * 찾는다. `parsePricingPage`/`diffRates`는 **등록된 모델만** 순회하므로, 페이지에 새
+ * 모델이 추가돼도 자동으로는 영영 발견되지 않는다 — claude-sonnet-5가 조용히 누락된
+ * 근본 원인(2026-07-05). 페이지는 원본 id가 아니라 표시명만 노출하므로 자동 추가는
+ * 불가(표시명→id 매핑은 사람 판단이 필요)하다. 대신 신규 모델을 표면화해 사전 추가를
+ * 유도한다. retired/deprecated 표식이 붙은 행은 노이즈라 제외한다. 표 앵커가 없으면
+ * 빈 배열(파싱은 parsePricingPage가 별도로 throw로 잡는다).
+ */
+export function detectNewModels(
+  html: string,
+  aliases: Record<string, string[]> = PAGE_ALIASES,
+): string[] {
+  const text = htmlToText(html);
+  const tableStart = text.indexOf(TABLE_START_MARKER);
+  if (tableStart < 0) return [];
+  const tableEnd = text.indexOf(TABLE_END_MARKER, tableStart);
+  if (tableEnd < 0) return [];
+  const table = text.slice(tableStart, tableEnd);
+
+  const known = new Set(Object.values(aliases).flat());
+  const seen = new Set<string>();
+  const out: string[] = [];
+  // "Claude <Family> <version>" — Family는 단어 하나(현행 Fable·Mythos·Opus·Sonnet·
+  // Haiku), version은 정수 또는 소수. 신규 패밀리(예: "Claude Zephyr 9")도 잡힌다.
+  const re = /Claude [A-Z][a-z]+ [0-9]+(?:\.[0-9]+)?/g;
+  for (const m of table.matchAll(re)) {
+    const name = m[0];
+    if (seen.has(name)) continue;
+    seen.add(name);
+    if (known.has(name)) continue;
+    // 표시명 직후 창에 retired/deprecated 표식이 있으면 제외.
+    const after = table.slice(m.index ?? 0, (m.index ?? 0) + 80).toLowerCase();
+    if (after.includes('deprecated') || after.includes('retired')) continue;
+    out.push(name);
   }
   return out;
 }
@@ -219,11 +261,20 @@ async function main(): Promise<number> {
 
   const parsed = parsePricingPage(html, Object.keys(current.models));
   const changes = diffRates(current, parsed);
+  const newModels = detectNewModels(html);
 
   if (markdown) {
     console.log(changes.length ? toMarkdown(changes, current.source_url) : '변동 없음.');
   } else {
     console.log(changes.length ? changes.join('\n') : 'no drift');
+  }
+  // 신규 모델은 표시명→id 매핑이 필요해 자동 추가 못 한다 — surface해 사람이 사전
+  // 추가하게 한다. --check는 이를 drift로 취급해 종료코드로 신호(주간 cron이 인지).
+  // stderr로 내보내 --markdown stdout(PR 본문)을 오염시키지 않는다.
+  if (newModels.length) {
+    console.error(
+      `new models on page (add to PAGE_ALIASES + pricing.json): ${newModels.join(', ')}`,
+    );
   }
 
   if (write && changes.length) {
@@ -243,7 +294,7 @@ async function main(): Promise<number> {
     console.error(`pricing.json updated: ${next.version} -> ${outPath}`);
   }
 
-  if (check && changes.length) return 1;
+  if (check && (changes.length || newModels.length)) return 1;
   return 0;
 }
 
