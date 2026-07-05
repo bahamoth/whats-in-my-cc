@@ -78,9 +78,16 @@ async fn usage_endpoint_returns_public_pricing_estimate() {
     // Pricing is a periodic-refresh public-rate estimate; the version IS the
     // update date (YYYY-MM-DD) — no arbitrary v-numbering — so staleness is
     // visible in the API/UI.
-    assert_eq!(
-        data["pricing_version"].as_str().unwrap(),
-        "pricing_estimate@2026-06-11"
+    // 버전 리터럴 고정 대신: (a) 형식 pricing_estimate@YYYY-MM-DD, (b) 엔드포인트가
+    // 소스 상수(pricing.json의 version)를 그대로 노출 — 갱신 시 수기 수정 불필요.
+    let version = data["pricing_version"].as_str().unwrap();
+    assert_eq!(version, wimcc::insight::pricing::pricing_version());
+    let date = version
+        .strip_prefix("pricing_estimate@")
+        .expect("pricing_version must start with pricing_estimate@");
+    assert!(
+        chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok(),
+        "pricing_version date must be YYYY-MM-DD, got {version}"
     );
     // claude-opus-4-7 is in the table → nothing unpriced for this fixture.
     assert!(data["models_without_pricing"]
