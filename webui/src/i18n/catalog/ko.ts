@@ -184,6 +184,8 @@ export const ko: Messages = {
   'metric.label.cacheReads': '캐시 읽기',
   'metric.label.cacheCreation': '캐시 생성',
   'metric.label.billedCost': '청구 비용',
+  'metric.badge.median': (x: string) => `세션 중앙값의 ${x}×`,
+  'metric.badge.lowSample': '표본 부족',
   'metric.tip.outputTokens': '이 응답에서 생성된 토큰 수입니다. 추론(thinking) 토큰도 여기에 포함됩니다 — 모델이 만들어낸 분량.',
   'metric.tip.inputTokens': '이번 요청에 새로 전달된(캐시되지 않은) 입력 토큰 수입니다. 컨텍스트 대부분은 보통 캐시 읽기로 재사용됩니다.',
   'metric.tip.cacheReads': '프롬프트 캐시에서 재사용한 토큰 수입니다. 클수록 컨텍스트 대부분을 캐시로 재활용 — 비용·지연을 줄입니다.',

@@ -18,6 +18,7 @@ import { formatDuration } from '../stream/llmRequestMetrics';
 import { hookFacet } from '../stream/hookFacet';
 import type { ToolMetrics } from './toolMetrics';
 import { Row, MetricGroup, ResponseMetricsRows, responseWarns, formatBytes } from './metricsRows';
+import type { LlmRequestP50Dto } from '../../../api/types';
 import { useT } from '../../../i18n';
 import styles from './EntityMetricsPanel.module.css';
 
@@ -28,6 +29,9 @@ interface EntityMetricsPanelProps {
   /** The selected node's raw payload — used for kinds whose metrics live in the
    *  payload itself (hook_event: exitCode / durationMs / command). */
   payload?: unknown;
+  /** Session-wide p50 baselines for the request-metric rows (PR-3 §3d) — used
+   *  to render a "세션 중앙값의 x.x×" badge next to duration/ttft/tokens/cost. */
+  llmP50?: LlmRequestP50Dto | null;
 }
 
 function Uncollected() {
@@ -93,7 +97,13 @@ function HookMetricsRows({ payload }: { payload: unknown }) {
   );
 }
 
-export function EntityMetricsPanel({ kind, toolMetrics, llmMetrics, payload }: EntityMetricsPanelProps) {
+export function EntityMetricsPanel({
+  kind,
+  toolMetrics,
+  llmMetrics,
+  payload,
+  llmP50 = null,
+}: EntityMetricsPanelProps) {
   const t = useT();
   if (kind === 'hook_event') {
     return (
@@ -115,7 +125,7 @@ export function EntityMetricsPanel({ kind, toolMetrics, llmMetrics, payload }: E
   if (kind === 'assistant_message' || kind === 'thinking') {
     return (
       <div className={styles.wrap} data-testid="entity-metrics" data-kind={kind}>
-        {llmMetrics ? <ResponseMetricsRows metrics={llmMetrics} /> : <Uncollected />}
+        {llmMetrics ? <ResponseMetricsRows metrics={llmMetrics} p50={llmP50} /> : <Uncollected />}
         {llmMetrics && responseWarns(llmMetrics) && (
           <p className={styles.warnNote}>
             <AlertTriangle size={12} aria-hidden /> {t('detail.response.warn')}
