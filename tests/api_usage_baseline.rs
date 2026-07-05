@@ -285,3 +285,32 @@ async fn baseline_scopes_to_the_sessions_project() {
     assert_eq!(data["billed_tokens"]["median"].as_f64().unwrap(), 300.0);
     assert_eq!(data["session_count"].as_i64().unwrap(), 2);
 }
+
+// PR-3 §3a — session_id가 왔지만 그 세션의 project를 해석할 수 없으면(관측
+// 이벤트/cwd 없음 → session_summary.project 미상) store 전체로 정직하게 폴백한다.
+#[tokio::test]
+async fn baseline_session_id_unknown_project_falls_back_to_store() {
+    let pool = empty_pool().await;
+    // usage만 있고 관측 이벤트가 없는 세션들 → project 해석 불가.
+    repo_usage_facet::insert(&pool, &uf("r1", "s1", 100, 0, 0, 100))
+        .await
+        .unwrap(); // billed 200
+    repo_usage_facet::insert(&pool, &uf("r2", "s2", 300, 0, 0, 300))
+        .await
+        .unwrap(); // billed 600
+
+    let state = AppState::new_for_tests(pool);
+    let server = TestServer::new(router(state)).unwrap();
+    let body = server
+        .get("/v1/usage/baseline")
+        .add_query_param("session_id", "s1")
+        .await
+        .json::<Value>();
+    let data = &body["data"];
+    // project 미상 → store 스코프로 폴백(필터 미적용, 정직하게 표기).
+    assert_eq!(data["scope"].as_str().unwrap(), "store");
+    assert!(data["project"].is_null());
+    // 전체 billed [200,600] → median 400 (스코프 필터가 걸렸다면 s1만 남아 200).
+    assert_eq!(data["billed_tokens"]["median"].as_f64().unwrap(), 400.0);
+    assert_eq!(data["session_count"].as_i64().unwrap(), 2);
+}
