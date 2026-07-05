@@ -84,6 +84,19 @@ export function filterKey(f: FilterState): string {
 
 /** 외부발 점프(§1.4): 필터 활성이고 대상이 로드된(=매칭) 버퍼 밖이면 필터를
  *  해제하고 이동한다. 버퍼 안이면 매칭 대상이므로 해제 없이 스크롤. */
-export function jumpNeedsFilterClear(filterActive: boolean, targetInBuffer: boolean): boolean {
-  return filterActive && !targetInBuffer;
+/**
+ * §1.4 점프 규칙 — 필터 활성 상태에서 스트림 외부발 점프(시그널 evidence·검증 점 등)의
+ * 대상이 필터 버퍼 밖이면 필터를 해제하고 이동한다.
+ *
+ * `isFreshJump`: 이 선택이 "새 점프"인가(=이번에 새로 지정된 대상), 아니면 이미
+ * 버퍼 안에서 선택돼 있다가 스트리밍/trim으로 버퍼 밖으로 밀려난 것인가. 후자는
+ * 사용자가 점프한 게 아니므로 필터를 지우면 안 된다("스트리밍 갱신 시 필터 풀림"
+ * 버그, 2026-07-05). 새 점프일 때에만 해제한다.
+ */
+export function jumpNeedsFilterClear(
+  filterActive: boolean,
+  targetInBuffer: boolean,
+  isFreshJump: boolean,
+): boolean {
+  return filterActive && !targetInBuffer && isFreshJump;
 }
