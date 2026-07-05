@@ -190,3 +190,24 @@ describe('AnalysisPanel — 검증 리듬 (§3b)', () => {
     expect(screen.getByTestId('rhythm-empty')).toHaveTextContent('—');
   });
 });
+
+describe('AnalysisPanel — 변경 커버리지 (§3c)', () => {
+  test('coverage 바와 커버 %·미커버 수를 렌더한다', () => {
+    render(<AnalysisPanel metrics={m} coverage={{ covered: 3, total: 4 }} />);
+    const bar = document.querySelector('[data-coverage-bar]');
+    expect(bar).not.toBeNull();
+    // 주의: /75%/ 단독 매칭은 기존 검증률 75% 행과 중복돼 getByText가 throw한다.
+    expect(screen.getByText(/커버 75% · 미커버 1|covered 75% · 1 uncovered/)).toBeInTheDocument();
+  });
+
+  test('hunk 0건이면 커버리지 값 자리에 — (0%로 위장 금지)', () => {
+    render(<AnalysisPanel metrics={m} coverage={{ covered: 0, total: 0 }} />);
+    expect(screen.getByTestId('coverage-empty')).toHaveTextContent('—');
+    expect(document.querySelector('[data-coverage-bar]')).toBeNull();
+  });
+
+  test('coverage 미전달(로딩/미지원)에도 — 표기', () => {
+    render(<AnalysisPanel metrics={m} />);
+    expect(screen.getByTestId('coverage-empty')).toHaveTextContent('—');
+  });
+});
