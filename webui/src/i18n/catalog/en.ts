@@ -124,7 +124,8 @@ export const en = {
   'analysis.cov.summary': (a: { pct: number; n: number }) => `covered ${a.pct}% · ${a.n} uncovered`,
   'analysis.cov.tip':
     'The [green]covered[/green] / [amber]uncovered[/amber] diff hunk ratio of this session.\n' +
-    'A hunk counts as covered only when **a passing verification ran after it was introduced** — same definition as the server verification summary.',
+    'A hunk counts as covered only when **a passing verification ran after it was introduced**\n' +
+    '— the same definition as the server verification summary.',
 
   // Detail — event provenance badge
   'detail.provenance.native': 'Native',
