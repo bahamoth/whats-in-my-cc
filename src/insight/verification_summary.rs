@@ -136,6 +136,13 @@ async fn intro_timestamps(
     Ok(out)
 }
 
+/// 집계 입력 — (session_id, first_observed_at, last_observed_at).
+struct SessionSpan {
+    session_id: String,
+    first_observed_at: String,
+    last_observed_at: String,
+}
+
 pub async fn collect(
     pool: &SqlitePool,
     project: Option<&str>,
@@ -149,11 +156,32 @@ pub async fn collect(
         };
         from.is_none_or(|f| ts >= f) && to.is_none_or(|t| ts <= t)
     };
-    let matched: Vec<_> = sessions
+    let matched: Vec<SessionSpan> = sessions
         .into_iter()
         .filter(|s| in_window(&s.first_observed_at))
+        .map(|s| SessionSpan {
+            session_id: s.session_id,
+            first_observed_at: s.first_observed_at,
+            last_observed_at: s.last_observed_at,
+        })
         .collect();
+    aggregate(pool, &matched).await
+}
 
+/// §3c — 단일 세션 스코프. 미존재 세션은 빈 집계(0/빈 배열)로 응답한다.
+pub async fn collect_session(pool: &SqlitePool, session_id: &str) -> Result<VerificationSummary> {
+    let matched: Vec<SessionSpan> = match repo_observed::session_summary(pool, session_id).await? {
+        Some((_count, first, last)) => vec![SessionSpan {
+            session_id: session_id.to_string(),
+            first_observed_at: first,
+            last_observed_at: last,
+        }],
+        None => Vec::new(),
+    };
+    aggregate(pool, &matched).await
+}
+
+async fn aggregate(pool: &SqlitePool, matched: &[SessionSpan]) -> Result<VerificationSummary> {
     let mut total = 0i64;
     let mut passed = 0i64;
     let mut failed = 0i64;
@@ -166,7 +194,7 @@ pub async fn collect(
     let mut rhythm_all: Vec<RhythmSession> = Vec::new();
     let mut cov_all: Vec<SessionCoverage> = Vec::new();
 
-    for s in &matched {
+    for s in matched {
         let runs = repo_verification_run::list_session(pool, &s.session_id).await?;
         let hunks = repo_diff_hunk::list_session(pool, &s.session_id).await?;
 

@@ -278,3 +278,50 @@ async fn summary_rejects_bad_time() {
     let r = server.get("/v1/verification/summary?from=yesterday").await;
     r.assert_status(axum::http::StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn summary_session_scope_aggregates_single_session() {
+    let server = TestServer::new(router(AppState::new_for_tests(seeded().await))).unwrap();
+    let r = server
+        .get("/v1/verification/summary?session_id=sess_va")
+        .await;
+    r.assert_status_ok();
+    let v: Value = r.json();
+    let d = &v["data"];
+    // sess_va만: failed→passed(test) + build passed = 3 runs, hunk 2/3 covered.
+    assert_eq!(d["total"], 3);
+    assert_eq!(d["passed"], 2);
+    assert_eq!(d["failed"], 1);
+    assert_eq!(d["failures"]["recovered"], 1);
+    assert_eq!(d["failures"]["abandoned"], 0);
+    let rhythm = d["rhythm"].as_array().unwrap();
+    assert_eq!(rhythm.len(), 1);
+    assert_eq!(rhythm[0]["session_id"], "sess_va");
+    assert_eq!(d["coverage"]["covered"], 2);
+    assert_eq!(d["coverage"]["total"], 3);
+}
+
+#[tokio::test]
+async fn summary_session_scope_rejects_window_params() {
+    // session_id×project/from/to 결합은 계약상 미지원(400) — kind×around와 같은 스타일.
+    let server = TestServer::new(router(AppState::new_for_tests(pool().await))).unwrap();
+    for q in [
+        "/v1/verification/summary?session_id=s&project=p",
+        "/v1/verification/summary?session_id=s&from=2026-06-10T00:00:00%2B00:00",
+        "/v1/verification/summary?session_id=s&to=2026-06-10T00:00:00%2B00:00",
+    ] {
+        let r = server.get(q).await;
+        r.assert_status(axum::http::StatusCode::BAD_REQUEST);
+    }
+}
+
+#[tokio::test]
+async fn summary_session_scope_unknown_session_is_empty() {
+    let server = TestServer::new(router(AppState::new_for_tests(seeded().await))).unwrap();
+    let r = server.get("/v1/verification/summary?session_id=nope").await;
+    r.assert_status_ok();
+    let v: Value = r.json();
+    assert_eq!(v["data"]["total"], 0);
+    assert_eq!(v["data"]["coverage"]["total"], 0);
+    assert_eq!(v["data"]["rhythm"].as_array().unwrap().len(), 0);
+}
