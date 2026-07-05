@@ -155,8 +155,11 @@ export function getVerificationSummary(opts: {
   project?: string;
   from?: string;
   to?: string;
+  /** §3c — 단일 세션 스코프(project/from/to와 결합 불가, 서버가 400). */
+  session_id?: string;
 }): Promise<VerificationSummaryDto> {
   const p = new URLSearchParams();
+  if (opts.session_id) p.set('session_id', opts.session_id);
   if (opts.project) p.set('project', opts.project);
   if (opts.from) p.set('from', opts.from);
   if (opts.to) p.set('to', opts.to);

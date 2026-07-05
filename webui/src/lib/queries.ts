@@ -22,6 +22,7 @@ import {
   getSessionTurns,
   getPlugins,
   getSessionTasks,
+  getVerificationSummary,
 } from '../api/client';
 import type {
   SessionDetail,
@@ -37,6 +38,7 @@ import type {
   TurnRollupResponse,
   PluginDto,
   TaskDto,
+  VerificationSummaryDto,
 } from '../api/types';
 
 export const sessionKeys = {
@@ -52,6 +54,7 @@ export const sessionKeys = {
   metrics: (id: string) => ['session', id, 'metrics'] as const,
   turns: (id: string) => ['session', id, 'turns'] as const,
   tasks: (id: string) => ['session', id, 'tasks'] as const,
+  verificationSummary: (id: string) => ['session', id, 'verification-summary'] as const,
 };
 
 /** 세션 목록 (store-global) — 세션 상세의 팀 배지·teammate 링크가 team 필드
@@ -127,6 +130,19 @@ export function useSessionTasksQuery(id: string, opts?: QOpts<TaskDto[]>) {
   return useQuery<TaskDto[]>({
     queryKey: sessionKeys.tasks(id),
     queryFn: () => getSessionTasks(id),
+    enabled: !!id,
+    ...opts,
+  });
+}
+
+/** §3c — 세션 스코프 verification summary(변경 커버리지). 분석 패널 lazy. */
+export function useSessionVerificationSummaryQuery(
+  id: string,
+  opts?: QOpts<VerificationSummaryDto>,
+) {
+  return useQuery<VerificationSummaryDto>({
+    queryKey: sessionKeys.verificationSummary(id),
+    queryFn: () => getVerificationSummary({ session_id: id }),
     enabled: !!id,
     ...opts,
   });
