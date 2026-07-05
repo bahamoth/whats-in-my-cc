@@ -1257,6 +1257,8 @@ pub struct VerificationSummaryQuery {
     pub project: Option<String>,
     pub from: Option<String>,
     pub to: Option<String>,
+    /// §3c — 단일 세션 스코프. project/from/to와 결합 불가(400).
+    pub session_id: Option<String>,
 }
 
 /// 2026-07-04 대시보드 검증 탭 — `GET /v1/verification/summary`.
@@ -1266,6 +1268,34 @@ pub async fn verification_summary(
     State(pool): State<SqlitePool>,
     Query(q): Query<VerificationSummaryQuery>,
 ) -> impl IntoResponse {
+    if let Some(sid) = q.session_id.as_deref() {
+        if q.project.is_some() || q.from.is_some() || q.to.is_some() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "INVALID_QUERY",
+                    "detail": "session_id cannot be combined with project/from/to",
+                })),
+            )
+                .into_response();
+        }
+        return match crate::insight::verification_summary::collect_session(&pool, sid).await {
+            Ok(summary) => Json(Envelope {
+                meta: ResponseMeta::now(),
+                data: summary,
+            })
+            .into_response(),
+            Err(err) => {
+                tracing::error!(err = %err, "verification_summary failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "internal server error"})),
+                )
+                    .into_response()
+            }
+        };
+    }
     fn parse_time(
         s: Option<&str>,
         name: &str,
