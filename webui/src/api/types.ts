@@ -213,6 +213,14 @@ export type DiffHunkDto = {
 };
 
 
+/** §2.2 — 이 모델에 적용된 per-Mtoken USD 단가(공개 가격표 ESTIMATE). */
+export type ModelRatesDto = {
+  input_per_mtok: number;
+  cache_creation_per_mtok: number;
+  cache_read_per_mtok: number;
+  output_per_mtok: number;
+};
+
 export type ModelUsageDto = {
   model: string;
   assistant_events: number;
@@ -223,6 +231,8 @@ export type ModelUsageDto = {
   /** Per-model public-pricing ESTIMATE (USD); 0 when unpriced. */
   estimated_cost_usd: number;
   priced: boolean;
+  /** 적용 단가 — 미가격 모델은 null. SSOT는 백엔드 pricing.json. */
+  rates: ModelRatesDto | null;
 };
 
 export type SessionUsageDto = {

@@ -86,6 +86,7 @@ describe('getSessionUsage', () => {
           output_tokens: 30,
           estimated_cost_usd: 0.0123,
           priced: true,
+          rates: null,
         },
       ],
     };

@@ -92,6 +92,17 @@ export const en = {
   'insight.cost.detailEstimate': 'Public-pricing estimate (≈)',
   'insight.cost.detailEstimateUnpriced': (n: number) => `Public-pricing estimate (≈) · ${n} unpriced`,
   'insight.cost.noPricing': 'no pricing',
+  'insight.cost.tipRateLine': (a: {
+    model: string;
+    input: string;
+    output: string;
+    cacheRead: string;
+    cacheWrite: string;
+  }) =>
+    `\`${a.model}\` in **$${a.input}** · out **$${a.output}** · cache-read $${a.cacheRead} · cache-write $${a.cacheWrite} /1M`,
+  'insight.cost.tipRateLineUnpriced': (model: string) =>
+    `\`${model}\` has no pricing entry — excluded from the total.`,
+  'insight.cost.tipPricingDate': (date: string) => `Rates from the public price list as of **${date}**.`,
 
   // Analysis panel
   'analysis.empty': 'No metrics to analyze.',
