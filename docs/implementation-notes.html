@@ -6323,6 +6323,80 @@ vitest: 69 passed
     불일치로 캐시가 자연히 무효화되지만, 관례를 따르는 편이 더 명확하다).</p>
   </section>
 
+  <section id="insight-baseline-p50-2026-07-05">
+    <h2>InsightStrip 프로젝트 중앙값 대비 + DetailPanel p50 배지 — UI 소비 (PR-3 §3a·§3d, 2026-07-05)</h2>
+    <p><b>범위:</b> 이 앵커는 <a href="#llm-request-p50-2026-07-05">#llm-request-p50-2026-07-05</a>
+    (§3d, <code>llm_request_p50</code> 백엔드 계산·소스 이중화)의 짝으로, PR-3의
+    <b>프론트엔드 소비 측</b>(§3a InsightStrip 카드 + §3d DetailPanel 배지)을 기록한다.
+    두 앵커를 함께 읽어야 §3a·§3d의 풀스택 그림이 완성된다.</p>
+    <p><b>§3a DeltaChip 공용화:</b> 대시보드 <code>HeadlineStats</code>에 있던 delta 칩을
+    <code>webui/src/components/DeltaChip.tsx</code>로 추출해 <code>InsightStrip</code>이
+    재사용한다(판정 문장 금지 — ▲/▼/▬ 방향 + <code>betterUp</code> 방향색만 전달, 숫자는
+    <code>trim1</code>로 소수 1자리). 대시보드 헤드라인 칩은 마크업·클래스 무변경이라
+    시각 회귀 없음.</p>
+    <p><b>§3a 프로젝트 중앙값 대비:</b> <code>GET /v1/usage/baseline?session_id=</code>
+    스코프 조회 결과를 <code>toInsightBaseline()</code>이 서버의 7지표(§baseline은
+    <a href="#llm-request-p50-2026-07-05">위 앵커</a> 아님 — <code>usage_baseline</code>
+    핸들러, PR-3 §3a) 중 카드 5종에 대응하는 <code>cache_hit_ratio</code>·
+    <code>billed_tokens</code>·<code>verification_pass_rate</code>·<code>tool_failure_count</code>·
+    <code>estimated_cost_usd</code>만 <code>InsightBaseline</code>으로 매핑한다
+    (<code>assistant_events</code>·<code>output_tokens</code>는 baseline 응답엔 있지만
+    카드 비교엔 쓰지 않음 — 의도적 축소). <code>compareToBaseline()</code>가 카드별
+    delta를 만든다: <b>n&lt;3</b>이면 <code>lowSample</code>(칩은 <code>v=0</code>으로
+    항상 flat 렌더되어 "세션이 중앙값과 정확히 같다"로 오독될 수 있어, 칩 대신
+    "표본 부족(n N)"만 표기), <b>n≥3</b>이면 DeltaChip + "프로젝트 중앙값의 x.x×
+    · n N"(<code>insight.baselinePositionN</code>, median&gt;0일 때만 문구 생성).</p>
+    <p><b>§3a 블렌디드 단가:</b> <code>blendedRatePerMTok(costUsd, billedTokens) =
+    costUsd / billedTokens * 1e6</code> — 세션 내 여러 모델이 섞이면 단일 "단가"가
+    없으므로 청구 토큰 가중 평균을 비용 카드 subtitle로 보여준다.
+    <code>billedTokens &lt;= 0</code>이면 <code>null</code>(미측정 ≠ 0 — CLAUDE.md
+    WebUI 표기 원칙).</p>
+    <p><b>§3d DetailPanel p50 배지:</b> <code>p50Badge()</code>(<code>webui/src/components/replay/detail/p50Badge.ts</code>)가
+    <code>SessionMetrics.llm_request_p50</code>의 <code>P50StatDto</code>를 소비해
+    요청 메트릭 4행(소요시간·TTFT·출력 토큰·청구 비용)마다 "세션 중앙값의 x.x×" 배지를
+    만든다. 게이트 3단: 관측값이 없으면(<code>value == null</code>) 배지 없음 →
+    <code>stat.n &lt; 3</code>이면 <code>metric.badge.lowSample</code>(표본 부족) →
+    <code>stat.p50</code>이 <code>null</code>이거나 <code>0</code> 이하면 배지 자체를
+    숨김(0으로 나누기 방지 + 미측정 표기 원칙) → 그 외엔
+    <code>metric.badge.median</code>(<code>value / stat.p50</code> 소수 1자리).
+    prop 체인은 <code>DetailPanel</code> → <code>EntityMetricsPanel</code> →
+    <code>InsightTab</code>까지 <code>llmP50</code>으로 통일하고, 실제 계산이
+    일어나는 <code>ResponseMetricsRows</code>(<code>metricsRows.tsx</code>) 내부에서만
+    지표별로 축약한 <code>p50</code> prop을 쓴다(Task 5·6 브리프 self-review에서
+    사전 확인된 명명 — 체인 전 구간·소비 지점의 이름이 달라도 각 파일을 열면
+    바로 해소되는 관례적 축약이라 편차 아님).</p>
+    <p><b>Task 7 개선 루프 부수 수정:</b> unknown-verification 루프가 이 세션 corpus에서
+    <code>cargo fmt --check</code> 실패 출력("Diff in &lt;path&gt;:&lt;line&gt;:" 헤더)이
+    어떤 heuristic에도 안 걸려 <code>format_check</code>가 unknown으로 남는 걸 발견했다
+    (실 표본 5건). <code>looks_like_failure</code>에 <code>"Diff in "</code> 패턴을
+    추가해 해소(<code>src/ingest/verification_run.rs</code>,
+    <code>looks_like_failure_detects_rustfmt_check_diff</code> 테스트로 잠금) — PR-3
+    코드 자체와는 무관하지만 CLAUDE.md 개선 루프 원칙("이 PR과 무관은 보류 사유
+    아님")에 따라 같은 PR에서 정정했다.</p>
+    <p><b>같은 루프의 잔여(의도적 미수정):</b> 재확인 재ingest 후 <code>format_check</code>
+    unknown이 실 표본 3건으로 재등장했다 — 이번엔 <code>cargo fmt --check</code>가
+    아니라 <b>같은 압축 명령 안의 앞선 세그먼트</b>(<code>cargo fmt -- &lt;path&gt;</code>,
+    <code>--check</code> 없는 mutate 모드)가 <code>matched_segment</code>의
+    첫-매치 규칙 때문에 골라진 경우였다. <code>verification_allowlist.rs</code>의
+    정규식(<code>^cargo fmt(?: --check)?…</code>)이 mutate 모드와 check 모드를
+    같은 <code>format_check</code> kind로 묶고 있어, mutate 모드는 본래 "조용히
+    재작성하고 항상 성공"이라 content 기반 신호가 없다(관측된 tail도 rustfmt
+    자체 출력이 아니라 하니스가 붙인 파일-수정 메모였다). 이걸 제대로 고치려면
+    <code>matched_segment</code>가 압축 명령에서 검증 세그먼트를 고르는 방식
+    (첫-매치 vs 마지막-매치, 또는 mutate/check 두 kind 분리)을 다시 설계해야 해서
+    — 이 PR의 smoke/루프 범위를 벗어나는 더 큰 변경이라 <b>고치지 않았다</b>.
+    다음에 이 loop를 도는 세션이 참고하도록 여기 남긴다.</p>
+    <p><b>브라우저 smoke 관측:</b> 스크래치 DB(정적 완료 세션 5건, 라이브 세션 제외,
+    <code>--no-watch-transcripts</code>)로 baseline <code>n</code>이 2~4로 작아
+    <code>verification_pass_rate</code> 카드는 표본 부족, 나머지 4카드는 실제
+    "x.x× · n N" 위치 문구가 렌더됨을 확인 — n&lt;3/n≥3 두 분기 모두 실동작.
+    <code>llm_request_p50</code>은 transcript-only ingest라 OTel span이 없어 전
+    지표 <code>n=0</code>/<code>null</code>이었다 — DetailPanel 배지가 크래시 없이
+    숨겨지는 것도 정상 관측(OTel 있는 세션은 <code>wimcc serve</code>가 현재 세션
+    telemetry를 라이브 수신할 때만 채워짐 — transcript-only ingest로는 measured가
+    드물다).</p>
+  </section>
+
 </main>
 </div>
 </body></html>
