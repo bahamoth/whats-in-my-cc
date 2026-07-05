@@ -34,6 +34,8 @@ type Routes = {
   raw?: Response;
   signals?: Response;
   metrics?: Response;
+  verificationRuns?: Response;
+  verificationSummary?: Response;
 };
 
 function setupFetch(routes: Routes) {
@@ -61,6 +63,14 @@ function setupFetch(routes: Routes) {
     }
     if (url.includes('/signals')) {
       if (routes.signals) return Promise.resolve(routes.signals.clone());
+    }
+    if (url.includes('/verification/summary')) {
+      if (routes.verificationSummary) return Promise.resolve(routes.verificationSummary.clone());
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }
+    if (url.includes('/verification-runs')) {
+      if (routes.verificationRuns) return Promise.resolve(routes.verificationRuns.clone());
+      return Promise.resolve(env([]));
     }
     if (url.endsWith('/metrics')) {
       if (routes.metrics) return Promise.resolve(routes.metrics.clone());
@@ -752,5 +762,164 @@ describe('Analysis surface', () => {
 
     // AnalysisPanel IS in the analysis slot
     expect(container.querySelector('[data-slot="analysis"]')).not.toBeNull();
+  });
+});
+
+// Task 7 (spec §3b+§3c) — wires AnalysisPanel's "검증 실행 리듬" (rhythm) and
+// "변경 커버리지" (coverage) sections to real session-scoped data: the
+// already-fetched verification-runs query (rhythm, via trigger_event_id +
+// started_at) and a NEWLY lazy-fetched (only while analysisOpen)
+// verification/summary?session_id=<id> (coverage). A rhythm-dot click must
+// jump the page's selection to the run's trigger event (existing
+// selectStreamCard), same as the drilled-signal click already proven above.
+describe('Analysis surface — verification rhythm + coverage wiring (Task 7)', () => {
+  const metricsPayload = {
+    session_id: 's1',
+    tool_call_total: 10,
+    tool_failure_count: 2,
+    verification_total: 4,
+    verification_passed: 3,
+    verification_failed: 1,
+    verification_unknown: 0,
+    verification_not_executed: 0,
+    context_bloat_count: 1,
+    detector_firing: {},
+  };
+
+  // trigger_event_id points at ev2 (loaded in eventsWithRows) so the jump
+  // assertion can check the real stream card's data-selected attribute.
+  const runsPayload = [
+    {
+      verification_run_id: 'vr1',
+      schema_version: 'verification_run.v1',
+      session_id: 's1',
+      source: 'bash',
+      command: 'cargo test',
+      command_kind: 'test_suite_rust',
+      trigger_event_id: 'ev2',
+      trigger_tool_use_id: null,
+      status: 'passed',
+      status_provenance: 'measured',
+      detection_basis: 'known_tool',
+      status_basis: 'exit',
+      started_at: '2026-05-19T10:00:03Z',
+      ended_at: null,
+      exit_code: 0,
+      failure_summary: null,
+      covered_diff_hunk_ids: [],
+    },
+  ];
+
+  const summaryPayload = {
+    total: 4,
+    measured: 4,
+    passed: 3,
+    failed: 1,
+    unknown: 0,
+    unknown_piped: 0,
+    unknown_other: 0,
+    not_executed: 0,
+    by_kind: [],
+    failures: { recovered: 0, abandoned: 0 },
+    rhythm: [],
+    coverage: { covered: 3, total: 4, by_session: [] },
+  };
+
+  beforeEach(() => {
+    if (!(globalThis as { EventSource?: unknown }).EventSource) {
+      (globalThis as Record<string, unknown>).EventSource = class FakeES {
+        url: string;
+        readyState = 0;
+        onmessage: ((ev: MessageEvent) => void) | null = null;
+        constructor(u: string) { this.url = u; }
+        addEventListener() {}
+        close() {}
+      };
+    }
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it('does not fetch verification/summary before the analysis panel opens (lazy-fetch)', async () => {
+    const f = setupFetch({
+      detail: env(sessionDetail),
+      events: env(eventsWithRows),
+      metrics: env(metricsPayload),
+      verificationRuns: env(runsPayload),
+      verificationSummary: env(summaryPayload),
+    });
+    rendered('s1');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+    expect(
+      f.mock.calls.some((c) => String(c[0]).includes('/verification/summary')),
+    ).toBe(false);
+  });
+
+  it('opening the analysis panel fetches session-scoped verification/summary and renders rhythm + coverage', async () => {
+    const f = setupFetch({
+      detail: env(sessionDetail),
+      events: env(eventsWithRows),
+      metrics: env(metricsPayload),
+      verificationRuns: env(runsPayload),
+      verificationSummary: env(summaryPayload),
+    });
+    rendered('s1');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /분석/i }));
+
+    await waitFor(() => {
+      expect(
+        f.mock.calls.some(
+          (c) =>
+            String(c[0]).includes('/verification/summary') &&
+            String(c[0]).includes('session_id=s1'),
+        ),
+      ).toBe(true);
+    });
+
+    // Rhythm dot (from verificationRuns + sessionSpan) renders inside the panel.
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-slot="analysis"] [data-dot]'),
+      ).not.toBeNull();
+    });
+    // Coverage bar (from verificationSummary.coverage) renders inside the panel.
+    expect(
+      document.querySelector('[data-slot="analysis"] [data-coverage-bar]'),
+    ).not.toBeNull();
+    expect(screen.getByText(/커버 75% · 미커버 1/)).toBeInTheDocument();
+  });
+
+  it('clicking a rhythm dot jumps to its trigger event (selects the stream card)', async () => {
+    setupFetch({
+      detail: env(sessionDetail),
+      events: env(eventsWithRows),
+      metrics: env(metricsPayload),
+      verificationRuns: env(runsPayload),
+      verificationSummary: env(summaryPayload),
+    });
+    const { container } = rendered('s1');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /분석/i }));
+
+    const dot = await waitFor(() => {
+      const el = document.querySelector('[data-slot="analysis"] [data-dot]');
+      if (!el) throw new Error('rhythm dot not rendered yet');
+      return el as HTMLElement;
+    });
+    fireEvent.click(dot);
+
+    // trigger_event_id 'ev2' is in the loaded window — the jump must select it.
+    await waitFor(() => {
+      expect(
+        container
+          .querySelector('[data-event-id="ev2"] [data-testid="message-card"]')
+          ?.getAttribute('data-selected'),
+      ).toBe('true');
+    });
   });
 });
