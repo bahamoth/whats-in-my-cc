@@ -12,6 +12,7 @@ import {
   diffRates,
   serializePricing,
   formatRate,
+  detectNewModels,
   type PricingJson,
 } from './update-pricing.ts';
 
@@ -145,4 +146,23 @@ test('subprocess --write --out: 임시 파일에만 쓰고 실 pricing.json은 �
   // 변동 안 된 정수 rate는 .0을 그대로 유지(리포맷 노이즈 없음)
   assert.ok(outLines.some((l) => /"input_per_mtok": 10\.0/.test(l)), '10.0 포맷 보존');
   assert.ok(outLines.some((l) => /"cache_read_per_mtok": 1\.0/.test(l)), '1.0 포맷 보존');
+});
+
+// ── 신규 모델 탐지 (등록 모델만 순회하던 맹점 보강, 2026-07-05) ──────────────
+
+test('detectNewModels: 표에 등장하나 alias 미등록인 모델 표시명을 surface한다', () => {
+  const html =
+    'Model pricing Claude Fable 5 $10 / MTok Claude Zephyr 9 $7 / MTok MTok = Million tokens';
+  const found = detectNewModels(html, { 'claude-fable-5': ['Claude Fable 5'] });
+  assert.deepEqual(found, ['Claude Zephyr 9']);
+});
+
+test('detectNewModels: retired/deprecated 행은 노이즈라 제외한다', () => {
+  const html = 'Model pricing Claude Zephyr 9 ( retired ) $7 / MTok MTok = Million tokens';
+  assert.deepEqual(detectNewModels(html, {}), []);
+});
+
+test('detectNewModels: 동결 fixture엔 미등록 활성 모델이 없다(활성 모델 전부 사전 추가)', () => {
+  // 신규 모델은 이 목록에 뜨는 즉시 PAGE_ALIASES + pricing.json에 사전 추가되어야 한다.
+  assert.deepEqual(detectNewModels(fixture), []);
 });
