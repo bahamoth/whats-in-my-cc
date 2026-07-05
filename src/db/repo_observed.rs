@@ -1474,4 +1474,113 @@ mod tests {
         .unwrap();
         assert_eq!(cnt, 10);
     }
+
+    /// SCAN_CHUNK(1000) 경계 회귀 잠금 (2026-07-05 머지-후 감사 Important):
+    /// 기존 시드는 전부 <1000행이라 resume 재질의 루프가 0회 실행됐다 — 커서
+    /// 경계를 `<`→`<=`로 바꾸는 류의 회귀가 매 1000행 경계에서 이벤트를 조용히
+    /// 누락/중복시켜도 못 잡는다. 2,500행(청크 3개)을 시드해 DESC(before)·
+    /// ASC(after)·count 세 경로 모두 resume을 ≥2회 태우고, 전량 수집 결과가
+    /// 무누락·무중복·전역 정렬임을 단언한다.
+    #[tokio::test]
+    async fn window_scan_multi_chunk_no_loss_or_dup_at_boundaries() {
+        let pool = test_pool().await;
+        let run_id = repo_runs::start(&pool).await.unwrap();
+        let base = chrono::Utc::now() - Duration::days(1);
+        const TOTAL: usize = 2_500;
+        // 매 7번째 행이 매칭("hit") → 358건이 세 청크에 걸쳐 흩어진다.
+        let expected: Vec<String> = (0..TOTAL)
+            .filter(|i| i % 7 == 0)
+            .map(|i| format!("evscan-{i:04}"))
+            .collect();
+        for i in 0..TOTAL {
+            let content = if i % 7 == 0 {
+                format!("hit {i}")
+            } else {
+                format!("miss {i}")
+            };
+            seed_scan_row(
+                &pool,
+                &run_id,
+                "sess-chunk",
+                i,
+                base + Duration::seconds(i as i64),
+                EventKind::UserMessage,
+                None,
+                serde_json::json!({ "content": content }),
+            )
+            .await;
+        }
+        let hit = |e: &ObservedEvent| {
+            e.payload
+                .get("content")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| s.starts_with("hit"))
+        };
+
+        // (1) count — ASC resume 루프가 청크 경계를 넘어 전량을 센다.
+        let cnt = count_session_scan(&pool, "sess-chunk", None, None, &hit)
+            .await
+            .unwrap();
+        assert_eq!(cnt, expected.len() as i64);
+
+        // (2) DESC 앵커 + before 페이징으로 전량 수집(페이지 limit 100).
+        let mut collected: Vec<ObservedEvent> = Vec::new();
+        let mut before: Option<Cursor> = None;
+        loop {
+            let page = list_session_window_scan(
+                &pool,
+                "sess-chunk",
+                None,
+                None,
+                &hit,
+                before.as_ref(),
+                None,
+                100,
+            )
+            .await
+            .unwrap();
+            if page.is_empty() {
+                break;
+            }
+            before = Some(Cursor {
+                observed_at: page[0].observed_at,
+                event_id: page[0].event_id.clone(),
+            });
+            // 페이지는 ASC — 과거 페이지를 앞에 붙여 전역 ASC 유지.
+            let mut next = page;
+            next.extend(collected);
+            collected = next;
+        }
+        let got: Vec<&str> = collected.iter().map(|e| e.event_id.as_str()).collect();
+        assert_eq!(got, expected.iter().map(String::as_str).collect::<Vec<_>>());
+
+        // (3) after 페이징 전진으로도 동일 집합. after-only가 ASC 전진 계약이므로
+        // "세션 시작 이전" 인공 커서에서 출발한다(after=None은 최신 앵커 DESC).
+        let mut forward: Vec<String> = Vec::new();
+        let mut after: Option<Cursor> = Some(Cursor {
+            observed_at: base - Duration::seconds(1),
+            event_id: String::new(),
+        });
+        loop {
+            let page = list_session_window_scan(
+                &pool,
+                "sess-chunk",
+                None,
+                None,
+                &hit,
+                None,
+                after.as_ref(),
+                100,
+            )
+            .await
+            .unwrap();
+            let Some(last) = page.last() else { break };
+            after = Some(Cursor {
+                observed_at: last.observed_at,
+                event_id: last.event_id.clone(),
+            });
+            forward.extend(page.into_iter().map(|e| e.event_id));
+        }
+        assert_eq!(forward, expected);
+    }
 }
