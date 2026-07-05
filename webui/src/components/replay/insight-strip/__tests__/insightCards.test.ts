@@ -384,6 +384,27 @@ describe('toInsightBaseline (PR-3 §3a)', () => {
     expect(b.cache_hit_ratio).toEqual({ median: 0.5, n: 3 });
     expect(b.verification_pass_rate).toEqual({ median: null, n: 0 });
   });
+
+  // 머지-후 감사 F1(2026-07-05): 백엔드가 정직 라벨용으로 실어보내는 scope를
+  // 프론트가 버리고 '프로젝트 중앙값'을 하드코딩 — store 폴백(프로젝트 미상)
+  // 세션에서 전-스토어 중앙값이 프로젝트 중앙값으로 오표기됐다(§0 표본 정직성).
+  it('scope를 보존하고, store 폴백이면 위치 문구가 전체 세션 기준을 명시한다', () => {
+    const dto = {
+      session_count: 3, scope: 'store', project: null,
+      cache_hit_ratio: { p25: 0.1, median: 0.5, p75: 0.9, n: 12 },
+      billed_tokens: { p25: 1, median: 1_000_000, p75: 3, n: 12 },
+      assistant_events: { p25: 1, median: 1, p75: 1, n: 3 },
+      output_tokens: { p25: 1, median: 1, p75: 1, n: 3 },
+      verification_pass_rate: { p25: null, median: 0.8, p75: null, n: 5 },
+      tool_failure_count: { p25: 0, median: 2, p75: 2, n: 12 },
+      estimated_cost_usd: { p25: 0.5, median: 1.0, p75: 2, n: 12 },
+    };
+    const b = toInsightBaseline(dto);
+    expect(b.scope).toBe('store');
+    const c = byId({ ...EMPTY, usage, baseline: b }).get('tokens')!;
+    expect(c.baseline!.position).toContain('전체 세션');
+    expect(c.baseline!.position).not.toContain('프로젝트');
+  });
 });
 
 // S8 (UX 재설계) — intra-session sparklines from per-turn tokens + tokens baseline.

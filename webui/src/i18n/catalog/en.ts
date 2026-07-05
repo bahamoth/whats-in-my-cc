@@ -39,6 +39,8 @@ export const en = {
   'insight.loading': 'Loading',
   'insight.baselinePositionN': (p: { x: string; n: number }) =>
     `${p.x}× project median · n ${p.n}`,
+  'insight.baselinePositionStoreN': (p: { x: string; n: number }) =>
+    `${p.x}× all-sessions median · n ${p.n}`,
   'insight.baselineLowSample': (n: number) => `low sample (n ${n})`,
   'insight.provenance.measured': 'measured',
   'insight.provenance.mixed': 'mixed',
