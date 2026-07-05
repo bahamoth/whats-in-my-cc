@@ -103,6 +103,16 @@ async fn usage_endpoint_returns_public_pricing_estimate() {
     assert!(m0["priced"].as_bool().unwrap());
     assert!(m0["cache_read_input_tokens"].as_i64().unwrap() > 0);
     assert!(m0["estimated_cost_usd"].as_f64().unwrap() > 0.0);
+
+    // §2.2 — per-model 적용 단가 노출. fixture 모델 claude-opus-4-7 = 5/6.25/0.5/25.
+    let rates = &m0["rates"];
+    assert!(
+        (rates["input_per_mtok"].as_f64().unwrap() - 5.0).abs() < 1e-9,
+        "opus-4-7 input rate"
+    );
+    assert!((rates["cache_creation_per_mtok"].as_f64().unwrap() - 6.25).abs() < 1e-9);
+    assert!((rates["cache_read_per_mtok"].as_f64().unwrap() - 0.5).abs() < 1e-9);
+    assert!((rates["output_per_mtok"].as_f64().unwrap() - 25.0).abs() < 1e-9);
 }
 
 /// F1 — `turns` → `assistant_events` 개명, `user_turns` 추가, `cache_hit_ratio` 삭제.
@@ -188,5 +198,61 @@ async fn usage_reports_assistant_events_and_user_turns_separately() {
     assert!(
         data.get("cache_hit_ratio").is_none(),
         "window-고정 rate 제거됨"
+    );
+}
+
+/// §2.2 — 가격표에 없는 모델은 `rates: null` + `priced: false`.
+#[tokio::test]
+async fn usage_rates_null_for_unpriced_model() {
+    let pool = empty_pool().await;
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    repo_raw::insert_dedup(
+        &pool,
+        &repo_raw::NewRaw {
+            raw_event_id: "raw_unpriced_1".into(),
+            ingest_run_id: run_id.clone(),
+            source_type: "claude_transcript".into(),
+            source_uri: "/tmp/unpriced_test.jsonl".into(),
+            source_line_no: 0,
+            source_byte_offset: 0,
+            payload_sha256: "sha_raw_unpriced_1".into(),
+            payload: b"{}".to_vec(),
+            parse_error: None,
+            captured_at: chrono::Utc::now(),
+            redaction_state: "not_applicable".into(),
+            redaction_manifest: None,
+        },
+    )
+    .await
+    .unwrap();
+    repo_usage_facet::insert(
+        &pool,
+        &UsageFacetRow {
+            raw_event_id: "raw_unpriced_1".into(),
+            schema_version: "usage_facet.v1".into(),
+            session_id: "sess_unpriced".into(),
+            model: Some("some-future-model-x".into()),
+            input_tokens: 10,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            output_tokens: 5,
+            observed_at: "2026-07-04T10:00:00Z".into(),
+            parser_version: "usage_facet@v1".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let state = AppState::new_for_tests(pool);
+    let server = TestServer::new(router(state)).unwrap();
+    let r = server.get("/v1/sessions/sess_unpriced/usage").await;
+    r.assert_status_ok();
+    let body = r.json::<Value>();
+    let m0 = &body["data"]["by_model"][0];
+    assert_eq!(m0["model"].as_str().unwrap(), "some-future-model-x");
+    assert!(!m0["priced"].as_bool().unwrap());
+    assert!(
+        m0["rates"].is_null(),
+        "unpriced model must carry rates: null"
     );
 }

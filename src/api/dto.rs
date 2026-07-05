@@ -264,6 +264,16 @@ pub struct SessionUsageDto {
     pub by_model: Vec<ModelUsageDto>,
 }
 
+/// §2.2 (2026-07-04 세션 상세 개선) — 이 모델에 적용된 per-Mtoken USD 단가
+/// (공개 가격표 ESTIMATE). 가격표에 없는 모델은 None(→ JSON null).
+#[derive(Serialize)]
+pub struct ModelRatesDto {
+    pub input_per_mtok: f64,
+    pub cache_creation_per_mtok: f64,
+    pub cache_read_per_mtok: f64,
+    pub output_per_mtok: f64,
+}
+
 #[derive(Serialize)]
 pub struct ModelUsageDto {
     pub model: String,
@@ -277,6 +287,8 @@ pub struct ModelUsageDto {
     pub estimated_cost_usd: f64,
     /// false when no pricing entry exists for `model` (cost is then 0).
     pub priced: bool,
+    /// 적용 단가 4종 — 미가격 모델은 null. 가격표 SSOT는 백엔드(pricing.json).
+    pub rates: Option<ModelRatesDto>,
 }
 
 /// insight-redesign #6 — one baseline metric's quantile triple.
