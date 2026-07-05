@@ -295,7 +295,11 @@ impl EventFilter {
                         return Err(format!("tag must be verb.object (e.g. test.code): {v}"));
                     }
                 }
-                if vals.is_empty() { None } else { Some(vals) }
+                if vals.is_empty() {
+                    None
+                } else {
+                    Some(vals)
+                }
             }
         };
         let q =
@@ -391,8 +395,10 @@ impl EventFilter {
             if ev.kind != crate::model::observed::EventKind::ToolCall {
                 return false;
             }
-            let outcome =
-                crate::insight::event_tags::classify_tool_call(ev.tool_name.as_deref(), &ev.payload);
+            let outcome = crate::insight::event_tags::classify_tool_call(
+                ev.tool_name.as_deref(),
+                &ev.payload,
+            );
             match outcome.value {
                 Some(v) if tags.iter().any(|t| t == v) => {}
                 _ => return false,
