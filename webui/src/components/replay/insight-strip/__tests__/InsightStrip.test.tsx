@@ -14,7 +14,7 @@ const usage: SessionUsageDto = {
     model: 'claude-opus-4-8', assistant_events: 5,
     input_tokens: 200_000, cache_creation_input_tokens: 3_900_000,
     cache_read_input_tokens: 199_500_000, output_tokens: 1_300_000,
-    estimated_cost_usd: 102.5, priced: true,
+    estimated_cost_usd: 102.5, priced: true, rates: null,
   }],
 };
 

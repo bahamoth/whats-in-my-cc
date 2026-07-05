@@ -40,6 +40,7 @@ const usage: SessionUsageDto = {
       output_tokens: 1_000_000,
       estimated_cost_usd: 90,
       priced: true,
+      rates: null,
     },
     {
       model: 'claude-haiku-4-5-20251001',
@@ -50,6 +51,7 @@ const usage: SessionUsageDto = {
       output_tokens: 300_000,
       estimated_cost_usd: 12.5,
       priced: true,
+      rates: null,
     },
   ],
 };
@@ -334,5 +336,75 @@ describe('buildInsightCards — S8 sparklines (per-turn tokens)', () => {
     }).get('tokens')!;
     // usage.billed_tokens = 5.4M vs median 2.7M → +100%
     expect(c.baselineDelta).toBe('+100% vs 중앙값');
+  });
+});
+
+// §2.3 — cost tooltip becomes a dynamic assembly: static estimate-basis copy +
+// one rate line per model OBSERVED IN THIS SESSION + a pricing-date line.
+describe('costCard tooltip — 단가표 동적 조립 (§2.3)', () => {
+  const usageWithRates: SessionUsageDto = {
+    session_id: 's1',
+    assistant_events: 2,
+    user_turns: 1,
+    input_tokens: 1000,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+    output_tokens: 500,
+    billed_tokens: 1500,
+    estimated_cost_usd: 0.04,
+    cost_basis: 'estimate_public_pricing',
+    pricing_version: 'pricing_estimate@2026-06-11',
+    models_without_pricing: ['some-future-model-x'],
+    by_model: [
+      {
+        model: 'claude-fable-5',
+        assistant_events: 1,
+        input_tokens: 1000,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+        output_tokens: 500,
+        estimated_cost_usd: 0.035,
+        priced: true,
+        rates: {
+          input_per_mtok: 10,
+          cache_creation_per_mtok: 12.5,
+          cache_read_per_mtok: 1,
+          output_per_mtok: 50,
+        },
+      },
+      {
+        model: 'some-future-model-x',
+        assistant_events: 1,
+        input_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+        output_tokens: 0,
+        estimated_cost_usd: 0,
+        priced: false,
+        rates: null,
+      },
+    ],
+  };
+
+  it('관측 모델의 단가 줄 + 기준일 줄이 툴팁에 붙는다', () => {
+    const cards = byId({ ...EMPTY, usage: usageWithRates });
+    const cost = cards.get('cost')!;
+    expect(cost.tooltip).toContain('`claude-fable-5`');
+    expect(cost.tooltip).toContain('$10');
+    expect(cost.tooltip).toContain('$50');
+    expect(cost.tooltip).toContain('12.5');
+    expect(cost.tooltip).toContain('2026-06-11');
+  });
+
+  it('미가격 모델은 가격표 없음 줄로 표기된다', () => {
+    const cards = byId({ ...EMPTY, usage: usageWithRates });
+    const cost = cards.get('cost')!;
+    expect(cost.tooltip).toContain('`some-future-model-x`');
+  });
+
+  it('usage 미수집이면 기존 정적 툴팁 그대로', () => {
+    const cards = byId(EMPTY);
+    const cost = cards.get('cost')!;
+    expect(cost.tooltip).not.toContain('기준');
   });
 });

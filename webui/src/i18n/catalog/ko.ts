@@ -90,6 +90,17 @@ export const ko: Messages = {
   'insight.cost.detailEstimate': '공개 가격표 추정 (≈)',
   'insight.cost.detailEstimateUnpriced': (n: number) => `공개 가격표 추정 (≈) · 미가격 ${n}`,
   'insight.cost.noPricing': '가격표 없음',
+  'insight.cost.tipRateLine': (a: {
+    model: string;
+    input: string;
+    output: string;
+    cacheRead: string;
+    cacheWrite: string;
+  }) =>
+    `\`${a.model}\` 입력 **$${a.input}** · 출력 **$${a.output}** · cache-read $${a.cacheRead} · cache-write $${a.cacheWrite} /1M`,
+  'insight.cost.tipRateLineUnpriced': (model: string) =>
+    `\`${model}\` 가격표 없음 — 합계에서 제외됩니다.`,
+  'insight.cost.tipPricingDate': (date: string) => `공개 가격표 **${date}** 기준.`,
 
   // Analysis panel
   'analysis.empty': '분석할 지표가 없습니다.',

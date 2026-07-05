@@ -275,14 +275,32 @@ function toolFailureCard(inputs: InsightInputs, t: TFunction): InsightCardModel 
 }
 
 function costCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
-  const tip = t('insight.cost.tip');
   if (!inputs.usage) {
     return {
       id: 'cost', title: t('insight.cost.title'), value: '—',
-      detail: t('insight.recollectUsage'), provenance: 'uncollected', tooltip: tip,
+      detail: t('insight.recollectUsage'), provenance: 'uncollected',
+      tooltip: t('insight.cost.tip'),
     };
   }
   const u = inputs.usage;
+  // §2.3 — 정적 추정 근거 + 관측 모델 단가 줄 + 가격표 기준일을 동적 조립.
+  const tipLines: string[] = [t('insight.cost.tip')];
+  for (const m of u.by_model) {
+    tipLines.push(
+      m.rates
+        ? t('insight.cost.tipRateLine', {
+            model: m.model,
+            input: String(m.rates.input_per_mtok),
+            output: String(m.rates.output_per_mtok),
+            cacheRead: String(m.rates.cache_read_per_mtok),
+            cacheWrite: String(m.rates.cache_creation_per_mtok),
+          })
+        : t('insight.cost.tipRateLineUnpriced', m.model),
+    );
+  }
+  const versionDate = u.pricing_version.split('@')[1];
+  if (versionDate) tipLines.push(t('insight.cost.tipPricingDate', versionDate));
+
   const unpriced = u.models_without_pricing.length > 0;
   const card: InsightCardModel = {
     id: 'cost', title: t('insight.cost.title'),
@@ -290,7 +308,7 @@ function costCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
     detail: unpriced
       ? t('insight.cost.detailEstimateUnpriced', u.models_without_pricing.length)
       : t('insight.cost.detailEstimate'),
-    provenance: 'estimated', tooltip: tip,
+    provenance: 'estimated', tooltip: tipLines.join('\n'),
     drill: {
       lines: u.by_model.map(
         (m) => `${m.model}: ${m.priced ? formatUsd(m.estimated_cost_usd) : t('insight.cost.noPricing')}`,
