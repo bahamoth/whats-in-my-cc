@@ -90,7 +90,7 @@ export const en = {
   'insight.cost.title': 'Cost',
   'insight.cost.tip':
     'An estimate from **public price list × usage tokens** — a floor, not the bill (design §6.5/§11.3).\n' +
-    'Replaced once the OTel claude_code.cost.usage metric arrives. cache_read (free) is excluded from cost.',
+    'Replaced once the OTel claude_code.cost.usage metric arrives. cache_read is costed at the **cache-read rate** (0.1× input).',
   'insight.cost.detailEstimate': 'Public-pricing estimate (≈)',
   'insight.cost.detailEstimateUnpriced': (n: number) => `Public-pricing estimate (≈) · ${n} unpriced`,
   'insight.cost.detailUnitRate': (r: string) => `blended $${r}/1M`,

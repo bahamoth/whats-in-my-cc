@@ -511,4 +511,13 @@ describe('costCard tooltip — 단가표 동적 조립 (§2.3)', () => {
     const cost = cards.get('cost')!;
     expect(cost.tooltip).not.toContain('기준');
   });
+
+  // 머지-후 감사 #1(2026-07-05, MEDIUM): 정적 tip이 cache_read를 '비용에서
+  // 제외'라 했으나 실제 추정(pricing.rs)은 cache-read 단가로 포함한다 — 같은
+  // 툴팁의 동적 단가 줄(cache-read $N/1M)과 정면 모순. 오기 재발을 잠근다.
+  it('정적 tip이 cache_read 비용 제외를 주장하지 않는다 (계산과 모순 금지)', () => {
+    const cards = byId({ ...EMPTY, usage: usageWithRates });
+    const cost = cards.get('cost')!;
+    expect(cost.tooltip).not.toMatch(/비용에서 제외|excluded from cost/);
+  });
 });
