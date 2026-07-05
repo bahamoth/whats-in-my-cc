@@ -416,6 +416,35 @@ describe('ConversationStream', () => {
     expect(screen.getByText(/no conversation/i)).toBeInTheDocument();
   });
 
+  // 필터드 tail이 로딩되는 수 초 동안 "no events"를 보여주면 '매칭 없음'으로
+  // 오독된다(2026-07-05 verification=unknown 실사례 — 50k 세션에서 수 초 스캔).
+  it('while loading with no items, shows a loading state instead of the empty hint', () => {
+    render(
+      <ConversationStream
+        items={[]}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+        loading
+      />,
+    );
+    expect(screen.queryByText(/no conversation/i)).toBeNull();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+
+  it('with a filter active and truly no matches, says no MATCHING events', () => {
+    render(
+      <ConversationStream
+        items={[]}
+        selectedEventId={null}
+        findingEventIds={new Set()}
+        onSelect={() => {}}
+        filterActive
+      />,
+    );
+    expect(screen.getByText(/매칭|match/i)).toBeInTheDocument();
+  });
+
   it('forwards clicks from a message card with the event id', () => {
     const onSelect = vi.fn();
     render(

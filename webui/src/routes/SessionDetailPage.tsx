@@ -618,6 +618,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
                 pendingNewCount={pendingNew}
                 flatMode={filterActive}
                 filterActive={filterActive}
+                loading={window_.loading === 'initial'}
                 footerExtra={
                   <UntaggedBashPanel events={window_.events} onJump={selectStreamCard} />
                 }

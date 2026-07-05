@@ -272,6 +272,8 @@ export const en = {
   'filter.axis.origin': 'Origin',
   'filter.axis.outcome': 'Outcome',
   'filter.axis.tag': 'Tags',
+  'stream.loading': 'Loading events…',
+  'stream.emptyFiltered': 'No events match the filter',
   'filter.axis.content': 'Tool·model·text',
   'filter.outcome.error': 'errored tools',
   'filter.outcome.signal': 'with signals',

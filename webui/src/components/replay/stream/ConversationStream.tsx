@@ -67,6 +67,10 @@ interface ConversationStreamProps {
    *  (AutoscrollToggle indeterminate). 필터 창의 대기 수치는 필터링된
    *  부분집합만 세므로 근사치다. */
   filterActive?: boolean;
+  /** 초기(필터드 tail) 로드가 진행 중 — 큰 세션의 verification/signal 스캔은
+   *  수 초가 걸려, 빈 목록을 곧장 "no events"로 보여주면 '매칭 없음'으로
+   *  오독된다(2026-07-05 실사례). true면 빈 상태 대신 로딩을 보여준다. */
+  loading?: boolean;
 }
 
 /** True when the item is a message with the given eventId, or an activity-run
@@ -110,6 +114,7 @@ export function ConversationStream({
   initialFollow = true,
   flatMode = false,
   filterActive = false,
+  loading = false,
 }: ConversationStreamProps) {
   const t = useT();
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -426,7 +431,19 @@ export function ConversationStream({
   }, [selectedEventId, items, totalSize]);
 
   if (items.length === 0) {
-    return <p className={styles.empty}>No conversation events yet.</p>;
+    // 로딩 중 빈 목록은 '아직 모름' — empty-state로 단정하지 않는다.
+    if (loading) {
+      return (
+        <p className={styles.empty} role="status" aria-live="polite">
+          {t('stream.loading')}
+        </p>
+      );
+    }
+    return (
+      <p className={styles.empty}>
+        {filterActive ? t('stream.emptyFiltered') : 'No conversation events yet.'}
+      </p>
+    );
   }
 
   const renderItem = (item: StreamItem) => {
