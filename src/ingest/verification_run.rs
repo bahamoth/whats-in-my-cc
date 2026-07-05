@@ -629,6 +629,13 @@ fn looks_like_failure(content: &str) -> bool {
         // — FAILED(대문자)·"failed,"(pytest)·"Tests failed" 전부 불일치
         // (2026-07-04 루프, 실 표본 12건: 이 프로젝트 vitest -t 필터 실행).
         || content.contains(" failed | ")
+        // cargo fmt --check / rustfmt --check — 실패 시 unified diff를 "Diff in
+        // <path>:<line>:" 헤더로 찍고 exit 1(통과 시 출력 없이 exit 0). 공식
+        // 문서(rustfmt --help): "Run in 'check' mode. Exits with 0 if input is
+        // formatted correctly. Exits with 1 and prints a diff if formatting is
+        // required." exit code도 못 얻은 세션에서 format_check가 unknown으로
+        // 남았다 (unknown-verification 루프, PR-3 Task 7, 2026-07-05, 실 표본 5건).
+        || content.contains("Diff in ")
 }
 
 /// Truncate a string to at most `max_bytes` bytes (UTF-8 safe).
@@ -713,6 +720,22 @@ mod tests {
         // 먼저 검사하므로 실제 경로에선 Failed로 처리된다. 이 의존성을 문서화한다.
         assert!(looks_like_success("1 failed, 41 passed in 1.20s"));
         assert!(looks_like_failure("1 failed, 41 passed in 1.20s"));
+    }
+
+    /// unknown-verification 루프 2026-07-05 (PR-3 Task 7, 실 표본 5건: dfb6c26e
+    /// 세션의 `cargo fmt --check 2>&1`). rustfmt --check는 미포맷 파일마다
+    /// "Diff in <path>:<line>:"로 시작하는 unified diff를 stdout에 찍고 종료코드
+    /// 1을 낸다(포맷 통과 시 출력 없음, exit 0) — 공식 문서: rustfmt --check
+    /// "Run in 'check' mode. Exits with 0 if input is formatted correctly.
+    /// Exits with 1 and prints a diff if formatting is required."
+    /// (`rustfmt --help`). 기존 heuristic 어느 것도 "Diff in "을 인식하지 못해
+    /// exit-code도 못 얻은 세션에서 format_check가 unknown으로 남았다.
+    #[test]
+    fn looks_like_failure_detects_rustfmt_check_diff() {
+        let rustfmt_diff_tail = "\u{f}\u{1b}[32m+                EventKind::AssistantMessage,\n\u{1b}[m\u{f}             &ctx\n         ));\n \nDiff in /Users/bahamoth/projects/whats-in-my-cc/src/insight/event_filter.rs:535:\n             &ctx\n         ));";
+        assert!(looks_like_failure(rustfmt_diff_tail));
+        // 포맷 통과(빈 출력)는 실패로 오판하지 않는다.
+        assert!(!looks_like_failure(""));
     }
 
     /// Dogfooding 2026-06-11: clippy 성공 출력은 "test result: ok" 류 요약이 없고
