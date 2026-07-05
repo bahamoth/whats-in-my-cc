@@ -291,20 +291,26 @@ pub struct ModelUsageDto {
     pub rates: Option<ModelRatesDto>,
 }
 
-/// insight-redesign #6 — one baseline metric's quantile triple.
+/// insight-redesign #6 + PR-3 §3a — one baseline metric's quantile triple.
 /// `median` is the user's rolling norm; the frontend renders the measured
 /// session value as a delta against it ("vs your median"). All three are null
-/// when no session in the store has usage_facet rows for this metric.
+/// when no session in the scope has a value for this metric.
+/// `n` = 이 지표의 분포에 실제로 들어간 세션 수(지표별 게이트가 달라 서로 다를
+/// 수 있다 — cache_hit은 분모>0, pass_rate는 측정>0, tool_failure는 tool_call>0,
+/// cost는 billed>0). n<3이면 프론트가 "표본 부족"으로 강조를 해제한다.
 #[derive(Serialize)]
 pub struct BaselineStat {
     pub p25: Option<f64>,
     pub median: Option<f64>,
     pub p75: Option<f64>,
+    pub n: i64,
 }
 
-/// insight-redesign #6 — cross-session usage baseline. Median (+ p25/p75) of
-/// each key metric across ALL stored sessions that have usage_facet rows.
-/// `session_count` is the number of sessions the baseline was computed over.
+/// insight-redesign #6 + PR-3 §3a — cross-session usage baseline. Median
+/// (+ p25/p75) of each key metric across the stored sessions in scope.
+/// `session_count` is the number of usage sessions the baseline was computed
+/// over. `?session_id=`가 오면 그 세션의 project(session_summary facet)로 분포를
+/// 스코프한다. project 미상이면 store 전체로 폴백(scope="store").
 ///
 /// F1: `turns` renamed to `assistant_events` (quantile distribution of
 /// usage_facet row counts per session). `cache_hit_ratio` distribution retained
@@ -313,10 +319,19 @@ pub struct BaselineStat {
 #[derive(Serialize)]
 pub struct UsageBaselineDto {
     pub session_count: i64,
+    /// "project" | "store" — 프론트가 라벨을 정직하게 붙이기 위한 관측 사실.
+    pub scope: String,
+    pub project: Option<String>,
     pub cache_hit_ratio: BaselineStat,
     pub billed_tokens: BaselineStat,
     pub assistant_events: BaselineStat,
     pub output_tokens: BaselineStat,
+    /// passed/(passed+failed) per session — 측정(passed+failed>0) 세션만.
+    pub verification_pass_rate: BaselineStat,
+    /// tool_failure 시그널 수 per session — tool_call_total>0 세션만(0-인플레 방지).
+    pub tool_failure_count: BaselineStat,
+    /// 공개 가격표 추정 비용 per session — billed_tokens>0 세션만.
+    pub estimated_cost_usd: BaselineStat,
 }
 
 /// `GET /v1/sessions/:id/tasks` — per-task summary (TaskCreate/TaskUpdate

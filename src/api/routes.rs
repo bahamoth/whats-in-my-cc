@@ -943,25 +943,86 @@ pub async fn session_usage(
     .into_response()
 }
 
-/// insight-redesign #6 — `GET /v1/usage/baseline`
+#[derive(Deserialize)]
+pub struct BaselineQuery {
+    pub session_id: Option<String>,
+}
+
+/// PR-3 §3a — 세션 횡단 baseline은 series와 같은 후보 cap을 쓴다(§G-3 준용).
+const BASELINE_CANDIDATE_CAP: i64 = 5000;
+
+/// insight-redesign #6 + PR-3 §3a — `GET /v1/usage/baseline`
 ///
-/// Cross-session baseline: median (+ p25/p75) of each key usage metric over
-/// ALL stored sessions that have usage_facet rows. SQLite has no MEDIAN(), so
-/// the per-session metric rows are pulled and the quantiles computed in Rust.
-/// `cache_hit_ratio`'s distribution excludes sessions with a 0-token
-/// denominator (None); `session_count` counts all sessions with usage rows.
-pub async fn usage_baseline(State(pool): State<SqlitePool>) -> impl IntoResponse {
-    let metrics = repo_usage_facet::per_session_metrics(&pool)
+/// Cross-session baseline: median (+ p25/p75 + sample n) of each key metric.
+/// `?session_id=`가 오면 그 세션의 `session_summary.project`로 분포를 스코프하고
+/// scope="project"·project를 실어 프론트가 라벨을 정직하게 붙이게 한다. project
+/// 미상이면 store 전체로 폴백(scope="store", 기존 동작 보존). SQLite has no
+/// MEDIAN(), so the per-session metric values are pulled and quantiles computed
+/// in Rust. usage 4지표(cache_hit·billed·assistant_events·output)는 usage_facet
+/// 파생이고, 신규 3지표(pass_rate·tool_failure·cost)는 `compute_session_metrics`
+/// 파생이다 — 각 지표의 게이트(분모)가 달라 `n`(표본 수)도 지표별로 다르다.
+pub async fn usage_baseline(
+    State(pool): State<SqlitePool>,
+    Query(q): Query<BaselineQuery>,
+) -> impl IntoResponse {
+    // 1) 스코프 해석: session_id → session_summary.project. 미상이면 store.
+    let project = match q.session_id.as_deref() {
+        Some(sid) => repo_observed::session_project(&pool, sid)
+            .await
+            .expect("db"),
+        None => None,
+    };
+    let rows =
+        repo_observed::list_sessions_filtered(&pool, BASELINE_CANDIDATE_CAP, project.as_deref())
+            .await
+            .expect("db");
+    let scope_ids: std::collections::HashSet<String> =
+        rows.iter().map(|r| r.session_id.clone()).collect();
+
+    // 2) usage 4지표 — 기존 per_session_metrics를 스코프로 필터(계산식 불변).
+    //    store 스코프(project=None)에서는 필터를 적용하지 않아 기존 동작을
+    //    보존한다(usage-only 세션은 관측 이벤트가 없어 scope_ids에 없을 수 있음).
+    let metrics: Vec<_> = repo_usage_facet::per_session_metrics(&pool)
         .await
-        .expect("db");
-
+        .expect("db")
+        .into_iter()
+        .filter(|m| project.is_none() || scope_ids.contains(&m.session_id))
+        .collect();
     let session_count = metrics.len() as i64;
-
     let cache_hit_vals: Vec<f64> = metrics.iter().filter_map(|m| m.cache_hit_ratio).collect();
     let billed_vals: Vec<f64> = metrics.iter().map(|m| m.billed_tokens as f64).collect();
     let assistant_events_vals: Vec<f64> =
         metrics.iter().map(|m| m.assistant_events as f64).collect();
     let output_vals: Vec<f64> = metrics.iter().map(|m| m.output_tokens as f64).collect();
+
+    // 3) 신규 3지표 — 스코프 세션별 compute_session_metrics(인메모리 캐시 편승,
+    //    series /v1/metrics와 같은 인터랙티브 경로 선례). 스코프의 관측-이벤트
+    //    세션(rows)과 usage 세션(metrics)의 합집합을 돈다 — usage-only 세션도
+    //    billed>0이면 비용 표본에 기여하기 때문(검증/도구는 게이트로 걸러진다).
+    let loop_ids: std::collections::BTreeSet<String> = rows
+        .iter()
+        .map(|r| r.session_id.clone())
+        .chain(metrics.iter().map(|m| m.session_id.clone()))
+        .collect();
+    let mut pass_rate_vals: Vec<f64> = Vec::new();
+    let mut tool_failure_vals: Vec<f64> = Vec::new();
+    let mut cost_vals: Vec<f64> = Vec::new();
+    for sid in &loop_ids {
+        let m = crate::insight::metrics::compute_session_metrics(&pool, sid)
+            .await
+            .expect("db");
+        let measured = m.verification_passed + m.verification_failed;
+        if measured > 0 {
+            pass_rate_vals.push(m.verification_passed as f64 / measured as f64);
+        }
+        if m.tool_call_total > 0 {
+            tool_failure_vals.push(m.tool_failure_count as f64);
+        }
+        let billed = m.input_tokens + m.cache_creation_input_tokens + m.output_tokens;
+        if billed > 0 {
+            cost_vals.push(m.estimated_cost_usd);
+        }
+    }
 
     fn stat(values: &[f64]) -> BaselineStat {
         match repo_usage_facet::median_p25_p75(values) {
@@ -969,21 +1030,32 @@ pub async fn usage_baseline(State(pool): State<SqlitePool>) -> impl IntoResponse
                 p25: Some(q.p25),
                 median: Some(q.median),
                 p75: Some(q.p75),
+                n: values.len() as i64,
             },
             None => BaselineStat {
                 p25: None,
                 median: None,
                 p75: None,
+                n: 0,
             },
         }
     }
 
     let data = UsageBaselineDto {
         session_count,
+        scope: if project.is_some() {
+            "project".into()
+        } else {
+            "store".into()
+        },
+        project,
         cache_hit_ratio: stat(&cache_hit_vals),
         billed_tokens: stat(&billed_vals),
         assistant_events: stat(&assistant_events_vals),
         output_tokens: stat(&output_vals),
+        verification_pass_rate: stat(&pass_rate_vals),
+        tool_failure_count: stat(&tool_failure_vals),
+        estimated_cost_usd: stat(&cost_vals),
     };
     Json(Envelope {
         meta: ResponseMeta::now(),
