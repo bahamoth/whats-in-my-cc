@@ -915,7 +915,13 @@ pub async fn session_usage(
             .into_iter()
             .map(|m| {
                 let est = priced.get(m.model.as_str()).copied().unwrap_or(0.0);
-                let is_priced = crate::insight::pricing::rates_for(&m.model).is_some();
+                let rates = crate::insight::pricing::rates_for(&m.model).map(|r| ModelRatesDto {
+                    input_per_mtok: r.input_per_mtok,
+                    cache_creation_per_mtok: r.cache_creation_per_mtok,
+                    cache_read_per_mtok: r.cache_read_per_mtok,
+                    output_per_mtok: r.output_per_mtok,
+                });
+                let is_priced = rates.is_some();
                 ModelUsageDto {
                     model: m.model,
                     assistant_events: m.assistant_events,
@@ -925,6 +931,7 @@ pub async fn session_usage(
                     output_tokens: m.output_tokens,
                     estimated_cost_usd: est,
                     priced: is_priced,
+                    rates,
                 }
             })
             .collect(),
