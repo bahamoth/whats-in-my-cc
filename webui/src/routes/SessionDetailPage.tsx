@@ -140,6 +140,23 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   // buildStreamModel collects tasks into one inline TaskList block.
   const tasksQuery = useSessionTasksQuery(sessionId);
 
+  // 필터 값 발견성(2026-07-05): 세션에 등장한 도구·모델 후보를 FilterBar에
+  // 내려준다 — 이미 로드되는 turns.tool_histogram 합산·usage.by_model 파생이라
+  // 추가 fetch 없음. 사용 빈도 내림차순(자주 쓴 도구가 위).
+  const availableTools = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const turn of turns.data?.turns ?? []) {
+      for (const [tool, n] of Object.entries(turn.tool_histogram)) {
+        counts.set(tool, (counts.get(tool) ?? 0) + n);
+      }
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([tool]) => tool);
+  }, [turns.data]);
+  const availableModels = useMemo(
+    () => (usage.data?.by_model ?? []).map((m) => m.model),
+    [usage.data],
+  );
+
   // Analysis surface — separate from replay (spec §8.3, 원칙 7)
   const [analysisOpen, setAnalysisOpen] = useState(false);
   // PR-3 §3d — also fetch when a node is selected (not just when the Analysis
@@ -565,6 +582,8 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               onChange={applyFilter}
               matchedCount={window_.matchedCount}
               notice={jumpNotice}
+              availableTools={availableTools}
+              availableModels={availableModels}
             />
             <StreamLegend open={legendOpen} onClose={() => setLegend(false)} />
             {window_.loading === 'older' && (

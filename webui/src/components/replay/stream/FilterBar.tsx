@@ -9,10 +9,11 @@
 // 참조 대상으로 언급됨)는 tailwind 유틸리티 클래스 전제라 이 디렉터리 관례와
 // 어긋나 채택하지 않았다 — 값 다중 선택은 CohortBoundaries의 토글 버튼
 // 패턴(aria-pressed)을 그대로 재사용한다(2026-07-05 편차 기록, Task 10).
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useT } from '../../../i18n';
 import type { FilterState } from './filterState';
 import { EMPTY_FILTER, isFilterActive } from './filterState';
+import { mcpServerOf, parseMcpName } from './nodeLabel';
 import styles from './FilterBar.module.css';
 
 // repo_observed.rs RENDERED 상수와 동일 집합(순서는 UI 표시용, 스펙 §1.4/브리프).
@@ -37,9 +38,21 @@ export interface FilterBarProps {
   onChange: (f: FilterState) => void;
   matchedCount: number | null;
   notice: string | null;
+  /** 세션에 등장한 도구명(2026-07-05 발견성 개선 — turns.tool_histogram 합산).
+   *  MCP 도구(`mcp__<server>__…`)는 서버별 그룹으로 묶어 원클릭 토글을 붙인다. */
+  availableTools?: string[];
+  /** 세션에서 관측된 모델 id(usage.by_model). */
+  availableModels?: string[];
 }
 
-export function FilterBar({ filter, onChange, matchedCount, notice }: FilterBarProps) {
+export function FilterBar({
+  filter,
+  onChange,
+  matchedCount,
+  notice,
+  availableTools,
+  availableModels,
+}: FilterBarProps) {
   const t = useT();
   const [qDraft, setQDraft] = useState(filter.q);
 
@@ -67,6 +80,32 @@ export function FilterBar({ filter, onChange, matchedCount, notice }: FilterBarP
 
   const [toolDraft, setToolDraft] = useState('');
   const [modelDraft, setModelDraft] = useState('');
+
+  // 세션 등장 도구를 비-MCP / MCP(서버별 그룹)로 나눈다. 그룹 토글은 축 내
+  // CSV OR라 "이 서버(예: serena) 도구 전부 모아보기"가 원클릭이 된다.
+  const { plainTools, mcpGroups } = useMemo(() => {
+    const plain: string[] = [];
+    const groups = new Map<string, string[]>();
+    for (const name of availableTools ?? []) {
+      const server = mcpServerOf(name);
+      if (server) {
+        const list = groups.get(server) ?? [];
+        list.push(name);
+        groups.set(server, list);
+      } else {
+        plain.push(name);
+      }
+    }
+    return { plainTools: plain, mcpGroups: [...groups.entries()] };
+  }, [availableTools]);
+
+  const toggleGroup = (groupTools: string[]) => {
+    const allOn = groupTools.every((v) => filter.tools.includes(v));
+    const tools = allOn
+      ? filter.tools.filter((v) => !groupTools.includes(v))
+      : [...filter.tools, ...groupTools.filter((v) => !filter.tools.includes(v))];
+    onChange({ ...filter, tools });
+  };
 
   const addOnEnter =
     (commit: (v: string) => void, reset: () => void) =>
@@ -179,6 +218,47 @@ export function FilterBar({ filter, onChange, matchedCount, notice }: FilterBarP
             )}
           </summary>
           <div className={styles.menu}>
+            {plainTools.length > 0 && (
+              <>
+                <span className={styles.groupLabel}>{t('filter.content.toolsInSession')}</span>
+                {plainTools.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={filter.tools.includes(v)}
+                    className={styles.option}
+                    onClick={() => onChange({ ...filter, tools: toggle(filter.tools, v) })}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </>
+            )}
+            {mcpGroups.map(([server, groupTools]) => (
+              <div key={server}>
+                <button
+                  type="button"
+                  data-testid={`mcp-group-${server}`}
+                  aria-pressed={groupTools.every((v) => filter.tools.includes(v))}
+                  className={styles.groupToggle}
+                  onClick={() => toggleGroup(groupTools)}
+                  title={t('filter.content.mcpGroupTip', server)}
+                >
+                  mcp: {server} ({groupTools.length})
+                </button>
+                {groupTools.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={filter.tools.includes(v)}
+                    className={styles.option}
+                    onClick={() => onChange({ ...filter, tools: toggle(filter.tools, v) })}
+                  >
+                    {parseMcpName(v)?.tool ?? v}
+                  </button>
+                ))}
+              </div>
+            ))}
             <input
               type="text"
               className={styles.miniInput}
@@ -191,6 +271,22 @@ export function FilterBar({ filter, onChange, matchedCount, notice }: FilterBarP
                 () => setToolDraft(''),
               )}
             />
+            {(availableModels ?? []).length > 0 && (
+              <>
+                <span className={styles.groupLabel}>{t('filter.content.modelsInSession')}</span>
+                {(availableModels ?? []).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={filter.models.includes(v)}
+                    className={styles.option}
+                    onClick={() => onChange({ ...filter, models: toggle(filter.models, v) })}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </>
+            )}
             <input
               type="text"
               className={styles.miniInput}
