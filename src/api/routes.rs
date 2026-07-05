@@ -650,6 +650,27 @@ pub async fn session_events(
                 FilterCtx::default()
             };
             let pred = |e: &crate::model::observed::ObservedEvent| f.matches(e, &ctx);
+            // verification/signal 축은 매칭 가능한 이벤트가 ctx 집합의 키로
+            // 한정된다 — event_id IN 푸시다운으로 풀스캔(50k 세션 수 초, 행별
+            // payload 파싱)을 후보 수백 행 조회로 줄인다(2026-07-05 실사고).
+            // 둘 다 활성이면 교집합. matches()에도 남아 있어 이중 안전.
+            let candidate_ids: Option<Vec<String>> = if f.verifications.is_some() || f.signal {
+                let mut ids: Vec<String> = match (f.verifications.is_some(), f.signal) {
+                    (true, true) => ctx
+                        .verification_by_trigger
+                        .keys()
+                        .filter(|k| ctx.signal_evidence.contains(*k))
+                        .cloned()
+                        .collect(),
+                    (true, false) => ctx.verification_by_trigger.keys().cloned().collect(),
+                    (false, true) => ctx.signal_evidence.iter().cloned().collect(),
+                    (false, false) => unreachable!(),
+                };
+                ids.sort();
+                Some(ids)
+            } else {
+                None
+            };
             // kind·tool은 SQL 푸시다운, matches()에도 남아 있어 이중 안전.
             matched_count = Some(
                 repo_observed::count_session_scan(
@@ -657,6 +678,7 @@ pub async fn session_events(
                     &id,
                     f.kinds.as_deref(),
                     f.tools.as_deref(),
+                    candidate_ids.as_deref(),
                     &pred,
                 )
                 .await
@@ -667,6 +689,7 @@ pub async fn session_events(
                 &id,
                 f.kinds.as_deref(),
                 f.tools.as_deref(),
+                candidate_ids.as_deref(),
                 &pred,
                 before.as_ref(),
                 after.as_ref(),
