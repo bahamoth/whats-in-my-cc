@@ -12,21 +12,50 @@
 //! Rates are US dollars per 1,000,000 tokens (1 Mtoken).
 //! Source: Anthropic public pricing page
 //! (platform.claude.com/docs/en/about-claude/pricing), captured 2026-06-11.
-//! Values are ESTIMATES and may drift — when they change, update `PRICING` and
-//! bump `PRICING_VERSION`, and re-anchor the unit test.
+//! Values are ESTIMATES and may drift — when they change, update `pricing.json`
+//! (repo root). `scripts/update-pricing.ts` + the weekly refresh workflow
+//! automate this; manual edits touch the JSON only (never re-hardcode here).
 //!
 //! cache_read is billed at a discount; cache_creation at a premium; both are
 //! kept as separate line items here because they have different rates.
 
 use crate::db::repo_usage_facet::ModelUsage;
+use once_cell::sync::Lazy;
+use serde::Deserialize;
+use std::collections::BTreeMap;
 
-/// Pricing-table provenance, formatted `pricing_estimate@<YYYY-MM-DD>` where the
-/// date is when `PRICING` was last refreshed from the public pricing page. The
-/// update date IS the version — no arbitrary v-numbering — so a stored/exported
-/// estimate's staleness is visible directly. List rates change over time (e.g.
-/// Opus dropped from 15/75 to 5/25), so refresh `PRICING` and this date together.
-/// Surfaced via the usage API.
-pub const PRICING_VERSION: &str = "pricing_estimate@2026-06-11";
+/// Checked-in pricing table (repo root). Rust embeds it at compile time so the
+/// runtime NEVER fetches rates externally (local-first, spec §2.4-6);
+/// `scripts/update-pricing.ts` + the weekly pricing-refresh workflow keep the
+/// file in sync with the public pricing page via reviewed PRs.
+static PRICING_JSON: &str = include_str!("../../pricing.json");
+
+#[derive(Debug, Deserialize)]
+struct PricingFile {
+    version: String,
+    source_url: String,
+    models: BTreeMap<String, ModelRates>,
+}
+
+static TABLE: Lazy<PricingFile> = Lazy::new(|| {
+    serde_json::from_str(PRICING_JSON).expect(
+        "pricing.json: schema mismatch (spec 2026-07-04 §2.1) — version/source_url/models required",
+    )
+});
+
+/// Pricing-table provenance `pricing_estimate@<YYYY-MM-DD>` — the date IS the
+/// version (last refresh from the public page; no arbitrary v-numbering) so a
+/// stored/exported estimate's staleness is visible directly. Surfaced via the
+/// usage API.
+pub fn pricing_version() -> &'static str {
+    &TABLE.version
+}
+
+/// Public pricing page the table was captured from (used by the refresh
+/// script/workflow and surfaced for provenance).
+pub fn pricing_source_url() -> &'static str {
+    &TABLE.source_url
+}
 
 /// Marker placed on the API response so the UI shows the 추정 badge and never
 /// presents this as actual billing.
@@ -34,85 +63,13 @@ pub const COST_BASIS_ESTIMATE: &str = "estimate_public_pricing";
 
 /// Per-Mtoken USD rates for one model. All four token classes priced
 /// independently. ESTIMATE only — see module header.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 pub struct ModelRates {
     pub input_per_mtok: f64,
     pub cache_creation_per_mtok: f64,
     pub cache_read_per_mtok: f64,
     pub output_per_mtok: f64,
 }
-
-/// Public-rate ESTIMATE table. `model` is matched against
-/// `assistant_message.payload.model` / `usage_facet.model` exactly.
-///
-/// Includes `claude-opus-4-7` (present in the frozen real fixture) and the
-/// dev-DB model ids called out in the redesign spec. Unknown models fall
-/// through to $0 and are flagged (see `estimate_session_cost`).
-pub const PRICING: &[(&str, ModelRates)] = &[
-    // Fable/Mythos-tier: input $10, 5m cache write $12.50, cache read $1,
-    // output $50 per Mtoken. Mythos 5 shares Fable 5's published rates.
-    (
-        "claude-fable-5",
-        ModelRates {
-            input_per_mtok: 10.0,
-            cache_creation_per_mtok: 12.5,
-            cache_read_per_mtok: 1.0,
-            output_per_mtok: 50.0,
-        },
-    ),
-    (
-        "claude-mythos-5",
-        ModelRates {
-            input_per_mtok: 10.0,
-            cache_creation_per_mtok: 12.5,
-            cache_read_per_mtok: 1.0,
-            output_per_mtok: 50.0,
-        },
-    ),
-    // Opus-tier (4.8/4.7): input $5, 5m cache write $6.25, cache read $0.50,
-    // output $25 per Mtoken. (The prior table carried the retired Opus-4.1 rate
-    // 15/18.75/1.5/75 — corrected to the current published rate on 2026-06-11.)
-    (
-        "claude-opus-4-8",
-        ModelRates {
-            input_per_mtok: 5.0,
-            cache_creation_per_mtok: 6.25,
-            cache_read_per_mtok: 0.5,
-            output_per_mtok: 25.0,
-        },
-    ),
-    (
-        "claude-opus-4-7",
-        ModelRates {
-            input_per_mtok: 5.0,
-            cache_creation_per_mtok: 6.25,
-            cache_read_per_mtok: 0.5,
-            output_per_mtok: 25.0,
-        },
-    ),
-    // Sonnet-tier ESTIMATE: input $3, cache_creation $3.75, cache_read $0.30,
-    // output $15 per Mtoken.
-    (
-        "claude-sonnet-4-6",
-        ModelRates {
-            input_per_mtok: 3.0,
-            cache_creation_per_mtok: 3.75,
-            cache_read_per_mtok: 0.3,
-            output_per_mtok: 15.0,
-        },
-    ),
-    // Haiku-tier ESTIMATE: input $1, cache_creation $1.25, cache_read $0.10,
-    // output $5 per Mtoken.
-    (
-        "claude-haiku-4-5-20251001",
-        ModelRates {
-            input_per_mtok: 1.0,
-            cache_creation_per_mtok: 1.25,
-            cache_read_per_mtok: 0.1,
-            output_per_mtok: 5.0,
-        },
-    ),
-];
 
 /// Per-model estimated cost (USD), with a `priced` flag so unknown models are
 /// visibly $0 rather than silently dropped.
@@ -135,7 +92,7 @@ pub struct CostEstimate {
 
 /// Look up the ESTIMATE rates for a model id (exact match).
 pub fn rates_for(model: &str) -> Option<ModelRates> {
-    PRICING.iter().find(|(m, _)| *m == model).map(|(_, r)| *r)
+    TABLE.models.get(model).copied()
 }
 
 /// Compute the public-pricing ESTIMATE for a session from its per-model token
@@ -279,5 +236,21 @@ mod tests {
         assert!((est.total_usd - 73.5).abs() < 1e-9, "got {}", est.total_usd);
         assert!(est.per_model[0].priced);
         assert!(est.models_without_pricing.is_empty());
+    }
+
+    #[test]
+    fn pricing_loads_from_checked_in_json() {
+        // 가격표 SSOT는 저장소 루트 pricing.json (스펙 §2.1).
+        assert!(rates_for("claude-fable-5").is_some());
+        assert!(rates_for("claude-haiku-4-5-20251001").is_some());
+        let v = pricing_version();
+        let date = v
+            .strip_prefix("pricing_estimate@")
+            .expect("version must start with pricing_estimate@");
+        assert!(
+            chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok(),
+            "version date must be YYYY-MM-DD, got {v}"
+        );
+        assert!(pricing_source_url().starts_with("https://"));
     }
 }

@@ -908,7 +908,7 @@ pub async fn session_usage(
         billed_tokens: billed,
         estimated_cost_usd: cost.total_usd,
         cost_basis: crate::insight::pricing::COST_BASIS_ESTIMATE.to_string(),
-        pricing_version: crate::insight::pricing::PRICING_VERSION.to_string(),
+        pricing_version: crate::insight::pricing::pricing_version().to_string(),
         models_without_pricing: cost.models_without_pricing.clone(),
         by_model: agg
             .by_model
