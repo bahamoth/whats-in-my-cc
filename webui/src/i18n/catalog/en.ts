@@ -45,9 +45,10 @@ export const en = {
   'insight.provenance.estimated': 'estimated',
   'insight.provenance.uncollected': 'uncollected·planned',
 
-  'insight.context.title': 'Context efficiency',
+  'insight.context.title': 'Cache-read share',
   'insight.context.tip':
-    'Cache hit ratio = **cache_read / (cache_read + cache_creation + input)** — measured (usage facet).\n' +
+    'Cache-read share = **cache_read / (cache_read + cache_creation + input)** — measured (usage facet).\n' +
+    'Reused from cache each turn, the prefix keeps this **high**; the cost lever is `billed tokens`.\n' +
     'Expand for the fixed cached-context size, its growth, and cache misses.\n' +
     'Per system-prompt/skill/memory breakdown and a "contamination" verdict are outside the data (design §8).',
   'insight.context.detailCacheRead': (v: string) => `Cache reads ${v}`,

@@ -162,6 +162,15 @@ describe('InsightStrip — S8 sparklines', () => {
     expect(spark.querySelectorAll('[data-bar]')).toHaveLength(2);
   });
 
+  // 표기 원칙(판정 금지·사실만): 캐시 읽기 비중은 매 턴 prefix 재사용으로 구조적으로
+  // 높게 유지되는 사실이지 "효율"이라는 판정이 아니다(2026-07-05 사용자 질문).
+  it('context card title states a fact, not an efficiency verdict', () => {
+    render(<InsightStrip usage={usage} verificationRuns={[]} signals={[]} />);
+    const card = screen.getByTestId('insight-card-context');
+    expect(card.textContent ?? '').not.toMatch(/효율|efficiency/i);
+    expect(card.textContent ?? '').toMatch(/캐시 읽기 비중|Cache-read share/);
+  });
+
   it('renders no sparkline when no turns are supplied', () => {
     render(<InsightStrip usage={usage} verificationRuns={[]} signals={[]} />);
     const card = screen.getByTestId('insight-card-tokens');
