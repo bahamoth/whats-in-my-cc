@@ -6,39 +6,10 @@
 import type { Headline, HeadlineDelta } from '../../lib/dashDerive';
 import { useT } from '../../i18n';
 import { InfoTip } from '../replay/insight-strip/InfoTip';
+import { DeltaChip, trim1 } from '../DeltaChip';
 
-const trim1 = (v: number) => String(Math.round(v * 10) / 10);
 const money = (v: number) =>
   '$' + v.toLocaleString('en-US', { maximumFractionDigits: v >= 100 ? 0 : 2 });
-
-function DeltaChip({
-  v,
-  unit,
-  betterUp,
-  noCompare,
-}: {
-  v: number | null;
-  unit: string;
-  betterUp: boolean;
-  noCompare: string;
-}) {
-  if (v === null)
-    return <span className="text-[11px] text-(--wimcc-fg-subtle)">{noCompare}</span>;
-  const flat = Math.abs(v) < 0.05;
-  const good = v > 0 ? betterUp : !betterUp;
-  const cls = flat
-    ? 'text-(--wimcc-fg-subtle) bg-(--wimcc-surface-2)'
-    : good
-      ? 'text-[#41c285] bg-[#41c285]/10'
-      : 'text-[#f0b429] bg-[#f0b429]/10';
-  const arrow = flat ? '▬' : v > 0 ? '▲' : '▼';
-  const num = flat ? '0.0' : `${trim1(Math.abs(v))}${unit}`;
-  return (
-    <span className={`rounded-[5px] px-1.5 py-0.5 font-mono text-[11.5px] whitespace-nowrap ${cls}`}>
-      {arrow} {num}
-    </span>
-  );
-}
 
 export function HeadlineStats({ h, d }: { h: Headline; d: HeadlineDelta | null }) {
   const t = useT();
