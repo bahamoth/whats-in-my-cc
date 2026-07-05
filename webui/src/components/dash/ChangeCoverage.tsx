@@ -3,6 +3,7 @@
 import type { VerificationSummaryDto } from '../../api/types';
 import { useT } from '../../i18n';
 import { InfoTip } from '../replay/insight-strip/InfoTip';
+import { CoverageBar } from './CoverageBar';
 
 export function ChangeCoverage({
   coverage,
@@ -42,10 +43,7 @@ export function ChangeCoverage({
               >
                 {nameOf(s.session_id)}
               </div>
-              <div className="flex h-[18px] min-w-0 flex-1 overflow-hidden rounded-[5px] bg-(--wimcc-surface-2)">
-                <i style={{ width: `${pct}%`, background: '#41c285', opacity: 0.9 }} />
-                <i style={{ width: `${100 - pct}%`, background: '#f0b429', opacity: 0.75 }} />
-              </div>
+              <CoverageBar covered={s.covered} total={s.total} />
               <div className="w-[150px] flex-none text-right font-mono text-[11px] text-(--wimcc-fg-muted)">
                 {pct}% · <b className="text-[#f0b429]">{s.total - s.covered}</b>
               </div>
