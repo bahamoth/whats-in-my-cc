@@ -25,6 +25,7 @@ import {
   useEventRawQuery,
   useCorrelatedEventsQuery,
   useSessionMetricsQuery,
+  useSessionVerificationSummaryQuery,
 } from '../lib/queries';
 import { teammatesOf } from '../lib/teamGrouping';
 import { TeamStrip } from '../components/replay/TeamStrip';
@@ -141,6 +142,11 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
   // Analysis surface — separate from replay (spec §8.3, 원칙 7)
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const metricsQuery = useSessionMetricsQuery(sessionId, { enabled: analysisOpen && !!sessionId });
+  // §3c 변경 커버리지 — session-scoped summary, 분석 패널이 열려 있을 때만 fetch
+  // (metrics와 동일한 lazy-fetch 패턴).
+  const verificationSummary = useSessionVerificationSummaryQuery(sessionId, {
+    enabled: analysisOpen && !!sessionId,
+  });
 
   // Stream legend visibility is owned HERE (not inside StreamLegend) so that
   // dismissing it reclaims its full vertical space — the re-open control is a
@@ -517,6 +523,16 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               <AnalysisPanel
                 metrics={metricsQuery.data ?? null}
                 signals={signalsData}
+                verificationRuns={verificationRuns.data}
+                sessionSpan={
+                  detail.data
+                    ? {
+                        first: detail.data.summary.first_observed_at,
+                        last: detail.data.summary.last_observed_at,
+                      }
+                    : null
+                }
+                coverage={verificationSummary.data?.coverage ?? null}
                 onSelectEvent={selectStreamCard}
                 data-testid="analysis-panel"
               />
