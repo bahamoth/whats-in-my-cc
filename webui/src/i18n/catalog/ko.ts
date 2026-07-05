@@ -88,7 +88,7 @@ export const ko: Messages = {
   'insight.cost.title': '비용',
   'insight.cost.tip':
     '**공개 가격표 × usage 토큰**으로 계산한 추정치 — 하한값입니다(설계 §6.5/§11.3).\n' +
-    'OTel claude_code.cost.usage 메트릭이 들어오면 대체됩니다. cache_read(무료)는 비용에서 제외.',
+    'OTel claude_code.cost.usage 메트릭이 들어오면 대체됩니다. cache_read는 **캐시 읽기 단가**(입력가의 0.1×)로 계산에 포함됩니다.',
   'insight.cost.detailEstimate': '공개 가격표 추정 (≈)',
   'insight.cost.detailEstimateUnpriced': (n: number) => `공개 가격표 추정 (≈) · 미가격 ${n}`,
   'insight.cost.detailUnitRate': (r: string) => `블렌디드 $${r}/1M`,
