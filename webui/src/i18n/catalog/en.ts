@@ -271,6 +271,7 @@ export const en = {
   'filter.axis.kind': 'Kind',
   'filter.axis.origin': 'Origin',
   'filter.axis.outcome': 'Outcome',
+  'filter.axis.tag': 'Tags',
   'filter.axis.content': 'Tool·model·text',
   'filter.outcome.error': 'errored tools',
   'filter.outcome.signal': 'with signals',

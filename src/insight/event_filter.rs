@@ -138,6 +138,7 @@ pub struct RawFilterParams<'a> {
     pub verification: Option<&'a str>,
     pub tool: Option<&'a str>,
     pub model: Option<&'a str>,
+    pub tag: Option<&'a str>,
     pub q: Option<&'a str>,
 }
 
@@ -170,7 +171,9 @@ impl Role {
     }
 }
 
-/// §1.2 8축 필터 — 축끼리 AND, 축 내부 CSV는 OR.
+/// §1.2 필터 축 — 축끼리 AND, 축 내부 CSV는 OR. tag 축은 2026-07-05 사후
+/// 확장(사용자 요청): tool_call의 결정론 태그(`classify_tool_call`, verb.object)
+/// 일치 — 태깅 사전(event_tags)을 필터에서 소비 가능하게 한다.
 pub struct EventFilter {
     pub kinds: Option<Vec<String>>,
     pub roles: Option<Vec<Role>>,
@@ -180,6 +183,7 @@ pub struct EventFilter {
     pub verifications: Option<Vec<String>>,
     pub tools: Option<Vec<String>>,
     pub models: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>,
     pub q: Option<String>,
 }
 
@@ -275,6 +279,25 @@ impl EventFilter {
             .model
             .map(|s| csv(s).iter().map(|x| x.to_string()).collect::<Vec<_>>())
             .filter(|v: &Vec<String>| !v.is_empty());
+        // tag: `verb.object` 형식 검증(태그 사전 값 존재까지는 검증하지 않음 —
+        // tool 축과 동일하게 미존재 값은 그냥 0건 매칭). 형식 오류는 오타
+        // 신호이므로 400으로 알린다.
+        let tags = match p.tag {
+            None => None,
+            Some(s) => {
+                let vals: Vec<String> = csv(s).iter().map(|v| v.to_string()).collect();
+                for v in &vals {
+                    let ok = v.split('.').count() == 2
+                        && v.split('.').all(|seg| {
+                            !seg.is_empty() && seg.chars().all(|c| c.is_ascii_lowercase())
+                        });
+                    if !ok {
+                        return Err(format!("tag must be verb.object (e.g. test.code): {v}"));
+                    }
+                }
+                if vals.is_empty() { None } else { Some(vals) }
+            }
+        };
         let q =
             p.q.map(str::trim)
                 .filter(|s| !s.is_empty())
@@ -288,6 +311,7 @@ impl EventFilter {
             verifications,
             tools,
             models,
+            tags,
             q,
         };
         if f.kinds.is_none()
@@ -298,6 +322,7 @@ impl EventFilter {
             && f.verifications.is_none()
             && f.tools.is_none()
             && f.models.is_none()
+            && f.tags.is_none()
             && f.q.is_none()
         {
             return Ok(None);
@@ -358,6 +383,18 @@ impl EventFilter {
         if let Some(models) = &self.models {
             match ev.payload.get("model").and_then(|v| v.as_str()) {
                 Some(m) if models.iter().any(|x| x == m) => {}
+                _ => return false,
+            }
+        }
+        if let Some(tags) = &self.tags {
+            // 태그는 tool_call에만 정의(turn_rollup의 tag_histogram과 동일 소스).
+            if ev.kind != crate::model::observed::EventKind::ToolCall {
+                return false;
+            }
+            let outcome =
+                crate::insight::event_tags::classify_tool_call(ev.tool_name.as_deref(), &ev.payload);
+            match outcome.value {
+                Some(v) if tags.iter().any(|t| t == v) => {}
                 _ => return false,
             }
         }
@@ -453,6 +490,53 @@ mod tests {
         assert!(EventFilter::from_params(&RawFilterParams::default())
             .unwrap()
             .is_none());
+    }
+
+    /// tag 축(2026-07-05 사용자 요청 — "애써 달아둔 태그를 필터에서 쓸 수 없음"):
+    /// tool_call의 `classify_tool_call(...).value`(verb.object)와 CSV OR 일치.
+    #[test]
+    fn matches_tag_axis_via_classify_tool_call() {
+        let ctx = FilterCtx::default();
+        let f = EventFilter::from_params(&RawFilterParams {
+            tag: Some("test.code,read.code"),
+            ..Default::default()
+        })
+        .unwrap()
+        .unwrap();
+        let bash = |cmd: &str| ObservedEvent {
+            kind: EventKind::ToolCall,
+            tool_name: Some("Bash".into()),
+            payload: json!({ "input": { "command": cmd } }),
+            ..Default::default()
+        };
+        let read = |fp: &str| ObservedEvent {
+            kind: EventKind::ToolCall,
+            tool_name: Some("Read".into()),
+            payload: json!({ "input": { "file_path": fp } }),
+            ..Default::default()
+        };
+        // cargo test → run.test, .rs Read → read.code: 축 내 OR로 둘 다 매칭.
+        assert!(f.matches(&bash("cargo test"), &ctx));
+        assert!(f.matches(&read("/src/main.rs"), &ctx));
+        // git status는 다른 태그 → 탈락. 비 tool_call도 탈락.
+        assert!(!f.matches(&bash("git status"), &ctx));
+        assert!(!f.matches(
+            &ev(EventKind::UserMessage, json!({"content":"test.code 얘기"})),
+            &ctx
+        ));
+        // 잘못된 형식(verb.object 아님)은 파싱 에러.
+        assert!(EventFilter::from_params(&RawFilterParams {
+            tag: Some("notatag"),
+            ..Default::default()
+        })
+        .is_err());
+        // tag만 있어도 필터 활성.
+        assert!(EventFilter::from_params(&RawFilterParams {
+            tag: Some("test.code"),
+            ..Default::default()
+        })
+        .unwrap()
+        .is_some());
     }
 
     #[test]
@@ -742,6 +826,58 @@ mod tests {
         assert!(
             saw_human && saw_command,
             "fixture must exercise both branches"
+        );
+    }
+
+    /// teammate origin real-fixture 앵커 (2026-07-05 머지-후 감사 Important):
+    /// TS classify는 teammate_v01 실 payload로 앵커돼 있는데 Rust `origin_of`는
+    /// 합성 문자열 1건뿐이었다 — 실 payload 형태 변화(속성 순서·접두 문구) 시
+    /// §1.3이 요구하는 "같은 real fixture 양쪽 앵커" 드리프트 가드가 Rust쪽에
+    /// 없던 갭. TS messageOrigin.test.ts와 동일 동결 표본을 동일 단언으로 미러.
+    #[test]
+    fn teammate_origin_real_fixture_invariants() {
+        // lead측 수신 레코드: 전부 teammate로 분류돼야 하며 human으로 새면 안 된다.
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/transcripts/real/teammate_v01/lead_teammate_messages.jsonl"
+        ))
+        .expect("fixture");
+        let mut n = 0usize;
+        for line in raw.lines().filter(|l| !l.trim().is_empty()) {
+            let rec: serde_json::Value = serde_json::from_str(line).expect("jsonl");
+            let text = rec
+                .pointer("/message/content")
+                .and_then(|c| c.as_str())
+                .expect("lead fixture user content is a string");
+            let is_meta = rec.get("isMeta").and_then(|m| m.as_bool()).unwrap_or(false);
+            assert_eq!(
+                origin_of(&json!({ "content": text }), is_meta),
+                Origin::Teammate,
+                "lead-side teammate reply must classify teammate, never human"
+            );
+            n += 1;
+        }
+        assert!(n > 0, "fixture must contain at least one record");
+
+        // teammate측 첫 user 레코드(접두문 없이 <teammate-message …>로 시작)도 teammate.
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/transcripts/real/teammate_v01/teammate_session_head.jsonl"
+        ))
+        .expect("fixture");
+        let user = raw
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| serde_json::from_str::<serde_json::Value>(l).expect("jsonl"))
+            .find(|r| r.get("type").and_then(|t| t.as_str()) == Some("user"))
+            .expect("head fixture must contain a user record");
+        let text = user
+            .pointer("/message/content")
+            .and_then(|c| c.as_str())
+            .expect("head user content is a string");
+        assert_eq!(
+            origin_of(&json!({ "content": text }), false),
+            Origin::Teammate
         );
     }
 }

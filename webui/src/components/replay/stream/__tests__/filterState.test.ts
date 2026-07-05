@@ -58,3 +58,29 @@ describe('filterState', () => {
     expect(jumpNeedsFilterClear(true, false, false)).toBe(false);
   });
 });
+
+// tag 축 (2026-07-05 사후 확장) — 태깅 사전(verb.object)을 필터에서 소비.
+describe('filterState — tag 축', () => {
+  it('tags가 서버 파라미터 tag CSV로 직렬화되고 활성 판정에 포함된다', () => {
+    const f: FilterState = { ...EMPTY_FILTER, tags: ['test.code', 'read.code'] };
+    expect(isFilterActive(f)).toBe(true);
+    expect(toEventFilterParams(f).tag).toBe('test.code,read.code');
+    expect(toEventFilterParams(EMPTY_FILTER).tag).toBeUndefined();
+  });
+
+  it('URL f_tag로 왕복한다', () => {
+    const f: FilterState = { ...EMPTY_FILTER, tags: ['test.code'] };
+    const sp = new URLSearchParams();
+    filterToSearch(f, sp);
+    expect(sp.get('f_tag')).toBe('test.code');
+    expect(filterFromSearch(sp).tags).toEqual(['test.code']);
+    filterToSearch(EMPTY_FILTER, sp);
+    expect(sp.get('f_tag')).toBeNull();
+  });
+
+  it('filterKey는 tags 순서와 무관하다', () => {
+    const a: FilterState = { ...EMPTY_FILTER, tags: ['a.b', 'c.d'] };
+    const b: FilterState = { ...EMPTY_FILTER, tags: ['c.d', 'a.b'] };
+    expect(filterKey(a)).toBe(filterKey(b));
+  });
+});

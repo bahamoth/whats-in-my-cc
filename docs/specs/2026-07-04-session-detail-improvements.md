@@ -34,6 +34,7 @@
 | `verification` | CSV | verification run outcome: `passed`,`failed`,`unknown` |
 | `tool` | CSV | 도구명 (`Bash`, `Edit`, `mcp__…` …) |
 | `model` | CSV | 모델 id 정확 일치 |
+| `tag` | CSV | (2026-07-05 사후 확장) tool_call의 결정론 태그(`classify_tool_call`, `verb.object` — turn `tag_histogram`과 동일 소스) 일치. 형식 오류는 400, 미존재 태그는 0건 |
 | `q` | 문자열 | 메시지 본문 텍스트 + 도구 입력/결과 문자열 필드 부분 일치, 대소문자 무시 |
 
 실행 전략: SQL로 싸게 거를 수 있는 축(kind, model 등 컬럼/단순

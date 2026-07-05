@@ -165,3 +165,26 @@ describe('FilterBar — 도구·모델 후보 목록', () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ models: ['claude-sonnet-5'] }));
   });
 });
+
+// tag 축 (2026-07-05) — 세션 등장 태그(turns.tag_histogram)를 토글 목록으로.
+describe('FilterBar — 태그 축', () => {
+  it('세션 등장 태그가 토글 버튼으로 나열되고 클릭 시 tags에 추가된다', () => {
+    const onChange = vi.fn();
+    render(
+      <FilterBar filter={EMPTY_FILTER} onChange={onChange} matchedCount={null} notice={null}
+        availableTags={['test.code', 'read.code', 'write.code']} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'test.code' }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ tags: ['test.code'] }));
+  });
+
+  it('활성 태그가 제거형 칩으로 나온다', () => {
+    const onChange = vi.fn();
+    render(
+      <FilterBar filter={{ ...EMPTY_FILTER, tags: ['test.code'] }} onChange={onChange}
+        matchedCount={null} notice={null} availableTags={['test.code']} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'test.code ×' }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ tags: [] }));
+  });
+});

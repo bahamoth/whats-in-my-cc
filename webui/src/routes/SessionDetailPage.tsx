@@ -156,6 +156,16 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
     () => (usage.data?.by_model ?? []).map((m) => m.model),
     [usage.data],
   );
+  // tag 축 후보 — turns.tag_histogram 합산(도구 후보와 동일 소스), 빈도 내림차순.
+  const availableTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const turn of turns.data?.turns ?? []) {
+      for (const [tag, n] of Object.entries(turn.tag_histogram)) {
+        counts.set(tag, (counts.get(tag) ?? 0) + n);
+      }
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([tag]) => tag);
+  }, [turns.data]);
 
   // Analysis surface — separate from replay (spec §8.3, 원칙 7)
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -584,6 +594,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               notice={jumpNotice}
               availableTools={availableTools}
               availableModels={availableModels}
+              availableTags={availableTags}
             />
             <StreamLegend open={legendOpen} onClose={() => setLegend(false)} />
             {window_.loading === 'older' && (

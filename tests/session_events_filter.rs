@@ -410,3 +410,30 @@ async fn filter_param_errors() {
         r.assert_status(axum::http::StatusCode::BAD_REQUEST);
     }
 }
+
+/// tag 축 (2026-07-05 사후 확장) — tool_call의 결정론 태그(classify_tool_call)
+/// 일치. 시드의 Bash 3건: `cargo test`→test.code, `cargo build`→build.code.
+#[tokio::test]
+async fn filter_tag_axis() {
+    let server = setup().await;
+    // 단일 태그
+    let v = get(&server, "?tag=test.code").await;
+    assert_eq!(v["data"]["matched_count"], serde_json::json!(1));
+    let evs = v["data"]["events"].as_array().unwrap();
+    assert_eq!(evs.len(), 1);
+    assert_eq!(evs[0]["tool_name"], serde_json::json!("Bash"));
+    // CSV OR
+    let v = get(&server, "?tag=test.code,build.code").await;
+    assert_eq!(v["data"]["matched_count"], serde_json::json!(2));
+    // 형식 유효·미존재 태그 → 0건 (400 아님 — tool 축과 동일한 관용)
+    let v = get(&server, "?tag=zz.zz").await;
+    assert_eq!(v["data"]["matched_count"], serde_json::json!(0));
+    // 형식 오류(verb.object 아님) → 400
+    let r = server
+        .get(&format!("/v1/sessions/{SESS}/events?tag=notatag"))
+        .await;
+    r.assert_status(axum::http::StatusCode::BAD_REQUEST);
+    // 다른 축과 AND: test.code AND tool=Edit → 0건
+    let v = get(&server, "?tag=test.code&tool=Edit").await;
+    assert_eq!(v["data"]["matched_count"], serde_json::json!(0));
+}

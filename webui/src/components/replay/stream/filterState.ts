@@ -1,27 +1,28 @@
 // filterState.ts — 스펙 §1.2/§1.4. 축끼리 AND, 축 내 CSV OR. URL 키는 f_ 접두.
+// tag 축은 2026-07-05 사후 확장 — 태깅 사전(verb.object)을 필터에서 소비.
 export interface FilterState {
   kinds: string[]; roles: string[]; origins: string[];
   error: boolean; signal: boolean; verifications: string[];
-  tools: string[]; models: string[]; q: string;
+  tools: string[]; models: string[]; tags: string[]; q: string;
 }
 
 export const EMPTY_FILTER: FilterState = {
   kinds: [], roles: [], origins: [], error: false, signal: false,
-  verifications: [], tools: [], models: [], q: '',
+  verifications: [], tools: [], models: [], tags: [], q: '',
 };
 
 export function isFilterActive(f: FilterState): boolean {
   return (
     f.kinds.length > 0 || f.roles.length > 0 || f.origins.length > 0 ||
     f.error || f.signal || f.verifications.length > 0 ||
-    f.tools.length > 0 || f.models.length > 0 || f.q.trim() !== ''
+    f.tools.length > 0 || f.models.length > 0 || f.tags.length > 0 || f.q.trim() !== ''
   );
 }
 
 /** 서버 쿼리 파라미터(스펙 §1.2 이름). 비활성 축은 키 자체를 생략. */
 export interface EventFilterParams {
   kind?: string; role?: string; origin?: string; error?: 'true'; signal?: 'true';
-  verification?: string; tool?: string; model?: string; q?: string;
+  verification?: string; tool?: string; model?: string; tag?: string; q?: string;
 }
 
 export function toEventFilterParams(f: FilterState): EventFilterParams {
@@ -34,6 +35,7 @@ export function toEventFilterParams(f: FilterState): EventFilterParams {
   if (f.verifications.length) p.verification = f.verifications.join(',');
   if (f.tools.length) p.tool = f.tools.join(',');
   if (f.models.length) p.model = f.models.join(',');
+  if (f.tags.length) p.tag = f.tags.join(',');
   if (f.q.trim()) p.q = f.q.trim();
   return p;
 }
@@ -41,6 +43,7 @@ export function toEventFilterParams(f: FilterState): EventFilterParams {
 const LIST_KEYS = [
   ['f_kind', 'kinds'], ['f_role', 'roles'], ['f_origin', 'origins'],
   ['f_verification', 'verifications'], ['f_tool', 'tools'], ['f_model', 'models'],
+  ['f_tag', 'tags'],
 ] as const;
 
 /** URL 동기화 — 접두 f_ (react-router searchParams). q는 trim 정규화 후 왕복하며,
@@ -63,6 +66,7 @@ export function filterFromSearch(sp: URLSearchParams): FilterState {
     kinds: list('f_kind'), roles: list('f_role'), origins: list('f_origin'),
     error: sp.get('f_error') === 'true', signal: sp.get('f_signal') === 'true',
     verifications: list('f_verification'), tools: list('f_tool'), models: list('f_model'),
+    tags: list('f_tag'),
     q: sp.get('f_q') ?? '',
   };
 }
@@ -79,11 +83,10 @@ export function filterKey(f: FilterState): string {
     ...p,
     kind: sortCsv(p.kind), role: sortCsv(p.role), origin: sortCsv(p.origin),
     verification: sortCsv(p.verification), tool: sortCsv(p.tool), model: sortCsv(p.model),
+    tag: sortCsv(p.tag),
   });
 }
 
-/** 외부발 점프(§1.4): 필터 활성이고 대상이 로드된(=매칭) 버퍼 밖이면 필터를
- *  해제하고 이동한다. 버퍼 안이면 매칭 대상이므로 해제 없이 스크롤. */
 /**
  * §1.4 점프 규칙 — 필터 활성 상태에서 스트림 외부발 점프(시그널 evidence·검증 점 등)의
  * 대상이 필터 버퍼 밖이면 필터를 해제하고 이동한다.
