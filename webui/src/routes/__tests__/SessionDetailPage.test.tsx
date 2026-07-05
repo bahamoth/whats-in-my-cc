@@ -556,6 +556,60 @@ describe('SessionDetailPage', () => {
       expect(calls.some((u) => u.includes('/events?before='))).toBe(true);
     });
   });
+
+  // Task 11 defence — the page MEMOIZES `windowFilterParams` (the filter option
+  // passed to useSessionWindow) so its identity is stable across renders. A
+  // naive inline `filter: filterActive ? toEventFilterParams(filter) : null`
+  // builds a NEW object every render; useSessionWindow keys its initial-fetch
+  // effect off `filter` identity (loadTail/doInitial deps), so an unstable
+  // identity re-runs the tail fetch on EVERY render while a filter is active →
+  // unbounded refetch loop. Regression lock: mounting under an active filter
+  // (?f_q=deploy) issues exactly ONE events fetch, and a filter-UNRELATED
+  // re-render (analysis toggle) issues NONE. Reverting the useMemo to the inline
+  // form makes this fail (events fetch count explodes past 1).
+  it('an active filter does not cause an unbounded events refetch loop (memoized filter params)', async () => {
+    const metricsPayload = {
+      session_id: 's1', tool_call_total: 0, tool_failure_count: 0,
+      verification_total: 0, verification_passed: 0, verification_failed: 0,
+      verification_unknown: 0, verification_not_executed: 0, context_bloat_count: 0,
+      detector_firing: {},
+    };
+    const f = setupFetch({
+      detail: env(sessionDetail),
+      events: env(eventsWithRows),
+      metrics: env(metricsPayload),
+    });
+    rendered('s1', '?f_q=deploy');
+    await waitFor(() => expect(screen.getByText(/2 events/)).toBeInTheDocument());
+
+    const eventsCalls = () =>
+      f.mock.calls.map((c) => String(c[0])).filter((u) => u.includes('/events')).length;
+
+    // The initial fetch is the FILTERED tail (carries the filter param)…
+    await waitFor(() => expect(eventsCalls()).toBeGreaterThanOrEqual(1));
+    const firstEventsUrl = f.mock.calls
+      .map((c) => String(c[0]))
+      .find((u) => u.includes('/events'));
+    expect(firstEventsUrl).toContain('q=deploy');
+
+    // …and there is EXACTLY one — a stable (memoized) filter identity means the
+    // initial-fetch effect does not re-run on subsequent renders. Let real time
+    // pass (plain awaits, NOT act — an unbounded loop would never let act settle,
+    // so this must fail fast via the count, not hang) so any spurious refetch
+    // loop surfaces, then assert the count never grew past the single fetch.
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(eventsCalls()).toBe(1);
+
+    // A filter-UNRELATED re-render (toggling the analysis panel is page state,
+    // not the filter) must not trigger an events refetch.
+    fireEvent.click(screen.getByRole('button', { name: /분석/i }));
+    for (let i = 0; i < 3; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(eventsCalls()).toBe(1);
+  });
 });
 
 describe('R1 layout shell', () => {
