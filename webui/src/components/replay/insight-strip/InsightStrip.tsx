@@ -23,6 +23,7 @@ import {
 } from './insightCards';
 import { ProvenanceBadge } from './ProvenanceBadge';
 import { InfoTip } from './InfoTip';
+import { DeltaChip } from '../../DeltaChip';
 import { useT } from '../../../i18n';
 import styles from './InsightStrip.module.css';
 
@@ -92,8 +93,28 @@ export function InsightStrip(props: InsightStripProps) {
               </button>
               <div className={styles.cardFoot}>
                 <ProvenanceBadge provenance={card.provenance} />
-                {/* PR-3 §3a — baselineDelta replaced by card.baseline (chip +
-                    position + n + lowSample); render wiring lands in Task 4. */}
+                {card.baseline &&
+                  (card.baseline.lowSample ? (
+                    // n<3 — a chip here would render `flat` (chip.v is
+                    // hardcoded 0), visually indistinguishable from "session
+                    // == median". Show the low-sample notice instead so a
+                    // thin baseline never misreads as "right at the median".
+                    <span className={styles.baselineLow}>
+                      {t('insight.baselineLowSample', card.baseline.n)}
+                    </span>
+                  ) : (
+                    <>
+                      <DeltaChip
+                        v={card.baseline.chip.v}
+                        unit={card.baseline.chip.unit}
+                        betterUp={card.baseline.chip.betterUp}
+                        noCompare=""
+                      />
+                      {card.baseline.position && (
+                        <span className={styles.baselinePos}>{card.baseline.position}</span>
+                      )}
+                    </>
+                  ))}
               </div>
               {card.sparkline && card.sparkline.length > 0 && (
                 <Sparkline values={card.sparkline} tint={card.sparklineTint} />

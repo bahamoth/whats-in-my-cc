@@ -63,7 +63,9 @@ export const sessionListKeys = {
   all: () => ['sessions'] as const,
 };
 
-/** insight-redesign #6 — store-wide usage baseline (not session-scoped). */
+/** insight-redesign #6 + PR-3 §3a — usage baseline. Store-wide by default;
+ *  `useUsageBaselineQuery(sessionId)` appends the id (or `'store'`) so a
+ *  project-scoped view never collides with the store-wide one in cache. */
 export const usageKeys = {
   baseline: () => ['usage', 'baseline'] as const,
 };
@@ -169,10 +171,13 @@ export function usePluginsQuery(opts?: QOpts<PluginDto[]>) {
   });
 }
 
-export function useUsageBaselineQuery(opts?: QOpts<UsageBaselineDto>) {
+/** PR-3 §3a — `sessionId` scopes the baseline to that session's project (see
+ *  `getUsageBaseline`); the cache key includes it so store-wide and
+ *  project-scoped views never collide. */
+export function useUsageBaselineQuery(sessionId?: string, opts?: QOpts<UsageBaselineDto>) {
   return useQuery<UsageBaselineDto>({
-    queryKey: usageKeys.baseline(),
-    queryFn: () => getUsageBaseline(),
+    queryKey: [...usageKeys.baseline(), sessionId ?? 'store'],
+    queryFn: () => getUsageBaseline(sessionId),
     staleTime: 60_000,
     ...opts,
   });

@@ -115,6 +115,25 @@ describe('getUsageBaseline', () => {
     expect(fetchSpy).toHaveBeenCalledWith('/v1/usage/baseline', expect.any(Object));
     expect(out).toEqual(expected);
   });
+
+  it('PR-3 §3a — passes session_id when given, scoping the baseline to the project', async () => {
+    const expected: UsageBaselineDto = {
+      session_count: 2,
+      scope: 'project',
+      project: '/p',
+      cache_hit_ratio: { p25: 0.0, median: 0.45, p75: 0.9, n: 2 },
+      billed_tokens: { p25: 200, median: 300, p75: 400, n: 2 },
+      assistant_events: { p25: 1, median: 1, p75: 1, n: 2 },
+      output_tokens: { p25: 100, median: 200, p75: 300, n: 2 },
+      verification_pass_rate: { p25: 0.5, median: 0.8, p75: 1, n: 2 },
+      tool_failure_count: { p25: 0, median: 1, p75: 2, n: 2 },
+      estimated_cost_usd: { p25: 0.01, median: 0.02, p75: 0.03, n: 2 },
+    };
+    fetchSpy.mockImplementation(mockJson(ENVELOPE(expected)));
+    const out = await getUsageBaseline('s1');
+    expect(fetchSpy).toHaveBeenCalledWith('/v1/usage/baseline?session_id=s1', expect.any(Object));
+    expect(out).toEqual(expected);
+  });
 });
 
 describe('getSessionMetrics', () => {

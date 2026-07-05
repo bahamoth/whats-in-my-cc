@@ -327,6 +327,26 @@ describe('buildInsightCards — baseline comparison (PR-3 §3a)', () => {
     expect(c.baseline!.chip.v).toBe(1); // 3 − 2
     expect(c.baseline!.chip.betterUp).toBe(false);
   });
+
+  it('verification 카드: MEASURED 통과율 기준 pp 칩 + 위치 + n (Task 3 review forward-risk)', () => {
+    // passed=1, failed=1 → measured=2, pass rate=0.5; base median=0.8,n=5.
+    const runs = [vr('test_suite_rust', 'passed'), vr('test_suite_js', 'failed')];
+    const c = byId({ ...EMPTY, verificationRuns: runs, baseline }).get('verification')!;
+    expect(c.baseline).toBeDefined();
+    expect(c.baseline!.chip.unit).toBe('%p');
+    expect(c.baseline!.chip.betterUp).toBe(true);
+    expect(c.baseline!.chip.v).toBeCloseTo(-30); // (0.5 − 0.8) × 100
+    expect(c.baseline!.n).toBe(5);
+    expect(c.baseline!.lowSample).toBe(false);
+    expect(c.baseline!.position).toContain('×');
+  });
+
+  it('verification 카드: 측정된 run이 없으면(measured=0) baseline을 붙이지 않는다', () => {
+    // status='skipped' is neither passed nor failed → measured stays 0.
+    const runs = [vr('format_check', 'skipped')];
+    const c = byId({ ...EMPTY, verificationRuns: runs, baseline }).get('verification')!;
+    expect(c.baseline).toBeUndefined();
+  });
 });
 
 describe('blendedRatePerMTok + 비용 카드 부제 (PR-3 §3a)', () => {
@@ -340,6 +360,11 @@ describe('blendedRatePerMTok + 비용 카드 부제 (PR-3 §3a)', () => {
   it('비용 카드 detail에 블렌디드 단가가 병기된다', () => {
     const c = byId({ ...EMPTY, usage }).get('cost')!;
     expect(c.detail).toContain('블렌디드');
+  });
+  it('과금 토큰이 0이면 블렌디드 단가 대신 — 를 표기한다 (미측정 ≠ 0)', () => {
+    const zeroBilled = { ...usage, billed_tokens: 0 };
+    const c = byId({ ...EMPTY, usage: zeroBilled }).get('cost')!;
+    expect(c.detail).toContain('블렌디드 —');
   });
 });
 
