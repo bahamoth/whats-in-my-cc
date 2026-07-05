@@ -36,6 +36,47 @@ export function formatMs(ms: number | null | undefined): string {
   return `${h}h ${m}m`;
 }
 
+/**
+ * Compact wall-clock span for "how long is this session" (session list + detail
+ * header, 2026-07-05). Unlike `formatMs` it rolls up into DAYS so a 2-day+ long
+ * session reads as `2d 3h`, not `51h 12m`. Seconds/minutes/hours/days, dropping
+ * the smaller unit once past it. Negative (clock skew) clamps to `0s`; nullish
+ * / NaN → placeholder.
+ */
+export function formatDurationSpan(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || Number.isNaN(ms)) return PLACEHOLDER;
+  const v = Math.max(0, ms);
+  const s = Math.floor(v / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${m % 60}m`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h`;
+}
+
+/** Milliseconds between two RFC3339/ISO instants (session span = last − first).
+ *  `null` when either is missing/unparseable; clamps to ≥0 for clock skew. */
+export function spanMs(
+  firstIso: string | null | undefined,
+  lastIso: string | null | undefined,
+): number | null {
+  if (!firstIso || !lastIso) return null;
+  const a = Date.parse(firstIso);
+  const b = Date.parse(lastIso);
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.max(0, b - a);
+}
+
+/** Convenience: `formatDurationSpan(spanMs(first, last))`. */
+export function formatSpan(
+  firstIso: string | null | undefined,
+  lastIso: string | null | undefined,
+): string {
+  return formatDurationSpan(spanMs(firstIso, lastIso));
+}
+
 export function formatUsd(usd: number | null | undefined): string {
   if (usd === null || usd === undefined || Number.isNaN(usd)) return PLACEHOLDER;
   if (usd < 0) return PLACEHOLDER;
