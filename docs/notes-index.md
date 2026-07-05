@@ -18,6 +18,7 @@ CLAUDE.md의 python 스니펫.
 | Teammate·Subagent 관측 | `#teammate-followups-2026-07-04` (B-6 종결: preview·북엔드·agent-setting·표본 2) | `#teammate-observability-2026-07-03` · `#teammate-in-session-2026-07-03` · `#bg-subagent-hairline-gutter-2026-06-14` · `#task-notification-sync-2026-06-14` |
 | WebUI replay·목록 | `#session-filtering-2026-07-04` (PR-1: 4축 서버 필터·FilterBar·flat 모드·점프 규칙) | `#session-list-perf-2026-06-29` · `#scroll-scrollbar-fix` · `#autoscroll-model` · `#pr33-regression-review` · `#tool-metrics-transcript-fallback` |
 | 툴팁 카피·i18n 게이트 | `#cost-tooltip-dynamic-2026-07-05` (비용 툴팁 동적 조립; 함수형 tip-fragment 키는 tipStyle 게이트 우회 — 손 검증) | — |
+| 비용·가격표 | `#pricing-json-2026-07-05` (pricing.json 분리 + include_str! 임베드, /usage rates, update-pricing.ts + 주간 cron, 동결 fixture가 파서 열 순서·alias 잠금) | `#cost-tooltip-dynamic-2026-07-05` |
 | 프로젝트 대시보드 | `#dashboard-feedback-2026-07-04` (전면 개편: ECharts 2탭·코호트 랭킹·instruction 관측·B-12/13/14) | `#project-dashboard-2026-07-04` · `#dashboard-shadcn-2026-07-04` |
 | MCP 표면 | `#mcp-digest-events-2026-07-04` (11종: structuredContent·events·digest) | `#mcp-parity-detector-config-2026-07-03` · `#dogfood-retrospect-2026-06-12` |
 | export·거버넌스 | `#export-bundle-2026-07-04` (POST /v1/export-bundles) + `#prd-09-decisions-2026-07-04` (§09 3건 종결) | `#full-retention` · `#slice-18-deviations` · `#slice-19-deviations` |
