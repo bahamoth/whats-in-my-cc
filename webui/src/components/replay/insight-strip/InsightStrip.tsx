@@ -37,13 +37,35 @@ interface InsightStripProps {
   turns?: TurnRollupDto[];
 }
 
+/** S8 — a 2-day+ session produces hundreds of per-turn values; the fixed-width
+ *  bar strip has no room for them and used to overflow its card (2026-07-05
+ *  롱세션 버그). Cap the bar count by downsampling into at most SPARK_MAX_BARS
+ *  buckets (bucket mean) so the trend still reads and the strip always fits.
+ *  32 bars fit the narrowest card (grid min 140px, gap 2px, min-width 1px). */
+export const SPARK_MAX_BARS = 32;
+
+export function downsampleBars(values: number[], maxBars: number = SPARK_MAX_BARS): number[] {
+  if (values.length <= maxBars) return values;
+  const out: number[] = [];
+  for (let b = 0; b < maxBars; b++) {
+    const start = Math.floor((b * values.length) / maxBars);
+    const end = Math.floor(((b + 1) * values.length) / maxBars);
+    let sum = 0;
+    for (let i = start; i < end; i++) sum += values[i];
+    out.push(sum / (end - start));
+  }
+  return out;
+}
+
 /** S8 — a compact bar sparkline. Values are normalised to the series max so the
- *  trend shape reads at a glance; an all-zero series renders flat. */
+ *  trend shape reads at a glance; an all-zero series renders flat. Long series
+ *  are downsampled (see downsampleBars) so the strip never overflows its card. */
 function Sparkline({ values, tint }: { values: number[]; tint?: SparklineTint }) {
-  const max = Math.max(...values, 0);
+  const bars = downsampleBars(values);
+  const max = Math.max(...bars, 0);
   return (
     <div className={styles.spark} data-testid="sparkline" data-tint={tint ?? 'blue'} aria-hidden>
-      {values.map((v, i) => (
+      {bars.map((v, i) => (
         <i key={i} data-bar style={{ height: `${max > 0 ? Math.round((v / max) * 100) : 2}%` }} />
       ))}
     </div>
