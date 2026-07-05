@@ -177,3 +177,19 @@
   color: var(--wimcc-fg-subtle, #6a7180);
   font-size: 12px;
 }
+
+.rhythmMeta {
+  margin-bottom: 6px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--wimcc-fg-subtle);
+}
+
+.rhythmAxis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9.5px;
+  color: var(--wimcc-fg-subtle);
+}

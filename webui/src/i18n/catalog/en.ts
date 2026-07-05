@@ -115,6 +115,11 @@ export const en = {
   'analysis.detectorDistribution': 'Detector signal distribution',
   'analysis.noSignals': 'No signals detected',
   'analysis.reReadLabel': (a: { file: string; count: string }) => `${a.file} · ${a.count} reads`,
+  'analysis.rhythm.title': 'Verification rhythm — run positions over session progress',
+  'analysis.rhythm.meta': (a: { g: number; p: number }) => `${a.g} guards · ${a.p} passed`,
+  'analysis.rhythm.tip':
+    '**x = session progress (time-based)**; each dot is one verification run and its color is the outcome.\n' +
+    'Click a dot to jump to the event card that triggered the run.',
 
   // Detail — event provenance badge
   'detail.provenance.native': 'Native',
