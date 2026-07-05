@@ -6,6 +6,7 @@ import { MetaStrip } from '../components/MetaStrip';
 import { DetailPanel } from '../components/replay/detail/DetailPanel';
 import { TopBar } from '../components/layout/TopBar';
 import { InsightStrip } from '../components/replay/insight-strip/InsightStrip';
+import { toInsightBaseline } from '../components/replay/insight-strip/insightCards';
 import { InstructionCard } from '../components/replay/InstructionCard';
 import { AnalysisPanel } from '../components/replay/analysis/AnalysisPanel';
 import {
@@ -484,14 +485,7 @@ function SessionDetailInner({ sessionId }: { sessionId: string }) {
               usage={usage.data}
               verificationRuns={verificationRuns.data}
               signals={signals.data}
-              baseline={
-                baseline.data
-                  ? {
-                      cache_hit_ratio: baseline.data.cache_hit_ratio.median,
-                      billed_tokens: baseline.data.billed_tokens.median,
-                    }
-                  : undefined
-              }
+              baseline={baseline.data ? toInsightBaseline(baseline.data) : undefined}
               turns={turns.data?.turns}
             />
             <InstructionCard sessionId={sessionId} />

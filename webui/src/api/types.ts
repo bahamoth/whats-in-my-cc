@@ -254,23 +254,31 @@ export type SessionUsageDto = {
 };
 
 /** insight-redesign #6 — one baseline metric's quantile triple. All null
- *  when no session in the store has usage_facet rows for the metric. */
+ *  when no session in the scope has usage_facet rows for the metric. */
 export type BaselineStat = {
   p25: number | null;
   median: number | null;
   p75: number | null;
+  /** PR-3 — 이 지표 분포에 들어간 세션 수(지표별 게이트가 상이). n<3 → 표본 부족. */
+  n: number;
 };
 
-/** insight-redesign #6 — cross-session usage baseline. Median (+ p25/p75) of
- *  each key metric across all stored sessions with usage_facet rows. The UI
+/** insight-redesign #6 + PR-3 §3a — cross-session usage baseline. Median
+ *  (+ p25/p75) of each key metric across the stored sessions in scope. The UI
  *  renders a measured session value as a delta against `*.median`
  *  ("vs your median"). */
 export type UsageBaselineDto = {
   session_count: number;
+  /** "project" | "store" — session_id 스코프 해석 결과(관측 사실). */
+  scope: string;
+  project: string | null;
   cache_hit_ratio: BaselineStat;
   billed_tokens: BaselineStat;
   assistant_events: BaselineStat;
   output_tokens: BaselineStat;
+  verification_pass_rate: BaselineStat;
+  tool_failure_count: BaselineStat;
+  estimated_cost_usd: BaselineStat;
 };
 
 /** `GET /v1/sessions/:id/tasks` — per-task summary (TaskCreate/TaskUpdate

@@ -11,23 +11,96 @@
  *  - SignalDto(detector=tool_failure) count drives the 도구 실패 card
  *    (deterministic L1 extractor count).
  *  - SessionUsageDto.estimated_cost_usd / cost_basis is the cost 추정.
- *  - An optional cross-session baseline (baseline cache_hit_ratio — NOT the
- *    removed per-session scalar) renders a "vs median" delta.
+ *  - An optional cross-session baseline (`{median, n}` per metric, PR-3 §3a)
+ *    renders a chip + "x.x× project median" position on each of the 5 cards;
+ *    n<3 degrades to a "표본 부족" notice instead (see `compareToBaseline`).
  */
 import type {
   SessionUsageDto,
   VerificationRunDto,
   SignalDto,
   TurnRollupDto,
+  UsageBaselineDto,
+  BaselineStat,
 } from '../../../api/types';
 import { formatPct, formatTokens, formatUsd } from '../../../lib/format';
 import type { TFunction } from '../../../i18n';
 import type { Provenance } from './provenance';
 
-/** Optional cross-session baseline (slice 6 + S8). Absent fields → no delta. */
+/** PR-3 §3a — one metric's cross-session median + sample size. `median` is
+ *  null when the scope has no sessions with a value for this metric. */
+export interface BaselineMedian {
+  median: number | null;
+  n: number;
+}
+
+/** Optional cross-session baseline (slice 6 + PR-3 §3a). Absent fields → no
+ *  comparison for that card. */
 export interface InsightBaseline {
-  cache_hit_ratio?: number | null;
-  billed_tokens?: number | null;
+  cache_hit_ratio?: BaselineMedian;
+  billed_tokens?: BaselineMedian;
+  verification_pass_rate?: BaselineMedian;
+  tool_failure_count?: BaselineMedian;
+  estimated_cost_usd?: BaselineMedian;
+}
+
+/** PR-3 §3a — a card's comparison against its cross-session median: the
+ *  DeltaChip input (already-computed delta), a "x.x× median" position string,
+ *  the sample size, and a lowSample flag (n<3 → chip/position dropped in
+ *  favor of a "표본 부족" notice; 표기 원칙: 판정 문장 금지). */
+export interface BaselineComparison {
+  /** DeltaChip 입력 (v는 이미 계산된 delta 수치) */
+  chip: { v: number; unit: string; betterUp: boolean };
+  /** "프로젝트 중앙값의 x.x×" 본문 — median>0일 때만 */
+  position?: string;
+  n: number;
+  /** n<3 — 칩·위치 대신 "표본 부족 (n N)"만 표기 */
+  lowSample: boolean;
+}
+
+/** PR-3 §3a — maps the 7-metric baseline DTO down to the 5 metrics the insight
+ *  cards compare against (median + n only; p25/p75 are not used here). */
+export function toInsightBaseline(dto: UsageBaselineDto): InsightBaseline {
+  const m = (s: BaselineStat): BaselineMedian => ({ median: s.median, n: s.n });
+  return {
+    cache_hit_ratio: m(dto.cache_hit_ratio),
+    billed_tokens: m(dto.billed_tokens),
+    verification_pass_rate: m(dto.verification_pass_rate),
+    tool_failure_count: m(dto.tool_failure_count),
+    estimated_cost_usd: m(dto.estimated_cost_usd),
+  };
+}
+
+/** PR-3 §3a — $/1M billed tokens, a blended unit-rate subtitle for the cost
+ *  card (mixed models in a session have no single "rate" otherwise). Null
+ *  when there are no billed tokens to divide by (미측정 ≠ 0). */
+export function blendedRatePerMTok(costUsd: number, billedTokens: number): number | null {
+  return billedTokens > 0 ? (costUsd / billedTokens) * 1_000_000 : null;
+}
+
+/** PR-3 §3a — builds a card's baseline comparison. Returns undefined when
+ *  there is no baseline for this metric or its median is unmeasured (null).
+ *  n<3 → lowSample (chip/position dropped; 표본 부족 표기만). */
+function compareToBaseline(
+  value: number,
+  base: BaselineMedian | undefined,
+  chip: { v: (value: number, median: number) => number; unit: string; betterUp: boolean },
+  t: TFunction,
+): BaselineComparison | undefined {
+  if (!base || base.median === null) return undefined;
+  if (base.n < 3) {
+    return { chip: { v: 0, unit: chip.unit, betterUp: chip.betterUp }, n: base.n, lowSample: true };
+  }
+  const position =
+    base.median > 0
+      ? t('insight.baselinePositionN', { x: (value / base.median).toFixed(1), n: base.n })
+      : undefined;
+  return {
+    chip: { v: chip.v(value, base.median), unit: chip.unit, betterUp: chip.betterUp },
+    position,
+    n: base.n,
+    lowSample: false,
+  };
 }
 
 export interface InsightInputs {
@@ -66,8 +139,10 @@ export interface InsightCardModel {
     lines: string[];
     byKind?: Record<string, number>;
   };
-  /** Optional "vs your median" delta (slice 6); undefined when no baseline. */
-  baselineDelta?: string;
+  /** Optional cross-session comparison (slice 6 + PR-3 §3a); undefined when
+   *  no baseline is supplied for this metric or the session value itself is
+   *  unmeasured. */
+  baseline?: BaselineComparison;
   /** S8 — per-turn trend (raw values; the strip normalises to bar heights).
    *  Undefined when no per-turn data is available. */
   sparkline?: number[];
@@ -142,10 +217,13 @@ function contextCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
       ],
     },
   };
-  const base = inputs.baseline?.cache_hit_ratio;
-  if (typeof base === 'number' && typeof ratio === 'number') {
-    const d = Math.round((ratio - base) * 100);
-    card.baselineDelta = t('insight.baselineDeltaPp', `${d >= 0 ? '+' : ''}${d}`);
+  if (typeof ratio === 'number') {
+    card.baseline = compareToBaseline(
+      ratio,
+      inputs.baseline?.cache_hit_ratio,
+      { v: (s, m) => (s - m) * 100, unit: '%p', betterUp: true },
+      t,
+    );
   }
   if (inputs.turns) {
     const spark = perTurnCacheHit(inputs.turns);
@@ -186,11 +264,12 @@ function tokensCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
       ],
     },
   };
-  const baseMedian = inputs.baseline?.billed_tokens;
-  if (typeof baseMedian === 'number' && baseMedian > 0) {
-    const d = Math.round((u.billed_tokens / baseMedian - 1) * 100);
-    card.baselineDelta = t('insight.baselineDeltaPct', `${d >= 0 ? '+' : ''}${d}`);
-  }
+  card.baseline = compareToBaseline(
+    u.billed_tokens,
+    inputs.baseline?.billed_tokens,
+    { v: (s, m) => (m > 0 ? (s / m - 1) * 100 : 0), unit: '%', betterUp: false },
+    t,
+  );
   if (inputs.turns) {
     const spark = perTurnBilled(inputs.turns);
     if (spark) {
@@ -234,7 +313,7 @@ function verificationCard(inputs: InsightInputs, t: TFunction): InsightCardModel
   const measured = passed + failed;
   const detailParts = Object.entries(byKind).map(([k, n]) => `${k} ${n}`);
   if (unknown > 0) detailParts.push(t('insight.verification.unmeasured', unknown));
-  return {
+  const card: InsightCardModel = {
     id: 'verification', title: t('insight.verification.title'),
     value:
       measured > 0
@@ -256,6 +335,15 @@ function verificationCard(inputs: InsightInputs, t: TFunction): InsightCardModel
       byKind,
     },
   };
+  if (measured > 0) {
+    card.baseline = compareToBaseline(
+      passed / measured,
+      inputs.baseline?.verification_pass_rate,
+      { v: (s, m) => (s - m) * 100, unit: '%p', betterUp: true },
+      t,
+    );
+  }
+  return card;
 }
 
 function toolFailureCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
@@ -265,13 +353,20 @@ function toolFailureCard(inputs: InsightInputs, t: TFunction): InsightCardModel 
     return { id: 'tool_failure', title: t('insight.toolFailure.title'), value: '—', detail: t('insight.loading'), provenance: 'uncollected', tooltip: tip };
   }
   const failures = sigs.filter((s) => s.detector === 'tool_failure');
-  return {
+  const card: InsightCardModel = {
     id: 'tool_failure', title: t('insight.toolFailure.title'),
     value: `${failures.length}`,
     detail: failures.length === 0 ? t('insight.toolFailure.none') : t('insight.toolFailure.expand'),
     provenance: 'measured', tooltip: tip,
     drill: { lines: failures.map((s) => `${s.subkind ?? s.detector} · ${s.summary}`) },
   };
+  card.baseline = compareToBaseline(
+    failures.length,
+    inputs.baseline?.tool_failure_count,
+    { v: (s, m) => s - m, unit: '', betterUp: false },
+    t,
+  );
+  return card;
 }
 
 function costCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
@@ -302,12 +397,21 @@ function costCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
   if (versionDate) tipLines.push(t('insight.cost.tipPricingDate', versionDate));
 
   const unpriced = u.models_without_pricing.length > 0;
+  const estimateDetail = unpriced
+    ? t('insight.cost.detailEstimateUnpriced', u.models_without_pricing.length)
+    : t('insight.cost.detailEstimate');
+  // PR-3 §3a — a mixed-model session has no single "the rate", so subtitle
+  // with a blended $/1M billed-tokens rate instead (미측정 ≠ 0 → '—' when
+  // there are no billed tokens to divide by).
+  const rate = blendedRatePerMTok(u.estimated_cost_usd, u.billed_tokens);
+  const rateText =
+    rate !== null
+      ? t('insight.cost.detailUnitRate', rate.toFixed(2))
+      : t('insight.cost.detailUnitRateNone');
   const card: InsightCardModel = {
     id: 'cost', title: t('insight.cost.title'),
     value: formatUsd(u.estimated_cost_usd),
-    detail: unpriced
-      ? t('insight.cost.detailEstimateUnpriced', u.models_without_pricing.length)
-      : t('insight.cost.detailEstimate'),
+    detail: `${estimateDetail} · ${rateText}`,
     provenance: 'estimated', tooltip: tipLines.join('\n'),
     drill: {
       lines: u.by_model.map(
@@ -315,6 +419,12 @@ function costCard(inputs: InsightInputs, t: TFunction): InsightCardModel {
       ),
     },
   };
+  card.baseline = compareToBaseline(
+    u.estimated_cost_usd,
+    inputs.baseline?.estimated_cost_usd,
+    { v: (s, m) => (m > 0 ? (s / m - 1) * 100 : 0), unit: '%', betterUp: false },
+    t,
+  );
   // S8 — cost has no per-turn pricing breakdown; bill ∝ cost, so the per-turn
   // billed-tokens series is an honest *shape* proxy for the cost trend.
   if (inputs.turns) {

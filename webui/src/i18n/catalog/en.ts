@@ -37,8 +37,9 @@ export const en = {
   'insight.infoTipAria': '{label} explanation',
   'insight.recollectUsage': 'usage facet re-collection needed',
   'insight.loading': 'Loading',
-  'insight.baselineDeltaPp': (sd: string) => `${sd}%p vs median`,
-  'insight.baselineDeltaPct': (sd: string) => `${sd}% vs median`,
+  'insight.baselinePositionN': (p: { x: string; n: number }) =>
+    `${p.x}× project median · n ${p.n}`,
+  'insight.baselineLowSample': (n: number) => `low sample (n ${n})`,
   'insight.provenance.measured': 'measured',
   'insight.provenance.mixed': 'mixed',
   'insight.provenance.estimated': 'estimated',
@@ -91,6 +92,8 @@ export const en = {
     'Replaced once the OTel claude_code.cost.usage metric arrives. cache_read (free) is excluded from cost.',
   'insight.cost.detailEstimate': 'Public-pricing estimate (≈)',
   'insight.cost.detailEstimateUnpriced': (n: number) => `Public-pricing estimate (≈) · ${n} unpriced`,
+  'insight.cost.detailUnitRate': (r: string) => `blended $${r}/1M`,
+  'insight.cost.detailUnitRateNone': 'blended —',
   'insight.cost.noPricing': 'no pricing',
   'insight.cost.tipRateLine': (a: {
     model: string;
