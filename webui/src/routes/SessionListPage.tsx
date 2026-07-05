@@ -5,7 +5,7 @@ import type { SessionListItem, SessionMetricsDto } from '../api/types';
 import { signalsOf } from '../lib/dashDerive';
 import { usageRatios } from '../lib/seriesView';
 import { useLiveStream, type LiveEnvelope } from '../hooks/useLiveStream';
-import { relativeTime, formatModel } from '../lib/format';
+import { relativeTime, formatModel, formatSpan, spanMs } from '../lib/format';
 import { groupTeamRows } from '../lib/teamGrouping';
 import { agentColor } from '../lib/colorHash';
 import { useLocale, useT } from '../i18n';
@@ -13,6 +13,7 @@ import styles from './SessionListPage.module.css';
 
 type SortKey =
   | 'last_observed_at'
+  | 'span'
   | 'event_count'
   | 'session_id'
   | 'verification'
@@ -25,6 +26,7 @@ type SortDir = 'asc' | 'desc';
 const SORT_LABELS: Record<SortKey, string> = {
   session_id: 'session',
   last_observed_at: 'last seen',
+  span: 'span',
   event_count: 'events',
   verification: 'verify',
   signals: 'signals',
@@ -131,6 +133,11 @@ function compare(
       return (a.slug ?? a.session_id).localeCompare(b.slug ?? b.session_id);
     case 'last_observed_at':
       return a.last_observed_at.localeCompare(b.last_observed_at);
+    case 'span':
+      return (
+        (spanMs(a.first_observed_at, a.last_observed_at) ?? 0) -
+        (spanMs(b.first_observed_at, b.last_observed_at) ?? 0)
+      );
     default:
       return num(a) - num(b);
   }
@@ -366,6 +373,13 @@ export default function SessionListPage() {
                 <th onClick={() => onHeaderClick('last_observed_at')} className={styles.sortable}>
                   last seen<SortIndicator active={sortKey === 'last_observed_at'} dir={sortDir} />
                 </th>
+                <th
+                  onClick={() => onHeaderClick('span')}
+                  className={`${styles.sortable} ${styles.numHead}`}
+                  title="세션 span — 첫 관측 → 마지막 관측 (유휴 포함)"
+                >
+                  span<SortIndicator active={sortKey === 'span'} dir={sortDir} />
+                </th>
                 <th onClick={() => onHeaderClick('event_count')} className={`${styles.sortable} ${styles.numHead}`}>
                   events<SortIndicator active={sortKey === 'event_count'} dir={sortDir} />
                 </th>
@@ -431,6 +445,12 @@ export default function SessionListPage() {
                     </td>
                     <td className={styles.relCell} title={r.last_observed_at}>
                       {relativeTime(r.last_observed_at, nowMs, locale)}
+                    </td>
+                    <td
+                      className={styles.eventsCell}
+                      title={`${r.first_observed_at} → ${r.last_observed_at}`}
+                    >
+                      {formatSpan(r.first_observed_at, r.last_observed_at)}
                     </td>
                     <td className={styles.eventsCell}>{r.event_count.toLocaleString()}</td>
                     <MetricCells m={metrics.get(r.session_id)} />

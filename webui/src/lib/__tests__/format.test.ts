@@ -18,6 +18,9 @@ import {
   formatBytes,
   relativeTime,
   formatModel,
+  formatDurationSpan,
+  spanMs,
+  formatSpan,
 } from '../format';
 
 describe('formatMs', () => {
@@ -181,5 +184,44 @@ describe('formatModel', () => {
     expect(formatModel(null)).toBe('—');
     expect(formatModel(undefined)).toBe('—');
     expect(formatModel('')).toBe('—');
+  });
+});
+
+describe('formatDurationSpan', () => {
+  it('sub-minute → whole seconds', () => {
+    expect(formatDurationSpan(45_000)).toBe('45s');
+  });
+  it('minutes only (drops seconds)', () => {
+    expect(formatDurationSpan(8 * 60_000 + 30_000)).toBe('8m');
+  });
+  it('hours + minutes', () => {
+    expect(formatDurationSpan(5 * 3_600_000 + 12 * 60_000)).toBe('5h 12m');
+  });
+  it('days + hours for a 2-day+ long session', () => {
+    expect(formatDurationSpan(2 * 86_400_000 + 3 * 3_600_000)).toBe('2d 3h');
+  });
+  it('negative clamps to 0s (clock skew)', () => {
+    expect(formatDurationSpan(-5)).toBe('0s');
+  });
+  it('nullish / NaN → placeholder', () => {
+    expect(formatDurationSpan(null)).toBe('—');
+    expect(formatDurationSpan(undefined)).toBe('—');
+    expect(formatDurationSpan(NaN)).toBe('—');
+  });
+});
+
+describe('spanMs / formatSpan', () => {
+  it('spanMs computes the ms between two ISO timestamps', () => {
+    expect(spanMs('2026-07-03T00:00:00Z', '2026-07-05T03:00:00Z')).toBe(
+      2 * 86_400_000 + 3 * 3_600_000,
+    );
+  });
+  it('formatSpan formats the derived span', () => {
+    expect(formatSpan('2026-07-03T00:00:00Z', '2026-07-05T03:00:00Z')).toBe('2d 3h');
+  });
+  it('spanMs is null and formatSpan is placeholder for bad input', () => {
+    expect(spanMs(null, '2026-07-05T00:00:00Z')).toBeNull();
+    expect(spanMs('nope', 'nope')).toBeNull();
+    expect(formatSpan('nope', 'nope')).toBe('—');
   });
 });
