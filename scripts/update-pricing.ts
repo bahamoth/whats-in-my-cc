@@ -8,6 +8,7 @@
  *   node scripts/update-pricing.ts --check                 # diff 출력 + 변동 있으면 exit 1(CI 게이트)
  *   node scripts/update-pricing.ts --check --markdown      # diff를 마크다운 표로(PR 본문)
  *   node scripts/update-pricing.ts --write                 # 변동 시 pricing.json 재작성, exit 0
+ *   node scripts/update-pricing.ts --write --out /tmp/p.json  # 재작성 목적지 지정(테스트 격리용)
  *   node scripts/update-pricing.ts --check --source tests/fixtures/pricing/real/pricing-page-2026-07-05.html
  *   node scripts/update-pricing.ts --source https://example.com/pricing.html
  *
@@ -138,6 +139,40 @@ export function diffRates(current: PricingJson, parsed: Record<string, RatesJson
   return changes;
 }
 
+/**
+ * rate 숫자를 pricing.json 관례대로 포맷한다: 정수는 `.0`을 유지(10 → "10.0"),
+ * 그 외는 최소 소수 표기(12.5 → "12.5"). `JSON.stringify`는 10.0을 "10"으로
+ * 재포맷해 변동 안 된 필드까지 diff에 노이즈로 실리므로(리뷰 Important 2) 쓰지 않는다.
+ */
+export function formatRate(v: number): string {
+  return Number.isInteger(v) ? `${v}.0` : String(v);
+}
+
+/**
+ * pricing.json을 원본 바이트 포맷(2-space indent·정수 rate `.0` 유지·후행 개행)
+ * 그대로 재직렬화한다. 변동된 (model,field)만 diff에 나오고 나머지 라인은 바이트
+ * 동일하게 유지된다 — `serializePricing(원본) === 원본 텍스트`가 성립(테스트가 잠금).
+ */
+export function serializePricing(p: PricingJson): string {
+  const models = Object.entries(p.models)
+    .map(([id, r]) => {
+      const fields = RATE_KEYS.map((k) => `      ${JSON.stringify(k)}: ${formatRate(r[k])}`).join(
+        ',\n',
+      );
+      return `    ${JSON.stringify(id)}: {\n${fields}\n    }`;
+    })
+    .join(',\n');
+  return (
+    '{\n' +
+    `  "version": ${JSON.stringify(p.version)},\n` +
+    `  "source_url": ${JSON.stringify(p.source_url)},\n` +
+    '  "models": {\n' +
+    `${models}\n` +
+    '  }\n' +
+    '}\n'
+  );
+}
+
 function toMarkdown(changes: string[], sourceUrl: string): string {
   const rows = changes.map((c) => {
     const m = c.match(/^(.+)\.(\w+): (.+) -> (.+)$/)!;
@@ -173,6 +208,10 @@ async function main(): Promise<number> {
   const write = args.includes('--write');
   const markdown = args.includes('--markdown');
   const srcIdx = args.indexOf('--source');
+  const outIdx = args.indexOf('--out');
+  // --write 목적지(기본 = repo pricing.json). 테스트가 실 파일을 clobber하지 않도록
+  // 임시 경로로 격리할 수 있게 한다(리뷰 Important 3).
+  const outPath = outIdx >= 0 ? (isAbsolute(args[outIdx + 1]) ? args[outIdx + 1] : join(ROOT, args[outIdx + 1])) : PRICING_PATH;
 
   const current: PricingJson = JSON.parse(readFileSync(PRICING_PATH, 'utf8'));
   const html = srcIdx >= 0 ? await fetchSource(args[srcIdx + 1]) : await fetchSource(current.source_url);
@@ -187,13 +226,20 @@ async function main(): Promise<number> {
   }
 
   if (write && changes.length) {
+    // 변동된 필드만 parsed에서 취하고 나머지는 current 값을 그대로 유지 →
+    // serializePricing이 원본 포맷을 보존하므로 변경 라인만 diff에 남는다.
     const next: PricingJson = {
       ...current,
       version: `pricing_estimate@${new Date().toISOString().slice(0, 10)}`,
-      models: Object.fromEntries(Object.keys(current.models).map((id) => [id, parsed[id]])),
+      models: Object.fromEntries(
+        Object.entries(current.models).map(([id, cur]) => [
+          id,
+          Object.fromEntries(RATE_KEYS.map((k) => [k, parsed[id][k]])) as RatesJson,
+        ]),
+      ),
     };
-    writeFileSync(PRICING_PATH, `${JSON.stringify(next, null, 2)}\n`);
-    console.error(`pricing.json updated: ${next.version}`);
+    writeFileSync(outPath, serializePricing(next));
+    console.error(`pricing.json updated: ${next.version} -> ${outPath}`);
   }
 
   if (check && changes.length) return 1;
