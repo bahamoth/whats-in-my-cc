@@ -6268,6 +6268,61 @@ vitest: 69 passed
     버킷(format_check/exit·build/piped)과 동일해 신규 아님.</p>
   </section>
 
+  <section id="llm-request-p50-2026-07-05">
+    <h2>SessionMetrics.llm_request_p50 — F1 예외 + 두 갈래 소스 편차 (PR-3 §3d, 2026-07-05)</h2>
+    <p><b>F1 예외:</b> <code>docs/03_data_model_spec.html</code>은 SessionMetrics가
+    "합성 가능한 count만" 반환한다고 규정한다(F1). <code>llm_request_p50</code>은
+    count가 아니라 <b>분포 통계(p50)</b>다 — 세션의 개별 LLM 요청 timing/토큰/비용
+    전수 없이는 소비자가 이 값을 재계산할 수 없어(세션 개별 이벤트를 노출하지 않는
+    on-demand 계약상), 예외적으로 서버가 직접 계산해 반환한다. 03 스펙에 각주(<code>*</code>)로
+    이 예외를 명시했다 — 침묵 위반 금지(CLAUDE.md Working Principles).</p>
+    <p><b>소스는 두 갈래(코드 현실 편차):</b> §3d 스펙 초안은 "api_request_log 상관
+    이벤트 전수 기준"이라고만 서술했지만, 실제 구현은 request_id로 조인되는 두
+    소스로 구체화된다 — ① <code>otel_span</code>(<code>span_name ==
+    "claude_code.llm_request"</code>) telemetry facet의 flat <code>attributes</code>에서
+    <code>ttft_ms</code>·<code>duration_ms</code>·<code>output_tokens</code>(real fixture
+    <code>tests/fixtures/otel/real/traces_v01.json</code>으로 속성명 앵커 — timing/토큰은
+    span에만 있고 log_record에는 없다), ② <code>log_record</code>(<code>payload.event_name
+    == "api_request"</code>)의 <code>payload.attributes.cost_usd</code>(Claude Code
+    자체 보고 실측 비용; 이 두 소스 매핑은 기존 프론트 <code>eventMetrics.ts</code>
+    <code>buildLlmMetricsFromEvents</code>·<code>llmRequestMetrics.ts</code>
+    <code>parseLlmRequestSpan</code>/<code>parseApiRequestLog</code>과 동일면 —
+    telemetry-fold Group A 결정, <a href="#telemetry-fold-group-a">#telemetry-fold-group-a</a>
+    참고). 각 request_id 당 <b>최초 1건</b>만 집계한다(<code>repo_observed::list_session</code>이
+    <code>observed_at ASC</code>라 순회 중 첫 삽입이 최초 관측과 같다 — 사전 SQL
+    확인으로 정렬 가정을 검증했다).</p>
+    <p><b>구현:</b> <code>src/insight/metrics.rs</code>에 <code>P50Stat { p50:
+    Option&lt;f64&gt;, n: i64 }</code> · <code>LlmRequestP50 { ttft_ms, duration_ms,
+    output_tokens, cost_usd }</code> 추가, <code>compute_session_metrics_uncached</code>의
+    기존 이벤트 루프에 <code>EventKind::OtelSpan</code>/<code>EventKind::LogRecord</code>
+    arm을 더해 request_id별 dedup 버퍼(<code>BTreeMap</code>)에 첫 값만 유지한 뒤
+    루프 뒤에서 <code>repo_usage_facet::median_p25_p75</code>(기존 usage-baseline
+    quantile 계산 재사용, DRY)로 p50을 조립한다. <code>n == 0</code>이면
+    <code>p50 == None</code> — 미측정을 0으로 위장하지 않는다. 인메모리 캐시
+    (<a href="#metrics-cache-2026-07-04">#metrics-cache-2026-07-04</a>)는 그대로
+    재사용 — 새 필드도 같은 캐시 키(event_count·last_observed_at)로 무효화된다.</p>
+    <p><b>TS 계약:</b> <code>webui/src/api/types.ts</code>에 <code>P50StatDto</code>·
+    <code>LlmRequestP50Dto</code> + <code>SessionMetricsDto.llm_request_p50</code>(필수
+    필드)를 추가했다. 필수 필드라 <code>SessionMetricsDto</code> 전체 리터럴을 만드는
+    기존 테스트 fixture 7건(AnalysisPanel·client.endpoints·CohortBoundaries·
+    scatterOption·SessionCardLane·dashDerive·seriesView)이 <code>tsc -b</code>에서
+    깨졌다 — 전부 <code>llm_request_p50: { …4종 모두 { p50: null, n: 0 } }</code>
+    (미측정 fixture)를 추가해 수정. Task 5 브리프 범위 밖이었지만 CI가 SPA 빌드
+    (<code>tsc -b</code>)를 게이트로 쓰므로(CLAUDE.md Operations) 같은 커밋에서
+    처리하지 않으면 이 PR이 깨진다 — 침묵 실패 대신 이 PR에서 정정.</p>
+    <p><b>Task 5 브리프와의 사소한 편차:</b> 브리프 pseudo-code는 테스트 helper가
+    <code>seed_run(&amp;pool, "run1")</code>로 run을 시드한다고 가정했지만, 이
+    파일(<code>tests/metrics_compute.rs</code>)에 그런 헬퍼는 없고 기존 관례는
+    <code>repo_runs::start(&amp;pool).await.unwrap()</code>(ULID 자동 생성, 인자
+    없음)이다 — 브리프도 "없으면 기존 관례를 따르라"고 명시했으므로 그대로 따랐다.
+    세션 id도 브리프의 리터럴 <code>"s"</code>/<code>"none"</code> 대신
+    <code>s_p50_odd</code>/<code>s_p50_even</code>/<code>s_p50_none</code>으로
+    바꿨다 — 프로세스 수명 메트릭 캐시(#metrics-cache-2026-07-04)가 session_id를
+    전역 키로 쓰는데, 동일 파일의 다른 <code>#[tokio::test]</code>는 전부 세션 id를
+    유니크하게 쓰는 관례라 그 일관성을 따랐다(기능상 충돌은 없었을 것 — count/last
+    불일치로 캐시가 자연히 무효화되지만, 관례를 따르는 편이 더 명확하다).</p>
+  </section>
+
 </main>
 </div>
 </body></html>
