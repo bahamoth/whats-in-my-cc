@@ -128,17 +128,20 @@ test('subprocess --write --out: 임시 파일에만 쓰고 실 pricing.json은 �
   const outLines = readFileSync(outPath, 'utf8').split('\n');
   assert.equal(origLines.length, outLines.length);
   const changed = origLines.map((l, i) => (l === outLines[i] ? -1 : i)).filter((i) => i >= 0);
-  assert.equal(changed.length, 2, `버전+drift 필드 2줄만 변해야 하는데: ${changed.join(',')}`);
-
   const changedText = changed.map((i) => outLines[i]);
+  // 변동 라인은 version 줄 또는 drift 필드(99.0)뿐 — 스퓨리어스 리포맷 없음.
+  // version은 --write가 실행일(today)로 세팅하므로, pricing.json이 마침 오늘 갱신돼
+  // 있으면 동일값이라 변동 목록에서 빠질 수 있다(당일 idempotent). 그래서 1~2줄을
+  // 허용하되, 변동 라인은 반드시 version/drift 중 하나여야 한다(날짜 결합 제거).
+  const isVersion = (l: string) => /"version": "pricing_estimate@\d{4}-\d{2}-\d{2}"/.test(l);
+  const isDrift = (l: string) => /"output_per_mtok": 99\.0/.test(l);
   assert.ok(
-    changedText.some((l) => /"version": "pricing_estimate@\d{4}-\d{2}-\d{2}"/.test(l)),
-    'version 줄 갱신',
+    changed.length >= 1 && changed.length <= 2 && changedText.every((l) => isVersion(l) || isDrift(l)),
+    `version/drift 외 변경이 있으면 안 됨: ${changedText.join(' | ')}`,
   );
-  assert.ok(
-    changedText.some((l) => /"output_per_mtok": 99\.0/.test(l)),
-    'drift 필드가 99.0(정수 .0 유지)로 갱신',
-  );
+  assert.ok(changedText.some(isDrift), 'drift 필드가 99.0(정수 .0 유지)로 갱신');
+  // 출력 version 줄은 당일 idempotent 여부와 무관하게 항상 형식이 유효해야 한다.
+  assert.ok(outLines.some(isVersion), 'version 줄 형식 유효');
   // 변동 안 된 정수 rate는 .0을 그대로 유지(리포맷 노이즈 없음)
   assert.ok(outLines.some((l) => /"input_per_mtok": 10\.0/.test(l)), '10.0 포맷 보존');
   assert.ok(outLines.some((l) => /"cache_read_per_mtok": 1\.0/.test(l)), '1.0 포맷 보존');

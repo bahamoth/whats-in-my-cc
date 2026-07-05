@@ -239,6 +239,25 @@ mod tests {
     }
 
     #[test]
+    fn sonnet_5_is_priced_from_public_rates() {
+        // platform.claude.com/docs/en/about-claude/pricing: claude-sonnet-5
+        // introductory pricing (through 2026-08-31): input $2, 5m cache write
+        // $2.50, cache read $0.20, output $10. 1M of each → 2 + 2.5 + 0.2 + 10 = 14.7.
+        // claude-sonnet-5 is a currently-active model and MUST be priced, else
+        // live sonnet-5 sessions show as "미가격" (2026-07-05 사용자 관측).
+        let est = estimate_session_cost(&[mu(
+            "claude-sonnet-5",
+            1_000_000,
+            1_000_000,
+            1_000_000,
+            1_000_000,
+        )]);
+        assert!((est.total_usd - 14.7).abs() < 1e-9, "got {}", est.total_usd);
+        assert!(est.per_model[0].priced);
+        assert!(est.models_without_pricing.is_empty());
+    }
+
+    #[test]
     fn pricing_loads_from_checked_in_json() {
         // 가격표 SSOT는 저장소 루트 pricing.json (스펙 §2.1).
         assert!(rates_for("claude-fable-5").is_some());
