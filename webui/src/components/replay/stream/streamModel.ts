@@ -8,6 +8,17 @@ function asObj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
 }
 
+/** 이 모델이 만들어내는 합성 스트림 id(실 ObservedEvent가 아닌 노드) 판별.
+ *  thinking 카드 `th-…`, scaffold 묶음, workflow/batch 그룹, 서브에이전트
+ *  종료 카드, activity run, task-list 블록이 해당한다. §1.4 점프-해제와
+ *  `?around=` 재조회는 실제 이벤트 id에만 반응해야 한다 — 필터 활성 중
+ *  thinking 카드 클릭이 '필터를 해제했습니다'를 오발동한 버그(2026-07-05).
+ *  접두 목록은 아래 emit 지점들의 id 리터럴과 함께 유지한다. */
+const SYNTHETIC_ID_RE = /^(th|scaffold|wfend|end|sc|wf|batch|run)-/;
+export function isSyntheticStreamId(id: string): boolean {
+  return id === 'task-list' || SYNTHETIC_ID_RE.test(id);
+}
+
 /** Workflow tool_call의 `payload.input.script`에 박힌 `meta = {name, description}`
  *  리터럴에서 이름·설명만 끌어낸다. 스크립트 전체 평가가 아니라 표층 정규식 —
  *  meta는 순수 리터럴 규약(작은/큰따옴표만)이라 충분하다. 못 찾으면 null. */

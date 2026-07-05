@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildStreamModel, groupScaffold, parseWorkflowMeta, computeBgGutter, insertSubagentEndCards, parseTaskNotification } from '../streamModel';
+import { buildStreamModel, isSyntheticStreamId, groupScaffold, parseWorkflowMeta, computeBgGutter, insertSubagentEndCards, parseTaskNotification } from '../streamModel';
 import type { MessageItem, StreamItem, SidechainGroup, SubagentEndCard } from '../streamModel';
 import { buildLlmRequestMetrics } from '../llmRequestMetrics';
 import type { ObservedEventDto } from '../../../../api/types';
@@ -1469,5 +1469,23 @@ describe('teammate dispatch bookends', () => {
     ]);
     const msg = items.find((i): i is MessageItem => i.type === 'message' && i.role === 'user');
     expect(msg?.dispatchEventId ?? null).toBeNull();
+  });
+});
+
+// 합성 스트림 id 판별 (2026-07-05): thinking 카드(`th-<event_id>`) 등 합성 id는
+// 실제 ObservedEvent가 아니므로 §1.4 점프-해제·around 재조회를 발동하면 안 된다 —
+// 필터 활성 중 thinking 카드 클릭이 "이동하여 필터를 해제했습니다"를 오발동한 버그.
+describe('isSyntheticStreamId', () => {
+  it('flags every synthetic id family emitted by the stream model', () => {
+    for (const id of [
+      'th-ev123', 'scaffold-ev1', 'wfend-x', 'wfend-noti-x', 'end-agent1',
+      'sc-ev1', 'wf-run1', 'batch-ev1', 'run-ev1', 'task-list',
+    ]) {
+      expect(isSyntheticStreamId(id), id).toBe(true);
+    }
+  });
+  it('passes real event ids through', () => {
+    expect(isSyntheticStreamId('01KWPQE0SYP3YAKY571S5EMBDF')).toBe(false);
+    expect(isSyntheticStreamId('evscan-0001')).toBe(false);
   });
 });
