@@ -6397,6 +6397,60 @@ vitest: 69 passed
     드물다).</p>
   </section>
 
+  <section id="session-detail-followups-2026-07-05">
+    <h2>세션 상세 개선 후속 — 라이브 도그푸딩 결함 6건 + 머지-후 감사 회귀 잠금 (2026-07-05)</h2>
+    <p><b>배경:</b> 4-PR 머지 직후 사용자가 라이브 도그푸딩(이틀 넘는 롱세션 포함)으로
+    실사용 결함을 연속 보고했고, 같은 날 머지-후 적대적 감사(회귀 방어·직교성·레드
+    적절성·스모크·완성도 5축)를 병행했다. 전부 <code>feat/pr3-insight-context</code>(#95)에
+    취합(단일 PR 원칙).</p>
+    <p><b>수정 6건:</b>
+    ① <b>sonnet-5 미가격</b> — pricing.json에 <code>claude-sonnet-5</code> 부재.
+    도입가(2026-08-31까지 in $2/out $10)로 추가 + PAGE_ALIASES 매핑(c8b427d).
+    ② <b>신규 모델 영구 누락</b>(근본 원인) — update-pricing 파서가 등록 모델만
+    순회해 페이지의 새 모델을 영영 발견 못 함. <code>detectNewModels</code>로
+    미등록 표시명을 surface하고 --check가 exit 1로 신호, cron은 rate drift(PR)와
+    신규 모델(이슈)을 분기. 활성 모델 opus-4-6/4-5·sonnet-4-5 사전 추가(a491f1f).
+    ③ <b>롱세션 스파크라인 오버플로우</b> — 턴당 바 1개에 상한이 없어 수백 턴이
+    카드 폭을 넘침. <code>downsampleBars</code>(버킷 평균, 최대 32바) + overflow
+    클립(0f951c9).
+    ④ <b>스트리밍 중 필터 자동 해제</b> — 선택 이벤트가 append/trim으로 버퍼에서
+    evict되면 §1.4 점프-해제가 오발동. <code>jumpNeedsFilterClear</code>에
+    isFreshJump 추가(df65795). 추가로 <b>thinking 카드(<code>th-</code> 합성 id)
+    클릭</b>도 같은 오발동을 일으켜 <code>isSyntheticStreamId</code> 가드로 합성
+    노드(th-·scaffold-·wf-·batch-·run-·end-·sc-·wfend-·task-list)를 점프-해제·
+    around 재조회에서 제외(431cfc8).
+    ⑤ <b>필터 값 발견성</b> — tool/model이 정확 문자열 입력만 받아 뭘 쓸지 알 수
+    없고 MCP 모아보기 불가. 세션 등장 도구(turns.tool_histogram 합산)·관측 모델
+    (usage.by_model)을 토글 목록으로, MCP는 서버별 그룹 원클릭 토글(a1fdf2b).
+    ⑥ <b>세션 길이 불가시</b> — span(first→last, 유휴 포함) 파생: 리스트 정렬
+    컬럼 + MetaStrip 병기, <code>formatDurationSpan</code>은 일 단위 롤업(5de1904).
+    부수: "컨텍스트 효율" 라벨이 판정성이라 "캐시 읽기 비중"으로 교정 + 툴팁에
+    "매 턴 prefix 재사용으로 구조적으로 높음, 비용 지렛대는 billed" 설명(56e4ebb) ·
+    span 컬럼 추가로 sources 태그 줄바꿈 → .prev 56→38ch(7eaca74).</p>
+    <p><b>머지-후 감사 산출(회귀 잠금):</b> §1 감사가 Important 2건을 확인 —
+    (a) <b>SCAN_CHUNK(1000) 다중 청크 경로 0회 테스트</b>: 기존 시드가 전부
+    &lt;1000행이라 resume 재질의 루프가 한 번도 실행 안 됨. 2,500행 시드로
+    DESC/ASC/count 세 경로의 경계 무누락·무중복을 잠그는
+    <code>window_scan_multi_chunk_no_loss_or_dup_at_boundaries</code> 추가.
+    작성 중 <b>after=None 첫 호출은 ASC 전진이 아니라 최신 앵커 DESC</b>라는
+    계약을 재확인(테스트 초안이 이 계약을 오해해 가짜 red — 인공 시작 커서로 정정).
+    (b) <b>Rust teammate origin 실-fixture 앵커 부재</b>: TS만 teammate_v01로
+    앵커돼 §1.3 "같은 real fixture 양쪽 앵커" 드리프트 가드가 반쪽이었다 —
+    <code>teammate_origin_real_fixture_invariants</code>로 미러. 통합 검증:
+    4-PR 통합 HEAD에서 vitest 839/839·cargo 113 result 전부 ok(유일 실패
+    transcript_tail 1건은 PoolTimedOut 부하성 flake — 격리 재실행 2/2 통과).</p>
+    <p><b>브라우저 smoke(라이브 :5173, 세션 31f1fb03·49k events·1d 0h):</b>
+    스파크라인 5카드 수납 · 리스트 span 컬럼("1d 0h"~"18d 0h")·정렬·sources 한 줄 ·
+    MetaStrip "1d 0h" · 필터 드롭다운 후보목록("이 세션의 도구/모델", "mcp:
+    claude-in-chrome (12)"·"mcp: serena (3)" 그룹) · serena 그룹 원클릭 → URL
+    f_tool 3종·"3건 매칭"·flat 스트림 · 모델 AND 결합 "0건 매칭" · 라이브 SSE
+    유입 중 필터 유지 · 배치 펼침·개별 카드 선택에도 필터 유지(selected와 f_tool
+    URL 공존) 확인.</p>
+    <p><b>알려진 잔여(Minor):</b> 필터 드롭다운(native details)이 바깥 클릭으로
+    닫히지 않아 연속 조작 시 화면을 가림 — 후속. 태그 기반 필터 축(사용자 요청)은
+    별도 작업(#24)으로 진행.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
