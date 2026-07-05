@@ -5986,6 +5986,132 @@ vitest: 69 passed
     ('project','user')</code> 필터 추가. 둘 다 TDD로 잠금.</p>
   </section>
 
+  <section id="session-filtering-2026-07-04">
+    <h2>세션 이벤트 4축 서버 필터 + 리플레이 FilterBar (PR-1, 스펙 §1)</h2>
+    <p><b>설계 요지:</b> <code>GET /v1/sessions/:id/events</code>에 8파라미터(kind·role·
+    origin·error·signal·verification·tool·model·q) 4축 필터를 추가 — 축끼리 AND,
+    축 내 CSV는 OR. SQL로 싸게 거를 수 있는 축(kind IN, tool_name)은 커서 스캔 SQL의
+    WHERE로 내리고, payload 파싱이 필요한 축(origin·q·error)과 파생 컨텍스트가 필요한
+    축(signal·verification)은 Rust 술어(<code>EventFilter::matches</code>)로 청크
+    스캔한다(<code>src/insight/event_filter.rs</code>, <code>src/db/repo_observed.rs</code>
+    커서 청크 스캔 창). 필터 활성 시에만 <code>matched_count</code>를 계산해 반환하고,
+    <code>around</code>×필터 조합은 400(백엔드가 두 파라미터의 동시 의미를 정의하지
+    않음 — 아래 프론트 방어 참조).</p>
+
+    <p><b>(a) role→kind 매핑 — payload 재파싱 없음:</b> <code>role</code> 축은 payload의
+    <code>role</code> 필드를 다시 파싱하지 않고 ingest가 이미 분해해 둔
+    <code>kind</code>로 판정한다(<code>Role::kind_str</code> — user→user_message,
+    assistant→assistant_message, system→system_summary). 별도 조회·역인덱스 없이
+    기존 <code>ObservedEvent.kind</code> 하나로 축을 완결시켜 signal/verification처럼
+    <code>FilterCtx</code>가 필요 없다.</p>
+
+    <p><b>(b) signal 축은 Rust 술어 — SQL IN 아님:</b> <code>signal=true</code> 축은
+    이 세션 시그널들의 <code>evidence_refs</code>(JSON 배열, bare event_id 문자열과
+    <code>{event_id}</code> 객체가 혼재하는 계약 — SessionDetailPage.tsx와 동일)를
+    <code>repo_signal::evidence_event_ids</code>가 세션당 1회 조회해
+    <code>HashSet&lt;String&gt;</code>으로 만들고(<code>FilterCtx.signal_evidence</code>),
+    스캔 중 이벤트별로 <code>ctx.signal_evidence.contains(&amp;ev.event_id)</code>로
+    막는다. <code>evidence_refs</code>가 JSON TEXT 컬럼(두 셰이프 혼재)이라 SQL
+    <code>event_id IN (SELECT …)</code> 서브쿼리로 직접 표현할 수 없어 — 필터 축마다
+    "SQL WHERE 대 Rust 술어"를 축의 데이터 형태가 결정한다(균일 규칙이 아님).</p>
+
+    <p><b>(c) origin_of — TS/Rust 의도적 이중화 + same-fixture 앵커(§1.3):</b>
+    <code>src/insight/event_filter.rs::origin_of</code>는
+    <code>webui/src/components/replay/stream/messageOrigin.ts</code>의 결정론 이식이다
+    (마커 우선순위: command → command-output → system → notification → teammate →
+    skill-scaffold → isMeta → human). 분류 로직의 단일화(백엔드로만 이관)는 이번
+    범위 밖 — 두 구현은 같은 동결 실 표본
+    <code>tests/fixtures/transcripts/real/message_origin_v01.jsonl</code>로 양쪽에서
+    앵커돼(Rust: <code>origin_real_fixture_invariants</code>, TS:
+    <code>messageOrigin.test.ts</code> "frozen real records") 드리프트가 테스트로 잡힌다.
+    이식 중 발견한 편차: TS의 teammate 마커는 <b>복합 패턴</b>
+    (<code>/^\s*(?:Another Claude session sent a message:\s*)?&lt;teammate-message[\s&gt;]/</code>)
+    인데 최초 Rust 이식은 이를 "접두문"과 "마커"의 독립 OR로 잘못 단순화해
+    <code>&lt;teammate-messages&gt;foo</code>(마커 뒤 문자가 <code>s</code>)류를 오탐했다 —
+    <code>is_teammate_message</code>로 복합 패턴 그대로 재구현해 수정(커밋 e6871ea).
+    <code>docs/plans/2026-07-04-pr1-session-filtering.md</code>의
+    <code>has_scaffold_marker</code> 예시 코드는 이 수정 전 단순 목록판이라 실제
+    구현과 다르다 — 계획 문서는 설계 의도 기록이고 SSOT는 커밋된 소스임을
+    재확인(문서 자체는 손대지 않음 — 계획 문서는 스냅샷이지 append-only 원장이
+    아니므로 이 편차는 여기 기록으로 충분).</p>
+
+    <p><b>(d) flat 모드 채택 · 그룹 골격 유지 기각(스펙 §1.4):</b> 필터가 하나라도
+    활성이면 <code>buildStreamModel(events, metricsByReq, tasks, { flat: true })</code>가
+    sidechain-group·batch-group·workflow-group·scaffold-group 네 그룹 타입의 조립
+    단계를 건너뛰고 매칭 이벤트를 시간순 평면 카드로 낸다(<code>activity-run</code>·
+    message·thinking·종료카드는 flat에서도 유지 — 이들은 메인 스파인 규칙이지 필터로
+    비활성화되는 "그룹"이 아니다). <b>부분 매칭 그룹의 골격(스켈레톤) 유지는 접힘
+    상태·빈 그룹 처리 복잡도 때문에 기각</b>(2026-07-04) — 필터링된 버퍼는 그룹의
+    한 부분집합만 담을 수 있어 그룹 헤더(개수·소요시간 요약)가 실제 매칭 수와
+    어긋나거나 그룹이 통째로 비는 경우를 감당해야 하는데, 그 UI 상태 조합이 값을
+    더하지 못한다고 판단했다. 대신 매칭된 서브에이전트 내부 이벤트는
+    <code>⑂ 서브에이전트 내부</code> 배지(<code>stream.flatSidechainBadge</code>,
+    <code>sidechain</code>/<code>is_sidechain</code> 플래그를 그대로 재사용)로 맥락만
+    표시한다.</p>
+
+    <p><b>(e) 점프 규칙 — 버퍼 존재만으로 결정(서버 재질의 없음):</b>
+    <code>jumpNeedsFilterClear(filterActive, targetInBuffer) = filterActive &amp;&amp;
+    !targetInBuffer</code>(순수 함수, <code>filterState.ts</code>)가 전부다. 필터가
+    활성인 버퍼는 정의상 매칭 이벤트만 담으므로, 점프 대상이 <b>버퍼 안에 있으면
+    이미 매칭이라 그대로 스크롤</b>하고, <b>버퍼 밖이면 "필터에 안 걸려서 없다"와
+    "아직 그 페이지를 안 불러왔다"를 클라이언트만으로 구별할 수 없으므로 무조건
+    필터를 해제</b>한다(서버에 "이 event_id가 매칭되는가"를 재질의하는 별도 API
+    호출 없이 결정론적으로 처리) — 필터 해제 → <code>filterKey</code> 변경 →
+    <code>useSessionWindow</code> 버퍼 리셋 → 같은 점프 effect가 재실행돼
+    (이제 무필터) <code>loadAround</code>로 폴스루한다. UI 알림
+    (<code>filter.cleared.byJump</code>)은 4초 후 자동 소거(타이머는 ref로 관리 —
+    재점프 시 이전 타이머를 취소해 스택 방지, 언마운트 시 정리).</p>
+
+    <p><b>(f) 딥링크×필터 방어 폴백:</b> 백엔드가 <code>around</code>×필터 조합을
+    지원하지 않으므로(400), <code>useSessionWindow</code>가 <code>initialAround</code>
+    (딥링크 <code>?selected=</code>)와 활성 필터를 동시에 받고 마운트되면 — <b>필터가
+    이긴다</b>: around-윈도우를 버리고 필터된 tail을 로드한다(그렇지 않으면 스트림이
+    이미 flat/필터 모드로 전환된 상태에서 무필터 around 윈도우를 그리는 모순이
+    생긴다). 이후 필터가 해제되면(점프 규칙 (e) 또는 사용자 조작) 같은
+    <code>doInitial</code> effect가 <code>filterKey</code> 변경으로 재실행돼 이번엔
+    around 분기로 떨어진다.</p>
+
+    <p><b>(g) list_session_window_kinds 제거:</b> 기존 <code>?kind=</code> 전용 커서
+    윈도우 함수(dogfood 2026-06-12)는 4축 필터 스캔 경로로 완전히 흡수돼
+    삭제됐다(커밋 91e7baa) — <code>kind</code>는 이제 <code>EventFilter</code>의 한
+    축일 뿐, 별도 SQL 함수·별도 커서 계약을 유지할 이유가 없다. 기존
+    <code>tests/session_events_kind_filter.rs</code>는 새 필터 경로로 무수정 통과해
+    계약이 보존됐음을 확인했다.</p>
+
+    <p><b>브라우저 스모크가 잡은 결함(2026-07-05, 스크래치 serve 프로덕션 빌드 vs
+    <code>vite dev</code> 대조로 확진):</b> 필터 활성 중 시그널 카드를 점프하면
+    (점프 규칙 (e)) 필터가 해제되고 <code>useSessionWindow.doInitial</code>이
+    <code>initialAround</code> 분기로 재진입하는데, 이 분기가
+    <code>setMatchedCount</code>를 호출하지 않아 직전 필터된 tail의
+    <code>matched_count</code>(예: "985건 매칭")가 필터 해제 후에도 계속 렌더링됐다.
+    이 분기는 자기 가드(<code>!filter</code>)로 항상 무필터이므로
+    <code>setMatchedCount(null)</code>을 추가해 고정(회귀 테스트:
+    <code>useSessionWindow.test.tsx</code> "clears a stale matchedCount…"). 진단 중
+    <code>npx vite --port</code> 개발 서버(React StrictMode 이중 effect 호출)에서는
+    초기 <code>tool=Bash</code> 요청이 두 번 발화해 이 중 하나가 around 응답보다
+    늦게 도착하면 값이 다시 985로 돌아오는 것처럼 보이는 <b>개발 전용 경합</b>도
+    관찰됐다 — 같은 시나리오를 <code>cargo build</code> 산출물을 서빙하는 스크래치
+    serve(:7999, StrictMode 이중 호출 없음)로 재현했더니 매칭 수·점프 알림·
+    DetailPanel 선택이 전부 정확했다. 즉 수정은 여전히 올바르고 필요하지만("이
+    분기는 정의상 무필터"라는 불변식을 명시적으로 지키는 것), 그 증상의 "계속
+    잔존"은 dev 서버 아티팩트였다 — 두 서빙 모드(vite dev / 임베디드 프로덕션
+    dist)를 모두 태운 뒤에야 원인을 분리할 수 있었다는 방법론 기록.</p>
+
+    <p><b>개선 루프(이 PR, 재빌드된 바이너리 스크래치 serve로 재확인):</b> untagged-bash
+    스캔에서 신규 <code>jobs</code>(POSIX 셸 빌트인, 백그라운드 잡 목록 — ps/uptime
+    동족 read.proc)와 <code>env</code>(POSIX 유틸리티, nohup/time 동형의 투명
+    wrapper)를 사전에 추가(TDD, <code>src/insight/event_tags.rs</code>). 나머지
+    6건(vite·splitrunbyphase·a299522d·determine_splits·doc-tests·expect)은 전부
+    실행이 아닌 토크나이저 파편이거나(따옴표 안 <code>|</code>/<code>;</code>가
+    quote-naive 분리기에 새는 grep·echo 패턴 문자열) 사용자 개인 dotfiles 함수 호출
+    (<code>determine_splits</code> — <code>~/.local/bin/layout_thesharp.sh</code>가
+    정의) 이라 <code>scripts/tagging-gate-baseline.json</code>에 사유와 함께 보류.
+    unidentified-plugins 0건. unknown-verification은 신규 actionable 패턴 없음(전량
+    <code>sampleContentTail</code> 빈 문자열 — 구조적 바닥, 기존
+    <code>#verification-tsc-2026-07-04</code> 종결 상태와 동일 클래스). 게이트
+    exit 0.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
