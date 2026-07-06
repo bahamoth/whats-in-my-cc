@@ -21,5 +21,6 @@ node_modules/
 # serena cache
 .serena/
 
-# dogfood
-dogfood/
+# dogfood 원장은 git 추적 대상 — session-retrospect 스킬의 제안 원장이
+# repo 기억을 담당한다 (2026-07-06 정정: 2026-06-23 위생 커밋의 ignore가
+# 새 원장만 조용히 누락시켰다. 기존 원장 2건은 이미 추적 중이었음).
