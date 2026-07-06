@@ -1,16 +1,17 @@
 {
+  // vite.config.ts의 타입체크 전용 프로젝트 (현행 create-vite 템플릿 관례).
+  // vite는 .ts 설정을 직접 로드하므로 js 산출물이란 단계 자체가 없다 —
+  // noEmit이 그 사실을 강제한다. 과거 composite(emit 강제)가 tsc -b마다
+  // vite.config.js를 소스 옆에 emit해 vite 설정 탐색(.js 우선)을 가로챘다
+  // (2026-07-06 대시보드 렌더 실사고; 알람은 noStaleViteConfig.test.ts).
   "compilerOptions": {
-    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "skipLibCheck": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
     "strict": true,
-    // composite는 emit을 강제한다 — 목적지를 소스 옆이 아닌 ignore된 캐시로
-    // 치운다. vite.config.ts 옆에 emit된 vite.config.js는 vite 설정 탐색
-    // (.js 우선)을 가로채 alias 없는 낡은 설정으로 기동시킨다
-    // (2026-07-06 대시보드 렌더 실사고; 알람은 noStaleViteConfig.test.ts).
-    "outDir": "node_modules/.tmp/tsconfig-node"
+    "noEmit": true
   },
   "include": ["vite.config.ts"]
 }

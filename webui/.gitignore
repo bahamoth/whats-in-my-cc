@@ -3,9 +3,7 @@ dist/
 .vite/
 *.log
 *.tsbuildinfo
-# tsc 오발 emit 산출물 — 커밋 금지 대상이라 ignore한다. 단 존재만으로 위험:
-# vite는 .js 설정을 .ts보다 먼저 집어 alias 없는 낡은 설정으로 조용히
-# 기동한다(2026-07-06 대시보드 렌더 실사고). 존재 감지는
-# src/__tests__/noStaleViteConfig.test.ts 게이트가 맡는다.
-vite.config.js
-vite.config.d.ts
+# vite.config.js/.d.ts를 여기 넣지 않는다 — vite는 .ts 설정을 직접 읽으므로
+# js 산출물이란 단계 자체가 없고(전 tsconfig noEmit), 생긴다면 비정상이라
+# git status에 보여야 한다. 커밋 유입은 noStaleViteConfig.test.ts 게이트가
+# CI에서 차단한다 (2026-07-06 대시보드 렌더 실사고).
