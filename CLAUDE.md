@@ -51,6 +51,13 @@ schema-versioning·deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html` �
 - **Real-data anchoring**: 외부 source(transcript JSONL·OTLP·hook stdin·git2 등)의 attribute
   의미 주장은 (a) 공식 docs 인용, 또는 (b) `tests/fixtures/**/real/`에 동결한 실 payload의
   invariant assertion으로 잠근다. 둘 다 없는 가정은 적지 않는다. 표본 1건으로 일반화하지 않는다.
+- **검증 명령 출력 위생** (R-20260706-3): 테스트·빌드·린트 실행은 도구의 요약 줄이
+  tool_result에 살아남게 한다 — 출력을 `grep`/`head`/`tail`로 거르지 않는다(`2>&1`은 무방).
+  성공 시 출력이 없는 도구(`cargo fmt`, `tsc --noEmit`)는 마지막에 `echo EXIT=$?` 한
+  형식만 덧붙인다(임의 마커 금지 — 파서 SSOT: `verification_run.rs::echoed_exit_status`).
+- **무거운 검증은 백그라운드** (R-20260706-4): 1분+ 걸리는 검증(`cargo test` 전량,
+  `clippy --all-targets`, 대형 vitest)은 run_in_background로 돌리고 완료 통지로 회수한다 —
+  포그라운드 대기는 타임아웃(결과 unknown)과 대기 독촉을 만든다(2026-07-06 회고, 독촉 4턴).
 - **UI는 브라우저 smoke 후 commit**: WebUI 변경은 `cargo build`+`vitest` 통과만으론 미완.
   `wimcc serve` + 브라우저 navigation·시각 검증까지 끝낸 뒤 commit.
 - **툴팁 카피 규칙(강제)**: `.tip`로 끝나는 모든 i18n 키에 적용 — ① 문장·항목 단위
