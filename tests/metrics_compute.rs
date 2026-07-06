@@ -361,6 +361,51 @@ async fn metrics_separates_verification_unknown_from_measured() {
     // not_executed(미실행)는 각각 별도 축으로 분리 노출.
 }
 
+/// 2026-07-06 실사고 재현 — serve 기동 backfill·CLI 재ingest는 observed_event를
+/// 바꾸지 않은 채 verification_run·signal rows를 재계산한다(INSERT OR REPLACE).
+/// 종전 캐시 키(event_count, last_observed_at)는 이를 유효 캐시로 오판해 낡은
+/// 집계를 무기한 반환했다 — 닫힌 세션 31f1fb03에서 `/metrics` unknown 207/541
+/// vs 테이블 실측 43/362가 라이브로 관측됨. 캐시 히트여도 사이드테이블 파생
+/// 필드는 신선해야 한다.
+#[tokio::test]
+async fn side_table_rebuild_reflected_despite_metrics_cache() {
+    let pool = test_pool().await;
+    let sid = "s_metrics_cache_rebuild";
+    let run_id = repo_runs::start(&pool).await.unwrap();
+    seed_event(&pool, &run_id, sid, "tc_cr1", EventKind::ToolCall).await;
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vr_cr1", "unknown"))
+        .await
+        .unwrap();
+
+    let before = compute_session_metrics(&pool, sid).await.unwrap();
+    assert_eq!(before.verification_total, 1);
+    assert_eq!(before.verification_unknown, 1);
+
+    // 재계산 시뮬레이션: 같은 row가 unknown→passed로 재기록(OR REPLACE,
+    // observed_event 불변) + 새 파서가 추가 인식한 run 1건 + 새 signal 1건.
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vr_cr1", "passed"))
+        .await
+        .unwrap();
+    repo_verification_run::insert(&pool, &make_vrun(sid, "vr_cr2", "passed"))
+        .await
+        .unwrap();
+    repo_signal::insert(&pool, &make_signal(sid, "sig_cr1", "tool_failure"))
+        .await
+        .unwrap();
+
+    let after = compute_session_metrics(&pool, sid).await.unwrap();
+    assert_eq!(
+        after.verification_unknown, 0,
+        "재계산된 테이블이 곧 응답이어야 한다 (stale 캐시 금지)"
+    );
+    assert_eq!(after.verification_passed, 2);
+    assert_eq!(after.verification_total, 2);
+    assert_eq!(
+        after.tool_failure_count, 1,
+        "signal 파생 필드도 신선해야 한다"
+    );
+}
+
 /// payload를 지정해 tool_result 이벤트를 시드한다 (disposition 카운트용).
 async fn seed_tool_result_with_content(
     pool: &sqlx::SqlitePool,

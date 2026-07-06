@@ -169,8 +169,16 @@ fn num_attr(attrs: &serde_json::Value, key: &str) -> Option<f64> {
 // 6003-이벤트 세션 232ms/콜, series(18세션) 1.2s — B-1 대시보드가 series를
 // 인터랙티브 경로로 만들어 호출 빈도 게이트가 열렸다. 키는
 // (event_count, last_observed_at): append-only ingest에서 데이터 변화는
-// 반드시 키를 바꾼다. detector 재구성만으로 signal이 바뀌는 경로는 새
-// 이벤트 flush 또는 프로세스 재시작을 동반한다(인메모리라 함께 사라짐).
+// 반드시 키를 바꾼다.
+//
+// R-20260706-1 정정: 종전 가정("detector 재구성은 새 이벤트 flush 또는 프로세스
+// 재시작을 동반")은 serve 기동 backfill·CLI 재ingest 경로에서 깨진다 —
+// observed_event는 불변(멱등 upsert)인 채 verification_run·signal rows만
+// INSERT OR REPLACE로 재계산돼 키가 스테일을 감지하지 못했다 (2026-07-06
+// 실사고: 닫힌 세션 /metrics unknown 207/541 vs 테이블 실측 43/362가 무기한
+// 지속). 캐시는 비싼 이벤트 스캔 파생값만 담당하고, 사이드테이블(signal·
+// verification_run·usage_facet) 파생 필드는 히트 시에도 매 호출 재계산한다
+// (apply_side_table_metrics — 세션당 수백 행 규모 소형 쿼리 3개).
 
 /// 세션별 캐시 엔트리 — event_count, last_observed_at, 계산 결과.
 type CacheEntry = (i64, String, SessionMetrics);
@@ -192,11 +200,18 @@ pub async fn compute_session_metrics(
     // totals 0.035s/500세션). 세션이 없으면 기존과 같이 빈 집계 경로.
     let key = repo_observed::session_summary(pool, session_id).await?;
     if let Some((count, _first, last)) = &key {
-        if let Some((c, l, m)) = METRICS_CACHE.lock().unwrap().get(session_id) {
-            if c == count && l == last {
-                CACHE_HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                return Ok(m.clone());
-            }
+        let cached = {
+            let cache = METRICS_CACHE.lock().unwrap();
+            cache
+                .get(session_id)
+                .and_then(|(c, l, m)| (c == count && l == last).then(|| m.clone()))
+        };
+        if let Some(mut m) = cached {
+            CACHE_HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            // 사이드테이블 파생 필드는 캐시를 신뢰하지 않는다 — backfill/재ingest가
+            // 이벤트 불변인 채 rows를 재계산할 수 있다 (모듈 상단 R-20260706-1).
+            apply_side_table_metrics(pool, session_id, &mut m).await?;
+            return Ok(m);
         }
     }
     let computed = compute_session_metrics_uncached(pool, session_id).await?;
@@ -217,20 +232,13 @@ pub async fn compute_session_metrics(
 ///
 /// # Repo functions used
 /// - `repo_observed::list_session(pool, id, 100_000)` — exists and matches.
-/// - `repo_signal::list_by_session(pool, id)` — exists (Plan 1).
-///   `SignalRow.detector` is the correct field name.
-/// - `repo_verification_run::list_session(pool, id)` — exists.
-///   `VerificationRunRow.status` is "passed"/"failed"/"unknown".
+/// - 사이드테이블(signal·verification_run·usage_facet) 파생 필드는
+///   `apply_side_table_metrics`가 채운다 — 캐시 히트 경로와 공유.
 async fn compute_session_metrics_uncached(
     pool: &SqlitePool,
     session_id: &str,
 ) -> Result<SessionMetrics> {
     let events = repo_observed::list_session(pool, session_id, 100_000).await?;
-    let signals = repo_signal::list_by_session(pool, session_id).await?;
-    let vruns = repo_verification_run::list_session(pool, session_id).await?;
-    // 토큰 사용량 — usage facet 세션 합계(2026-07-04). 할당량은 관측면에 없다.
-    let usage = crate::db::repo_usage_facet::session_aggregate(pool, session_id).await?;
-    let cost = crate::insight::pricing::estimate_session_cost(&usage.by_model);
 
     let tool_call_total = events
         .iter()
@@ -353,20 +361,6 @@ async fn compute_session_metrics_uncached(
         }
     }
 
-    let mut detector_firing: BTreeMap<String, i64> = BTreeMap::new();
-    for s in &signals {
-        *detector_firing.entry(s.detector.clone()).or_insert(0) += 1;
-    }
-    let tool_failure_count = *detector_firing.get("tool_failure").unwrap_or(&0);
-    let context_bloat_count = *detector_firing.get("context_bloat").unwrap_or(&0);
-
-    let verification_total = vruns.len() as i64;
-    let verification_passed = vruns.iter().filter(|v| v.status == "passed").count() as i64;
-    let verification_failed = vruns.iter().filter(|v| v.status == "failed").count() as i64;
-    let verification_unknown = vruns.iter().filter(|v| v.status == "unknown").count() as i64;
-    let verification_not_executed =
-        vruns.iter().filter(|v| v.status == "not_executed").count() as i64;
-
     // §3d — p50 조립. 중앙값은 기존 usage-baseline quantile 계산(DRY)을 재사용.
     fn p50_stat(values: Vec<f64>) -> P50Stat {
         let n = values.len() as i64;
@@ -380,16 +374,16 @@ async fn compute_session_metrics_uncached(
         cost_usd: p50_stat(cost_seen.values().copied().collect()),
     };
 
-    Ok(SessionMetrics {
+    let mut m = SessionMetrics {
         session_id: session_id.to_string(),
         tool_call_total,
-        tool_failure_count,
-        verification_total,
-        verification_passed,
-        verification_failed,
-        verification_unknown,
-        verification_not_executed,
-        context_bloat_count,
+        tool_failure_count: 0,
+        verification_total: 0,
+        verification_passed: 0,
+        verification_failed: 0,
+        verification_unknown: 0,
+        verification_not_executed: 0,
+        context_bloat_count: 0,
         tool_user_rejected,
         tool_policy_denied,
         tool_cancelled,
@@ -398,16 +392,59 @@ async fn compute_session_metrics_uncached(
         turn_duration_count,
         api_error_count,
         api_rate_limit_count,
-        input_tokens: usage.input_tokens,
-        output_tokens: usage.output_tokens,
-        cache_read_input_tokens: usage.cache_read_input_tokens,
-        cache_creation_input_tokens: usage.cache_creation_input_tokens,
-        estimated_cost_usd: cost.total_usd,
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+        estimated_cost_usd: 0.0,
         compact_boundary_count,
         away_summary_count,
         tool_result_truncated_count,
         user_interruption_count,
-        detector_firing,
+        detector_firing: BTreeMap::new(),
         llm_request_p50,
-    })
+    };
+    apply_side_table_metrics(pool, session_id, &mut m).await?;
+    Ok(m)
+}
+
+/// 사이드테이블(signal·verification_run·usage_facet) 파생 필드를 채운다.
+///
+/// uncached 계산과 캐시 히트 경로가 공유한다 — backfill/재ingest가
+/// observed_event 불변인 채 rows를 재계산해도(INSERT OR REPLACE) 이 필드들은
+/// 항상 테이블 현재 상태를 반영한다 (R-20260706-1, 2026-07-06 실사고).
+/// 비용: 세션당 수백 행 규모 소형 쿼리 3개 — 이벤트 스캔(232ms/6k행)과 달리
+/// 캐시 없이 감당 가능.
+async fn apply_side_table_metrics(
+    pool: &SqlitePool,
+    session_id: &str,
+    m: &mut SessionMetrics,
+) -> Result<()> {
+    let signals = repo_signal::list_by_session(pool, session_id).await?;
+    let vruns = repo_verification_run::list_session(pool, session_id).await?;
+    // 토큰 사용량 — usage facet 세션 합계(2026-07-04). 할당량은 관측면에 없다.
+    let usage = crate::db::repo_usage_facet::session_aggregate(pool, session_id).await?;
+    let cost = crate::insight::pricing::estimate_session_cost(&usage.by_model);
+
+    let mut detector_firing: BTreeMap<String, i64> = BTreeMap::new();
+    for s in &signals {
+        *detector_firing.entry(s.detector.clone()).or_insert(0) += 1;
+    }
+    m.tool_failure_count = *detector_firing.get("tool_failure").unwrap_or(&0);
+    m.context_bloat_count = *detector_firing.get("context_bloat").unwrap_or(&0);
+    m.detector_firing = detector_firing;
+
+    m.verification_total = vruns.len() as i64;
+    m.verification_passed = vruns.iter().filter(|v| v.status == "passed").count() as i64;
+    m.verification_failed = vruns.iter().filter(|v| v.status == "failed").count() as i64;
+    m.verification_unknown = vruns.iter().filter(|v| v.status == "unknown").count() as i64;
+    m.verification_not_executed =
+        vruns.iter().filter(|v| v.status == "not_executed").count() as i64;
+
+    m.input_tokens = usage.input_tokens;
+    m.output_tokens = usage.output_tokens;
+    m.cache_read_input_tokens = usage.cache_read_input_tokens;
+    m.cache_creation_input_tokens = usage.cache_creation_input_tokens;
+    m.estimated_cost_usd = cost.total_usd;
+    Ok(())
 }
