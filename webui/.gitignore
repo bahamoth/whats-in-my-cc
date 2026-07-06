@@ -3,5 +3,7 @@ dist/
 .vite/
 *.log
 *.tsbuildinfo
-vite.config.js
-vite.config.d.ts
+# vite.config.js/.d.ts를 여기 넣지 말 것 — tsc가 실수로 emit한 산출물을
+# ignore로 숨기면 vite가 .ts보다 .js 설정을 먼저 집어 alias 없는 낡은
+# 설정으로 조용히 기동한다(2026-07-06 대시보드 렌더 실사고). tsconfig
+# noEmit:true가 생성을 막고, 생기면 git status에 보여야 즉시 지운다.
