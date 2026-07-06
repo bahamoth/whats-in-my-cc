@@ -59,8 +59,10 @@ async fn extracts_verification_runs_from_real_bash_fixture() {
     //   → Tier-4 estimated → Failed.
     // - Run 2 (cargo test 2>&1 | tail -40): same content format with "FAILED"
     //   + "error: test failed" → Tier-4 estimated → Failed.
-    // - Run 3 (cargo build --release): content is "Compiled … Finished" only
-    //   → no failure pattern → Unknown.
+    // - Run 3 (cargo build --release): content is "Compiled … Finished" only —
+    //   2026-07-06 4차 루프(R-20260706-2)까지는 Unknown이었으나, build는
+    //   Finished 도달 = 성공이 결정론적이라 Passed(estimated)로 승격한다
+    //   (실패한 빌드는 error[…] 후 중단돼 Finished를 찍지 못한다).
     //
     // Pre-Plan-6 all 3 were "passed" (is_error=false) — that was the bug.
     let failed = runs.iter().filter(|r| r.status == "failed").count();
@@ -69,10 +71,16 @@ async fn extracts_verification_runs_from_real_bash_fixture() {
         failed, 2,
         "2 real-fixture test runs have failure content (Tier-4 estimated)"
     );
+    assert_eq!(unknown, 0, "build Finished 승격 후 unknown은 없어야 한다");
+    let build = runs
+        .iter()
+        .find(|r| r.command_kind == "build")
+        .expect("build run must exist");
     assert_eq!(
-        unknown, 1,
-        "1 real-fixture build run has no failure content → unknown"
+        build.status, "passed",
+        "cargo build Finished → passed (4차 루프)"
     );
+    assert_eq!(build.status_provenance.as_deref(), Some("estimated"));
 
     // Validate common fields on every run
     for r in &runs {
@@ -89,7 +97,7 @@ async fn extracts_verification_runs_from_real_bash_fixture() {
             r.source
         );
         assert_eq!(r.schema_version, "verification_run.v1");
-        assert_eq!(r.parser_version, "verification_run@v1");
+        assert_eq!(r.parser_version, "verification_run@v1.1");
     }
 
     // Verify command kinds present
