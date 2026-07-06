@@ -357,13 +357,16 @@ async fn recompute_session(pool: &SqlitePool, session_id: &str) -> Result<()> {
     // Slice-11 — extract verification runs for this session and persist
     // them before the insight pipeline reads them (the pipeline's view
     // loads verification_run + diff_hunk side-tables).
+    // 산출은 세션 단위 원자 교체(replace_session) — 스트리밍 중 tool_call만
+    // 있던 슬라이스의 행(trigger=call)은 result 도착 후 trigger=result로
+    // vr_id가 달라져 insert(PK REPLACE)로는 안 지워진다(2026-07-06 실사고,
+    // tests/ingest_streaming_verification.rs).
     if !session_id.is_empty() {
         let evs = repo_observed::list_session(pool, session_id, 100_000).await?;
-        let vr_records = verification_run::extract_verification_runs(&evs);
-        for rec in vr_records {
-            repo_verification_run::insert(
-                pool,
-                &repo_verification_run::VerificationRunRow {
+        let vr_rows: Vec<repo_verification_run::VerificationRunRow> =
+            verification_run::extract_verification_runs(&evs)
+                .into_iter()
+                .map(|rec| repo_verification_run::VerificationRunRow {
                     verification_run_id: rec.verification_run_id,
                     schema_version: rec.schema_version.to_string(),
                     session_id: rec.session_id,
@@ -382,10 +385,9 @@ async fn recompute_session(pool: &SqlitePool, session_id: &str) -> Result<()> {
                     failure_summary: rec.failure_summary,
                     raw_event_id: rec.raw_event_id,
                     parser_version: rec.parser_version.to_string(),
-                },
-            )
-            .await?;
-        }
+                })
+                .collect();
+        repo_verification_run::replace_session(pool, session_id, &vr_rows).await?;
     }
 
     // insight-redesign #1 — populate usage_facet from raw transcript lines.

@@ -70,6 +70,60 @@ pub async fn insert(pool: &SqlitePool, row: &NewVerificationRun) -> Result<()> {
     Ok(())
 }
 
+/// recompute 경로 전용 — 세션의 추출 산출 전체를 한 트랜잭션으로 교체한다.
+///
+/// 스트리밍 ingest에서 tool_call만 도착한 슬라이스의 행은 trigger=tool_call
+/// 이벤트인데, result 도착 후 재추출 행은 trigger=tool_result라 vr_id
+/// (sha256(session||trigger||started_at))가 달라져 `insert`(PK REPLACE)로는
+/// 이전 고아 행이 지워지지 않는다 — 2026-07-06 실사고: 세션 bebd8197의
+/// unknown 36/36건이 ended_at=None 고아였고 `verification=unknown` 필터에
+/// 완료된 run의 tool_call 이벤트가 유령 매칭됐다. 추출은 세션 전체 이벤트
+/// 기준 결정론이므로 delete+insert가 곧 현재 진실이다.
+pub async fn replace_session(
+    pool: &SqlitePool,
+    session_id: &str,
+    rows: &[NewVerificationRun],
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM verification_run WHERE session_id = ?")
+        .bind(session_id)
+        .execute(&mut *tx)
+        .await?;
+    for row in rows {
+        sqlx::query(
+            "INSERT OR REPLACE INTO verification_run(
+                verification_run_id, schema_version, session_id, source, command,
+                command_kind, trigger_event_id, trigger_tool_use_id, status,
+                status_provenance,
+                started_at, ended_at, exit_code, failure_summary,
+                raw_event_id, parser_version, detection_basis, status_basis)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        )
+        .bind(&row.verification_run_id)
+        .bind(&row.schema_version)
+        .bind(&row.session_id)
+        .bind(&row.source)
+        .bind(&row.command)
+        .bind(&row.command_kind)
+        .bind(&row.trigger_event_id)
+        .bind(&row.trigger_tool_use_id)
+        .bind(&row.status)
+        .bind(&row.status_provenance)
+        .bind(&row.started_at)
+        .bind(&row.ended_at)
+        .bind(row.exit_code.map(|x| x as i64))
+        .bind(&row.failure_summary)
+        .bind(&row.raw_event_id)
+        .bind(&row.parser_version)
+        .bind(&row.detection_basis)
+        .bind(&row.status_basis)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 /// List all verification runs for a session, ordered by `started_at`.
 pub async fn list_session(pool: &SqlitePool, session_id: &str) -> Result<Vec<VerificationRunRow>> {
     let rows = sqlx::query(

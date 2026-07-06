@@ -118,7 +118,7 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
         // considered, not just the paired tool_result.
         // is_error is intentionally ignored for status — it reflects only
         // whether the tool executor accepted the call, not the command exit.
-        let resolved = resolve_outcome(evs, tid);
+        let resolved = discard_pipe_masked(resolve_outcome(evs, tid), m.status_basis);
 
         // Tier-4: for verification kinds (test/build/lint/format), when the
         // chain returns Unknown, apply content rules (estimated).
@@ -210,13 +210,13 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
             // status_basis keeps the disposition name as the reason.
             ("not_executed", "unknown".to_string())
         } else if m.status_basis == "piped" {
-            // piped masks the shell exit code (no measured-from-exit), BUT the
-            // command's own deterministic summary may survive the pipe (tier-4
-            // estimated), or an OTLP/hook signal may exist (measured). Keep that
-            // resolution; only force unknown when nothing determined it. The
-            // status_basis above stays "piped" so the masking is transparent.
-            // (Dogfooding fix 2026-06-11; relaxes the prior unconditional
-            // piped→unknown of design §6.2.)
+            // piped masks the shell exit code — exit-파생 measured 신호(OTLP
+            // success/hook exit/"Exit code N")는 위 discard_pipe_masked가 이미
+            // 버렸다(2026-07-06). 남는 판정은 파이프를 살아남은 도구 자체의
+            // 결정론 요약(tier-4 estimated) 또는 <tool_use_error>(measured)뿐
+            // 이며 그대로 유지한다; 아무것도 판정 못 했으면 unknown. status_basis
+            // 는 "piped"로 남아 마스킹이 투명하다. (Dogfooding fix 2026-06-11;
+            // relaxes the prior unconditional piped→unknown of design §6.2.)
             if status == "unknown" {
                 ("unknown", "unknown".to_string())
             } else {
@@ -313,7 +313,11 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
         let vr_id = derive_id(&ev.session_id, trigger_event_id, &started_at);
         // Hook branch: apply resolve_outcome with all session events.
         // Hook post_tool_use carries exit_code → measured if present.
-        let hook_resolved = resolve_outcome(evs, ev.tool_use_id.as_deref().unwrap_or(""));
+        // Bash 브랜치와 동일한 piped 가드 — exit-파생 신호는 파이프에 마스킹된다.
+        let hook_resolved = discard_pipe_masked(
+            resolve_outcome(evs, ev.tool_use_id.as_deref().unwrap_or("")),
+            m.status_basis,
+        );
         let hook_status = match hook_resolved.status {
             OutcomeStatus::Passed => "passed",
             OutcomeStatus::Failed => "failed",
@@ -403,6 +407,27 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
     }
 
     out
+}
+
+/// 비-pager 파이프(status_basis="piped")에 마스킹된 exit-파생 measured 신호를
+/// 버린다. bash 매뉴얼 §3.7.5: 파이프라인의 exit status는 마지막 명령의 것 —
+/// `cargo test … | grep … | head`의 OTLP success/hook exit/"Exit code N"
+/// prepend는 전부 head(꼬리 stage)의 exit이지 검증 도구의 결과가 아니다.
+/// Unknown으로 되돌리면 이어지는 Tier-4 content 규칙(도구 자체의 결정론 요약)이
+/// 판정하고, 요약도 없으면 unknown으로 남는다(추측 금지). `<tool_use_error>`는
+/// exit와 무관한 하니스 실행-실패 채널이라 유지한다.
+/// 실사고 2026-07-06: vr_30c7c2a20327e4d6 — content "test result: FAILED"인데
+/// OTLP success=true(head exit 0)를 신뢰해 passed/measured로 오판. real fixture:
+/// tests/fixtures/observed/real/verification_piped_otlp_v01.json.
+fn discard_pipe_masked(
+    resolved: crate::insight::outcome::Outcome,
+    status_basis: &str,
+) -> crate::insight::outcome::Outcome {
+    if status_basis == "piped" && resolved.basis.exit_derived() {
+        crate::insight::outcome::Outcome::UNKNOWN
+    } else {
+        resolved
+    }
 }
 
 /// Derive a deterministic `verification_run_id` from session + trigger + time.
