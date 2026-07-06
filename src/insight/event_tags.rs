@@ -303,6 +303,18 @@ static CHEZMOI_SUBS: &[(&str, &str)] = &[
 ];
 /// volta — Node 툴체인 관리 (rustup install 동족, tagging loop 2026-07-04).
 static VOLTA_SUBS: &[(&str, &str)] = &[("install", "write.deps")];
+/// docker — 컨테이너 멀티플렉서 (tagging loop 2026-07-06). compose는 다중
+/// 컨테이너 앱 실행 관리(공식 docs: "Compose is a tool for defining and
+/// running multi-container applications") — 관측 표본(세션 c78d40d3, n=6)은
+/// 전부 `compose up -d`(서비스 기동, open/`wimcc serve`의 run.proc 동족).
+/// 3단계 조회형 op(logs/ps)·그 외 서브커맨드(build/rmi 등)는 미관측 —
+/// unmatched로 남겨 재표면화 시 세분화한다.
+static DOCKER_SUBS: &[(&str, &str)] = &[("compose", "run.proc")];
+/// claude — Claude Code CLI (tagging loop 2026-07-06). plugins는 플러그인
+/// 레지스트리 조회(npm list의 read.deps 동족) — 관측 표본(세션 f6fa76f8,
+/// n=4)은 전부 목록/도움말 조회(`plugins list --json`·`plugins marketplace
+/// list`·`--help`). 설치형 op는 3단계라 미관측 — 재표면화 시 세분화.
+static CLAUDE_SUBS: &[(&str, &str)] = &[("plugins", "read.deps")];
 /// wimcc — 자기 CLI. 의미의 SSOT는 이 repo의 clap 정의(src/cli.rs):
 /// init-db/ingest는 DB 쓰기, serve는 서버 기동, doctor는 환경 진단 조회
 /// (tagging loop 2026-07-04; 보통 경로 실행 `./target/…/wimcc`(run.code)로
@@ -357,6 +369,8 @@ pub static TOOL_SUBCOMMAND_TAGS: &[(&str, &[(&str, &str)])] = &[
     ("chezmoi", CHEZMOI_SUBS),
     ("volta", VOLTA_SUBS),
     ("wimcc", WIMCC_SUBS),
+    ("docker", DOCKER_SUBS),
+    ("claude", CLAUDE_SUBS),
 ];
 
 /// MCP 도구 태깅. 도구 이름은 `mcp__[plugin_<plugin>_]<server>__<tool>`. server→tool

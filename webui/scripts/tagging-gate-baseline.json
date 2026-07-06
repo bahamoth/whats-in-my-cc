@@ -8,6 +8,7 @@
     "doc-tests": "실행 아님 — grep -qE 'test result…|Doc-tests|^error' 정규식 대체(alternation) 문자열의 `|` 토크나이저 파편 (2026-07-05, 세션 b4196731)",
     "expect": "실행 아님 — echo \"…; expect now exploration/diagnosis, NOT action)\" 영문 코멘트 문장의 `;` 토크나이저 파편 (2026-07-05, 세션 01fe9550)",
     "will": "실행 아님 — echo \"…will proceed once notified.\" 상태 메시지 문자열의 토크나이저 파편 (2026-07-05, 이 세션 대기 로그)",
-    "port": "실행 아님 — pgrep -f \"port 7999|port 5174|pr3-smoke\" 패턴 문자열의 토크나이저 파편 (2026-07-05, PR-4 스모크 세션)"
+    "port": "실행 아님 — pgrep -f \"port 7999|port 5174|pr3-smoke\" 패턴 문자열의 토크나이저 파편 (2026-07-05, PR-4 스모크 세션)",
+    "example": "실행 아님 — git commit -m 다행 메시지 개행·단독 경로 세그먼트(…/.env.example)의 토크나이저 파편 (2026-07-06, 세션 c78d40d3 gameradar)"
   }
 }
