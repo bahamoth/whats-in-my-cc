@@ -184,3 +184,25 @@ describe('nodeLabel', () => {
     expect(L('log_record', { event_name: 'something_new' }).primary).toBe('something_new');
   });
 });
+
+// flat 모드 무손실 렌더(2026-07-06) — 필터 매칭으로 activity 행이 된
+// system_summary·tool_result가 bare kind 문자열 대신 읽히는 라벨을 갖는다.
+describe('nodeLabel — flat 모드 범용 행 (system_summary · tool_result)', () => {
+  it('system_summary: subkind를 부제로 노출한다', () => {
+    const r = nodeLabel(
+      { node_kind: 'system_summary', payload: { type: 'system', hookCount: 1 }, subkind: 'stop_hook_summary' },
+      koT,
+    );
+    expect(r).toEqual({ kind: 'other', primary: 'system', secondary: 'stop_hook_summary' });
+    // subkind 미상이어도 bare 'system_summary'로 떨어지지 않는다.
+    expect(nodeLabel({ node_kind: 'system_summary', payload: {} }, koT).primary).toBe('system');
+  });
+  it('tool_result: content 첫 줄을 부제로 노출한다', () => {
+    const r = nodeLabel(
+      { node_kind: 'tool_result', payload: { tool_result: { is_error: true, content: 'Exit code 1\nboom' } } },
+      koT,
+    );
+    expect(r).toEqual({ kind: 'tool', primary: 'result', secondary: 'Exit code 1' });
+    expect(nodeLabel({ node_kind: 'tool_result', payload: {} }, koT).secondary).toBe('');
+  });
+});

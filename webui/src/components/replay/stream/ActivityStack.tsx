@@ -36,7 +36,7 @@ export function ActivityStack({ stack, selectedEventId, onSelect, flatMode = fal
   const expanded = userOverride ?? containsSelected;
 
   const renderItem = (ae: ActivityStackData['events'][number]) => {
-    const label = nodeLabel({ node_kind: ae.event.kind, payload: ae.event.payload, telemetry: ae.event.telemetry, tag: ae.event.tag, is_meta: ae.event.is_meta }, t);
+    const label = nodeLabel({ node_kind: ae.event.kind, payload: ae.event.payload, telemetry: ae.event.telemetry, tag: ae.event.tag, is_meta: ae.event.is_meta, subkind: ae.event.subkind }, t);
     // B-6b — teammate 디스패치 북엔드: Agent(named) 호출 라벨을 그 팀메이트의
     // agentColor로 칠해 응답 카드와 짝으로 읽히게 한다(연속 레일 없음).
     const dispatchName = (() => {

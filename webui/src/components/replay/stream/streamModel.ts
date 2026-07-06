@@ -1441,14 +1441,22 @@ export function buildStreamModel(
   const lastAgentDispatchByName = new Map<string, string>();
 
   for (const e of events) {
-    if (e.kind === 'tool_result') continue;
+    // grouped 모드: tool_result는 소유 tool_call의 ActivityEvent(배지·duration)로
+    // 접히므로 자체 행을 만들지 않는다. flat 모드(필터 활성)는 버퍼가 서버 매칭
+    // 행뿐이라(call이 함께 로드되지 않을 수 있음) 자체 행으로 렌더한다.
+    if (e.kind === 'tool_result' && !flat) continue;
     const sc = !!e.is_sidechain;
     const agent = e.agent_id || null; // '' (NULL TEXT row mapping) → null
     if (e.kind === 'tool_call' && e.tool_name === 'Agent') {
       const nm = (asObj(asObj(e.payload).input) as Record<string, unknown>).name;
       if (typeof nm === 'string' && nm) lastAgentDispatchByName.set(nm, e.event_id);
     }
-    const c = classify(e);
+    let c = classify(e);
+    // flat 모드 무손실 렌더: 매칭 행이 카드 없는 kind(system_summary 잔여
+    // subkind·빈 메시지 등)라도 조용히 떨어뜨리지 않고 범용 activity 행으로
+    // 렌더한다 — "N건 매칭"과 화면이 1:1이어야 한다(스펙 §1.4 "매칭 카드를
+    // 시간순 평면 렌더"; 2026-07-06 리뷰: 16건 매칭·0건 표시).
+    if (flat && c.cat === 'drop') c = { cat: 'activity' };
     if (sc && agent && !scRunByKey.has(agent)) {
       scRunByKey.set(agent, e.workflow_run_id ?? null);
     }
@@ -1521,6 +1529,9 @@ export function buildStreamModel(
           const ms = new Date(r.observed_at).getTime() - new Date(e.observed_at).getTime();
           durationMs = Number.isFinite(ms) ? ms : null;
         }
+      } else if (e.kind === 'tool_result') {
+        // flat 모드 자체 행(위 gate) — 상태 배지는 자기 payload의 is_error.
+        result = { isError: asObj(asObj(e.payload).tool_result).is_error === true };
       }
       run.push({ event: e, result, durationMs });
     }

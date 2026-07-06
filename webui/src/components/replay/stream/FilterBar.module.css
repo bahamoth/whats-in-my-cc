@@ -61,6 +61,10 @@
   flex-direction: column;
   gap: 3px;
   min-width: 160px;
+  /* 항목이 많은 축(태그·MCP 도구)이 뷰포트를 넘어 하단 항목을 선택할 수
+     없던 문제(2026-07-06 리뷰) — 메뉴 자체가 스크롤 컨테이너가 된다. */
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
   margin-top: 4px;
   padding: 6px;
   background: var(--wimcc-surface-1);
