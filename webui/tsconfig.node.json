@@ -5,7 +5,12 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
-    "strict": true
+    "strict": true,
+    // composite는 emit을 강제한다 — 목적지를 소스 옆이 아닌 ignore된 캐시로
+    // 치운다. vite.config.ts 옆에 emit된 vite.config.js는 vite 설정 탐색
+    // (.js 우선)을 가로채 alias 없는 낡은 설정으로 기동시킨다
+    // (2026-07-06 대시보드 렌더 실사고; 알람은 noStaleViteConfig.test.ts).
+    "outDir": "node_modules/.tmp/tsconfig-node"
   },
   "include": ["vite.config.ts"]
 }
