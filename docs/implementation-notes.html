@@ -6479,6 +6479,56 @@ vitest: 69 passed
     분자(비용, cache_read 포함)/분모(billed, 제외) 불일치는 by-design 소견.</p>
   </section>
 
+  <section id="session-detail-followups-3-2026-07-06">
+    <h2>세션 상세 후속 3차 — 통합 휴먼 리뷰 결함 3건 (2026-07-06)</h2>
+    <p>이전 3개 PR의 통합 휴먼 리뷰(세션 bebd8197 실주행)에서 나온 결함 3건.</p>
+    <p><b>① flat 모드 무손실 렌더</b>: <code>f_kind=system_summary</code>가
+    "16건 매칭"인데 스트림 0건 — 필터 활성 시 버퍼는 서버 매칭 행만 담는데
+    <code>classify()</code>가 카드 없는 kind(system_summary 잔여 subkind·
+    tool_result·빈 메시지)를 flat 모드에서도 drop했다. 스펙 §1.4("매칭 카드를
+    시간순 평면 렌더") 위반. 수정: flat에서 drop→범용 activity 행 재라우팅 +
+    tool_result 자체 행(상태 배지는 자기 payload의 <code>is_error</code>) +
+    nodeLabel에 system_summary(부제=subkind)·tool_result(부제=content 첫 줄)
+    케이스. grouped(비필터) 동작은 불변. 특히 <b>verification 축은 고아 행
+    제거(③) 후 매칭 이벤트가 전부 tool_result가 되므로</b> 이 수정 없이는 ③이
+    verification 필터를 전멸시킨다 — 두 수정은 한 몸.</p>
+    <p><b>② FilterBar 드롭다운 오버플로우</b>: 항목 많은 축(태그 21종·MCP 도구
+    수십 개)이 뷰포트를 넘어 하단 항목 선택 불가 — <code>.menu</code>에
+    <code>max-height: min(60vh, 420px)</code> + <code>overflow-y: auto</code>.</p>
+    <p><b>③ verification_run 고아 행 + piped measured 오판</b>
+    (<code>f_verification=unknown</code>이 "실패한 테스트"를 매칭한 실사고):
+    <b>(a) 고아 행</b> — 워처가 자라는 transcript를 ingest하다 tool_call만 있는
+    슬라이스에서 recompute가 돌면 trigger=call 이벤트로 unknown 행이 생기고,
+    result 도착 후 재추출 행은 trigger=result라 vr_id가 달라져 PK REPLACE로
+    안 지워졌다. 세션 bebd8197의 unknown 36/36건 전부가 이 고아
+    (ended_at=None). 수정: recompute가 세션 산출을 원자 교체
+    (<code>repo_verification_run::replace_session</code>, delete+insert 단일 tx).
+    추출은 세션 전체 이벤트 기준 결정론이므로 교체가 곧 현재 진실. <b>기존
+    DB의 잔존 고아는 세션 재-recompute(신규 이벤트 도착 또는 재ingest) 시
+    청소</b>된다 — 죽은 세션은 재ingest 필요.
+    <b>(b) piped measured 오판</b> — <code>cargo test … | grep … | head</code>가
+    passed/measured로 저장(vr_30c7c2a20327e4d6): content는 "test result:
+    FAILED"인데 OTLP <code>tool_result.success="true"</code>를 신뢰했다. bash
+    매뉴얼 §3.7.5(파이프라인 exit = 마지막 명령)에 따라 OTLP success·hook
+    exit_code·"Exit code N" prepend는 전부 파이프 꼬리(head exit 0)의 반영.
+    수정: <code>Outcome.basis</code>(어느 체인 스텝이 판정했나) 신설,
+    <code>status_basis="piped"</code>면 exit-파생 3종을 버리고 Tier-4 content
+    규칙으로 재판정(요약 없으면 unknown 유지 — 추측 금지).
+    <code>&lt;tool_use_error&gt;</code>는 exit 무관 하니스 채널이라 유지. 실
+    payload 3종 동결: <code>tests/fixtures/observed/real/
+    verification_piped_otlp_v01.json</code>. <b>한계(인지)</b>:
+    <code>set -o pipefail</code>이 선행하면 파이프라인 exit 0은 신뢰 가능하지만
+    비-pager 파이프+pipefail 실표본이 없어 미구현 — exit 0도 버린다(Tier-4가
+    대부분 회수). tool_failure detector의 resolve_outcome 소비는 pipe 미인지
+    그대로(별건).</p>
+    <p><b>개선 루프 실행</b>(스크래치 재ingest DB, 게이트 pass): 보편 2종 사전
+    추가 — <code>docker compose</code>→run.proc(관측 n=6 전부 `compose up -d`)
+    · <code>claude plugins</code>→read.deps(관측 n=4 전부 목록/도움말 조회);
+    <code>example</code>은 커밋 메시지 개행·단독 경로 파편으로 baseline 보류.
+    unknown-verification 잔여 2건은 복구 불가 클래스(빈 content tail·piped
+    요약 절단)로 보류.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
