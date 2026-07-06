@@ -1,5 +1,68 @@
 # Changelog
 
+## [1.2.0](https://github.com/bahamoth/whats-in-my-cc/compare/v1.1.0...v1.2.0) (2026-07-06)
+
+
+### Features
+
+* **api:** /usage per-model 적용 단가(rates) 노출 — 미가격 null ([f84a8f4](https://github.com/bahamoth/whats-in-my-cc/commit/f84a8f4e7178db7035f9ad3d8c7f632190457599))
+* **api:** events 4축 서버 필터 — AND/OR·matched_count·around 400 (§1.2) ([af16ca2](https://github.com/bahamoth/whats-in-my-cc/commit/af16ca2fc78b5a6892e05b0102468d1f7d566674))
+* **api:** usage/baseline에 session_id 스코프 + 5지표 프로젝트 중앙값·표본 n ([eef66a2](https://github.com/bahamoth/whats-in-my-cc/commit/eef66a2566a7135e4df21b51a1b6b77455bbf40a))
+* **api:** verification summary에 session_id 스코프 추가 ([43153d1](https://github.com/bahamoth/whats-in-my-cc/commit/43153d185087a9c9630521916456c35ce5643354))
+* **db:** FilterCtx 조회 — signal evidence 집합·verification trigger 상태 맵 ([a1a4dbc](https://github.com/bahamoth/whats-in-my-cc/commit/a1a4dbc9ca77d38809323b749d0795b2b059fdd9))
+* **db:** 커서 청크 스캔 창 — SQL 푸시다운 + Rust 술어 + matched count ([dc278c4](https://github.com/bahamoth/whats-in-my-cc/commit/dc278c41fdb16f38eec0d091b84a8e93448ac036))
+* **insight+webui:** tag 필터 축 — 태깅 사전을 필터에서 소비 ([33c991e](https://github.com/bahamoth/whats-in-my-cc/commit/33c991e00658c319f11196c31f2322c763a486d0))
+* **insight:** EventFilter — 4축 파싱·검증·AND/OR 술어 (§1.2) ([be161d3](https://github.com/bahamoth/whats-in-my-cc/commit/be161d374df1b8e32f124f3f3b80d2eb3eb585b2))
+* **insight:** origin_of — messageOrigin.ts의 Rust 이식 (real fixture 앵커) ([3c33a5b](https://github.com/bahamoth/whats-in-my-cc/commit/3c33a5b1c16740d0ed60392fd0ab1aff2bc7da3d))
+* **insight:** SessionMetrics에 llm_request_p50(ttft·duration·output·cost) 추가 (PR-3 §3d) ([d93b5a4](https://github.com/bahamoth/whats-in-my-cc/commit/d93b5a412f3a3ebcb6862679fc65d5d3ad2e4dcb))
+* **insight:** 태깅 루프 — jobs·top(read.proc)·env(투명 wrapper) 사전 추가 ([450557c](https://github.com/bahamoth/whats-in-my-cc/commit/450557c1375d57ad617ee28d3e13d79383ef16c7))
+* **pricing:** 가격표를 pricing.json으로 분리 — include_str! 로더 전환 ([c4c4a67](https://github.com/bahamoth/whats-in-my-cc/commit/c4c4a671c92ff62ffb6dcf8f7f3ba21082409341))
+* **pricing:** 공개 가격 페이지 파서·diff 스크립트 + 실페이지 fixture 동결 ([0c30310](https://github.com/bahamoth/whats-in-my-cc/commit/0c30310bedac59a62acf201b4323f231aea2512e))
+* **pricing:** 신규 모델 탐지 + 현재 활성 모델 사전 추가 ([6004bc7](https://github.com/bahamoth/whats-in-my-cc/commit/6004bc769c6bb63d27f1cd5985cf453f3436040c))
+* **webui:** FilterBar — 축별 칩·텍스트 검색·매칭 수·해제 알림 ([d89ac89](https://github.com/bahamoth/whats-in-my-cc/commit/d89ac896f72dd24cddc0ce3276c07f6bcd846420))
+* **webui:** FilterState — URL 왕복·서버 파라미터 직렬화 ([4442ef4](https://github.com/bahamoth/whats-in-my-cc/commit/4442ef4ae4911edeb3194d9c9a6b294e8964d950))
+* **webui:** InsightStrip baseline을 비교 모델(칩·위치·n·표본부족)로 개편 + 블렌디드 단가 파생 (PR-3 §3a) ([4fbc00e](https://github.com/bahamoth/whats-in-my-cc/commit/4fbc00e8802a2904e857abe4766acd48666d6e17))
+* **webui:** useSessionWindow 필터 파라미터·리셋·matchedCount ([ee88a13](https://github.com/bahamoth/whats-in-my-cc/commit/ee88a136a45cb5681e24dd099ffc43916ebeb33a))
+* **webui:** verification summary 세션 스코프 클라이언트와 훅 ([e37facd](https://github.com/bahamoth/whats-in-my-cc/commit/e37facdcc52454ef09c27b059f3e7b4f0b197d48))
+* **webui:** 분석 패널에 검증 실행 리듬 스트립 추가 ([b3e08fa](https://github.com/bahamoth/whats-in-my-cc/commit/b3e08fae097d3e92a97d00d65068c8e06d0224a4))
+* **webui:** 분석 패널에 변경 커버리지 섹션 추가 ([eea3935](https://github.com/bahamoth/whats-in-my-cc/commit/eea393506c9fe29bdffad3933a860b9f26f42232))
+* **webui:** 비용 툴팁에 세션 관측 모델 단가표·가격표 기준일 동적 조립 ([e23d423](https://github.com/bahamoth/whats-in-my-cc/commit/e23d423d2e539fd24c1d901c9db5a4b85f36796a))
+* **webui:** 상세 패널 요청 메트릭에 세션 p50 대비 배지 (PR-3 §3d) ([ec12159](https://github.com/bahamoth/whats-in-my-cc/commit/ec12159466c6ac3df2bc86541ead1c6a57b5b596))
+* **webui:** 세션 길이(span) 정보 — 리스트 정렬 컬럼 + 상세 헤더 ([0064e0c](https://github.com/bahamoth/whats-in-my-cc/commit/0064e0c44c57749c06f4d77fc414fb06ddb4c9a6))
+* **webui:** 세션 상세 분석 패널에 검증 리듬·커버리지 배선 ([cc7e698](https://github.com/bahamoth/whats-in-my-cc/commit/cc7e698c8401220f83ce45ef6135d212bfd9cda8))
+* **webui:** 세션 필터 배선 — URL 동기화·점프 시 해제·새 이벤트 배지 ([f36408a](https://github.com/bahamoth/whats-in-my-cc/commit/f36408a2fe1cadc23a1e0688164c9ab691b340b6))
+* **webui:** 요약 카드에 프로젝트 중앙값 대비 DeltaChip·위치·표본 n 표기 (PR-3 §3a) ([58e3bfe](https://github.com/bahamoth/whats-in-my-cc/commit/58e3bfe8b487b80c61e0fb4c527c78e38597d949))
+* **webui:** 필터 flat 모드 — 그룹핑 비활성 + 서브에이전트 출처 배지 ([dcdf117](https://github.com/bahamoth/whats-in-my-cc/commit/dcdf117c37c875f277af09d1781d1455537ec2c9))
+* **webui:** 필터 도구·모델 후보 목록 + MCP 서버 그룹 원클릭 토글 ([2c6df8b](https://github.com/bahamoth/whats-in-my-cc/commit/2c6df8b1e16380a15052c5435d9c686dc6c1d571))
+
+
+### Bug Fixes
+
+* **ingest:** verification 고아 행 원자 교체 + piped exit-파생 신호 폐기 ([ea74890](https://github.com/bahamoth/whats-in-my-cc/commit/ea7489081ec470f8e8771cc6676d0399930250db))
+* **insight:** teammate 마커를 복합 패턴으로 판정 — origin_of의 정확한 로직을 has_scaffold_marker에 재사용 ([5c6e046](https://github.com/bahamoth/whats-in-my-cc/commit/5c6e046d815755d0b522729905938a53eddad718))
+* **insight:** unknown-verification 루프 — rustfmt --check "Diff in" 실패 인식 ([d8f740b](https://github.com/bahamoth/whats-in-my-cc/commit/d8f740b3822bdc32f15de5a8927ab4c6caf4ad81))
+* **pricing:** claude-sonnet-5 단가 추가 — 라이브 세션 미가격 해소 ([c2e3dc3](https://github.com/bahamoth/whats-in-my-cc/commit/c2e3dc3476e41d98d1d3cc39491ec927c50812e6))
+* **webui:** context 카드 라벨을 판정형→사실형 (캐시 읽기 비중) ([5212a43](https://github.com/bahamoth/whats-in-my-cc/commit/5212a43e8d4be4a1878a00295fe4cca3190a0293))
+* **webui:** deep-link×필터 활성 시 필터 tail 로드·필터 파라미터 메모이즈·jumpNotice 타이머 정리 ([2295a50](https://github.com/bahamoth/whats-in-my-cc/commit/2295a50f7633b8c2c26b2760bc64d8a709c5f678))
+* **webui:** en analysis.cov.tip 120자 초과 단락 줄바꿈 분리 ([472ad64](https://github.com/bahamoth/whats-in-my-cc/commit/472ad64c3b06eca40dafb1b54756cfb7d99b21b2))
+* **webui:** FilterBar 디바운스 stale-closure race — ref로 최신 filter 읽기 ([0a2f2eb](https://github.com/bahamoth/whats-in-my-cc/commit/0a2f2eb52aa7b260aa1879d7a6b4c9c2decbab20))
+* **webui:** filterKey를 축 내 값 순서 무관하게 정렬 — 스퓨리어스 윈도우 리셋 방지 ([1d3bdba](https://github.com/bahamoth/whats-in-my-cc/commit/1d3bdbac87576c2441048b548fa52503613e48a8))
+* **webui:** flat 모드 무손실 렌더 + FilterBar 드롭다운 스크롤 ([b262731](https://github.com/bahamoth/whats-in-my-cc/commit/b262731ecc2a5d0ddb4a114d99488a2ebac9d02c))
+* **webui:** store 폴백 baseline '프로젝트 중앙값' 오표기 + 리듬 경계 잠금 ([3251a63](https://github.com/bahamoth/whats-in-my-cc/commit/3251a63ce8dbb621e9cf0a7d5039c1c38a779151))
+* **webui:** thinking 등 합성 스트림 카드 클릭이 필터 해제를 오발동하지 않게 ([717178d](https://github.com/bahamoth/whats-in-my-cc/commit/717178da379ddc8c9e8759c061df32d2b1a7c6f2))
+* **webui:** tsconfig.node emit 목적지를 ignore된 캐시로 이동 — 설정 가로채기 원천 차단 ([86dc7e6](https://github.com/bahamoth/whats-in-my-cc/commit/86dc7e66a8e55a1d619d0ce3733aad6d2060b498))
+* **webui:** 롱세션 스파크라인 오버플로우 — 바 개수 상한(다운샘플) ([d905084](https://github.com/bahamoth/whats-in-my-cc/commit/d905084f05c1c20ee12cf92def3f3b01004de551))
+* **webui:** 비용 툴팁 cache_read '무료·비용 제외' 오기 교정 ([2f24aa9](https://github.com/bahamoth/whats-in-my-cc/commit/2f24aa9114b97904136201c659a07bf5d3eed0c3))
+* **webui:** 세션 리스트 span 컬럼 추가 후 sources 태그 줄바꿈 정리 ([9c0503d](https://github.com/bahamoth/whats-in-my-cc/commit/9c0503dbee203b93ad0549e27d4ac4426a6fe0a0))
+* **webui:** 스트리밍으로 선택이 evict돼도 활성 필터 유지 ([74eb356](https://github.com/bahamoth/whats-in-my-cc/commit/74eb356514315ff829819553f0f0b1695fbc682c))
+* **webui:** 점프로 필터 해제 시 stale matchedCount 초기화 ([4ff47d5](https://github.com/bahamoth/whats-in-my-cc/commit/4ff47d5f4f5e2f1e5d7d3a6ea2246cbcaa585b30))
+* **webui:** 필터 로딩 중 빈 스트림을 '매칭 없음'으로 오독하지 않게 ([f2400a7](https://github.com/bahamoth/whats-in-my-cc/commit/f2400a7ab28551b017746534446b5357d619e9cd))
+
+
+### Performance Improvements
+
+* **db+api:** verification/signal 필터 event_id IN 푸시다운 — 7.2s→0.39s ([e59204d](https://github.com/bahamoth/whats-in-my-cc/commit/e59204db4ce3bbb9ff35f6066a7fb37866b7c09a))
+
 ## [1.1.0](https://github.com/bahamoth/whats-in-my-cc/compare/v1.0.0...v1.1.0) (2026-07-04)
 
 
