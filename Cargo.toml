@@ -1,6 +1,6 @@
 [package]
 name = "wimcc"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 rust-version = "1.88"
 description = "What's in My Claude Code — local-only execution inspection with evidence-linked insight"

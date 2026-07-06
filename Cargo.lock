@@ -3355,7 +3355,7 @@ dependencies = [
 
 [[package]]
 name = "wimcc"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "assert-json-diff",

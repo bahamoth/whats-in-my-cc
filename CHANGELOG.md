@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.1](https://github.com/bahamoth/whats-in-my-cc/compare/v1.2.0...v1.2.1) (2026-07-06)
+
+
+### Bug Fixes
+
+* **ingest:** verification 파서 4차 루프 — echoed exit 마커·vitest 전실패·failures: 섹션·타임아웃·build Finished ([b43177a](https://github.com/bahamoth/whats-in-my-cc/commit/b43177afff3e7bb76c2ab131f3cd8e5eb359ba46))
+* **insight:** metrics 캐시 스테일 — 사이드테이블 파생 필드는 히트 시에도 재계산 ([b208b80](https://github.com/bahamoth/whats-in-my-cc/commit/b208b80e1f7e46e631ed914ed8bac68bd2a56e8e))
+
 ## [1.2.0](https://github.com/bahamoth/whats-in-my-cc/compare/v1.1.0...v1.2.0) (2026-07-06)
 
 
