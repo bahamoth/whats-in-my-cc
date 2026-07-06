@@ -4,9 +4,14 @@
 //! compute_session_metrics ≈ 232ms/콜, /v1/metrics series(18세션) ≈ 1.2s.
 //! B-1 대시보드가 series를 인터랙티브 경로로 만들면서 호출 빈도 조건이
 //! 충족됐다. 캐시 키는 (event_count, last_observed_at) — append-only ingest
-//! 에서 데이터 변화는 반드시 키를 바꾼다. detector 재구성으로 signal만
-//! 바뀌는 경로는 새 이벤트(재ingest flush) 또는 프로세스 재시작을 동반한다
-//! (인메모리 캐시라 재시작에 함께 사라짐 — 스테일 불가).
+//! 에서 데이터 변화는 반드시 키를 바꾼다.
+//!
+//! R-20260706-1 정정: 종전 "detector 재구성은 새 이벤트 flush 또는 재시작을
+//! 동반하므로 스테일 불가" 가정은 backfill/CLI 재ingest 경로에서 깨졌다
+//! (observed_event 불변인 채 사이드테이블만 INSERT OR REPLACE 재계산 —
+//! 2026-07-06 실사고). 이제 캐시는 이벤트 스캔 파생값만 담당하고
+//! signal·verification_run·usage 파생 필드는 히트 시에도 재계산된다
+//! (tests/metrics_compute.rs::side_table_rebuild_reflected_despite_metrics_cache).
 
 use sqlx::sqlite::SqlitePoolOptions;
 use wimcc::db::migrate;
