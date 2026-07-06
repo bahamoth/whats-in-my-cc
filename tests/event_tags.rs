@@ -900,3 +900,32 @@ fn env_wrapper_unwrapped() {
     );
     assert_eq!(tag(&bash("env FOO=bar cargo build")), Some("build.code"));
 }
+
+/// 태깅 루프 2026-07-06 (세션 상세 후속 3차 PR 게이트) — 보편 CLI 2종 해소.
+/// 표본: tagging-gate 실측 후보(스크래치 재ingest DB).
+#[test]
+fn tagging_loop_2026_07_06_additions() {
+    // docker compose — 다중 컨테이너 앱 실행 관리 (공식 docs: "Compose is a tool
+    // for defining and running multi-container applications"). 관측 표본(세션
+    // c78d40d3, n=6)은 전부 `compose up -d`(서비스 기동) — open/wimcc serve의
+    // run.proc 동족. 3단계 조회형 op(logs/ps)는 미관측 — 재표면화 시 세분화.
+    assert_eq!(
+        tag(&bash("docker compose up -d 2>&1 | tail -2")),
+        Some("run.proc")
+    );
+    // claude plugins — Claude Code CLI의 플러그인 레지스트리 조회 (npm list의
+    // read.deps 동족). 관측 표본(세션 f6fa76f8, n=4)은 전부 목록/도움말 조회
+    // (`plugins list --json`·`plugins marketplace list`·`--help`). 설치형 op는
+    // 미관측 — 재표면화 시 세분화.
+    assert_eq!(
+        tag(&bash("claude plugins list --json 2>/dev/null")),
+        Some("read.deps")
+    );
+    assert_eq!(
+        tag(&bash("claude plugins marketplace list")),
+        Some("read.deps")
+    );
+    // 미관측 서브커맨드는 unmatched 유지 (사전 원칙).
+    assert_eq!(tag(&bash("docker rmi old-image")), None);
+    assert_eq!(tag(&bash("claude doctor")), None);
+}
