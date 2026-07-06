@@ -23,7 +23,11 @@ use crate::insight::outcome::{resolve_outcome, OutcomeProvenance, OutcomeStatus}
 use crate::insight::verification_allowlist::classify_segment;
 use crate::model::observed::{EventKind, ObservedEvent};
 
-pub const PARSER_VERSION: &str = "verification_run@v1";
+// R-20260706-5: 패턴팩(looks_like_*·echoed_exit_status·추출 규칙) 변경 시
+// minor를 올린다 — rows의 parser_version으로 "어느 세대 파서가 판정했나"를
+// 구분 가능하게 (2026-07-06 실사고: 구세대 rows와 현행 파서 산출이 섞여
+// unknown 비중이 38% vs 12%로 갈렸는데 표면상 구분 불가였다).
+pub const PARSER_VERSION: &str = "verification_run@v1.1";
 pub const SCHEMA_VERSION: &str = "verification_run.v1";
 
 /// A single verification run row ready for DB insertion.
@@ -146,10 +150,28 @@ pub fn extract_verification_runs(evs: &[ObservedEvent]) -> Vec<VerificationRunRe
                     .pointer("/tool_result/content")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
+                // echo된 exit 마커는 도구 뒤에 파이프가 없을 때만 신뢰한다 —
+                // 파이프라인 뒤 `$?`는 마지막 파이프 단계의 exit다
+                // (MatchedSegment::downstream_pipe 문서 참조).
+                let echoed = if m.downstream_pipe {
+                    None
+                } else {
+                    echoed_exit_status(content)
+                };
                 if looks_like_failure(content) {
                     (OutcomeStatus::Failed, OutcomeProvenance::Estimated)
+                } else if let Some(code) = echoed {
+                    // 에이전트가 echo한 exit 마커 — quiet-success 도구(cargo fmt·
+                    // tsc --noEmit)의 유일한 transcript 신호 (2026-07-06 루프,
+                    // 세션 31f1fb03 실 표본 19건). 자기보고라 Estimated 유지.
+                    if code == 0 {
+                        (OutcomeStatus::Passed, OutcomeProvenance::Estimated)
+                    } else {
+                        (OutcomeStatus::Failed, OutcomeProvenance::Estimated)
+                    }
                 } else if looks_like_success(content)
-                    || (command_kind == "lint" && looks_like_lint_success(content))
+                    || (matches!(command_kind, "lint" | "build")
+                        && looks_like_finished_success(content))
                 {
                     // 도구의 결정론 성공 요약 → Passed(Estimated). exit code(Measured)와 구분.
                     (OutcomeStatus::Passed, OutcomeProvenance::Estimated)
@@ -453,6 +475,12 @@ pub struct MatchedSegment {
     // "test_keyword" is a legacy value that may
     // persist only in older rows — spec F2)
     pub status_basis: &'static str, // "exit" | "piped"
+    /// matched segment 바로 뒤 connector가 파이프인가 — pager 여부 무관.
+    /// echo된 `$?` 마커 신뢰 판정용: 파이프라인 뒤의 `$?`는 마지막 파이프
+    /// 단계(tail/head/grep 등)의 exit라 도구의 성패를 반영하지 않는다
+    /// (real fixture: verification_tsc_v01.jsonl 178fae97 — tsc를 tail로
+    /// 캡처한 뒤 echo한 "tsc exit: 0"은 tail의 exit).
+    pub downstream_pipe: bool,
 }
 
 /// Pager / output-filter commands. When the matched segment is piped INTO one
@@ -525,10 +553,22 @@ pub fn matched_segment(cmd: &str) -> Option<MatchedSegment> {
                 command_kind: kind,
                 detection_basis: basis,
                 status_basis,
+                downstream_pipe: downstream_has_pipe(cmd, seg),
             });
         }
     }
     None
+}
+
+/// matched segment 바로 뒤가 파이프(`|`, `||` 제외)인가 — pager 여부 무관.
+/// `downstream_status_basis`와 달리 pager도 파이프로 센다: echo된 `$?`의
+/// 신뢰 판정에는 "무엇으로든 파이프됐다"는 사실 자체가 결격 사유다.
+fn downstream_has_pipe(cmd: &str, seg: &str) -> bool {
+    let Some(seg_pos) = cmd.find(seg) else {
+        return false;
+    };
+    let after = cmd[seg_pos + seg.len()..].trim_start();
+    after.starts_with('|') && !after.starts_with("||")
 }
 
 /// Decide "exit" vs "piped" for the matched segment at `idx`.
@@ -613,17 +653,77 @@ fn looks_like_success(content: &str) -> bool {
         || (content.contains("Tests") && content.contains(" passed ("))
 }
 
-/// Tier-4 estimated lint(clippy) success heuristic: clippy emits no "test result: ok"
-/// style summary, only a trailing `Finished … target(s)` line on a successful run
-/// (warnings alone do not fail it unless `-D warnings` promotes them — those produce
-/// `error:` / `aborting due to`, which looks_like_failure catches first).
+/// Tier-4 estimated success heuristic for cargo의 `Finished … target(s)` 종료행:
+/// clippy·build는 "test result: ok" 류 요약 없이 성공 시 이 행으로만 끝난다
+/// (warning만으로는 실패하지 않음 — `-D warnings` 승격 실패는 `error:` /
+/// `aborting due to`를 찍어 looks_like_failure가 먼저 잡는다).
 ///
-/// **lint only.** cargo build/test also print `Finished … target(s)` after their build
-/// step, so applying this to build/test_suite_* would mark a failed test run as passed
-/// (CLAUDE.md §unknown-verification loop, caveat 3). The caller gates on command_kind.
-/// real fixture: 6a254a2a vr_774831107e0b78fd (cargo clippy --all-targets, warning-only success).
-fn looks_like_lint_success(content: &str) -> bool {
+/// **lint·build only — test류 금지.** cargo test도 빌드 단계에서 Finished를
+/// 찍은 뒤 테스트가 실패할 수 있어, 파이프가 실패 요약을 자르면 오판한다
+/// (CLAUDE.md §unknown-verification loop, caveat 3). command_kind=build는
+/// 명령 자체가 빌드라 Finished 도달 = 성공이 결정론적 (2026-07-06 정정,
+/// 세션 31f1fb03 실 표본 6건 — 종전 "build도 금지"는 test 시나리오의 과잉 일반화).
+/// The caller gates on command_kind. real fixtures: 6a254a2a
+/// vr_774831107e0b78fd (clippy warning-only success), 31f1fb03 `cargo build
+/// 2>&1` tail "Finished `dev` profile … target(s) in 20.16s".
+fn looks_like_finished_success(content: &str) -> bool {
     content.contains("Finished") && content.contains("target(s)")
+}
+
+/// 에이전트가 출력 끝에 echo한 exit 마커를 파싱한다 — `EXIT: 0`·`EXIT=0`·
+/// `FMT_EXIT=0`·`fmt applied exit=0`·`tsc exit code: 0` (2026-07-06 루프,
+/// 세션 31f1fb03 실측: 1회차 19건 해소 + 2회차 "exit code: N" 형태 2건 해소
+/// — "tsc exit code: 0"·"vitest exit code: 0" 각 1건). quiet-success
+/// 도구는 성공 출력이 없고 CC는 성공 exit code를 transcript에 남기지 않아
+/// 이 마커가 유일한 신호다.
+///
+/// 오탐 가드: ① 마지막 5행만 검사(본문 중간 코드 인용 제외) ② `exit` 앞은
+/// 행 시작·공백·`_`만(`process.exit(0)` 제외) ③ `:` 또는 `=` 구분자 필수 —
+/// 선택적 `code` 단어 뒤에도 적용("exit code: 0"은 인정, 하네스 실패 행
+/// "Exit code 143"은 구분자가 없어 제외, "clean exit 0" 산문 제외) ④ 숫자
+/// 뒤는 비영숫자만 허용.
+fn echoed_exit_status(content: &str) -> Option<i64> {
+    for line in content.lines().rev().take(5) {
+        let lower = line.to_ascii_lowercase();
+        for (at, _) in lower.match_indices("exit") {
+            let ok_before = at == 0
+                || lower[..at]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c.is_whitespace() || c == '_');
+            if !ok_before {
+                continue;
+            }
+            let rest = lower[at + 4..].trim_start();
+            let rest = rest
+                .strip_prefix("code")
+                .map(str::trim_start)
+                .unwrap_or(rest);
+            let Some(rest) = rest.strip_prefix([':', '=']) else {
+                continue;
+            };
+            let rest = rest.trim_start();
+            let digits: &str = &rest[..rest
+                .char_indices()
+                .find(|(_, c)| !c.is_ascii_digit())
+                .map(|(i, _)| i)
+                .unwrap_or(rest.len())];
+            if digits.is_empty() {
+                continue;
+            }
+            if rest[digits.len()..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_alphanumeric())
+            {
+                continue;
+            }
+            if let Ok(n) = digits.parse::<i64>() {
+                return Some(n);
+            }
+        }
+    }
+    None
 }
 
 /// Tier-4 estimated failure heuristic: checks for common failure patterns in
@@ -646,6 +746,19 @@ fn looks_like_failure(content: &str) -> bool {
         || content.contains("failed,")
         // cargo clippy
         || content.contains("aborting due to")
+        // vitest 전실패 요약 "Test Files  1 failed (1)" — 혼합형 " failed | "과
+        // 달리 실패만 있으면 괄호 형태라 어느 패턴에도 안 걸렸다 (2026-07-06
+        // 루프, 세션 31f1fb03 실 표본 3건). 성공 요약은 " passed ("라 불일치.
+        || content.contains(" failed (")
+        // cargo test 실패 목록 섹션 헤더 "failures:" — 파이프 tail이
+        // "test result: FAILED" 최종행을 잘라도 이 섹션은 남는다. 성공 출력엔
+        // 없는 섹션 (2026-07-06 루프, 세션 31f1fb03 실 표본 3건).
+        || content.contains("\nfailures:")
+        || content.starts_with("failures:")
+        // Claude Code 하네스 타임아웃 마커 — 검증이 완료되지 못함 = failed
+        // (2026-07-06 루프, 세션 31f1fb03 실 표본 1건: clippy 5m 타임아웃,
+        // tail "Exit code 143\nCommand timed out after 5m 0s").
+        || content.contains("Command timed out after")
         // tsc 진단 포맷 `file(line,col): error TSxxxx:` — 실 표본 2건이 잠금
         // (verification_tsc_v01.jsonl, error TS2345/TS2741). "error:" 콜론
         // 직결 형식이 아니라 위 패턴들이 놓친다 (B-2, 2026-07-04).
@@ -765,13 +878,18 @@ mod tests {
 
     /// Dogfooding 2026-06-11: clippy 성공 출력은 "test result: ok" 류 요약이 없고
     /// "Finished … target(s)"로만 끝나므로 기존 looks_like_success가 놓쳐 unknown으로
-    /// 남았다(세션 6a254a2a lint unknown 다수). lint에서는 Passed(estimated)로 승격하되,
-    /// 동일 content라도 build에서는 승격 금지 — cargo build/test도 빌드 단계에서
-    /// "Finished"를 찍으므로 실패한 테스트를 통과로 오판한다(CLAUDE.md §unknown-verification).
-    /// real fixture: 6a254a2a vr_774831107e0b78fd (cargo clippy --all-targets 2>&1,
-    /// warning만 있고 exit 0인 성공).
+    /// 남았다(세션 6a254a2a lint unknown 다수). real fixture: 6a254a2a
+    /// vr_774831107e0b78fd (cargo clippy --all-targets 2>&1, warning만 있고 exit 0).
+    ///
+    /// 2026-07-06 정정(세션 31f1fb03 실 표본 6건: `cargo build 2>&1` tail
+    /// "Finished `dev` profile … target(s) in 20.16s"): command_kind=build도
+    /// 승격한다 — cargo build는 실패 시 error[…] 후 중단돼 Finished에 도달하지
+    /// 못하므로 Finished = 빌드 성공이 결정론적이다. 종전 "build 승격 금지"의
+    /// 근거였던 "실패한 테스트를 통과로 오판"은 test_suite_*에만 성립하는
+    /// 시나리오였다(빌드 단계 Finished 후 테스트 실패 요약이 파이프에 잘리는
+    /// 경우) — 그래서 test류는 계속 승격 금지로 잠근다.
     #[test]
-    fn clippy_finished_summary_promotes_lint_only() {
+    fn finished_summary_promotes_lint_and_build_not_tests() {
         let clippy_ok = "warning: doc list item without indentation\n  --> src/insight/outcome.rs:16:5\n   |\nwarning: `wimcc` (lib) generated 1 warning\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.00s";
 
         let lint = extract_verification_runs(&make_bash_run(
@@ -784,17 +902,131 @@ mod tests {
         assert_eq!(lint[0].status, "passed", "clippy Finished → lint passed");
         assert_eq!(lint[0].status_provenance.as_deref(), Some("estimated"));
 
-        // 동일 "Finished" content를 build로 실행하면 승격 금지 → unknown 유지.
+        // build도 승격 — 실 표본과 동일한 성공 빌드 tail.
+        let build_ok = "   Compiling wimcc v1.1.0 (/Users/bahamoth/projects/whats-in-my-cc)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 20.16s";
         let build = extract_verification_runs(&make_bash_run(
             "toolu_build_finished",
             "cargo build 2>&1",
-            clippy_ok,
+            build_ok,
         ));
         assert_eq!(build.len(), 1);
         assert_eq!(build[0].command_kind, "build");
+        assert_eq!(build[0].status, "passed", "build Finished → passed");
+        assert_eq!(build[0].status_provenance.as_deref(), Some("estimated"));
+
+        // test류는 승격 금지 유지 — 빌드 단계 Finished만 남고 테스트 실패
+        // 요약이 잘린 출력을 통과로 오판하면 안 된다 (caveat 3).
+        let test_run = extract_verification_runs(&make_bash_run(
+            "toolu_test_finished",
+            "cargo test 2>&1",
+            build_ok,
+        ));
+        assert_eq!(test_run.len(), 1);
+        assert_eq!(test_run[0].command_kind, "test_suite_rust");
         assert_eq!(
-            build[0].status, "unknown",
-            "build Finished must NOT promote (cargo test 빌드단계 오판 방지)"
+            test_run[0].status, "unknown",
+            "test류 Finished must NOT promote"
+        );
+    }
+
+    /// unknown-verification 루프 2026-07-06 (세션 31f1fb03, 실 표본: vitest
+    /// 전실패형 3건·cargo test failures 섹션 3건·하네스 타임아웃 1건). 각 tail은
+    /// unknown-verification.ts가 표면화한 실 tool_result 내용 그대로.
+    #[test]
+    fn looks_like_failure_detects_vitest_allfail_cargo_failures_and_timeout() {
+        // vitest 전실패형 — 실패만 있으면 "Test Files  1 failed (1)" 형태라
+        // " failed | "(혼합형)·"Tests failed"·"FAILED" 어디에도 안 걸렸다.
+        let vitest_allfail = "⎯⎯⎯⎯[1/1]⎯\n\n Test Files  1 failed (1)\n      Tests  no tests\n   Start at  14:28:04\n   Duration  544ms";
+        assert!(looks_like_failure(vitest_allfail));
+        // cargo test 실패 목록 섹션 — 파이프 tail이 "test result: FAILED" 최종행을
+        // 잘라도 "failures:" 섹션 헤더는 남는다 (성공 출력엔 이 섹션이 없다).
+        let cargo_failures_section = "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    db::repo_observed::tests::window_scan_multi_chunk_no_loss_or_dup_at_boundaries";
+        assert!(looks_like_failure(cargo_failures_section));
+        // 하네스 타임아웃 마커 — 검증이 완료되지 못함 = failed(estimated).
+        assert!(looks_like_failure(
+            "Exit code 143\nCommand timed out after 5m 0s"
+        ));
+        // 성공 요약은 여전히 실패로 오판하지 않는다.
+        assert!(!looks_like_failure(
+            " Test Files  2 passed (2)\n Tests  37 passed (37)"
+        ));
+        assert!(!looks_like_failure("test result: ok. 42 passed; 0 failed"));
+    }
+
+    /// echoed_exit_status 마커 형태 잠금 — 인정/거부 경계.
+    #[test]
+    fn echoed_exit_status_parses_marker_forms_only() {
+        assert_eq!(echoed_exit_status("EXIT: 0"), Some(0));
+        assert_eq!(echoed_exit_status("FMT_EXIT=0"), Some(0));
+        assert_eq!(
+            echoed_exit_status("fmt applied exit=0\nfmt --check clean"),
+            Some(0)
+        );
+        assert_eq!(echoed_exit_status("EXIT: 2"), Some(2));
+        assert_eq!(echoed_exit_status("tsc EXIT=1"), Some(1));
+        // "exit code: N" 형태 — 2026-07-06 루프 2회차, 세션 31f1fb03 실 표본
+        // 2건("tsc exit code: 0"·"vitest exit code: 0"). 하네스 "Exit code
+        // 143"(구분자 없음)과 콜론 유무로 구분된다.
+        assert_eq!(echoed_exit_status("tsc exit code: 0"), Some(0));
+        assert_eq!(echoed_exit_status("vitest exit code: 0"), Some(0));
+        assert_eq!(echoed_exit_status("exit code: 2"), Some(2));
+        // 하네스 "Exit code N"(구분자 없음)·코드 인용 "process.exit(0)"·
+        // 산문 "clean exit 0"은 마커가 아니다.
+        assert_eq!(echoed_exit_status("Exit code 143"), None);
+        assert_eq!(echoed_exit_status("process.exit(0)"), None);
+        assert_eq!(echoed_exit_status("clean exit 0"), None);
+        // 마커는 출력 끝(마지막 5행)에서만 인정 — 본문 중간 인용 오탐 방지.
+        let buried = format!("EXIT: 1\n{}", "line\n".repeat(6));
+        assert_eq!(echoed_exit_status(&buried), None);
+    }
+
+    /// unknown-verification 루프 2026-07-06 (세션 31f1fb03, 실 표본 19건:
+    /// `cargo fmt` 10·`npx tsc --noEmit` 8·`cargo fmt --check` 1). quiet-success
+    /// 도구는 성공 시 출력이 없고 CC는 성공 exit code를 transcript에 남기지
+    /// 않으므로, 에이전트가 echo한 exit 마커("EXIT: 0"·"FMT_EXIT=0"·
+    /// "fmt applied exit=0")가 유일한 신호인데 종전 파서가 인식하지 못했다.
+    #[test]
+    fn echoed_exit_marker_resolves_quiet_success_tools() {
+        for (tid, cmd, content) in [
+            (
+                "toolu_fmt_echo",
+                "cargo fmt 2>&1",
+                "fmt applied exit=0\nfmt --check clean",
+            ),
+            ("toolu_tsc_echo", "npx tsc --noEmit 2>&1", "EXIT: 0"),
+            ("toolu_fmtchk_echo", "cargo fmt --check 2>&1", "FMT_EXIT=0"),
+        ] {
+            let runs = extract_verification_runs(&make_bash_run(tid, cmd, content));
+            assert_eq!(runs.len(), 1, "{cmd}");
+            assert_eq!(runs[0].status, "passed", "{cmd}: echo된 exit 0 → passed");
+            assert_eq!(
+                runs[0].status_provenance.as_deref(),
+                Some("estimated"),
+                "{cmd}"
+            );
+        }
+        // 비-0 echo 마커는 failed(estimated).
+        let runs = extract_verification_runs(&make_bash_run(
+            "toolu_tsc_echo_fail",
+            "npx tsc --noEmit 2>&1",
+            "EXIT: 2",
+        ));
+        assert_eq!(runs[0].status, "failed");
+        assert_eq!(runs[0].status_provenance.as_deref(), Some("estimated"));
+
+        // 도구 뒤에 파이프가 있으면 echo된 `$?`는 파이프 마지막 단계(tail 등)의
+        // exit라 도구 성패를 반영하지 않는다 — 승격 금지, unknown 유지.
+        // real fixture 동형: verification_tsc_v01.jsonl 178fae97
+        // (`pnpm tsc --noEmit 2>&1 | tail -5; echo "tsc exit: $?"` → "tsc exit: 0").
+        let runs = extract_verification_runs(&make_bash_run(
+            "toolu_tsc_piped_echo",
+            "pnpm tsc --noEmit 2>&1 | tail -5; echo \"tsc exit: $?\"",
+            "tsc exit: 0",
+        ));
+        assert_eq!(runs.len(), 1);
+        assert_eq!(
+            runs[0].status, "unknown",
+            "파이프 뒤 echo 마커는 신뢰 불가 — 승격 금지"
         );
     }
 

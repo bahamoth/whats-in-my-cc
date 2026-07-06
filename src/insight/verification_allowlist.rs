@@ -9,7 +9,7 @@
 //! command before the first such token.
 //!
 //! Pattern count: 17 (locked by `tests/verification_bash_allowlist.rs`).
-//! parser_version: "verification_run@v1"
+//! parser_version: `verification_run::PARSER_VERSION` (패턴팩 변경 시 minor bump)
 
 use once_cell::sync::Lazy;
 use regex::Regex;
