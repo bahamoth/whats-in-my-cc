@@ -134,6 +134,8 @@ export function nodeLabel(
     tag?: { display?: string | null } | null;
     /** transcript isMeta → caller classification of user_message scaffolding. */
     is_meta?: boolean | number | null;
+    /** event subkind (CC transcript subtype) — system_summary 라벨에 쓰인다. */
+    subkind?: string | null;
   },
   // l10n — the three localized display labels (thinking / command-output /
   // notification) come from the catalog; the caller injects t().
@@ -205,6 +207,19 @@ export function nodeLabel(
           return { kind: 'user', primary: 'You', secondary: txt.trim() };
       }
     }
+    case 'tool_result': {
+      // flat 모드(필터 활성)에서만 자체 행이 된다 — 소유 call이 버퍼 밖일 수
+      // 있으므로 출력 첫 줄로 "무엇이 끝났는지"를 보인다 (2026-07-06).
+      const content = asObj(p.tool_result).content;
+      const first =
+        typeof content === 'string' ? content.trim().split('\n', 1)[0] : '';
+      return { kind: 'tool', primary: 'result', secondary: first };
+    }
+    case 'system_summary':
+      // 카드형 subkind(away_summary·compact_boundary)는 메시지 카드로 가고,
+      // 여기 오는 것은 flat 모드의 매칭 행(stop_hook_summary·turn_duration 등)
+      // — subkind가 곧 정체성이다 (2026-07-06).
+      return { kind: 'other', primary: 'system', secondary: node.subkind ?? '' };
     case 'hook_event': {
       const hn =
         (p.hookName as string) ??

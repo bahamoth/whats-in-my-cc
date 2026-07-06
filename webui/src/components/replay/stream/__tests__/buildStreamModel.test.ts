@@ -340,6 +340,40 @@ describe('buildStreamModel — sidechain grouping (#3)', () => {
     const groupedTopMessages = grouped.filter((i) => i.type === 'message');
     expect(flatMessages.length).toBeGreaterThan(groupedTopMessages.length);
   });
+
+  // §1.4 flat 모드 무손실 렌더 — 필터 활성 시 버퍼는 서버 매칭 행만 담으므로
+  // 어떤 이벤트도 조용히 떨어지면 안 된다. 실사고 2026-07-06: f_kind=
+  // system_summary가 "16건 매칭"인데 classify가 stop_hook_summary 등을 전부
+  // drop해 0건 렌더(세션 bebd8197).
+  describe('flat 모드 무손실 렌더 (매칭 행 ↔ 화면 1:1)', () => {
+    const sysSummary = ev({
+      event_id: 'ss1', kind: 'system_summary', subkind: 'stop_hook_summary',
+      actor: 'system', payload: { type: 'system', hookCount: 1 },
+    });
+    const toolResult = ev({
+      event_id: 'tr1', kind: 'tool_result', tool_use_id: 'tuX',
+      payload: { tool_result: { tool_use_id: 'tuX', is_error: true, content: 'Exit code 1\nboom' } },
+    });
+
+    it('flat: 카드 없는 kind(system_summary 잔여 subkind·tool_result)도 activity 행으로 렌더', () => {
+      const items = buildStreamModel([sysSummary, toolResult], new Map(), [], { flat: true });
+      const evIds = items
+        .filter((i) => i.type === 'activity-run')
+        .flatMap((r: any) => r.events.map((ae: any) => ae.event.event_id));
+      expect(evIds).toEqual(['ss1', 'tr1']);
+    });
+
+    it('flat: tool_result 행은 자기 payload의 is_error로 상태를 표시한다', () => {
+      const items = buildStreamModel([toolResult], new Map(), [], { flat: true });
+      const run = items.find((i) => i.type === 'activity-run') as any;
+      expect(run.events[0].result).toEqual({ isError: true });
+    });
+
+    it('grouped(비필터): 기존 동작 유지 — 둘 다 스트림에 나타나지 않는다', () => {
+      const items = buildStreamModel([sysSummary, toolResult], new Map(), []);
+      expect(items).toEqual([]);
+    });
+  });
 });
 
 describe('buildStreamModel — sidechain agent attribution (agent_id)', () => {
