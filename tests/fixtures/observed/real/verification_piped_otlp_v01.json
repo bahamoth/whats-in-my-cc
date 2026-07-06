@@ -1,0 +1,77 @@
+{
+ "captured_from": {
+  "session_id": "bebd8197-894f-4ed8-95ed-7e9b6ed3a0e5",
+  "tool_use_id": "toolu_01LJX3e4Y8kqdgn3oFm9JPqt",
+  "note": "wimcc 라이브 DB에서 동결한 실 관측 payload (CC 2.1.198, 2026-07-02). cargo test가 grep|head로 파이프되어 파이프라인 exit=0 → OTLP success=true인데 transcript content는 test result: FAILED."
+ },
+ "events": {
+  "tool_call": {
+   "kind": "tool_call",
+   "observed_at": "2026-07-02T23:10:05.718+00:00",
+   "payload": {
+    "content_ordinal": 0,
+    "tool_name": "Bash",
+    "input": {
+     "command": "cargo test --test mcp_tools_call --test mcp_tools_list --test mcp_spec_compat 2>&1 | grep -E 'test result|FAILED|error\\[' | head",
+     "description": "Run MCP tests after tool registration"
+    }
+   }
+  },
+  "otlp_tool_result": {
+   "kind": "log_record",
+   "observed_at": "2026-07-02T23:10:37.750+00:00",
+   "payload": {
+    "severity_number": null,
+    "severity_text": null,
+    "body": "claude_code.tool_result",
+    "event_name": "tool_result",
+    "attributes": {
+     "user.id": "efba24cedeb0ee89f3641015e20e43156eae9a78ae6167c7176c2eb64a738316",
+     "session.id": "bebd8197-894f-4ed8-95ed-7e9b6ed3a0e5",
+     "app.version": "2.1.198",
+     "organization.id": "24e79433-1b56-4858-97d2-41d739bf8fd2",
+     "user.email": "bahamoth@ncsoft.com",
+     "user.account_uuid": "a64e2aac-b010-40ab-b419-d9c35888d278",
+     "user.account_id": "user_01MY6R2R4MNB9msmKnEy59So",
+     "terminal.type": "ghostty",
+     "event.name": "tool_result",
+     "event.timestamp": "2026-07-02T23:10:37.750Z",
+     "event.sequence": 616,
+     "prompt.id": "d3d50baa-f639-48a6-88dd-ae25c8735927",
+     "tool_name": "Bash",
+     "tool_use_id": "toolu_01LJX3e4Y8kqdgn3oFm9JPqt",
+     "success": "true",
+     "duration_ms": "28754",
+     "tool_input_size_bytes": "197",
+     "tool_result_size_bytes": "146",
+     "decision_source": "config",
+     "decision_type": "accept"
+    },
+    "resource": {
+     "host.arch": "arm64",
+     "os.type": "darwin",
+     "os.version": "25.5.0",
+     "service.name": "claude-code",
+     "service.version": "2.1.198"
+    },
+    "scope_name": "com.anthropic.claude_code.events",
+    "scope_version": "2.1.198",
+    "time_unix_nano": 1783033837750000000,
+    "observed_time_unix_nano": 1783033837750000000
+   }
+  },
+  "tool_result": {
+   "kind": "tool_result",
+   "observed_at": "2026-07-02T23:10:38.041+00:00",
+   "payload": {
+    "content_ordinal": 0,
+    "tool_result": {
+     "tool_use_id": "toolu_01LJX3e4Y8kqdgn3oFm9JPqt",
+     "type": "tool_result",
+     "content": "test protocol_compat_tools_list_shape ... FAILED\ntest result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s",
+     "is_error": false
+    }
+   }
+  }
+ }
+}

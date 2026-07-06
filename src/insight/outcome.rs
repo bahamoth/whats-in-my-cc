@@ -45,17 +45,50 @@ pub enum OutcomeProvenance {
     Unknown,
 }
 
+/// Which chain step produced the outcome. exit-파생 3종(OTLP success · hook
+/// exit_code · content "Exit code N" prepend)은 전부 **shell-보고 exit**의
+/// 반영이다 — bash 매뉴얼 §3.7.5: 파이프라인의 exit status는 마지막 명령의
+/// 것이므로, 비-pager 파이프(status_basis="piped") 명령에서는 검증 도구가 아닌
+/// 파이프 꼬리(grep/head)의 결과다. piped를 아는 호출부(verification_run
+/// extractor)가 이 값으로 신호를 버릴 수 있게 노출한다 (2026-07-06 실사고:
+/// vr_30c7c2a20327e4d6 — FAILED 출력인데 OTLP success=true로 passed 오판).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutcomeBasis {
+    /// Step 1 — OTLP log_record `attributes.success`.
+    OtlpSuccess,
+    /// Step 2 — hook post_tool_use `tool_response.exit_code`.
+    HookExitCode,
+    /// Step 3 — transcript content의 "Exit code N" / "exit code: N" 라인.
+    ContentExitCode,
+    /// Step 3b — 하니스 `<tool_use_error>` 래퍼 (exit와 무관한 실행 실패 채널).
+    ToolUseError,
+    /// 체인 무매치 (Unknown).
+    None,
+}
+
+impl OutcomeBasis {
+    /// True면 shell-보고 exit에서 파생된 신호 — 파이프에 마스킹될 수 있다.
+    pub fn exit_derived(self) -> bool {
+        matches!(
+            self,
+            OutcomeBasis::OtlpSuccess | OutcomeBasis::HookExitCode | OutcomeBasis::ContentExitCode
+        )
+    }
+}
+
 /// Resolved outcome pair.
 #[derive(Debug, Clone, Copy)]
 pub struct Outcome {
     pub status: OutcomeStatus,
     pub provenance: OutcomeProvenance,
+    pub basis: OutcomeBasis,
 }
 
 impl Outcome {
     pub const UNKNOWN: Outcome = Outcome {
         status: OutcomeStatus::Unknown,
         provenance: OutcomeProvenance::Unknown,
+        basis: OutcomeBasis::None,
     };
 }
 
@@ -101,6 +134,7 @@ pub fn resolve_outcome(events: &[ObservedEvent], tool_use_id: &str) -> Outcome {
             return Outcome {
                 status,
                 provenance: OutcomeProvenance::Measured,
+                basis: OutcomeBasis::OtlpSuccess,
             };
         }
     }
@@ -133,6 +167,7 @@ pub fn resolve_outcome(events: &[ObservedEvent], tool_use_id: &str) -> Outcome {
             return Outcome {
                 status,
                 provenance: OutcomeProvenance::Measured,
+                basis: OutcomeBasis::HookExitCode,
             };
         }
     }
@@ -163,6 +198,7 @@ pub fn resolve_outcome(events: &[ObservedEvent], tool_use_id: &str) -> Outcome {
                 return Outcome {
                     status,
                     provenance: OutcomeProvenance::Measured,
+                    basis: OutcomeBasis::ContentExitCode,
                 };
             }
             // ── Step 3b: harness 구조화 에러 래퍼 ─────────────────────────────
@@ -178,6 +214,7 @@ pub fn resolve_outcome(events: &[ObservedEvent], tool_use_id: &str) -> Outcome {
                     return Outcome {
                         status: OutcomeStatus::Failed,
                         provenance: OutcomeProvenance::Measured,
+                        basis: OutcomeBasis::ToolUseError,
                     };
                 }
             }
