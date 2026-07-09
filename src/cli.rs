@@ -103,14 +103,34 @@ pub enum Command {
         /// Existing connections receive 401 on their next request.
         #[arg(long, conflicts_with = "print_token")]
         rotate_token: bool,
-        /// Slice-19: Retention profile. Default: "none" (no deletion).
-        /// "default" (raw 30d, normalized+signal 180d, audit 90d) or "strict"
-        /// (raw 7d, others 30d) enables a 6-hourly sweep over all data classes.
-        #[arg(long, default_value = "none", value_parser = ["none", "default", "strict"])]
+        /// Slice-19: Retention profile. Default: "default" (raw 60d,
+        /// normalized+signal 180d, audit 90d) — a 6-hourly sweep over all data
+        /// classes. "none" keeps everything forever (explicit archiving opt-out);
+        /// "strict" (raw 7d, others 30d) is more aggressive.
+        #[arg(long, default_value = "default", value_parser = ["none", "default", "strict"])]
         retention_profile: String,
         /// Whether to require bearer-token auth on /v1 + /mcp. Default: off (single-user dev).
         /// `on` activates slice-19 token middleware. DEV-S19-08.
         #[arg(long, value_enum, default_value_t = AuthMode::Off)]
         auth: AuthMode,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 2026-07-08 사용자 결정: retention은 스펙상 "제품 핵심 요구사항"인데
+    /// 기본이 none이면 무한 증가가 기본이 된다 — 이름대로 `default` 프로파일을
+    /// 실제 기본값으로 승격한다. none은 명시적 아카이빙 opt-out으로 남는다.
+    #[test]
+    fn serve_defaults_to_default_retention_profile() {
+        let cli = Cli::try_parse_from(["wimcc", "serve"]).expect("serve parses with defaults");
+        match cli.command {
+            Command::Serve {
+                retention_profile, ..
+            } => assert_eq!(retention_profile, "default"),
+            other => panic!("expected Serve, got {other:?}"),
+        }
+    }
 }

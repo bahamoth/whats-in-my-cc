@@ -149,9 +149,9 @@ async fn count(pool: &sqlx::SqlitePool, sql: &str, bind: &str) -> i64 {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn sweep_default_profile_scrubs_raw_payload_older_than_30d() {
+async fn sweep_default_profile_scrubs_raw_payload_older_than_60d() {
     let pool = test_pool().await;
-    let old_id = seed_old_raw_event(&pool, 31).await;
+    let old_id = seed_old_raw_event(&pool, 61).await;
     let new_id = seed_old_raw_event(&pool, 5).await; // must stay intact
 
     let p = RetentionPolicy {
@@ -164,7 +164,7 @@ async fn sweep_default_profile_scrubs_raw_payload_older_than_30d() {
     assert_eq!(
         report.deletions.get("raw_event").copied().unwrap_or(0),
         1,
-        "should scrub exactly 1 raw payload older than 30d"
+        "should scrub exactly 1 raw payload older than 60d"
     );
 
     // Both rows survive: the skeleton (provenance triple) is kept so the
@@ -195,7 +195,7 @@ async fn sweep_default_profile_scrubs_raw_payload_older_than_30d() {
 #[tokio::test]
 async fn scrubbed_raw_payload_has_tombstone() {
     let pool = test_pool().await;
-    let id = seed_old_raw_event(&pool, 31).await;
+    let id = seed_old_raw_event(&pool, 61).await;
 
     let p = RetentionPolicy {
         profile: Profile::Default,
@@ -220,7 +220,7 @@ async fn scrubbed_raw_payload_has_tombstone() {
 #[tokio::test]
 async fn raw_scrub_succeeds_with_observed_event_fk_child() {
     let pool = test_pool().await;
-    let raw_id = seed_old_raw_event(&pool, 31).await;
+    let raw_id = seed_old_raw_event(&pool, 61).await;
     // Child is recent → its session is NOT expired, so the raw row cannot be
     // deleted without breaking the FK. Scrub must still empty the payload.
     seed_observed_event(&pool, &raw_id, "sess_fk_child", 1).await;
@@ -245,7 +245,7 @@ async fn raw_scrub_succeeds_with_observed_event_fk_child() {
 #[tokio::test]
 async fn raw_scrub_is_idempotent_across_sweeps() {
     let pool = test_pool().await;
-    seed_old_raw_event(&pool, 31).await;
+    seed_old_raw_event(&pool, 61).await;
 
     let p = RetentionPolicy {
         profile: Profile::Default,
@@ -534,7 +534,7 @@ async fn orphan_session_without_observed_events_is_swept() {
 #[tokio::test]
 async fn sweep_writes_audit_row() {
     let pool = test_pool().await;
-    seed_old_raw_event(&pool, 31).await;
+    seed_old_raw_event(&pool, 61).await;
 
     let p = RetentionPolicy {
         profile: Profile::Default,
