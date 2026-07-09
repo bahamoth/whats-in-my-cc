@@ -49,7 +49,7 @@ impl Profile {
     pub fn raw_payload_days(&self) -> Option<i64> {
         match self {
             Profile::None => None,
-            Profile::Default => Some(30),
+            Profile::Default => Some(60),
             Profile::Strict => Some(7),
         }
     }
@@ -326,4 +326,36 @@ pub fn spawn_sweep_task(
 pub struct SweepStats {
     pub last_sweep_at: Option<String>,
     pub last_sweep_deletions: HashMap<String, u64>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 2026-07-08 사용자 결정: `default` 프로파일을 CLI 기본으로 승격하면서
+    /// 티어를 확정한다 — raw payload 60일(재도출 가능 기간; 30일은 파서 개선
+    /// 재적용 창이 너무 짧다는 도그푸딩 판단), 분석 데이터(normalized·signal)
+    /// 180일(대시보드 90일 프리셋의 2배 → 경계 뷰 완전 + 버퍼), audit 90일.
+    #[test]
+    fn default_profile_tiers_are_raw60_analyzable180_audit90() {
+        assert_eq!(Profile::Default.raw_payload_days(), Some(60));
+        assert_eq!(Profile::Default.normalized_event_days(), Some(180));
+        assert_eq!(Profile::Default.insight_days(), Some(180));
+        assert_eq!(Profile::Default.audit_days(), Some(90));
+        // normalized == insight: 스윕이 둘을 한 패스로 지운다(테스트로 잠금 —
+        // 어긋나면 별도 패스가 필요하다는 신호). run_sweep 주석 참조.
+        assert_eq!(
+            Profile::Default.normalized_event_days(),
+            Profile::Default.insight_days()
+        );
+    }
+
+    /// None/Strict는 이번 변경 대상이 아님 — 회귀 방지로 함께 잠근다.
+    #[test]
+    fn none_and_strict_tiers_unchanged() {
+        assert_eq!(Profile::None.raw_payload_days(), None);
+        assert_eq!(Profile::None.normalized_event_days(), None);
+        assert_eq!(Profile::Strict.raw_payload_days(), Some(7));
+        assert_eq!(Profile::Strict.normalized_event_days(), Some(30));
+    }
 }
