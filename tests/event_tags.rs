@@ -929,3 +929,28 @@ fn tagging_loop_2026_07_06_additions() {
     assert_eq!(tag(&bash("docker rmi old-image")), None);
     assert_eq!(tag(&bash("claude doctor")), None);
 }
+
+/// tagging-gate 2026-07-09 추가 (실측 후보). docker ps/exec는 DOCKER_SUBS
+/// 주석이 예고한 재표면화 op — ps는 컨테이너 목록/상태 조회(read.proc), exec는
+/// 컨테이너 내 프로세스 실행(run.proc; 관측 표본 전부 `docker exec … psql -c
+/// "select/update…"`, 세션 gameradar). aws configure는 로컬 프로필 조회
+/// (관측 표본 전부 `aws configure list-profiles` — read.config).
+#[test]
+fn tagging_loop_2026_07_09_additions() {
+    assert_eq!(
+        tag(&bash("docker ps --format '{{.Names}}\\t{{.Status}}'")),
+        Some("read.proc")
+    );
+    assert_eq!(
+        tag(&bash(
+            "docker exec gameradar-postgres psql -U gameradar -c \"select 1\""
+        )),
+        Some("run.proc")
+    );
+    assert_eq!(
+        tag(&bash("aws configure list-profiles 2>/dev/null | head -20")),
+        Some("read.config")
+    );
+    // 미관측 docker 서브커맨드는 여전히 unmatched (사전 원칙).
+    assert_eq!(tag(&bash("docker rmi old-image")), None);
+}

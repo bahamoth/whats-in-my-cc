@@ -288,10 +288,12 @@ static RUSTUP_SUBS: &[(&str, &str)] = &[
     ("install", "write.deps"),
     ("show", "read.deps"),
 ];
-/// aws — sts는 자격 신원 조회(printenv/sysctl의 read.proc 동족). 그 외
-/// 서비스 서브커맨드는 verb가 3단계(aws <svc> <op>)에 있어 미관측인 채로
-/// unmatched 유지 (tagging loop 2026-07-03).
-static AWS_SUBS: &[(&str, &str)] = &[("sts", "read.proc")];
+/// aws — sts는 자격 신원 조회(printenv/sysctl의 read.proc 동족). configure는
+/// 로컬 자격/프로필 설정 조회(2026-07-09 추가, n=2 전부 `aws configure
+/// list-profiles` — 로컬 ~/.aws 조회라 read.config). 그 외 서비스 서브커맨드는
+/// verb가 3단계(aws <svc> <op>)에 있어 미관측인 채로 unmatched 유지
+/// (tagging loop 2026-07-03).
+static AWS_SUBS: &[(&str, &str)] = &[("sts", "read.proc"), ("configure", "read.config")];
 /// chezmoi — dotfile 관리자 (tagging loop 2026-07-04). diff/managed/source-path는
 /// 소스·타겟 상태 조회(read.config), apply는 타겟 반영(write.config). 미관측
 /// 서브커맨드(add·edit 등)는 unmatched로 남긴다.
@@ -307,9 +309,15 @@ static VOLTA_SUBS: &[(&str, &str)] = &[("install", "write.deps")];
 /// 컨테이너 앱 실행 관리(공식 docs: "Compose is a tool for defining and
 /// running multi-container applications") — 관측 표본(세션 c78d40d3, n=6)은
 /// 전부 `compose up -d`(서비스 기동, open/`wimcc serve`의 run.proc 동족).
-/// 3단계 조회형 op(logs/ps)·그 외 서브커맨드(build/rmi 등)는 미관측 —
+/// 2026-07-09 추가: ps는 컨테이너 목록/상태 조회(read.proc, n=10 전부
+/// `ps --format …`), exec는 컨테이너 내 프로세스 실행(run.proc, n=13 전부
+/// `exec … psql -c "select/update…"`). 그 외(build/rmi 등)는 미관측 —
 /// unmatched로 남겨 재표면화 시 세분화한다.
-static DOCKER_SUBS: &[(&str, &str)] = &[("compose", "run.proc")];
+static DOCKER_SUBS: &[(&str, &str)] = &[
+    ("compose", "run.proc"),
+    ("ps", "read.proc"),
+    ("exec", "run.proc"),
+];
 /// claude — Claude Code CLI (tagging loop 2026-07-06). plugins는 플러그인
 /// 레지스트리 조회(npm list의 read.deps 동족) — 관측 표본(세션 f6fa76f8,
 /// n=4)은 전부 목록/도움말 조회(`plugins list --json`·`plugins marketplace

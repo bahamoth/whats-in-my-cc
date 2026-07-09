@@ -9,6 +9,11 @@
     "expect": "실행 아님 — echo \"…; expect now exploration/diagnosis, NOT action)\" 영문 코멘트 문장의 `;` 토크나이저 파편 (2026-07-05, 세션 01fe9550)",
     "will": "실행 아님 — echo \"…will proceed once notified.\" 상태 메시지 문자열의 토크나이저 파편 (2026-07-05, 이 세션 대기 로그)",
     "port": "실행 아님 — pgrep -f \"port 7999|port 5174|pr3-smoke\" 패턴 문자열의 토크나이저 파편 (2026-07-05, PR-4 스모크 세션)",
-    "example": "실행 아님 — git commit -m 다행 메시지 개행·단독 경로 세그먼트(…/.env.example)의 토크나이저 파편 (2026-07-06, 세션 c78d40d3 gameradar)"
+    "example": "실행 아님 — git commit -m 다행 메시지 개행·단독 경로 세그먼트(…/.env.example)의 토크나이저 파편 (2026-07-06, 세션 c78d40d3 gameradar)",
+    "sqlx": "실행 아님 — git commit -m \"test: …sqlx…\" 메시지·heredoc 코드 본문(sqlx 크레이트 사용)의 토크나이저 파편, sqlx-cli 호출 아님 (2026-07-09, 세션 whats-in-my-cc)",
+    "qmd": "실행이지만 비보편 — mcc-knowledge-vault 개인 검색 CLI(`qmd search \"…\"`). 공개 CLI/공식 plugin 아님 (2026-07-09, mcc-knowledge-vault 세션)",
+    "sdk": "실행 아님 — `ls/cat node_modules/@modelcontextprotocol/sdk/…` 경로 세그먼트의 토크나이저 파편, 최상위 명령은 ls/cat (2026-07-09)",
+    "not": "실행 아님 — `find … -not -path '*/node_modules/*'`의 `-not` 플래그 토크나이저 파편 (2026-07-09, nc-design-system 세션)",
+    "basename": "실행이지만 비태깅 — `$(basename $(dirname $file))` 명령 치환 내부 경로 헬퍼(순수 문자열 처리, 파일 I/O 없어 verb.object 부적합). 최상위 명령은 echo/for 루프 (2026-07-09)"
   }
 }
