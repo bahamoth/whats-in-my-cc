@@ -4404,6 +4404,38 @@ vitest: 69 passed
         같은 형태라고 단정하지 말 것(이번에 "EXIT: 0" 그룹 다수가 실제론 무출력이었다).</li>
     </ul>
 
+    <p><strong>5차 라운드(2026-07-08 — vitest 파일 마커): 세션 c55703b4 잔여 unknown 해부</strong></p>
+    <ul>
+      <li><strong>근본 원인</strong>: vitest 실패 출력이 최종 요약(<code>Tests  M failed | K passed</code>) 전에
+        잘리면(파이프·출력캡 한도) 살아남는 신호가 파일 마커 <code>FAIL  &lt;path&gt;</code>·실패 불릿
+        <code>×</code>·파일별 카운트 <code>(N tests | M failed)</code>·섹션 배너 <code>⎯ Failed Tests N ⎯</code>뿐인데,
+        기존 <code>looks_like_failure</code>는 요약형(<code>FAILED</code>·<code>" failed | "</code>·<code>" failed ("</code>)만
+        인식해 전부 놓쳤다(<code>vr_ac75e8a2be18b9b9</code> <code>npm test -- --run 2>&amp;1</code> piped — content는
+        명백한 2-fail인데 unknown). DB 전수: 현행 v1.1 unknown 98건 중 <b>7건</b>이 이 갭(전부 test_suite_js).</li>
+      <li><strong>looks_like_failure 확장(균형 세트 3종)</strong>: ① 파일 마커 <code>" FAIL  "</code>(2-space —
+        통과 파일 <code> ✓ </code>/<code> PASS </code>와 구분, 테스트명 속 1-space "FAIL"과도 구분),
+        ② 배너 <code>"⎯ Failed Tests"</code>(⎯ U+23AF 박스 앵커 — 실패 시에만 등장),
+        ③ 파일별 카운트 <code>has_vitest_perfile_failure</code>(<code>| &lt;digits&gt; failed)</code> 수동 스캔,
+        regex 없이 — 통과 파일은 <code>(N tests)</code>뿐). 7/7 전부 커버. 잠금:
+        <code>vitest_file_marker_failure_without_summary_is_failed_estimated</code>(vr_ac75 실 content)·
+        <code>looks_like_failure_detects_vitest_markers_without_summary</code>(오탐 가드 2건 포함).</li>
+      <li><strong>오탐 안전성(전 코퍼스 대조)</strong>: v1.1 passed 542건에 후보 패턴 매치는 전부
+        <code>measured</code>(resolve_outcome가 Passed → Tier-4 <code>looks_like_failure</code> 미호출로 면역).
+        estimated-pass 매치 0. 앞서 "flip 위험"으로 보인 2건은 <b>이미 오판된 스테일 v1 rows</b>
+        (<code>3 failed | 22 passed</code>·<code>1 failed | 275 passed</code>인데 passed — 현행 <code>" failed | "</code>가
+        재ingest 시 오히려 교정). ` FAIL `은 2-space로 좁혀 1-space-only 오탐 0 확인.</li>
+      <li><strong>piped 근본 한계 재확인(사용자 질문)</strong>: content가 실패인 piped 88건 중 81건(92%)이
+        <code>Exit code</code> 라인 없음 = 파이프라인 exit 0이 도구 실패를 가림 → CC는 pipefail 미설정.
+        <code>discard_pipe_masked</code>가 exit-파생 신호를 버리는 건 과보수가 아니라 필수(안 버리면 81건
+        passed 오판; frozen fixture verification_piped_otlp_v01 동형). 복구는 살아남은 도구 요약(content)
+        기반뿐 — 이번 확장이 그 recall을 넓힌 것. agent의 destructive 필터(<code>| grep -c</code>·<code>| wc</code>)가
+        요약 자체를 없앤 경우는 소스에서 소실(transcript에 없음) — 파서 복구 불가. pipefail 인지 exit-신뢰는
+        기존 "한계(인지)" 노트대로 미구현(실표본 없음, 이 코퍼스도 사용 0건).</li>
+      <li><strong>PARSER_VERSION v1.1→v1.2</strong>(R-20260706-5): 패턴팩 변경 minor bump.
+        스테일 v1 rows 360건 중 ~167(46%)은 현행 파서가 이미 해소(성공요약 126·실패 31·마커 9·echo 1) —
+        재ingest만 해도 unknown 버킷 반토막 + v1 오판 교정.</li>
+    </ul>
+
     <h2 id="dogfooding-deferred-2026-06-11">개밥먹기 분석 — 이번 범위 외(deferred)</h2>
     <ul>
       <li><strong>비용 미가격·Opus 과대 — 2026-06-11 적용</strong>: 6a254a2a 지배 모델
