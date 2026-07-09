@@ -97,7 +97,7 @@ async fn extracts_verification_runs_from_real_bash_fixture() {
             r.source
         );
         assert_eq!(r.schema_version, "verification_run.v1");
-        assert_eq!(r.parser_version, "verification_run@v1.1");
+        assert_eq!(r.parser_version, "verification_run@v1.2");
     }
 
     // Verify command kinds present

@@ -27,7 +27,7 @@ use crate::model::observed::{EventKind, ObservedEvent};
 // minor를 올린다 — rows의 parser_version으로 "어느 세대 파서가 판정했나"를
 // 구분 가능하게 (2026-07-06 실사고: 구세대 rows와 현행 파서 산출이 섞여
 // unknown 비중이 38% vs 12%로 갈렸는데 표면상 구분 불가였다).
-pub const PARSER_VERSION: &str = "verification_run@v1.1";
+pub const PARSER_VERSION: &str = "verification_run@v1.2";
 pub const SCHEMA_VERSION: &str = "verification_run.v1";
 
 /// A single verification run row ready for DB insertion.
@@ -774,6 +774,37 @@ fn looks_like_failure(content: &str) -> bool {
         // required." exit code도 못 얻은 세션에서 format_check가 unknown으로
         // 남았다 (unknown-verification 루프, PR-3 Task 7, 2026-07-05, 실 표본 5건).
         || content.contains("Diff in ")
+        // vitest 실패 마커 3종 — 최종 요약(`Tests  M failed | K passed`)이 잘려도
+        // 살아남는 신호. 요약 기반 기존 패턴("failed |"·"failed (")과 상보적이다
+        // (2026-07-08 루프, 세션 c55703b4 실 표본 7건, vr_ac75e8a2be18b9b9 등).
+        //   ① 파일 마커 ` FAIL  <path>`(2-space) — 통과 파일은 ` ✓ `/` PASS `라
+        //      2-space "FAIL  "은 실패 파일에만 찍힌다(테스트명 속 1-space "FAIL"
+        //      과 구분; 통과 코퍼스 542건 대조: 2-space 매치는 전부 measured라
+        //      Tier-4 미호출로 면역, 1-space-only 오탐 0).
+        || content.contains(" FAIL  ")
+        //   ② 실패 섹션 배너 `⎯⎯⎯ Failed Tests N ⎯⎯⎯` — ⎯(U+23AF) 박스로 앵커해
+        //      실패 시에만 등장(통과 출력엔 없음).
+        || content.contains("⎯ Failed Tests")
+        //   ③ 파일별 카운트 `(N tests | M failed)` — 통과 파일은 `(N tests)`뿐이라
+        //      "| <digits> failed)"는 실패에만 나타난다.
+        || has_vitest_perfile_failure(content)
+}
+
+/// vitest 파일별 결과 줄 `(N tests | M failed)`의 `| <digits> failed)` 조각을
+/// 구조적으로 판별한다(요약이 잘려도 파일별 카운트 줄은 남는 경우가 있다).
+/// 통과 파일은 `(N tests)` 형태라 이 조각이 등장하지 않는다 — prose "… failed)"
+/// 오탐을 피하려 바로 앞이 `| <숫자>` 형태일 때만 인정한다. echoed_exit_status와
+/// 동일하게 regex 없이 수동 스캔(정밀 파싱).
+fn has_vitest_perfile_failure(content: &str) -> bool {
+    for (idx, _) in content.match_indices(" failed)") {
+        let head = &content[..idx];
+        let without_digits = head.trim_end_matches(|c: char| c.is_ascii_digit());
+        // 최소 한 자리 숫자를 벗겨냈고, 그 앞이 "| "로 끝나면 파일별 카운트다.
+        if without_digits.len() < head.len() && without_digits.ends_with("| ") {
+            return true;
+        }
+    }
+    false
 }
 
 /// Truncate a string to at most `max_bytes` bytes (UTF-8 safe).
@@ -1144,6 +1175,60 @@ mod tests {
             "vitest pipe-separated summary → failed"
         );
         assert_eq!(runs[0].status_provenance.as_deref(), Some("estimated"));
+    }
+
+    /// unknown-verification 루프 2026-07-08 (세션 c55703b4, 실 표본:
+    /// vr_ac75e8a2be18b9b9 `npm test -- --run 2>&1`의 잘린 vitest 실패 출력 +
+    /// 동세션 6건). vitest는 실패 시 파일 마커 ` FAIL  <path>`, 파일별 카운트
+    /// `(N tests | M failed)`, 실패 섹션 배너 `⎯ Failed Tests N ⎯`를 찍는데,
+    /// 출력이 최종 요약(`Tests  M failed | K passed`) 전에 잘리면 기존 패턴
+    /// (FAILED·" failed | "·" failed (")이 전부 불일치해 unknown에 머물렀다.
+    /// piped(exit 마스킹)여도 이 마커들은 살아남으므로 Tier-4가 실패로 잡아야 한다.
+    #[test]
+    fn vitest_file_marker_failure_without_summary_is_failed_estimated() {
+        // vr_ac75e8a2be18b9b9의 실제 tool_result content(최종 요약 전에 잘린 형태).
+        let real_tail = " ❯ src/components/CreativeTrendsView.test.tsx (6 tests | 2 failed) 128ms\n     × 확산/단독 스케일 레인을 분리해서 보여준다 37ms\n     × 클러스터 → 소재 드릴다운으로 클릭 도달한다 (기존 갤러리 카드 재사용) 55ms\n FAIL  src/components/CreativeTrendsView.test.tsx > CreativeTrendsView > 확산/단독 스케일 레인을 분리해서 보여준다\n ❯ src/components/CreativeTrendsView.test.tsx:127:19\n FAIL  src/components/CreativeTrendsView.test.tsx > CreativeTrendsView > 클러스터 → 소재 드릴다운으로 클릭 도달한다 (기존 갤러리 카드 재사용)\n ❯ src/components/CreativeTrendsView.test.tsx:154:27\n    152|     render(<CreativeTrendsView />)";
+        let evs = make_piped_run(
+            "toolu_vitest_marker",
+            "npm test -- --run 2>&1 | grep -iE 'fail'",
+            real_tail,
+        );
+        let runs = extract_verification_runs(&evs);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(
+            runs[0].status, "failed",
+            "vitest FAIL marker survives the pipe → failed even without a summary line"
+        );
+        assert_eq!(runs[0].status_provenance.as_deref(), Some("estimated"));
+        assert_eq!(runs[0].status_basis, "piped");
+    }
+
+    /// vitest 실패 마커 3종을 직접 잠근다(균형 세트: 마커·배너·파일별 카운트).
+    /// 실 표본(세션 c55703b4): vr_c3b6ac04/vr_65d24125의 `⎯ Failed Tests N ⎯`
+    /// 배너, vr_1960a8d8의 `× <test>` 불릿, vr_ac75의 `(N tests | M failed)`.
+    #[test]
+    fn looks_like_failure_detects_vitest_markers_without_summary() {
+        // 파일 마커(2-space) — 통과 출력엔 없다(통과 파일은 ` ✓ `/` PASS `).
+        assert!(looks_like_failure(
+            " FAIL  src/components/CreativeTrendsView.test.tsx > CreativeTrendsView > a"
+        ));
+        // 실패 섹션 배너(⎯ 박스 앵커) — 실패 시에만 출력.
+        assert!(looks_like_failure(
+            "Exit code 1\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n"
+        ));
+        // 파일별 카운트 `(N tests | M failed)` — 통과 파일은 `(N tests)`뿐.
+        assert!(looks_like_failure(
+            " ❯ src/components/CreativeTrendsView.test.tsx (6 tests | 2 failed) 128ms"
+        ));
+        // 오탐 가드 ①: 전부 통과한 vitest 요약은 실패로 보지 않는다.
+        assert!(!looks_like_failure(
+            " ✓ src/a.test.ts (6 tests) 12ms\n Test Files  1 passed (1)\n      Tests  6 passed (6)"
+        ));
+        // 오탐 가드 ②: 테스트 이름에 "FAIL"이 든 통과 불릿(1-space)은 파일 마커
+        // (2-space)와 달라 매칭되지 않는다.
+        assert!(!looks_like_failure(
+            " ✓ does not FAIL on empty input (5 tests) 1ms"
+        ));
     }
 
     #[test]
