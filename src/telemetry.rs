@@ -73,7 +73,10 @@ pub fn init(format: &LogFormat, verbose: bool, file: Option<(&Path, u16)>) -> Op
         None => None,
     };
 
-    tracing_subscriber::registry().with(filter).with(layers).init();
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(layers)
+        .init();
     guard
 }
 
