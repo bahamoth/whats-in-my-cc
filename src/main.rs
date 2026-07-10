@@ -3,7 +3,29 @@ use wimcc::{cli, db, doctor, error, paths, telemetry};
 
 fn main() -> error::Result<()> {
     let cli = cli::Cli::parse();
-    telemetry::init(&cli.log_format, cli.verbose);
+    // Only a real `serve` (not the --print-token/--rotate-token short-circuits)
+    // gets a rotating file log next to its DB; other commands stay console-only.
+    let file_log = match &cli.command {
+        cli::Command::Serve {
+            print_token: false,
+            rotate_token: false,
+            ..
+        } => Some((
+            telemetry::resolve_log_dir(&cli.db_path, cli.log_dir.as_deref()),
+            cli.log_retention_days,
+        )),
+        _ => None,
+    };
+    // The guard must outlive the whole run so the non-blocking writer flushes.
+    let _log_guard = telemetry::init(
+        &cli.log_format,
+        cli.verbose,
+        file_log.as_ref().map(|(dir, keep)| (dir.as_path(), *keep)),
+    );
+    if let Some((dir, keep)) = &file_log {
+        let abs = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.clone());
+        tracing::info!(dir = %abs.display(), keep_days = keep, "rotating file log enabled");
+    }
     let rt = tokio::runtime::Runtime::new().map_err(anyhow::Error::from)?;
     rt.block_on(async move {
         match cli.command {
