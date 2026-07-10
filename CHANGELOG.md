@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0](https://github.com/bahamoth/whats-in-my-cc/compare/v1.2.1...v1.3.0) (2026-07-10)
+
+
+### Features
+
+* **logger:** serve에 롤링 파일 로그 배선 — 콘솔+파일 tee ([58220fb](https://github.com/bahamoth/whats-in-my-cc/commit/58220fb7b088014678790b769bbeadb36aa61710))
+* **logger:** 로그 디렉터리 해석·일자 회전 파일 appender 헬퍼 ([8bba257](https://github.com/bahamoth/whats-in-my-cc/commit/8bba257866c1a539663bbfaca50eef14f66f3aa7))
+* **retention:** default 프로파일을 CLI 기본값으로 승격, raw 60일 ([c8e6759](https://github.com/bahamoth/whats-in-my-cc/commit/c8e67596c8622742c590ab8b3275566eeb1cd5ac))
+
+
+### Bug Fixes
+
+* **ingest:** vitest 파일 마커 실패를 unknown이 아닌 failed로 판정 ([d1bde2f](https://github.com/bahamoth/whats-in-my-cc/commit/d1bde2f85f837dd7839f3230e3f8589e6381e3aa))
+
 ## [1.2.1](https://github.com/bahamoth/whats-in-my-cc/compare/v1.2.0...v1.2.1) (2026-07-06)
 
 
