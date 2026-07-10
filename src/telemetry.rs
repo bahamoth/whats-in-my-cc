@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
+use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter, Layer};
 
 use crate::cli::LogFormat;
 
@@ -33,16 +34,47 @@ pub fn file_appender(dir: &Path, keep_days: u16) -> RollingFileAppender {
         .expect("build rolling file appender")
 }
 
-pub fn init(format: &LogFormat, verbose: bool) {
+/// Initialize the global tracing subscriber.
+///
+/// The console layer honors `format` (Pretty/Json) and keeps ANSI colors.
+/// When `file` is `Some((dir, keep_days))` — only `serve` passes this — a second
+/// layer writes to a daily-rotating file in `dir`. The file layer is **always**
+/// human-readable Pretty with ANSI stripped: the file is a `tail` target, so
+/// JSON is inconvenient and ANSI escapes would pollute it (2026-07-10 decision).
+///
+/// Returns the appender's `WorkerGuard` when file logging is on; the caller must
+/// hold it for the process lifetime so the non-blocking writer flushes on exit.
+pub fn init(format: &LogFormat, verbose: bool, file: Option<(&Path, u16)>) -> Option<WorkerGuard> {
     let default_level = if verbose { "debug" } else { "info" };
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(format!("wimcc={default_level},sqlx=warn,axum=info")));
 
-    let reg = tracing_subscriber::registry().with(filter);
-    match format {
-        LogFormat::Pretty => reg.with(fmt::layer().with_target(false)).init(),
-        LogFormat::Json => reg.with(fmt::layer().json().with_target(false)).init(),
-    }
+    let console: Box<dyn Layer<_> + Send + Sync> = match format {
+        LogFormat::Pretty => fmt::layer().with_target(false).boxed(),
+        LogFormat::Json => fmt::layer().json().with_target(false).boxed(),
+    };
+    let mut layers: Vec<Box<dyn Layer<_> + Send + Sync>> = vec![console];
+
+    let guard = match file {
+        Some((dir, keep_days)) => {
+            // Ensure the directory exists (a custom --log-dir may not); the
+            // db-parent default normally exists because the DB lives there.
+            let _ = std::fs::create_dir_all(dir);
+            let (nb, guard) = tracing_appender::non_blocking(file_appender(dir, keep_days));
+            layers.push(
+                fmt::layer()
+                    .with_ansi(false)
+                    .with_target(false)
+                    .with_writer(nb)
+                    .boxed(),
+            );
+            Some(guard)
+        }
+        None => None,
+    };
+
+    tracing_subscriber::registry().with(filter).with(layers).init();
+    guard
 }
 
 #[cfg(test)]

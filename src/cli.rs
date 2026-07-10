@@ -32,6 +32,21 @@ pub struct Cli {
     /// Verbose logging (equivalent to RUST_LOG=debug).
     #[arg(short, long, global = true)]
     pub verbose: bool,
+
+    /// Directory for rotating serve logs. Default: same directory as --db-path
+    /// (CWD when the default `.wimcc.sqlite` is used). Only `serve` writes files.
+    #[arg(long, global = true, env = "WIMCC_LOG_DIR")]
+    pub log_dir: Option<PathBuf>,
+
+    /// How many daily serve log files to keep before pruning. Default: 7.
+    #[arg(
+        long,
+        global = true,
+        default_value_t = 7,
+        value_parser = clap::value_parser!(u16).range(1..=365),
+        env = "WIMCC_LOG_RETENTION_DAYS"
+    )]
+    pub log_retention_days: u16,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]
@@ -132,5 +147,34 @@ mod tests {
             } => assert_eq!(retention_profile, "default"),
             other => panic!("expected Serve, got {other:?}"),
         }
+    }
+
+    /// 2026-07-10: 롤링 파일 로거 — 위치·보관수는 전역 옵션. 기본값 확인.
+    #[test]
+    fn log_dir_and_retention_days_defaults() {
+        let cli = Cli::try_parse_from(["wimcc", "serve"]).expect("serve parses");
+        assert_eq!(cli.log_dir, None);
+        assert_eq!(cli.log_retention_days, 7);
+    }
+
+    #[test]
+    fn log_dir_and_retention_days_from_args() {
+        let cli = Cli::try_parse_from([
+            "wimcc",
+            "--log-dir",
+            "/logs",
+            "--log-retention-days",
+            "14",
+            "serve",
+        ])
+        .expect("parses global log flags");
+        assert_eq!(cli.log_dir.as_deref(), Some(std::path::Path::new("/logs")));
+        assert_eq!(cli.log_retention_days, 14);
+    }
+
+    #[test]
+    fn log_retention_days_rejects_out_of_range() {
+        assert!(Cli::try_parse_from(["wimcc", "--log-retention-days", "0", "serve"]).is_err());
+        assert!(Cli::try_parse_from(["wimcc", "--log-retention-days", "366", "serve"]).is_err());
     }
 }
