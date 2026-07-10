@@ -1,6 +1,7 @@
 /target
 **/*.rs.bk
 .wimcc.sqlite*
+wimcc.*.log
 payloads/
 .DS_Store
 webui/node_modules/
