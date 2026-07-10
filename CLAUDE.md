@@ -98,6 +98,13 @@ schema-versioning·deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html` �
   npx vite --port 5174`. **`--auto-migrate`를 빼먹으면 신규 테이블이 없어
   런타임 WARN으로만 드러난다**(2026-07-04 실사고). 새 백엔드 필드는 스크래치
   serve 재빌드·재기동 후에야 API에 실린다.
+- **serve 로그 관측/디버깅**: 프로세스 상태 확인·디버깅은 **재기동하지 말고 로그
+  파일을 tail**한다(재기동은 라이브 상태를 초기화). 파일 위치 우선순위:
+  ①`--log-dir`/`WIMCC_LOG_DIR`(명시 시) → ②없으면 `--db-path`의 부모 디렉터리 →
+  ③그것도 비면(기본 `.wimcc.sqlite`) CWD. 파일명 `wimcc.<date>.log`, 일자 회전·
+  기본 7일 보관(`--log-retention-days`). serve 시작 로그의 `rotating file log
+  enabled dir=…` 줄에 그 시점 절대 경로가 찍히니 그걸 tail한다. 파일은 항상
+  Pretty·ANSI 없음(JSON은 콘솔 `--log-format json`에서만).
 - **dev DB**: migration 추가 시 원칙적으로 `wimcc init-db` + 재ingest. 단 serve/ingest
   startup에서 backfill하는 migration은 불필요(각 migration 주석이 명시). payload 필드
   (JSON BLOB)는 migration 없이 추가되므로 기존 이벤트엔 없다 — 재ingest해야 채워진다.
