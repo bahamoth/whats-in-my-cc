@@ -954,3 +954,18 @@ fn tagging_loop_2026_07_09_additions() {
     // 미관측 docker 서브커맨드는 여전히 unmatched (사전 원칙).
     assert_eq!(tag(&bash("docker rmi old-image")), None);
 }
+
+#[test]
+fn tagging_loop_2026_07_10_additions() {
+    // cargo-watch: 이번 PR에서 just dev에 추가한 백엔드 핫리로드 러너. 로컬
+    // 프로젝트 코드를 감시·재실행 → CARGO_SUBS의 run.code 계열과 일관.
+    assert_eq!(
+        tag(&bash(
+            "cargo watch -w src -w Cargo.toml -x 'run -- serve --auto-migrate'"
+        )),
+        Some("run.code")
+    );
+    assert_eq!(tag(&bash("cargo watch -x test")), Some("run.code"));
+    // 미관측 cargo 서브커맨드는 여전히 unmatched (사전 원칙).
+    assert_eq!(tag(&bash("cargo bench")), None);
+}
