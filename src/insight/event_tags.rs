@@ -253,6 +253,9 @@ static CARGO_SUBS: &[(&str, &str)] = &[
     ("nextest", "test.code"),
     ("run", "run.code"),
     ("r", "run.code"),
+    // tagging loop 2026-07-10: cargo-watch(핫리로드 러너)는 로컬 프로젝트 코드를
+    // 감시·재실행 — run 계열과 동족. just dev에 도입돼 관측됨.
+    ("watch", "run.code"),
     ("check", "lint.code"),
     ("clippy", "lint.code"),
     ("fmt", "lint.code"),
