@@ -135,6 +135,7 @@ jobs:
           "node-version": 22
       - name: "Build webui (embedded by rust-embed at compile time)"
         run: |
+          cd webui
           npm ci
           npm run build
       - name: Install dist
