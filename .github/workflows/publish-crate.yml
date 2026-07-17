@@ -1,0 +1,32 @@
+name: publish-crate
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  crates-io:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webui/package-lock.json
+      # cargo package의 include가 webui/dist를 집으려면 퍼블리시 전에 빌드돼 있어야 한다
+      - name: Build webui (bundled into the crate)
+        working-directory: webui
+        run: |
+          npm ci
+          npm run build
+      - name: Install Rust toolchain
+        run: rustup toolchain install
+      - name: Packaging gate
+        run: bash scripts/check-crate-contents.sh
+      - name: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked --allow-dirty
