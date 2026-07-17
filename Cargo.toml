@@ -4,6 +4,20 @@ version = "1.3.0"
 edition = "2021"
 rust-version = "1.88"
 description = "What's in My Claude Code — local-only execution inspection with evidence-linked insight"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/bahamoth/whats-in-my-cc"
+readme = "README.md"
+# include는 허용목록으로 동작한다 — 여기 없는 파일은 .crate에서 빠진다.
+# 컴파일 타임 임베드 3종(webui/dist·pricing.json·migrations)이 근거.
+include = [
+  "src/**",
+  "migrations/**",
+  "pricing.json",
+  "webui/dist/**",
+  "README.md",
+  "LICENSE-MIT",
+  "LICENSE-APACHE",
+]
 
 [[bin]]
 name = "wimcc"
