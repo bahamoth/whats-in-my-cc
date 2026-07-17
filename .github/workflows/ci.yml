@@ -56,6 +56,9 @@ jobs:
           name: webui-dist
           path: webui/dist
 
+      - name: crate packaging gate (webui/dist 동봉)
+        run: bash scripts/check-crate-contents.sh
+
       # Installs the channel + components pinned in rust-toolchain.toml.
       - name: Install Rust toolchain
         run: rustup toolchain install
