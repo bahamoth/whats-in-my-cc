@@ -77,3 +77,13 @@ urlencoding        = "2"
 
 [profile.release]
 lto = "thin"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+[package.metadata.binstall]
+# dist가 올리는 GitHub Releases 바이너리를 재사용 — binstall 사용자는 재컴파일하지 않는다
+pkg-url = "{ repo }/releases/download/v{ version }/wimcc-{ target }.tar.xz"
+pkg-fmt = "txz"
