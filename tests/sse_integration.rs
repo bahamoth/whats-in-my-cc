@@ -50,6 +50,7 @@ async fn setup() -> (sqlx::SqlitePool, AppState) {
         token: String::new(),
         retention_profile: "none".to_string(),
         shutdown: tokio_util::sync::CancellationToken::new(),
+        update_status: Default::default(),
     };
     (pool, state)
 }

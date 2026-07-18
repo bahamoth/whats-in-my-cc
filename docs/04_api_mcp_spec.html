@@ -49,7 +49,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <section id="api"><h2><span class="num">03</span>Pull API Contract</h2>
 <h3>Endpoint map <span class="pill blue">src/api/mod.rs route 등록 전수</span></h3>
 <table><thead><tr><th>Method</th><th>Path</th><th>Purpose</th><th>Envelope</th></tr></thead><tbody>
-<tr><td>GET</td><td><code>/v1/health</code></td><td>service status: <code>status</code>, <code>build_sha</code>, <code>security.auth_required</code>, <code>security.retention_profile</code></td><td>bare JSON</td></tr>
+<tr><td>GET</td><td><code>/v1/health</code></td><td>service status: <code>status</code>, <code>build_sha</code>, <code>version.{current,latest,update_available}</code>, <code>security.auth_required</code>, <code>security.retention_profile</code></td><td>bare JSON</td></tr>
 <tr><td>GET</td><td><code>/v1/health/sources</code></td><td>source별 ingest freshness (transcript / otel-traces / otel-metrics / otel-logs) — <code>wimcc doctor</code>가 사용</td><td>{meta, data}</td></tr>
 <tr><td>GET</td><td><code>/v1/sessions</code></td><td>세션 목록 (최신순, <code>?limit=</code>, <code>?project=</code>) — <code>event_count</code>, <code>by_kind</code> 별 행수 포함</td><td>{meta, data}</td></tr>
 <tr><td>GET</td><td><code>/v1/sessions/{session_id}</code></td><td>session summary (<code>event_count</code>, <code>by_kind</code>, first/last observed). event 본문은 포함하지 않는다</td><td>{meta, data}</td></tr>
@@ -73,6 +73,14 @@ table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;overflo
 <tr><td>POST</td><td><code>/otel/v1/traces</code> · <code>/otel/v1/metrics</code> · <code>/otel/v1/logs</code></td><td>OTLP/HTTP collector receivers (loopback, 무인증)</td><td>accept counters</td></tr>
 </tbody></table>
 <div class="callout"><strong>완결성:</strong> 위 표가 제공되는 endpoint의 전부다. 표에 없는 경로는 SPA fallback 또는 404를 반환한다.</div>
+<h3><code>/v1/health</code> version 블록 <span class="pill blue">2026-07-17 §4</span></h3>
+<pre><code>{
+  "status": "ok",
+  "build_sha": "dev",
+  "version": { "current": "1.3.0", "latest": "v1.3.0", "update_available": false },
+  "security": { "auth_required": false, "retention_profile": "default" }
+}</code></pre>
+<p><code>version.latest</code>는 GitHub Releases 조회 결과(24h 주기·<code>--update-check off</code>로 비활성) — 미조회 시 null.</p>
 <h3>Common response envelope</h3>
 <p>대부분의 endpoint는 <code>{meta, data}</code> envelope을 반환한다 (<code>src/model/meta.rs</code>의 <code>Envelope&lt;T&gt;</code>). 위 표의 Envelope 열이 예외를 표시한다: <code>/v1/health</code>는 bare JSON, metrics/signals/detectors/audit는 <code>{data}</code>만 반환한다.</p>
 <pre><code>{

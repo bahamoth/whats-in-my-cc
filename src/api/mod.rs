@@ -53,6 +53,8 @@ pub struct AppState {
     /// Post-slice-19: cancellation token observed by long-lived stream
     /// handlers (SSE, MCP-GET) so they self-terminate on shutdown signal.
     pub shutdown: CancellationToken,
+    /// 스펙 2026-07-17 §4 — 업데이트 체크 루프가 쓰고 health가 읽는다.
+    pub update_status: crate::update_check::SharedUpdateStatus,
 }
 
 impl AppState {
@@ -72,6 +74,7 @@ impl AppState {
             token: String::new(),
             retention_profile: "none".to_string(),
             shutdown: CancellationToken::new(),
+            update_status: Default::default(),
         }
     }
 }
