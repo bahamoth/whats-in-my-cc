@@ -10,4 +10,4 @@ pub mod session;
 pub mod tools;
 pub mod transport;
 
-pub use session::SessionRegistry;
+pub use session::{McpSession, SessionRegistry};
