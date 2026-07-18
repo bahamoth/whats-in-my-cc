@@ -18,6 +18,7 @@
     "result": "실행 아님 — echo \"=== cargo test finished; result lines ===\" 상태 메시지 문자열의 `;` 토크나이저 파편 (2026-07-18 루프 재표면화, 세션 31f1fb03, PR-4 스모크, 2026-07-05 원 발생)",
     "cargo test$\"": "실행 아님 — pgrep -f \"^/Users.*cargo test$\\\"\" 정규식 패턴 문자열의 토크나이저 파편(cargo 서브커맨드 아님) (2026-07-18 루프 재표면화, 세션 31f1fb03, PR-4 스모크, 2026-07-05 원 발생)",
     "last": "실행 아님 — echo \"…last lines:\"; tail -5 … 상태 메시지 문자열의 `;` 토크나이저 파편 (2026-07-18 루프 재표면화, 세션 31f1fb03, PR-4 스모크, 2026-07-05 원 발생)",
-    "only": "실행 아님 — echo \"…only baseline holds remain) ===\" 상태 메시지 문자열의 `;` 토크나이저 파편 (2026-07-18 루프 재표면화, 세션 31f1fb03, PR-4 스모크, 2026-07-05 원 발생)"
+    "only": "실행 아님 — echo \"…only baseline holds remain) ===\" 상태 메시지 문자열의 `;` 토크나이저 파편 (2026-07-18 루프 재표면화, 세션 31f1fb03, PR-4 스모크, 2026-07-05 원 발생)",
+    "id": "실행이지만 비태깅 — `$(id -u)` 명령 치환 내부 identity 헬퍼(launchctl gui/$(id -u) 경로 조립, 파일 I/O 없어 verb.object 부적합; basename 선례). 최상위 명령은 launchctl/rm (2026-07-18, 세션 fd2244f2)"
   }
 }

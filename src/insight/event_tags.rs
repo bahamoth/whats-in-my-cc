@@ -148,6 +148,9 @@ pub static BASH_FIRST_TOKEN_TAGS: &[(&str, &str)] = &[
     ("curl", "read.web"),
     ("wget", "read.web"),
     ("dig", "read.web"),
+    // 원격 접속/프로브 — curl/dig의 네트워크 접근 동류. 태깅 루프 2026-07-18,
+    // 실표본 `ssh -T git@github.com -o BatchMode=yes`(GitHub 인증 점검) count 3.
+    ("ssh", "read.web"),
     // write.file — 생성/수정 (비파괴)
     ("mkdir", "write.file"),
     ("mktemp", "write.file"),

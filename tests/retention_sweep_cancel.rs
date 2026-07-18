@@ -17,7 +17,7 @@ async fn sweep_task_exits_on_cancel() {
     };
     let cancel = CancellationToken::new();
 
-    let handle = wimcc::security::retention::spawn_sweep_task(pool, policy, cancel.clone());
+    let handle = wimcc::security::retention::spawn_sweep_task(pool, policy, Default::default(), cancel.clone());
 
     // Give the task a tick to install its select; then cancel.
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -39,7 +39,7 @@ async fn sweep_task_none_profile_exits_immediately_regardless_of_cancel() {
     };
     let cancel = CancellationToken::new();
 
-    let handle = wimcc::security::retention::spawn_sweep_task(pool, policy, cancel.clone());
+    let handle = wimcc::security::retention::spawn_sweep_task(pool, policy, Default::default(), cancel.clone());
 
     tokio::time::timeout(Duration::from_millis(200), handle)
         .await
