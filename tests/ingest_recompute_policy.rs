@@ -31,7 +31,9 @@ async fn live_reingest_with_no_new_rows_skips_recompute() {
     let pool = make_pool().await;
     let path = std::path::Path::new(FIXTURE);
 
-    let stats1 = store::ingest_file_live(&pool, path, &NoopSink).await.unwrap();
+    let stats1 = store::ingest_file_live(&pool, path, &NoopSink)
+        .await
+        .unwrap();
     assert!(stats1.raw_inserted > 0);
     assert!(
         stats1.sessions_recomputed.contains("sess-A"),
@@ -39,7 +41,9 @@ async fn live_reingest_with_no_new_rows_skips_recompute() {
         stats1.sessions_recomputed
     );
 
-    let stats2 = store::ingest_file_live(&pool, path, &NoopSink).await.unwrap();
+    let stats2 = store::ingest_file_live(&pool, path, &NoopSink)
+        .await
+        .unwrap();
     assert_eq!(stats2.raw_inserted, 0, "second run fully dedups");
     assert!(
         stats2.sessions_touched.contains("sess-A"),
@@ -62,8 +66,12 @@ async fn live_flush_with_no_new_rows_leaves_no_ingest_run_row() {
     let pool = make_pool().await;
     let path = std::path::Path::new(FIXTURE);
 
-    store::ingest_file_live(&pool, path, &NoopSink).await.unwrap();
-    store::ingest_file_live(&pool, path, &NoopSink).await.unwrap();
+    store::ingest_file_live(&pool, path, &NoopSink)
+        .await
+        .unwrap();
+    store::ingest_file_live(&pool, path, &NoopSink)
+        .await
+        .unwrap();
 
     let runs: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ingest_run")
         .fetch_one(&pool)

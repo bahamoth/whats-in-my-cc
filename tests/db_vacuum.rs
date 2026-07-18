@@ -45,7 +45,10 @@ async fn vacuum_converts_legacy_db_and_reclaims_disk() {
             .unwrap();
         }
         // 공간을 만든 뒤 지워 free page를 남긴다.
-        sqlx::query("DELETE FROM raw_event").execute(&pool).await.unwrap();
+        sqlx::query("DELETE FROM raw_event")
+            .execute(&pool)
+            .await
+            .unwrap();
         sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
             .execute(&pool)
             .await
@@ -59,14 +62,20 @@ async fn vacuum_converts_legacy_db_and_reclaims_disk() {
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(av, 0, "legacy file keeps auto_vacuum=NONE until a full VACUUM");
+        assert_eq!(
+            av, 0,
+            "legacy file keeps auto_vacuum=NONE until a full VACUUM"
+        );
         // vacuum_cmd 실사용 조건: serve 정지 = 다른 연결 없음.
         pool.close().await;
     }
 
     let before_file = std::fs::metadata(&path).unwrap().len();
     let (before, after) = wimcc::db::vacuum_db(&url).await.unwrap();
-    assert!(before > after, "page math must show the shrink: {before} -> {after}");
+    assert!(
+        before > after,
+        "page math must show the shrink: {before} -> {after}"
+    );
 
     let pool = wimcc::db::connect(&url).await.unwrap();
     let av: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")

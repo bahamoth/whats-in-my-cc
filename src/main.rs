@@ -157,7 +157,12 @@ async fn init_db(path: &std::path::Path) -> error::Result<()> {
 async fn vacuum_cmd(path: &std::path::Path) -> error::Result<()> {
     let url = format!("sqlite://{}?mode=rwc", path.display());
     let (before, after) = db::vacuum_db(&url).await?;
-    tracing::info!(?path, before_bytes = before, after_bytes = after, "vacuum complete");
+    tracing::info!(
+        ?path,
+        before_bytes = before,
+        after_bytes = after,
+        "vacuum complete"
+    );
     eprintln!("vacuum: {before} -> {after} bytes ({})", path.display());
     Ok(())
 }

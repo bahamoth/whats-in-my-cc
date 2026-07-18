@@ -63,7 +63,10 @@ async fn health_includes_db_block_with_size() {
     let size = body["db"]["size_bytes"]
         .as_i64()
         .unwrap_or_else(|| panic!("db.size_bytes missing: {body}"));
-    assert!(size > 0, "migrated DB must report a positive size; got {size}");
+    assert!(
+        size > 0,
+        "migrated DB must report a positive size; got {size}"
+    );
     assert!(
         body["db"]["freelist_bytes"].as_i64().is_some(),
         "db.freelist_bytes missing: {body}"
@@ -98,10 +101,12 @@ async fn health_reports_last_sweep_after_stats_update() {
     {
         let mut s = handle.write().await;
         s.last_sweep_at = Some("2026-07-18T00:00:00+00:00".into());
-        s.last_sweep_deletions =
-            std::collections::HashMap::from([("raw_event".to_string(), 3u64)]);
+        s.last_sweep_deletions = std::collections::HashMap::from([("raw_event".to_string(), 3u64)]);
     }
     let body: serde_json::Value = srv.get("/v1/health").await.json();
-    assert_eq!(body["retention"]["last_sweep_at"], "2026-07-18T00:00:00+00:00");
+    assert_eq!(
+        body["retention"]["last_sweep_at"],
+        "2026-07-18T00:00:00+00:00"
+    );
     assert_eq!(body["retention"]["last_sweep_deletions"]["raw_event"], 3);
 }

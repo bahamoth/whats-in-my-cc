@@ -64,7 +64,13 @@ pub async fn ingest_file_live(
     path: &Path,
     sink: &dyn LiveSink,
 ) -> Result<IngestStats> {
-    ingest_paths_with(pool, &[path.to_path_buf()], sink, RecomputePolicy::NewRowsOnly).await
+    ingest_paths_with(
+        pool,
+        &[path.to_path_buf()],
+        sink,
+        RecomputePolicy::NewRowsOnly,
+    )
+    .await
 }
 
 /// Ingest one or more transcript files in a single run. All raw lines land
