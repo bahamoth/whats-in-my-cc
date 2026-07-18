@@ -1,0 +1,14 @@
+---
+source: src/service.rs
+assertion_line: 236
+expression: systemd_unit(&argv())
+---
+[Unit]
+Description=wimcc serve — local Claude Code observation
+
+[Service]
+ExecStart="/usr/local/bin/wimcc" "--db-path" "/data/wimcc.sqlite" "serve" "--bind" "127.0.0.1" "--port" "7878" "--auto-migrate"
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

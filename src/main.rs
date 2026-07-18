@@ -90,6 +90,17 @@ fn main() -> error::Result<()> {
             cli::Command::SelfUpdate { check } => {
                 wimcc::self_update::run(check).await.map_err(Into::into)
             }
+            cli::Command::Service { action } => match action {
+                cli::ServiceAction::Install {
+                    bind,
+                    port,
+                    auto_migrate,
+                } => wimcc::service::install(&cli.db_path, &bind.to_string(), port, auto_migrate)
+                    .map_err(Into::into),
+                cli::ServiceAction::Uninstall => wimcc::service::uninstall().map_err(Into::into),
+                cli::ServiceAction::Restart => wimcc::service::restart().map_err(Into::into),
+                cli::ServiceAction::Status => wimcc::service::status().map_err(Into::into),
+            },
         }
     })
 }

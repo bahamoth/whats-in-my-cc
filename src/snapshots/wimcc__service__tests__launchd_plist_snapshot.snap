@@ -1,0 +1,29 @@
+---
+source: src/service.rs
+assertion_line: 231
+expression: launchd_plist(&argv())
+---
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.bahamoth.wimcc</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/wimcc</string>
+    <string>--db-path</string>
+    <string>/data/wimcc.sqlite</string>
+    <string>serve</string>
+    <string>--bind</string>
+    <string>127.0.0.1</string>
+    <string>--port</string>
+    <string>7878</string>
+    <string>--auto-migrate</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+</dict>
+</plist>

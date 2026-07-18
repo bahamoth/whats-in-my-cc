@@ -139,6 +139,28 @@ pub enum Command {
         #[arg(long)]
         check: bool,
     },
+    /// serve를 OS 사용자 서비스로 등록/해제한다 (macOS launchd, Linux systemd --user).
+    Service {
+        #[command(subcommand)]
+        action: ServiceAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ServiceAction {
+    /// 로그인 시 자동 시작되도록 등록. --db-path(전역)는 절대경로로 기록된다.
+    Install {
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: std::net::IpAddr,
+        #[arg(long, default_value_t = 7878)]
+        port: u16,
+        /// 서비스는 무인 기동이라 마이그레이션 프롬프트에 답할 수 없다 — 기본 on.
+        #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+        auto_migrate: bool,
+    },
+    Uninstall,
+    Restart,
+    Status,
 }
 
 #[cfg(test)]
@@ -203,6 +225,23 @@ mod tests {
         match cli.command {
             Command::SelfUpdate { check } => assert!(check),
             other => panic!("expected SelfUpdate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn service_install_defaults() {
+        let cli = Cli::try_parse_from(["wimcc", "service", "install"]).expect("parses");
+        match cli.command {
+            Command::Service {
+                action:
+                    ServiceAction::Install {
+                        port, auto_migrate, ..
+                    },
+            } => {
+                assert_eq!(port, 7878);
+                assert!(auto_migrate, "무인 기동이므로 auto-migrate 기본 on");
+            }
+            other => panic!("expected Service Install, got {other:?}"),
         }
     }
 }
