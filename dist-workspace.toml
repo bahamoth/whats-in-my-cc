@@ -8,7 +8,7 @@ cargo-dist-version = "0.32.0"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
-installers = ["shell", "npm", "homebrew"]
+installers = ["shell", "homebrew"]
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = [
   "aarch64-apple-darwin",
@@ -19,7 +19,7 @@ targets = [
 # release-please가 태그+Release를 만든다 — dist는 기존 Release에 업로드만 (스펙 §1)
 create-release = false
 tap = "bahamoth/homebrew-tap"
-publish-jobs = ["homebrew", "npm", "./publish-crate"]
+publish-jobs = ["homebrew", "./publish-crate"]
 install-updater = false
 # cargo 빌드 전 webui SPA 빌드 주입 (rust-embed 컴파일 타임 임베드 — 스펙 §1)
 github-build-setup = "../build-setup.yml"

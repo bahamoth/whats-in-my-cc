@@ -6729,6 +6729,15 @@ vitest: 69 passed
       release-please <code>skip-github-release: true</code> + dist
       <code>create-release = true</code>).
     </div>
+
+    <p><b>npm 채널 제거(2026-07-18 사용자 결정, 후속):</b> "npm publish는 필요
+    없다"는 결정으로 <code>dist-workspace.toml</code>의 <code>installers</code>·
+    <code>publish-jobs</code>에서 <code>npm</code>을 제거하고 <code>dist
+    generate</code>로 <code>release.yml</code>을 재생성했다(<code>publish-npm</code>
+    job과 <code>announce</code>의 해당 의존성 소멸). <code>NPM_TOKEN</code>
+    secret은 불필요해졌다. 이 섹션 위쪽 본문·체크리스트의 npm 언급(4채널·npm
+    퍼블리시)은 이 결정으로 대체된다 — 현행 설치 채널은
+    shell·Homebrew·crates.io(+binstall)·mise(문서만) 3+1이다.</p>
   </section>
 
 </main>
