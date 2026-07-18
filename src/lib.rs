@@ -14,3 +14,4 @@ pub mod security;
 pub mod serve;
 pub mod telemetry;
 pub mod transcript_tail;
+pub mod update_check;

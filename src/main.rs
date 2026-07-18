@@ -58,6 +58,7 @@ fn main() -> error::Result<()> {
                 rotate_token,
                 retention_profile,
                 auth,
+                update_check,
             } => {
                 // Slice-19: --print-token and --rotate-token short-circuit server start.
                 if print_token {
@@ -82,6 +83,7 @@ fn main() -> error::Result<()> {
                     sse_channel_capacity,
                     retention_profile,
                     auth,
+                    update_check,
                 )
                 .await
             }
@@ -110,6 +112,7 @@ async fn serve_cmd(
     sse_channel_capacity: u64,
     retention_profile: String,
     auth: cli::AuthMode,
+    update_check: String,
 ) -> error::Result<()> {
     // Loopback-only enforcement: accepts 127.0.0.0/8 and ::1 (is_loopback()).
     // Strict 127.0.0.1-only would use `bind == IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)`.
@@ -240,6 +243,22 @@ async fn serve_cmd(
         tracing::info!(profile = retention_profile, "retention sweep enabled");
     }
 
+    // 2026-07-17 §4: background update-check loop. `--update-check off` means
+    // zero outbound calls (spec's only outbound path is this check).
+    let update_status: wimcc::update_check::SharedUpdateStatus = Default::default();
+    if update_check == "on" {
+        let url = std::env::var("WIMCC_UPDATE_CHECK_URL")
+            .unwrap_or_else(|_| wimcc::update_check::DEFAULT_LATEST_RELEASE_URL.to_string());
+        tokio::spawn(wimcc::update_check::run_update_check_loop(
+            update_status.clone(),
+            url,
+            cancel.clone(),
+        ));
+        tracing::info!("update check loop enabled (24h interval)");
+    } else {
+        tracing::info!("update check disabled (--update-check off)");
+    }
+
     let state = wimcc::api::AppState {
         pool: pool.clone(),
         live_tx: live_tx.clone(),
@@ -252,6 +271,8 @@ async fn serve_cmd(
         retention_profile,
         // Post-slice-19: same token long-lived stream handlers observe.
         shutdown: cancel.clone(),
+        // 2026-07-17 §4: update-check loop writes, health handler reads.
+        update_status,
     };
     let app = wimcc::api::router(state);
     let addr = std::net::SocketAddr::new(bind, port);

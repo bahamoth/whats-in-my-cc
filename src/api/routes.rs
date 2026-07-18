@@ -78,10 +78,18 @@ async fn tombstone_gate(
 
 /// Slice-19: adds a `security` block with `auth_required` and `retention_profile`.
 /// `/v1/health` is auth-gated (DEV-S19-02).
+/// 2026-07-17 §4: adds a `version` block (`current`/`latest`/`update_available`)
+/// sourced from the background update-check loop (see `update_check`).
 pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
+    let v = state.update_status.read().await;
     Json(json!({
         "status": "ok",
         "build_sha": option_env!("GIT_SHA").unwrap_or("dev"),
+        "version": {
+            "current": env!("CARGO_PKG_VERSION"),
+            "latest": v.latest,
+            "update_available": v.update_available,
+        },
         "security": {
             "auth_required": !state.token.is_empty(),
             "retention_profile": state.retention_profile,

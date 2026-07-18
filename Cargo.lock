@@ -3409,6 +3409,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rust-embed",
+ "semver",
  "serde",
  "serde_json",
  "sha2",

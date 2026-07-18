@@ -41,3 +41,14 @@ async fn health_includes_security_block() {
         "auth_required must be false in test mode (empty token)"
     );
 }
+
+/// 스펙 2026-07-17 §4 — health에 version 블록. 테스트 서버는 체크 루프를
+/// 돌리지 않으므로 latest는 미조회 = null이어야 한다.
+#[tokio::test]
+async fn health_includes_version_block() {
+    let srv = test_server().await;
+    let body: serde_json::Value = srv.get("/v1/health").await.json();
+    assert_eq!(body["version"]["current"], env!("CARGO_PKG_VERSION"));
+    assert!(body["version"]["update_available"].is_boolean());
+    assert!(body["version"]["latest"].is_null());
+}

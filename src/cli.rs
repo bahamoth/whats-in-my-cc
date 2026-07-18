@@ -128,6 +128,10 @@ pub enum Command {
         /// `on` activates slice-19 token middleware. DEV-S19-08.
         #[arg(long, value_enum, default_value_t = AuthMode::Off)]
         auth: AuthMode,
+        /// 새 버전 자동 확인 — GitHub Releases 메타데이터 조회(유일한 outbound).
+        /// off면 어떤 outbound도 발생하지 않는다. 스펙 2026-07-17 §4.
+        #[arg(long, default_value = "on", value_parser = ["on", "off"], env = "WIMCC_UPDATE_CHECK")]
+        update_check: String,
     },
 }
 
@@ -176,5 +180,14 @@ mod tests {
     fn log_retention_days_rejects_out_of_range() {
         assert!(Cli::try_parse_from(["wimcc", "--log-retention-days", "0", "serve"]).is_err());
         assert!(Cli::try_parse_from(["wimcc", "--log-retention-days", "366", "serve"]).is_err());
+    }
+
+    #[test]
+    fn serve_update_check_defaults_on() {
+        let cli = Cli::try_parse_from(["wimcc", "serve"]).expect("parses");
+        match cli.command {
+            Command::Serve { update_check, .. } => assert_eq!(update_check, "on"),
+            other => panic!("expected Serve, got {other:?}"),
+        }
     }
 }
