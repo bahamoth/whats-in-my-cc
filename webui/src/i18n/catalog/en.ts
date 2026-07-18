@@ -537,6 +537,11 @@ export const en = {
   'dash.outcome.failed': 'failed',
   'dash.outcome.unknown': 'unknown',
   'dash.cost.total': (v: string) => `total ≈$${v}`,
+  // Update banner — 버전 숫자·사실만 (판정 문장 금지)
+  'update.available': (a: { current: string; latest: string }) =>
+    `wimcc ${a.latest} available — current v${a.current}`,
+  'update.releaseNotes': 'Release notes',
+  'update.dismiss': 'Dismiss update notice',
 };
 
 export type Messages = typeof en;

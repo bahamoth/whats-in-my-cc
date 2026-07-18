@@ -489,3 +489,11 @@ export type InstructionSnapshotDto = {
   content: string;
   first_observed_at: string;
 };
+
+/** `/v1/health`의 `version` 블록 — 스펙 2026-07-17 §4. health는 Envelope 미사용
+ *  (원시 JSON). `latest`는 조회 실패/미조회 시 null. */
+export interface HealthVersion {
+  current: string;
+  latest: string | null;
+  update_available: boolean;
+}
