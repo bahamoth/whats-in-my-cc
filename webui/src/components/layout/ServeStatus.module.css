@@ -1,0 +1,102 @@
+/* growth-2026-07-18 — nav rail 하단 serve 상태 칩. 56px 아이콘 레일 폭에
+ * 맞춘 2줄(버전/용량) 세로 칩 + 오른쪽으로 여는 hover 패널. */
+
+.wrap {
+  margin-top: auto;
+  position: relative;
+}
+
+.chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--wimcc-fg-muted, #aab0bd);
+  font-size: 9px;
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  cursor: default;
+}
+.chip:hover,
+.chip:focus-visible {
+  background: var(--wimcc-surface-2, #161a23);
+  color: var(--wimcc-fg, #e6e8ee);
+}
+.chip:focus-visible {
+  outline: 2px solid var(--wimcc-accent, #4f8cff);
+  outline-offset: 2px;
+}
+
+.version {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+/* 최신 릴리스 관측 마커 — 파랑(정보), 보라 금지(보라 = 코호트 경계 문법). */
+.updateDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7da7ff;
+}
+
+.size {
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.panel {
+  position: absolute;
+  left: calc(100% + 8px);
+  bottom: 0;
+  z-index: 60;
+  min-width: 240px;
+  max-width: 340px;
+  padding: 10px 12px;
+  border: 1px solid var(--wimcc-border, #1d212c);
+  border-radius: 8px;
+  background: var(--wimcc-surface-1, #11141b);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.row dt {
+  color: var(--wimcc-fg-muted, #aab0bd);
+  white-space: nowrap;
+}
+.row dd {
+  margin: 0;
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  text-align: right;
+}
+
+.path {
+  word-break: break-all;
+  font-size: 11px;
+}
+
+.tipText {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--wimcc-border, #1d212c);
+  color: var(--wimcc-fg-muted, #aab0bd);
+  white-space: pre-line;
+  line-height: 1.5;
+}

@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useT } from '../../i18n';
 import { LanguageToggle } from './LanguageToggle';
+import { ServeStatus } from './ServeStatus';
 import { UpdateBanner } from './UpdateBanner';
 import styles from './AppShell.module.css';
 
@@ -31,6 +32,7 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
           <span className={styles.navText}>{t('nav.dashboard')}</span>
         </Link>
         <LanguageToggle />
+        <ServeStatus />
       </nav>
       <main id="wimcc-main" className={styles.main} role="main">
         <UpdateBanner />
