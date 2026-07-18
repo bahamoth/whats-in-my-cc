@@ -38,10 +38,14 @@ WebUI is embedded; the single binary is all you need.
 
 ```bash
 curl -fsSL https://github.com/bahamoth/whats-in-my-cc/releases/latest/download/wimcc-installer.sh | sh
-wimcc init-db                # apply migrations, prepare .wimcc.sqlite
 wimcc serve --auto-migrate   # http://127.0.0.1:7878  (auth off by default)
 wimcc doctor                 # verify collector wiring
 ```
+
+`--auto-migrate` creates and migrates the database on startup (default
+location: `wimcc/wimcc.sqlite` under the platform data directory — see
+[CLI](#cli)). `wimcc init-db` exists for preparing the DB without starting the
+server; it is not needed before `serve --auto-migrate`.
 
 ## Install
 
@@ -82,7 +86,6 @@ wimcc service uninstall
 
 ```bash
 just build-release                            # build the SPA + release binary (target/release/wimcc) in one step
-./target/release/wimcc init-db                # apply migrations, prepare .wimcc.sqlite
 ./target/release/wimcc serve --auto-migrate   # http://127.0.0.1:7878  (auth off by default)
 ./target/release/wimcc doctor                 # verify collector wiring
 ```
@@ -124,6 +127,7 @@ env `WIMCC_DB`; `wimcc doctor` also reports the resolved path.
 | Command | Purpose |
 | --- | --- |
 | `init-db` | Apply migrations and prepare the database. |
+| `vacuum` | Compact the DB file: convert to `auto_vacuum=INCREMENTAL` and run a full `VACUUM` so freed pages return to the filesystem. Run while serve is stopped (exclusive lock). Needed once for DBs created before v1.5. |
 | `ingest --all` / `ingest --path <P>` | Backfill: scan transcript JSONL files into raw + observed events (idempotent). |
 | `doctor [--json] [--server <URL>] [--project <DIR>]` | Read-only diagnosis of collector wiring (settings hierarchy, OTel env, server probe). Never mutates anything. |
 | `serve` | Start the local service: Pull API + WebUI + OTel receiver + transcript live tail. |
@@ -170,7 +174,7 @@ always unauthenticated loopback endpoints.
 
 | Path | Response |
 | --- | --- |
-| `/v1/health` | `{status, build_sha, security: {auth_required, retention_profile}}` |
+| `/v1/health` | `{status, build_sha, version: {current, latest, update_available}, db: {size_bytes, freelist_bytes, path}, security: {auth_required, retention_profile}, retention: {last_sweep_at, last_sweep_deletions}}` |
 | `/v1/health/sources` | per-source freshness (used by `doctor`) |
 | `/v1/sessions` | session list (newest first) |
 | `/v1/sessions/{id}` | `{session_id, summary}` (events come from `/v1/sessions/{id}/events`) |
@@ -215,16 +219,43 @@ returns 404.
 - `whats_in_my_cc.get_session_metrics`
 - `whats_in_my_cc.get_session_signals`
 - `whats_in_my_cc.get_session_fingerprint`
+- `whats_in_my_cc.get_session_events`
+- `whats_in_my_cc.get_session_digest` — the recommended entry point ("start
+  here"): one call returns a session's summary, metrics, signals, and
+  verification runs
 - `whats_in_my_cc.list_detectors`
 
 It also serves MCP resources: a per-session summary plus file-lineage and
 OTel-trace resource templates.
 
+To connect an MCP client, point it at `http://127.0.0.1:7878/mcp` (Streamable
+HTTP). For Claude Code:
+
+```bash
+claude mcp add --transport http wimcc http://127.0.0.1:7878/mcp
+```
+
+or in a project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "wimcc": { "type": "http", "url": "http://127.0.0.1:7878/mcp" }
+  }
+}
+```
+
+With `--auth on`, add `Authorization: Bearer <token>` to the connection
+headers (`serve --print-token` prints the token).
+
 ## Web UI
 
 The `wimcc` binary embeds a React SPA (rust-embed), served at
-`http://127.0.0.1:7878/`. Two pages:
+`http://127.0.0.1:7878/`. Three pages:
 
+- `/dashboard` — cross-session project insight: daily verification/cost/signal
+  series, instruction-cohort before/after comparison, session distribution,
+  and a verification tab.
 - `/sessions` — session list
 - `/sessions/:id` — event-first replay: a conversation stream with per-event
   detail panel, raw-source tab, an insight strip (context efficiency / tokens /
@@ -284,10 +315,12 @@ curl -X POST http://127.0.0.1:7878/otel/v1/metrics \
   Token file: macOS `~/Library/Application Support/wimcc/token`, Linux
   `~/.config/wimcc/token` (mode `0600`). Manage it with `serve --print-token`
   / `--rotate-token`.
-- **Retention** defaults to `none` (no deletion). `--retention-profile default`
-  (raw 30d / normalized 180d / insight 180d / audit 90d) or `strict`
-  (raw 7d / normalized 30d / insight 30d / audit 30d) enables a background
-  sweep.
+- **Retention** defaults to `default`: a background sweep (every 6h) scrubs
+  raw payloads after 60d and deletes normalized/insight rows after 180d and
+  audit rows after 90d. `strict` tightens the windows
+  (raw 7d / normalized 30d / insight 30d / audit 30d);
+  `--retention-profile none` disables deletion entirely (unbounded local
+  archive). The active profile and last sweep are reported by `/v1/health`.
 
 ## Security notes
 

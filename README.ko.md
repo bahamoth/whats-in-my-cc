@@ -36,10 +36,14 @@ Silicon/Intel, Linux x86_64/aarch64 musl). WebUI가 임베드되어 있어 단�
 
 ```bash
 curl -fsSL https://github.com/bahamoth/whats-in-my-cc/releases/latest/download/wimcc-installer.sh | sh
-wimcc init-db                # 마이그레이션 적용, .wimcc.sqlite 준비
 wimcc serve --auto-migrate   # http://127.0.0.1:7878  (auth 기본 off)
 wimcc doctor                 # collector 연동 점검
 ```
+
+`--auto-migrate`가 시작 시 DB 생성과 마이그레이션까지 처리한다(기본 위치:
+플랫폼 데이터 디렉터리 아래 `wimcc/wimcc.sqlite` — [CLI](#cli) 참고).
+`wimcc init-db`는 서버를 띄우지 않고 DB만 준비하는 명령으로,
+`serve --auto-migrate` 전에 실행할 필요는 없다.
 
 ## 설치
 
@@ -80,7 +84,6 @@ wimcc service uninstall
 
 ```bash
 just build-release                            # WebUI 빌드 + 릴리스 바이너리(target/release/wimcc)를 한 번에
-./target/release/wimcc init-db                # 마이그레이션 적용, .wimcc.sqlite 준비
 ./target/release/wimcc serve --auto-migrate   # http://127.0.0.1:7878  (auth 기본 off)
 ./target/release/wimcc doctor                 # collector 연동 점검
 ```
@@ -119,6 +122,7 @@ Linux `~/.local/share`)이고, 현재 디렉터리에 legacy `./.wimcc.sqlite`�
 | 커맨드 | 역할 |
 | --- | --- |
 | `init-db` | 마이그레이션 적용 및 DB 준비. |
+| `vacuum` | DB 파일 압축: `auto_vacuum=INCREMENTAL` 전환 + 전체 `VACUUM`으로 빈 page를 파일시스템에 반환. serve 정지 상태에서 실행(배타 잠금). v1.5 이전에 만든 DB는 1회 필요. |
 | `ingest --all` / `ingest --path <P>` | 백필: transcript JSONL을 raw + observed event로 스캔(idempotent). |
 | `doctor [--json] [--server <URL>] [--project <DIR>]` | collector 연동 상태의 read-only 진단(설정 계층, OTel env, 서버 probe). 어떤 것도 변경하지 않음. |
 | `serve` | 로컬 서비스 시작: Pull API + WebUI + OTel 수신기 + transcript live tail. |
@@ -163,7 +167,7 @@ JSON-RPC content다. `--auth on`이면 모든 `/v1/*`·`/mcp` 요청에
 
 | 경로 | 응답 |
 | --- | --- |
-| `/v1/health` | `{status, build_sha, security: {auth_required, retention_profile}}` |
+| `/v1/health` | `{status, build_sha, version: {current, latest, update_available}, db: {size_bytes, freelist_bytes, path}, security: {auth_required, retention_profile}, retention: {last_sweep_at, last_sweep_deletions}}` |
 | `/v1/health/sources` | 소스별 freshness (`doctor`가 사용) |
 | `/v1/sessions` | 세션 목록 (최신순) |
 | `/v1/sessions/{id}` | `{session_id, summary}` (event는 `/v1/sessions/{id}/events`로 조회) |
@@ -204,16 +208,44 @@ SDK가 `…/v1/metrics`로 POST해서 wimcc가 404를 반환한다.
 - `whats_in_my_cc.get_otel_trace`
 - `whats_in_my_cc.get_session_turns`
 - `whats_in_my_cc.get_project_metrics`
+- `whats_in_my_cc.get_session_metrics`
+- `whats_in_my_cc.get_session_signals`
+- `whats_in_my_cc.get_session_fingerprint`
+- `whats_in_my_cc.get_session_events`
+- `whats_in_my_cc.get_session_digest` — 권장 진입점("start here"): 한 번의
+  호출로 세션 summary·지표·signal·verification run을 함께 반환
 - `whats_in_my_cc.list_detectors`
 
 MCP resource도 제공한다: 세션별 summary와 file-lineage·OTel-trace
 resource template.
 
+MCP 클라이언트 연결은 `http://127.0.0.1:7878/mcp`(Streamable HTTP)로 한다.
+Claude Code 기준:
+
+```bash
+claude mcp add --transport http wimcc http://127.0.0.1:7878/mcp
+```
+
+또는 프로젝트 `.mcp.json`에:
+
+```json
+{
+  "mcpServers": {
+    "wimcc": { "type": "http", "url": "http://127.0.0.1:7878/mcp" }
+  }
+}
+```
+
+`--auth on`이면 연결 헤더에 `Authorization: Bearer <token>`을 추가한다
+(`serve --print-token`으로 토큰 확인).
+
 ## Web UI
 
 `wimcc` 바이너리는 React SPA를 임베드(rust-embed)하며 `http://127.0.0.1:7878/`에서
-제공한다. 두 페이지:
+제공한다. 세 페이지:
 
+- `/dashboard` — 세션 횡단 프로젝트 인사이트: 일별 검증/비용/signal 시리즈,
+  instruction 코호트 전후 비교, 세션 분포, 검증 탭.
 - `/sessions` — 세션 목록
 - `/sessions/:id` — event-first replay: event별 detail panel을 갖춘 conversation
   stream, raw-source 탭, insight strip(컨텍스트 효율/토큰/검증/도구 실패/비용,
@@ -270,10 +302,11 @@ curl -X POST http://127.0.0.1:7878/otel/v1/metrics \
   --auth on`은 `/v1/*` + `/mcp`에 bearer token을 강제한다. Token 파일: macOS
   `~/Library/Application Support/wimcc/token`, Linux `~/.config/wimcc/token`
   (mode `0600`). `serve --print-token` / `--rotate-token`으로 관리한다.
-- **retention**은 기본 `none`(삭제 없음). `--retention-profile default`
-  (raw 30d / normalized 180d / insight 180d / audit 90d) 또는 `strict`
-  (raw 7d / normalized 30d / insight 30d / audit 30d)로 백그라운드 sweep을
-  활성화한다.
+- **retention**은 기본 `default`: 백그라운드 sweep(6시간 주기)이 raw payload는
+  60일, normalized/insight row는 180일, audit row는 90일 경과 시 정리한다.
+  `strict`는 창을 좁힌다(raw 7d / normalized 30d / insight 30d / audit 30d);
+  `--retention-profile none`은 삭제를 전부 끈다(무기한 로컬 아카이브). 활성
+  프로파일과 마지막 sweep은 `/v1/health`가 보여준다.
 
 ## 보안 주의
 

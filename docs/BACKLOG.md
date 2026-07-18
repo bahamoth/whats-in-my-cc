@@ -43,3 +43,32 @@ live tail 재해시(≈10ms/flush)·recompute_session(현 코퍼스 최대 6k행
 detector화. no-annotation 원칙상 판별 기록은 저장되지 않으므로 관문은 회고
 세션에서만 닫힌다. lexical 의미 판별을 L1에 넣지 않는 선례:
 `#final-state-mismatch-removal-2026-07-03`.
+
+## G-5. 세션 상세 API 무제한 반환 (표본 게이트 — 2026-07-18 감사)
+
+`session_turns`(`repo_observed.rs::list_session_conversation` LIMIT 없음)·
+diff-hunks·verification-runs·signals는 세션 전체 세트를 반환한다. 현 코퍼스
+최대 세션(≈25k행)에서는 무통 — **수십만 행 세션이 실제로 관측되어 응답이
+아플 때** 커서 페이지네이션을 도입한다. 참조: implementation-notes
+`#growth-resource-sweep-2026-07-18`.
+
+## G-6. Linux inotify recursive watch 스케일 (표본 게이트)
+
+`transcript_tail`의 recursive watch는 Linux에서 디렉터리당 watch descriptor를
+잡는다(macOS FSEvents는 무관). `~/.claude/projects/**` 하위 디렉터리 수천 개
+환경의 실측 표본이 생기면 `max_user_watches` 대응(폴링 폴백 또는 안내)을
+넣는다. 참조: implementation-notes `#growth-resource-sweep-2026-07-18`.
+
+## G-7. 증분 ingest 오프셋 (성능 재실측 게이트 — G-3 연동)
+
+live tail은 flush마다 파일 전체를 재해시한다(DEV-S7-01 의도된 트레이드오프,
+recompute 스킵과 별개로 남는 비용). G-3과 같은 기준 — **재해시가 실측으로
+아플 때**(대형 세션에서 flush 지연 관측) byte-offset 커서를 재검토한다.
+
+## G-8. 인사이트 → 다음 행동 연결 (설계 논의 필요)
+
+대시보드·insight strip은 판정 문장 금지 원칙상 숫자·관측 사실만 보여주고,
+판단은 `session-retrospect` 스킬(LLM 온디맨드)로 외주화되어 있다 — 스킬의
+존재를 모르는 사용자는 "그래서?"에서 이탈한다(2026-07-18 UX 감사 GAP-5).
+원칙을 깨지 않고 스킬로의 발견 가능한 연결(예: 대시보드에서 retrospect 안내
+표면)을 설계할지 사용자 논의 후 착수.
