@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.4.0](https://github.com/bahamoth/whats-in-my-cc/compare/v1.3.0...v1.4.0) (2026-07-18)
+
+
+### Features
+
+* **cli:** DB 기본 경로를 플랫폼 데이터 디렉터리로 — legacy CWD 폴백 + 기동 로그 ([f375625](https://github.com/bahamoth/whats-in-my-cc/commit/f3756251183acf1a581d84b83a7b500ae50b106c))
+* **cli:** wimcc self-update — axoupdater receipt 분기, 자동 재시작 금지 ([711977b](https://github.com/bahamoth/whats-in-my-cc/commit/711977bc53b5df26fa7131cedabbe043978ebdc3))
+* **cli:** wimcc service — launchd/systemd user 서비스 등록·해제·재시작·상태 ([0fad19a](https://github.com/bahamoth/whats-in-my-cc/commit/0fad19af91dd228ad650880b79a845bf1da2c40f))
+* **dist:** npm 배포 채널 제거 — installers·publish-jobs에서 삭제, release.yml 재생성 ([19c4588](https://github.com/bahamoth/whats-in-my-cc/commit/19c45888b3397a4a54b1fcac9bec546a77125b5f))
+* **serve:** 업데이트 체크 루프 + /v1/health version 블록 — 기본 on, --update-check off로 비활성 ([33a28ef](https://github.com/bahamoth/whats-in-my-cc/commit/33a28efadcc8cc7d4e09e2d1c7576af6f3a8d42e))
+* **webui:** 업데이트 배너 — health version 블록 소비, 버전 숫자만 표기 ([b49d7ef](https://github.com/bahamoth/whats-in-my-cc/commit/b49d7ef354e6d0f3d03832f0c90f28744db6e77e))
+
+
+### Bug Fixes
+
+* **ci:** dist generate가 탈락시키는 working-directory 대신 run 내 cd webui ([9f63c7c](https://github.com/bahamoth/whats-in-my-cc/commit/9f63c7c80e54cc40eff0a01d61faf878f1f79d9a))
+* **serve:** 업데이트 체크 HTTP 30s 타임아웃 — 행 시 이후 주기 정지 방지 ([5fd37cd](https://github.com/bahamoth/whats-in-my-cc/commit/5fd37cd67db261395826dddeb9481ac4be00c075))
+* **service:** install도 loopback bind만 허용 — non-loopback 등록은 crash-loop이 됨 ([5a9d22b](https://github.com/bahamoth/whats-in-my-cc/commit/5a9d22b307a3eaf2fcdfdba4667e69e73d510ebd))
+* **service:** 등록 실패를 정직하게 보고 + plist XML 이스케이프 ([9268f28](https://github.com/bahamoth/whats-in-my-cc/commit/9268f28bd64e4649a446e05baaa674ae074135d4))
+
 ## [1.3.0](https://github.com/bahamoth/whats-in-my-cc/compare/v1.2.1...v1.3.0) (2026-07-10)
 
 
