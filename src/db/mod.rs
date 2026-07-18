@@ -45,6 +45,41 @@ pub async fn migrate(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
+/// growth-2026-07-18 — `wimcc vacuum`: one-shot offline compaction.
+///
+/// Converts the file to auto_vacuum=INCREMENTAL (the header of a DB created
+/// before 2026-07-18 stays NONE until a full VACUUM, making the sweep's
+/// `incremental_vacuum` a no-op) and releases every free page back to the
+/// filesystem. VACUUM takes an exclusive lock — run while serve is stopped.
+/// Returns `(before_bytes, after_bytes)` by page math.
+///
+/// Opens its own single connection from `url` instead of taking a pool: the
+/// NONE→INCREMENTAL header conversion silently does not happen when the
+/// VACUUM runs on a pooled connection (verified by tests/db_vacuum.rs against
+/// sqlx 0.8; the same statement sequence on a dedicated connection — and in
+/// the sqlite3 CLI — converts fine).
+pub async fn vacuum_db(url: &str) -> Result<(i64, i64)> {
+    use sqlx::{ConnectOptions, Connection, Executor};
+    let mut conn = sqlx::sqlite::SqliteConnectOptions::from_str(url)?
+        .connect()
+        .await?;
+    async fn size(conn: &mut sqlx::SqliteConnection) -> Result<i64> {
+        let page_size: i64 = sqlx::query_scalar("PRAGMA page_size")
+            .fetch_one(&mut *conn)
+            .await?;
+        let page_count: i64 = sqlx::query_scalar("PRAGMA page_count")
+            .fetch_one(&mut *conn)
+            .await?;
+        Ok(page_size * page_count)
+    }
+    let before = size(&mut conn).await?;
+    conn.execute("PRAGMA auto_vacuum = INCREMENTAL; VACUUM; PRAGMA wal_checkpoint(TRUNCATE);")
+        .await?;
+    let after = size(&mut conn).await?;
+    conn.close().await?;
+    Ok((before, after))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

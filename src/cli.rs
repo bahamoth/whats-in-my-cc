@@ -63,6 +63,10 @@ pub enum LogFormat {
 pub enum Command {
     /// Apply migrations and prepare the database.
     InitDb,
+    /// Compact the database file: convert to auto_vacuum=INCREMENTAL and run
+    /// a full VACUUM so freed pages return to the filesystem. VACUUM takes an
+    /// exclusive lock — run while serve is stopped.
+    Vacuum,
     /// Scan transcript JSONL files and insert raw + observed events.
     Ingest {
         /// A specific file or directory to ingest.
