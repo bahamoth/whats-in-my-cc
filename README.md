@@ -126,6 +126,8 @@ Global flags apply to every subcommand. `--db-path` defaults to
 | `ingest --all` / `ingest --path <P>` | Backfill: scan transcript JSONL files into raw + observed events (idempotent). |
 | `doctor [--json] [--server <URL>] [--project <DIR>]` | Read-only diagnosis of collector wiring (settings hierarchy, OTel env, server probe). Never mutates anything. |
 | `serve` | Start the local service: Pull API + WebUI + OTel receiver + transcript live tail. |
+| `self-update [--check]` | Replace the binary with the latest release (shell installs; package-manager installs are pointed to their manager). Never restarts a running serve. |
+| `service install\|uninstall\|restart\|status` | Register serve as a login service (launchd / systemd `--user`). `install` takes `--bind` / `--port` / `--auto-migrate`. |
 
 ### `wimcc serve` flags
 
@@ -135,7 +137,8 @@ wimcc serve [--bind 127.0.0.1] [--port 7878]
              [--transcripts-root <PATH>]         # override ~/.claude/projects
              [--no-watch-transcripts]            # disable the live tail (OTel/hook only)
              [--auth off|on]                      # bearer-token auth on /v1 + /mcp (default: off)
-             [--retention-profile none|default|strict]   # background retention sweep (default: none)
+             [--retention-profile none|default|strict]   # background retention sweep (default: default)
+             [--update-check on|off]              # daily GitHub Releases version check (default: on)
              [--print-token] [--rotate-token]     # manage the bearer token, then exit
              [--sse-keepalive-secs N]             # WebUI live-stream keep-alive (default: 30)
              [--sse-channel-capacity N]           # broadcast channel capacity (default: 512)
