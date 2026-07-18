@@ -63,6 +63,7 @@ base64             = "0.22"
 subtle             = "2"
 toml = "1.1.2"
 semver             = "1"
+axoupdater         = { version = "0.10", default-features = false, features = ["github_releases"] }
 
 [dev-dependencies]
 assert-json-diff   = "2"

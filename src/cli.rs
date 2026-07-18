@@ -133,6 +133,12 @@ pub enum Command {
         #[arg(long, default_value = "on", value_parser = ["on", "off"], env = "WIMCC_UPDATE_CHECK")]
         update_check: String,
     },
+    /// 바이너리를 최신 릴리스로 교체한다. 실행 중인 serve는 재시작하지 않는다.
+    SelfUpdate {
+        /// 조회만 하고 교체하지 않는다.
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 #[cfg(test)]
@@ -188,6 +194,15 @@ mod tests {
         match cli.command {
             Command::Serve { update_check, .. } => assert_eq!(update_check, "on"),
             other => panic!("expected Serve, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn self_update_parses_with_check_flag() {
+        let cli = Cli::try_parse_from(["wimcc", "self-update", "--check"]).expect("parses");
+        match cli.command {
+            Command::SelfUpdate { check } => assert!(check),
+            other => panic!("expected SelfUpdate, got {other:?}"),
         }
     }
 }

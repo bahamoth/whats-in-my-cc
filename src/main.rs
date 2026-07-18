@@ -87,6 +87,9 @@ fn main() -> error::Result<()> {
                 )
                 .await
             }
+            cli::Command::SelfUpdate { check } => {
+                wimcc::self_update::run(check).await.map_err(Into::into)
+            }
         }
     })
 }

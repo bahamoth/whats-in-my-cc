@@ -11,6 +11,7 @@ pub mod model;
 pub mod paths;
 pub mod plugins;
 pub mod security;
+pub mod self_update;
 pub mod serve;
 pub mod telemetry;
 pub mod transcript_tail;
