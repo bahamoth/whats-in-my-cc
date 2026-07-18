@@ -5,11 +5,11 @@
 
 [English](README.md) · **한국어**
 
-**Claude Code의 모든 내부 동작을 측정하고 기록해 사람과 에이전트 모두에게 실행 가시성을 제공합니다.**
+**Claude Code의 모든 내부 동작을 측정하고 기록해 사람과 에이전트 모두에게 실행 가시성을 제공한다.**
 
 ## What's in my cc?
 
-wimcc는 방금 끝났거나 지금 진행 중인 Claude Code 세션을, 한 단계씩 짚어볼 수 있는
+wimcc는 방금 끝났거나 지금 진행 중인 Claude Code 세션을 한 단계씩 짚어볼 수 있는
 실행으로 다시 보여준다. 채팅 로그만으로는 안 보이는 것들 — 어떤 도구가 왜 실패했는지,
 모델 요청에 시간과 토큰이 얼마나 들었는지, hook이 무엇을 막았는지, 어떤 edit이 어느
 파일의 어느 줄을 바꿨는지 — 을 한 화면에 모아 보여주고, 각 항목을 그 근거가 된 원본
@@ -24,13 +24,13 @@ wimcc로 할 수 있는 것:
 - 모델 요청·도구 호출·hook이 **시간순으로 어떻게 얽혀** 흘렀는지 따라간다.
 - 위 모든 것을 브라우저 UI로 보거나, **Pull API / MCP로 다른 도구·에이전트가** 가져간다.
 
-모든 처리는 로컬(`127.0.0.1`)에서 이루어지며 외부로 데이터를 전송하지 않는다. 외부
+모든 처리는 로컬(`127.0.0.1`)에서 실행되며 외부로 데이터를 전송하지 않는다. 외부
 접근은 읽기 전용이다.
 
 ## 빠른 시작
 
 아래 [설치](#설치) 절의 채널 중 하나를 사용한다. shell 설치 스크립트가 가장
-빠른 경로다 — 플랫폼에 맞는 dist 아카이브를 자동으로 받는다(macOS Apple
+빠른 경로다 — 플랫폼에 맞는 dist 아카이브를 자동으로 내려받는다(macOS Apple
 Silicon/Intel, Linux x86_64/aarch64 musl). WebUI가 임베드되어 있어 단일
 바이너리만 있으면 된다.
 
@@ -50,7 +50,7 @@ curl -fsSL https://github.com/bahamoth/whats-in-my-cc/releases/latest/download/w
 # Homebrew
 brew install bahamoth/tap/wimcc
 
-# npm (Claude Code 사용자는 이미 설치돼 있음)
+# npm (Claude Code 사용자는 npm이 이미 있음)
 npm install -g wimcc
 
 # cargo
@@ -206,7 +206,7 @@ SDK가 `…/v1/metrics`로 POST해서 wimcc가 404를 반환한다.
 - `whats_in_my_cc.get_project_metrics`
 - `whats_in_my_cc.list_detectors`
 
-MCP resource도 제공한다: 세션별 summary, 그리고 file-lineage·OTel-trace
+MCP resource도 제공한다: 세션별 summary와 file-lineage·OTel-trace
 resource template.
 
 ## Web UI
@@ -289,7 +289,7 @@ curl -X POST http://127.0.0.1:7878/otel/v1/metrics \
 ## 빌드 · 테스트 · 개발
 
 빌드·테스트는 `just` 레시피로 묶여 있다. 백엔드 바이너리는 `webui/dist/`를 rust-embed로
-컴파일 시점에 임베드하므로, **백엔드를 빌드·테스트하기 전에 SPA가 먼저 빌드돼 있어야
+컴파일 시점에 임베드하므로, **백엔드를 빌드·테스트하기 전에 SPA가 빌드돼 있어야
 한다.**
 
 | 레시피 | 동작 |
