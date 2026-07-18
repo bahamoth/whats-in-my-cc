@@ -497,3 +497,15 @@ export interface HealthVersion {
   latest: string | null;
   update_available: boolean;
 }
+
+/** growth-2026-07-18 — /v1/health 전체 상태(원시 JSON). ServeStatus 칩이 소비.
+ *  `db`는 page 기반 산출, `retention.last_sweep_at`은 sweep 미실행 시 null. */
+export interface HealthStatus {
+  version: HealthVersion;
+  db: { path: string | null; size_bytes: number; freelist_bytes: number };
+  security: { auth_required: boolean; retention_profile: string };
+  retention: {
+    last_sweep_at: string | null;
+    last_sweep_deletions: Record<string, number>;
+  };
+}

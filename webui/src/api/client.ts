@@ -17,6 +17,7 @@ import type {
   TurnRollupResponse,
   PluginDto,
   TaskDto,
+  HealthStatus,
   HealthVersion,
 } from './types';
 import type { EventFilterParams } from '../components/replay/stream/filterState';
@@ -165,6 +166,19 @@ export async function getHealthVersion(): Promise<HealthVersion | null> {
     if (!resp.ok) return null;
     const body = await resp.json();
     return (body.version as HealthVersion | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** growth-2026-07-18 — health 전체 블록(version·db·retention). 실패/부재 시
+ *  null — ServeStatus 칩이 조용히 생략된다(getHealthVersion과 동일 계약). */
+export async function getHealthStatus(): Promise<HealthStatus | null> {
+  try {
+    const resp = await fetch('/v1/health', { headers: { accept: 'application/json' } });
+    if (!resp.ok) return null;
+    const body = (await resp.json()) as HealthStatus;
+    return body.version && body.db ? body : null;
   } catch {
     return null;
   }
