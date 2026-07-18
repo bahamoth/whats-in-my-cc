@@ -122,6 +122,8 @@ wimcc [--db-path <PATH>] [--log-format pretty|json] [--verbose] <command>
 | `ingest --all` / `ingest --path <P>` | 백필: transcript JSONL을 raw + observed event로 스캔(idempotent). |
 | `doctor [--json] [--server <URL>] [--project <DIR>]` | collector 연동 상태의 read-only 진단(설정 계층, OTel env, 서버 probe). 어떤 것도 변경하지 않음. |
 | `serve` | 로컬 서비스 시작: Pull API + WebUI + OTel 수신기 + transcript live tail. |
+| `self-update [--check]` | 바이너리를 최신 릴리스로 교체(shell 설치본 기준; 패키지 매니저 설치본은 해당 매니저 안내). 실행 중인 serve는 재시작하지 않음. |
+| `service install\|uninstall\|restart\|status` | serve를 로그인 서비스로 등록(launchd / systemd `--user`). `install`은 `--bind` / `--port` / `--auto-migrate`를 받음. |
 
 ### `wimcc serve` 옵션
 
@@ -131,7 +133,8 @@ wimcc serve [--bind 127.0.0.1] [--port 7878]
              [--transcripts-root <PATH>]         # ~/.claude/projects 재정의
              [--no-watch-transcripts]            # live tail 비활성화 (OTel/hook만)
              [--auth off|on]                      # /v1 + /mcp에 bearer-token 인증 (기본: off)
-             [--retention-profile none|default|strict]   # 백그라운드 retention sweep (기본: none)
+             [--retention-profile none|default|strict]   # 백그라운드 retention sweep (기본: default)
+             [--update-check on|off]              # 일일 GitHub Releases 버전 확인 (기본: on)
              [--print-token] [--rotate-token]     # bearer token 관리 후 종료
              [--sse-keepalive-secs N]             # WebUI live-stream keep-alive (기본: 30)
              [--sse-channel-capacity N]           # broadcast 채널 용량 (기본: 512)
