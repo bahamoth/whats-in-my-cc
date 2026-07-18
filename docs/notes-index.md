@@ -24,7 +24,7 @@ CLAUDE.md의 python 스니펫.
 | MCP 표면 | `#mcp-digest-events-2026-07-04` (11종: structuredContent·events·digest) | `#mcp-parity-detector-config-2026-07-03` · `#dogfood-retrospect-2026-06-12` |
 | export·거버넌스 | `#export-bundle-2026-07-04` (POST /v1/export-bundles) + `#prd-09-decisions-2026-07-04` (§09 3건 종결) | `#full-retention` · `#slice-18-deviations` · `#slice-19-deviations` |
 | telemetry fold | `#telemetry-fold-group-a` · `#telemetry-fold-group-bc` | — |
-| 배포·릴리즈·업데이트 | `#db-default-path-2026-07-18` (DB 기본 경로 = 플랫폼 데이터 디렉터리 + legacy CWD 폴백·로그) · `#release-distribution` (dist 3채널 — npm 채널 2026-07-18 제외·release-please 역할분담·self-update·service — 첫 릴리스 검증 미완) | — |
+| 배포·릴리즈·업데이트 | `#db-default-path-2026-07-18` (DB 기본 경로 = 플랫폼 데이터 디렉터리 + legacy CWD 폴백·로그) · `#release-distribution` (dist 3채널 — npm 채널 2026-07-18 제외·release-please 역할분담·self-update·service — v1.4.0 파이프라인 실검증 완료 2026-07-18, 설치 스모크·self-update E2E 잔여) | — |
 
 ## 이원화 구조 (B-5 결정)
 

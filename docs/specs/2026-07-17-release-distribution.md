@@ -122,11 +122,16 @@ serve 재기동은 라이브 CC 세션 관측을 중단시킬 수 있다. 교체
 
 ## 8. 구현 중 검증 항목 (열린 것)
 
-- [ ] GitHub Release 생성 주체 조정 — release-please vs dist 중 한쪽 생성 비활성 (§1)
-- [ ] aarch64-linux 빌드 러너 — GitHub ARM 러너 vs dist cross 지원 (§1)
-- [ ] axoupdater receipt 동작 실측 — 문서 + 로컬 실험 (§3)
-- [ ] 첫 릴리스에서: 4타깃 asset·install.sh·sha256·brew formula·crates.io 전부
-  발행 확인 + 각 채널 설치 스모크
+- [x] GitHub Release 생성 주체 조정 — dist `create-release = false`로 해소, v1.4.0에서
+  published Release 대상 `--draft=false` no-op 무해 확인 (2026-07-18)
+- [x] aarch64-linux 빌드 러너 — `ubuntu-24.04-arm` 확정, v1.4.0 빌드 성공 (2026-07-18)
+- [ ] axoupdater receipt 동작 실측 — `--check` 우회는 구현·주석 기록(§3), receipt 기반
+  실제 교체 E2E는 shell 설치 스모크에서
+- [x] 첫 릴리스 발행 확인 — v1.4.0: 4타깃 asset(`wimcc-{target}.tar.xz`+`.sha256`,
+  binstall 템플릿과 일치)·`wimcc-installer.sh`(latest/download 200)·brew formula
+  (tap 커밋)·crates.io 1.4.0 전부 발행 (2026-07-18, 상세: implementation-notes
+  `#release-distribution` 후속 문단)
+- [ ] 각 채널 설치 스모크 + shell receipt `self-update` E2E + serve 배너 v1.4.0 인지
 
 ## Non-goals
 

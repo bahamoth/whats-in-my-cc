@@ -6738,6 +6738,22 @@ vitest: 69 passed
     secret은 불필요해졌다. 이 섹션 위쪽 본문·체크리스트의 npm 언급(4채널·npm
     퍼블리시)은 이 결정으로 대체된다 — 현행 설치 채널은
     shell·Homebrew·crates.io(+binstall)·mise(문서만) 3+1이다.</p>
+
+    <p><b>첫 릴리스 실검증 결과(v1.4.0, 2026-07-18, 후속):</b> 위 warn 체크리스트의
+    파이프라인 항목이 전부 통과했다 — ① release-please PAT 태그가
+    <code>release.yml</code>을 발화 ② 4타깃 빌드 성공(aarch64-linux-musl은
+    <code>ubuntu-24.04-arm</code> 러너) ③ published Release에 업로드
+    (<code>create-release=false</code>) 및 <code>gh release edit --draft=false</code>
+    no-op 무해 확인 ④ brew formula가 <code>bahamoth/homebrew-tap</code>에 커밋
+    ("wimcc 1.4.0") ⑤ crates.io <code>wimcc 1.4.0</code> 게시(verify 빌드가 동봉
+    webui/dist로 통과) ⑥ <code>releases/latest/download/wimcc-installer.sh</code>
+    HTTP 200. <b>실측 asset 파일명(Real-data anchoring, 스펙 §8)</b>:
+    타깃별 <code>wimcc-{target}.tar.xz</code> + <code>.tar.xz.sha256</code>
+    (binstall pkg-url 템플릿과 정확 일치 — 소스빌드 폴백 없음), 공통
+    <code>wimcc-installer.sh</code>·<code>wimcc.rb</code>·<code>sha256.sum</code>·
+    <code>dist-manifest.json</code>·<code>source.tar.gz(.sha256)</code>.
+    <b>잔여(로컬 설치 필요)</b>: 채널별 설치 스모크, shell receipt 기반
+    <code>self-update</code> E2E, serve 업데이트 체크 배너의 v1.4.0 인지.</p>
   </section>
 
   <section id="db-default-path-2026-07-18">
