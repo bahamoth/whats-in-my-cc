@@ -14,6 +14,10 @@
     "qmd": "실행이지만 비보편 — mcc-knowledge-vault 개인 검색 CLI(`qmd search \"…\"`). 공개 CLI/공식 plugin 아님 (2026-07-09, mcc-knowledge-vault 세션)",
     "sdk": "실행 아님 — `ls/cat node_modules/@modelcontextprotocol/sdk/…` 경로 세그먼트의 토크나이저 파편, 최상위 명령은 ls/cat (2026-07-09)",
     "not": "실행 아님 — `find … -not -path '*/node_modules/*'`의 `-not` 플래그 토크나이저 파편 (2026-07-09, nc-design-system 세션)",
-    "basename": "실행이지만 비태깅 — `$(basename $(dirname $file))` 명령 치환 내부 경로 헬퍼(순수 문자열 처리, 파일 I/O 없어 verb.object 부적합). 최상위 명령은 echo/for 루프 (2026-07-09)"
+    "basename": "실행이지만 비태깅 — `$(basename $(dirname $file))` 명령 치환 내부 경로 헬퍼(순수 문자열 처리, 파일 I/O 없어 verb.object 부적합). 최상위 명령은 echo/for 루프 (2026-07-09)",
+    "result": "실행 아님 — echo \"=== cargo test finished; result lines ===\" 상태 메시지 문자열의 `;` 토크나이저 파편 (2026-07-18 루프 재표면화, 세션 31f1fb03, PR-4 스모크, 2026-07-05 원 발생)",
+    "cargo test$\"": "실행 아님 — pgrep -f \"^/Users.*cargo test$\\\"\" 정규식 패턴 문자열의 토크나이저 파편(cargo 서브커맨드 아님) (2026-07-18 루프 재표면화, 세션 31f1fb03, PR-4 스모크, 2026-07-05 원 발생)",
+    "last": "실행 아님 — echo \"…last lines:\"; tail -5 … 상태 메시지 문자열의 `;` 토크나이저 파편 (2026-07-18 루프 재표면화, 세션 31f1fb03, PR-4 스모크, 2026-07-05 원 발생)",
+    "only": "실행 아님 — echo \"…only baseline holds remain) ===\" 상태 메시지 문자열의 `;` 토크나이저 파편 (2026-07-18 루프 재표면화, 세션 31f1fb03, PR-4 스모크, 2026-07-05 원 발생)"
   }
 }
