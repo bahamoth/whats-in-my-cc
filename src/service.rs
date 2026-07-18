@@ -118,6 +118,21 @@ fn build_argv(
 }
 
 pub fn install(db_path: &Path, bind: &str, port: u16, auto_migrate: bool) -> anyhow::Result<()> {
+    // R-2026-07-18: serve(main.rs)는 is_loopback()이 아니면 즉시 Err로 기동을
+    // 거부한다. 그 기준을 여기서 미러링하지 않으면 non-loopback bind로 등록된
+    // 서비스가 plist KeepAlive=true / unit Restart=on-failure에 의해 무한
+    // 재시작(crash-loop)된다 — install 시점엔 "등록 완료"만 보이고 실패는
+    // 로그에서만 드러난다. 파일 쓰기·launchctl/systemctl 호출보다 반드시 먼저
+    // 검증해 실패 시 아무 부수효과도 남기지 않는다.
+    let ip: std::net::IpAddr = bind
+        .parse()
+        .with_context(|| format!("bind 주소 파싱 실패: {bind}"))?;
+    if !ip.is_loopback() {
+        bail!(
+            "serve는 loopback bind만 허용합니다 (got {bind}) — non-loopback 등록은 \
+             기동 실패가 무한 재시작되는 crash-loop이 되므로 service 등록을 중단합니다"
+        );
+    }
     let argv = build_argv(db_path, bind, port, auto_migrate)?;
     if cfg!(target_os = "macos") {
         let path = plist_path()?;
@@ -278,5 +293,77 @@ mod tests {
     #[test]
     fn systemd_unit_snapshot() {
         insta::assert_snapshot!(systemd_unit(&argv()));
+    }
+
+    /// R-2026-07-18: `wimcc service install --bind 0.0.0.0`이 그대로 등록되면
+    /// serve의 loopback-only 강제(main.rs)에 걸려 기동이 항상 실패하고,
+    /// plist `KeepAlive=true`/unit `Restart=on-failure`가 무한 재시작(crash-loop)한다.
+    /// install()은 파일을 쓰거나 launchctl/systemctl을 부르기 전에 non-loopback bind를
+    /// 거부해야 한다. 이 테스트는 실 서비스 파일 경로(홈 디렉터리 하위, 고정 위치)를
+    /// 건드리지 않기 위해 "쓰기 전/후 상태 불변"을 확인한다 — 실제 write가 있었다면
+    /// mtime/존재 여부가 바뀌었을 것이다.
+    #[test]
+    fn install_rejects_non_loopback_bind_before_any_file_write() {
+        let target_path = if cfg!(target_os = "macos") {
+            plist_path().expect("plist path")
+        } else if cfg!(target_os = "linux") {
+            unit_path().expect("unit path")
+        } else {
+            // 지원하지 않는 OS — install()은 이후 분기에서 bail하므로 여기서는
+            // loopback 거부만 확인한다(파일 부재 확인은 생략).
+            let result = install(
+                std::path::Path::new("/tmp/wimcc-install-reject-test.sqlite"),
+                "0.0.0.0",
+                7878,
+                true,
+            );
+            assert!(result.is_err(), "non-loopback bind must be rejected");
+            return;
+        };
+        let existed_before = target_path.exists();
+        let mtime_before = std::fs::metadata(&target_path)
+            .and_then(|m| m.modified())
+            .ok();
+
+        let result = install(
+            std::path::Path::new("/tmp/wimcc-install-reject-test.sqlite"),
+            "0.0.0.0",
+            7878,
+            true,
+        );
+
+        let err = result.expect_err("non-loopback bind must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("loopback"),
+            "error should mention loopback, got: {msg}"
+        );
+
+        let existed_after = target_path.exists();
+        assert_eq!(
+            existed_before, existed_after,
+            "install must not create/remove the service file for a rejected bind"
+        );
+        if let Some(before) = mtime_before {
+            let after = std::fs::metadata(&target_path)
+                .expect("file should still exist")
+                .modified()
+                .expect("mtime");
+            assert_eq!(
+                before, after,
+                "existing service file must not be touched on a rejected bind"
+            );
+        }
+    }
+
+    #[test]
+    fn install_rejects_unparseable_bind() {
+        let result = install(
+            std::path::Path::new("/tmp/wimcc-install-reject-test2.sqlite"),
+            "not-an-ip",
+            7878,
+            true,
+        );
+        assert!(result.is_err(), "unparseable bind must be rejected");
     }
 }
