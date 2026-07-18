@@ -52,9 +52,6 @@ curl -fsSL https://github.com/bahamoth/whats-in-my-cc/releases/latest/download/w
 # Homebrew
 brew install bahamoth/tap/wimcc
 
-# npm (Claude Code users already have this)
-npm install -g wimcc
-
 # cargo
 cargo install wimcc          # or: cargo binstall wimcc
 
@@ -65,7 +62,7 @@ mise use -g ubi:bahamoth/whats-in-my-cc
 ## Update
 
 - shell install: `wimcc self-update` (check only: `wimcc self-update --check`)
-- brew / npm / cargo: use that manager's upgrade command
+- brew / cargo: use that manager's upgrade command
 - The running `wimcc serve` keeps the old binary until restarted — restart when
   no live Claude Code session is being observed: `wimcc service restart`
 - `wimcc serve` checks GitHub Releases metadata once a day (its only outbound
@@ -357,7 +354,7 @@ migration, so existing events won't have them until re-ingested.
 - **Releases** are split across two workflows: release-please accumulates
   conventional commits on `main` into a release PR and, on merge, tags
   `vX.Y.Z`, generates the CHANGELOG, and creates the GitHub Release. dist
-  (cargo-dist) then builds the 4 targets and the shell/Homebrew/npm
+  (cargo-dist) then builds the 4 targets and the shell/Homebrew
   installers, uploading everything to that same Release. Publishing to
   crates.io is a separate custom job: it gates on the embedded `webui/dist`
   (`scripts/check-crate-contents.sh`) and runs `cargo publish` independently

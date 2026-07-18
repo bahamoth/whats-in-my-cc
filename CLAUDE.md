@@ -80,7 +80,7 @@ schema-versioning·deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html` �
   분담한다 — release-please(`release-please.yml`)는 conventional commit을 릴리스
   PR로 누적하고 머지 시 `vX.Y.Z` 태그·CHANGELOG·GitHub Release 생성까지 전담, dist
   (`release.yml`)는 그 태그를 받아 4타깃(mac aarch64/x86_64, linux musl x86_64/
-  aarch64) 빌드·shell/Homebrew/npm installer·crates.io publish를 수행해 **기존
+  aarch64) 빌드·shell/Homebrew installer·crates.io publish를 수행해 **기존
   Release에 업로드만** 한다(`create-release = false`). 태그 push가 dist를 트리거하려면
   release-please 쪽에 `RELEASE_PLEASE` PAT secret이 필요(기본 `GITHUB_TOKEN`이 만든
   태그는 다른 워크플로를 발화시키지 않음). 상세·함정: `docs/implementation-notes.html#release-distribution`.

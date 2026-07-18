@@ -50,9 +50,6 @@ curl -fsSL https://github.com/bahamoth/whats-in-my-cc/releases/latest/download/w
 # Homebrew
 brew install bahamoth/tap/wimcc
 
-# npm (Claude Code 사용자는 npm이 이미 있음)
-npm install -g wimcc
-
 # cargo
 cargo install wimcc          # 또는: cargo binstall wimcc
 
@@ -63,7 +60,7 @@ mise use -g ubi:bahamoth/whats-in-my-cc
 ## 업데이트
 
 - shell 설치: `wimcc self-update` (조회만: `wimcc self-update --check`)
-- brew / npm / cargo: 해당 매니저의 업그레이드 명령 사용
+- brew / cargo: 해당 매니저의 업그레이드 명령 사용
 - 실행 중인 serve는 재시작 전까지 구 바이너리로 동작 — 라이브 Claude Code 세션
   관측이 없을 때 `wimcc service restart`
 - `wimcc serve`는 하루 한 번 GitHub Releases 메타데이터를 조회해(유일한 outbound
@@ -341,7 +338,7 @@ cargo test
 - **릴리스**는 두 워크플로가 나눠 맡는다: release-please가 `main`의 conventional
   commit을 릴리스 PR에 누적하고, 머지 시 `vX.Y.Z` 태그·CHANGELOG 생성과 GitHub
   Release 생성까지 담당한다. 이어서 dist(cargo-dist)가 4개 타깃 빌드와
-  shell/Homebrew/npm installer를 만들어 같은 Release에 업로드한다. crates.io
+  shell/Homebrew installer를 만들어 같은 Release에 업로드한다. crates.io
   퍼블리시는 별도의 custom job이 맡는다 — 임베드된 `webui/dist`를 게이트
   (`scripts/check-crate-contents.sh`)한 뒤 dist 업로드와 무관하게 독립적으로
   `cargo publish`를 실행한다. `Cargo.toml`과 `webui/package.json`의 버전은 함께

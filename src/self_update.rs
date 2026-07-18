@@ -43,7 +43,7 @@ pub async fn run(check_only: bool) -> anyhow::Result<()> {
         // `AxoUpdater::is_update_needed` internally calls
         // `check_receipt_is_for_this_executable`, which requires `install_prefix`
         // to be set — but that field is only populated by `load_receipt`. A
-        // no-receipt build (dev build, or a brew/npm/cargo install) leaves it
+        // no-receipt build (dev build, or a brew/cargo install) leaves it
         // `None`, so `is_update_needed` errors with `NotConfigured` instead of
         // answering the question. `--check` only wants "is there a newer
         // release", independent of update *eligibility*, so query the release
@@ -71,7 +71,7 @@ pub async fn run(check_only: bool) -> anyhow::Result<()> {
             println!(
                 "이 wimcc는 패키지 매니저로 설치된 것으로 보입니다. 해당 매니저로 업데이트하세요:"
             );
-            println!("  brew upgrade wimcc | npm update -g wimcc | cargo install wimcc");
+            println!("  brew upgrade wimcc | cargo install wimcc");
             Ok(())
         }
         Plan::RunUpdate => {
@@ -98,7 +98,7 @@ mod tests {
         assert_eq!(decide(true, true), Plan::RunUpdate);
     }
 
-    /// receipt 없음 = brew/npm/cargo 설치본 — 매니저 안내만.
+    /// receipt 없음 = brew/cargo 설치본 — 매니저 안내만.
     #[test]
     fn package_manager_install_is_guided() {
         assert_eq!(decide(false, false), Plan::ManagedElsewhere);

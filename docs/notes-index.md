@@ -24,7 +24,7 @@ CLAUDE.md의 python 스니펫.
 | MCP 표면 | `#mcp-digest-events-2026-07-04` (11종: structuredContent·events·digest) | `#mcp-parity-detector-config-2026-07-03` · `#dogfood-retrospect-2026-06-12` |
 | export·거버넌스 | `#export-bundle-2026-07-04` (POST /v1/export-bundles) + `#prd-09-decisions-2026-07-04` (§09 3건 종결) | `#full-retention` · `#slice-18-deviations` · `#slice-19-deviations` |
 | telemetry fold | `#telemetry-fold-group-a` · `#telemetry-fold-group-bc` | — |
-| 배포·릴리즈·업데이트 | `#release-distribution` (dist 4채널·release-please 역할분담·self-update·service — 첫 릴리스 검증 미완) | — |
+| 배포·릴리즈·업데이트 | `#release-distribution` (dist 3채널 — npm 채널 2026-07-18 제외·release-please 역할분담·self-update·service — 첫 릴리스 검증 미완) | — |
 
 ## 이원화 구조 (B-5 결정)
 

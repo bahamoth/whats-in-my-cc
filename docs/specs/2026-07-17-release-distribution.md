@@ -9,15 +9,14 @@
 | 축 | 결정 |
 |----|------|
 | 릴리스 도구 | **dist**(구 cargo-dist, astral 유지 fork)로 빌드·installer·퍼블리시 일원화. release-please는 현행 유지 |
-| 설치 채널 | shell installer(`curl \| sh`) · Homebrew tap · npm(`wimcc`, unscoped) · crates.io(+cargo-binstall) · mise/ubi(문서만) |
+| 설치 채널 | shell installer(`curl \| sh`) · Homebrew tap · crates.io(+cargo-binstall) · mise/ubi(문서만). npm은 2026-07-18 사용자 결정으로 제외("npm publish는 필요 없다") |
 | 빌드 타깃 | `aarch64-apple-darwin` · `x86_64-apple-darwin` · `x86_64-unknown-linux-musl` · `aarch64-unknown-linux-musl` (Windows 제외 — 동작 미검증) |
 | self-update | `wimcc self-update` 서브커맨드(axoupdater 라이브러리 통합) |
 | 업데이트 체크 | **기본 켬** + config로 완전 비활성(opt-out). serve가 주기 조회 → WebUI 배너 + CLI 로그 |
 | crates.io | **이번에 포함**(기존 "추후 결정" 보류를 사용자가 해제). `webui/dist` 동봉 + binstall 메타데이터 |
 | 서비스 등록 | `wimcc service install/uninstall/restart/status` 포함(macOS launchd + Linux systemd user unit) |
 
-npm 이름 `wimcc`·crates.io 이름 `wimcc`는 2026-07-17 조회로 비어 있음 확인(npm 404,
-crates.io "does not exist").
+crates.io 이름 `wimcc`는 2026-07-17 조회로 비어 있음 확인("does not exist").
 
 ## 1. 파이프라인 아키텍처
 
@@ -30,7 +29,6 @@ conventional commits → release-please PR → 머지 → vX.Y.Z 태그
       ├─ 4타깃 빌드 (github-build-setup으로 webui npm build 선행 → rust-embed 임베드)
       ├─ shell installer(install.sh) + sha256 체크섬 생성·업로드
       ├─ Homebrew formula → bahamoth/homebrew-tap 퍼블리시 (publish-jobs)
-      ├─ npm 패키지 `wimcc` 퍼블리시 (publish-jobs)
       └─ cargo publish (crates.io)
 ```
 
@@ -51,11 +49,12 @@ conventional commits → release-please PR → 머지 → vX.Y.Z 태그
 |------|------|---------|
 | shell | `curl -fsSL …/install.sh \| sh` | `wimcc self-update` |
 | Homebrew | `brew install bahamoth/tap/wimcc` | `brew upgrade wimcc` |
-| npm | `npm i -g wimcc` | `npm update -g wimcc` |
 | cargo | `cargo install wimcc` / `cargo binstall wimcc` | 동일 명령 재실행 |
 | mise | `mise use -g ubi:bahamoth/whats-in-my-cc` | `mise upgrade` |
 
-- npm 채널의 근거: 타깃 사용자(Claude Code 사용자)는 전원 npm 보유.
+- npm 채널: 2026-07-18 사용자 결정으로 제외 — `dist-workspace.toml`의
+  `installers`·`publish-jobs`에서 제거, `dist generate`로 재생성(당초 근거였던
+  "타깃 사용자 전원 npm 보유"는 이 결정으로 대체).
 - mise/ubi는 릴리스 asset 네이밍이 규칙적이면 추가 작업 없음 — README 한 줄만.
 
 ### crates.io 동봉 규칙
@@ -77,7 +76,7 @@ axoupdater를 라이브러리로 통합한 서브커맨드. axoupdater는 shell 
 | 설치 경로 | `wimcc self-update` 동작 |
 |-----------|------------------------|
 | shell installer (receipt 있음) | 최신 확인 → 다운로드 → 바이너리 원자적 교체 |
-| brew/npm/cargo (receipt 없음) | 해당 매니저 명령 안내 후 종료(예: "brew upgrade wimcc 사용") — 매니저 관리 파일을 임의 교체하면 매니저 상태가 깨지므로 의도된 동작 |
+| brew/cargo (receipt 없음) | 해당 매니저 명령 안내 후 종료(예: "brew upgrade wimcc 사용") — 매니저 관리 파일을 임의 교체하면 매니저 상태가 깨지므로 의도된 동작 |
 | `--check` 플래그 | 어느 경로든 조회만, 교체 없음 |
 
 **자동 재시작 금지(불변)**: 어떤 경우에도 실행 중 serve를 재시작하지 않는다 —
@@ -118,16 +117,15 @@ serve 재기동은 라이브 CC 세션 관측을 중단시킬 수 있다. 교체
 
 ## 7. 사전 준비물 (사용자 액션 필요)
 
-1. npm 계정 + repo secret `NPM_TOKEN`
-2. crates.io 계정 + repo secret `CARGO_REGISTRY_TOKEN`
-3. `bahamoth/homebrew-tap` 저장소 생성 + 그 repo write 권한 PAT를 secret으로
+1. crates.io 계정 + repo secret `CARGO_REGISTRY_TOKEN`
+2. `bahamoth/homebrew-tap` 저장소 생성 + 그 repo write 권한 PAT를 secret으로
 
 ## 8. 구현 중 검증 항목 (열린 것)
 
 - [ ] GitHub Release 생성 주체 조정 — release-please vs dist 중 한쪽 생성 비활성 (§1)
 - [ ] aarch64-linux 빌드 러너 — GitHub ARM 러너 vs dist cross 지원 (§1)
 - [ ] axoupdater receipt 동작 실측 — 문서 + 로컬 실험 (§3)
-- [ ] 첫 릴리스에서: 4타깃 asset·install.sh·sha256·brew formula·npm·crates.io 전부
+- [ ] 첫 릴리스에서: 4타깃 asset·install.sh·sha256·brew formula·crates.io 전부
   발행 확인 + 각 채널 설치 스모크
 
 ## Non-goals
