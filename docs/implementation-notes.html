@@ -6784,6 +6784,45 @@ vitest: 69 passed
     (<code>sqlite://…?mode=rwc</code>)로 정상 동작함을 실측 확인.</p>
   </section>
 
+  <section id="growth-resource-sweep-2026-07-18">
+    <h2>성장·리소스 감사 대응 — recompute 정책 분리·sweep 확장·상태 관측 (2026-07-18)</h2>
+    <p><b>배경(실측):</b> 도그푸딩 감사에서 세 가지가 수치로 확인됐다. ①DB
+    1.2GB/ingest 5주(raw_event 658MB+observed_event 405MB), retention sweep은
+    돌고 있으나 삭제 실적 0(<code>{"session":0,"raw_event":0}</code> — 데이터가
+    아직 창 안), 삭제돼도 VACUUM 부재로 파일은 단조 증가. ②활동 세션 관측 중
+    serve CPU 105%·RSS 864MB — 전량 dedup된 flush에서도 세션 전체(≤100k행)
+    recompute가 돌았고, flush마다 빈 <code>ingest_run</code> 행이 영구
+    누적(5주 9,086행). ③MCP SessionRegistry는 insert만 있고 정리 수단이
+    재시작뿐.</p>
+    <p><b>결정:</b> (a) <code>RecomputePolicy</code> 분리 — live tail은
+    NewRowsOnly(새 raw 행 있는 세션만 recompute + 빈 run 행 자가 삭제), CLI
+    <code>ingest</code>는 AllTouched 유지(파서 업그레이드 재적용 의미 보존).
+    OTLP 3경로의 touched-on-duplicate self-heal은 문서화된 의도(재POST 복구)
+    이고 빈도가 낮아 유지. (b) sweep 확장 — 세션 만료 시
+    <code>session_summary</code>·<code>instruction_observation</code> 동반 삭제,
+    orphan <code>instruction_snapshot</code> 정리, audit 창 경과+미참조
+    <code>ingest_run</code> 정리. 만료 후보 스캔에
+    <code>instruction_observation.observed_at</code> 추가.
+    tombstone grow-only는 DEV-S19-04 설계라 유지. (c) 디스크 회수 — 신규 DB
+    <code>auto_vacuum=INCREMENTAL</code> + sweep 후
+    <code>incremental_vacuum</code>·<code>wal_checkpoint(TRUNCATE)</code>.
+    기존 DB는 header가 우선이라 no-op → <code>wimcc vacuum</code> 서브커맨드가
+    1회 변환+회수를 담당(serve 정지 상태 전제, VACUUM은 배타 잠금).
+    (d) 관측 — <code>/v1/health</code>에 <code>db</code>(page 기반
+    size/freelist/path)·<code>retention</code>(last sweep) 블록, dead code였던
+    <code>SweepStats</code>를 SharedSweepStats로 배선. WebUI nav rail 하단
+    ServeStatus 칩(버전·최신 릴리스 관측 마커·DB 용량, hover 상세). (e) MCP
+    세션 idle-TTL — insert 시 지연 eviction + exists/subscribe 접근 touch.
+    세션 소멸은 MCP Streamable HTTP 계약상 정상 사건(클라이언트 재초기화).</p>
+    <p><b>주의(재ingest와 보존 시계):</b> raw 스크럽 기준 <code>captured_at</code>은
+    dedup이 원 row를 보존하므로 재ingest로 리셋되지 않는다 — 리셋되는 경우는
+    DB 재생성(init-db 후 재ingest)뿐이며 이는 새 캡처로서 정당하다. 감사 중
+    "재ingest가 시계를 리셋한다"는 초기 가설은 오판으로 정정.</p>
+    <p><b>보류/비채택:</b> doctor에 DB 크기 표기(health가 커버), 세션 상세
+    API LIMIT, Linux inotify 스케일, 증분 ingest 오프셋, 대시보드 "다음 행동"
+    유도 장치 — BACKLOG G-5~G-8 참조.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
