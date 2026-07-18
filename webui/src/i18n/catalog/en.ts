@@ -11,6 +11,20 @@ export const en = {
   'a11y.primaryNav': 'Primary',
   'a11y.sidePanel': 'Side panel',
 
+  // Serve status chip (growth-2026-07-18)
+  'status.aria': 'wimcc server status',
+  'status.version': 'running',
+  'status.latest': 'latest release',
+  'status.dbSize': 'DB size',
+  'status.freelist': 'reclaimable',
+  'status.dbPath': 'DB path',
+  'status.retention': 'retention',
+  'status.lastSweep': 'last sweep',
+  'status.serve.tip':
+    'The running `wimcc serve` version and its local SQLite footprint.\n' +
+    'A [blue]blue dot[/blue] marks a newer release observed on GitHub Releases (daily check).\n' +
+    '**DB size** is the page total of the database file; **reclaimable** pages return to disk on the next retention sweep.',
+
   // Language switcher
   'lang.group': 'Language',
   'lang.switchToEnglish': 'Switch to English',
@@ -22,6 +36,31 @@ export const en = {
   // Session list
   'sessions.searchPlaceholder': '⌕ Search projects · slugs… ( / )',
   'sessions.searchAria': 'Search sessions',
+  'sessions.title': 'wimcc · Sessions',
+  'sessions.refresh': 'refresh',
+  'sessions.loading': 'Loading…',
+  'sessions.retry': 'Retry',
+  'sessions.emptyTitle': 'No sessions yet.',
+  'sessions.emptyHintLive':
+    'With `wimcc serve --auto-migrate` running, a claude session is recorded automatically by the live tail.',
+  'sessions.emptyHintBackfill':
+    'Transcripts from before serve was running can be backfilled once with `wimcc ingest --all`.',
+  'sessions.count': (p: { n: number }) => `${p.n} sessions`,
+  'sessions.sortedBy': 'sorted by',
+  'sessions.col.session': 'session',
+  'sessions.col.lastSeen': 'last seen',
+  'sessions.col.span': 'span',
+  'sessions.col.events': 'events',
+  'sessions.col.verify': 'verify',
+  'sessions.col.signals': 'signals',
+  'sessions.col.cost': 'cost',
+  'sessions.col.rate': '$/1M',
+  'sessions.col.hit': 'hit',
+  'sessions.col.sources': 'sources',
+  'sessions.spanTitle': 'session span — first observation → last observation (idle included)',
+  'sessions.liveTitle': 'received an SSE envelope within 60s — claude is currently active',
+  'sessions.verifyTitle': (p: { passed: number; failed: number; unknown: number }) =>
+    `passed ${p.passed} · failed ${p.failed} · unknown ${p.unknown}`,
 
   // Session detail
   'detail.analysisToggle': 'Analysis',
@@ -530,7 +569,8 @@ export const en = {
   'dash.truncated': (a: { n: number; m: number }) =>
     `showing the latest ${a.n} of ${a.m} sessions (limit)`,
   'dash.empty': 'No sessions in this window.',
-  'dash.emptyHint': 'Ingest transcripts first: wimcc ingest --all',
+  'dash.emptyHint':
+    'Sessions appear automatically while wimcc serve is running; backfill older transcripts with wimcc ingest --all.',
   'dash.error': 'Failed to load the series.',
   'dash.loading': 'Loading series…',
   'dash.outcome.passed': 'passed',
