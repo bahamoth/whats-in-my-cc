@@ -58,6 +58,15 @@ fn read_proc_db_web_and_date() {
         tag(&bash("top -l 1 -n 5 -o cpu | head -20")),
         Some("read.proc")
     );
+    // `ssh` — network access peer of curl/wget/dig (read.web). Surfaced by the
+    // tagging loop (2026-07-18, real sample: GitHub auth probe
+    // `ssh -T git@github.com -o BatchMode=yes`, count 3, session 65feb5ef).
+    assert_eq!(
+        tag(&bash(
+            "ssh -T git@github.com -o BatchMode=yes -o ConnectTimeout=5 2>&1; echo \"EXIT=$?\""
+        )),
+        Some("read.web")
+    );
 }
 
 #[test]
