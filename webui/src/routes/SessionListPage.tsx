@@ -8,7 +8,7 @@ import { useLiveStream, type LiveEnvelope } from '../hooks/useLiveStream';
 import { relativeTime, formatModel, formatSpan, spanMs } from '../lib/format';
 import { groupTeamRows } from '../lib/teamGrouping';
 import { agentColor } from '../lib/colorHash';
-import { useLocale, useT } from '../i18n';
+import { useLocale, useT, type MessageKey } from '../i18n';
 import styles from './SessionListPage.module.css';
 
 type SortKey =
@@ -23,17 +23,24 @@ type SortKey =
   | 'hit';
 type SortDir = 'asc' | 'desc';
 
-const SORT_LABELS: Record<SortKey, string> = {
-  session_id: 'session',
-  last_observed_at: 'last seen',
-  span: 'span',
-  event_count: 'events',
-  verification: 'verify',
-  signals: 'signals',
-  cost: 'cost',
-  rate: '$/1M',
-  hit: 'hit',
+const SORT_LABEL_KEYS: Record<SortKey, MessageKey> = {
+  session_id: 'sessions.col.session',
+  last_observed_at: 'sessions.col.lastSeen',
+  span: 'sessions.col.span',
+  event_count: 'sessions.col.events',
+  verification: 'sessions.col.verify',
+  signals: 'sessions.col.signals',
+  cost: 'sessions.col.cost',
+  rate: 'sessions.col.rate',
+  hit: 'sessions.col.hit',
 };
+
+// 카탈로그 문자열 안의 `code` 구간을 <code>로 렌더 — 빈 상태 힌트의 CLI 명령용.
+function renderWithCode(text: string) {
+  return text.split('`').map((part, i) =>
+    i % 2 === 1 ? <code key={i}>{part}</code> : <span key={i}>{part}</span>,
+  );
+}
 
 type State =
   | { kind: 'loading' }
@@ -159,6 +166,7 @@ function matchesQuery(r: SessionListItem, q: string): boolean {
 
 /** 지표 5셀 — 미측정은 '—'(0 위장 금지). 검증은 통과/전체 + pass/fail 마이크로바. */
 function MetricCells({ m }: { m?: SessionMetricsDto }) {
+  const t = useT();
   const dim = <td className={styles.eventsCell}><span className={styles.tagDim}>—</span></td>;
   if (!m) return <>{dim}{dim}{dim}{dim}{dim}</>;
   const ratios = usageRatios(m);
@@ -170,7 +178,13 @@ function MetricCells({ m }: { m?: SessionMetricsDto }) {
     <>
       <td className={styles.eventsCell}>
         {total > 0 ? (
-          <span title={`passed ${m.verification_passed} · failed ${m.verification_failed} · unknown ${m.verification_unknown}`}>
+          <span
+            title={t('sessions.verifyTitle', {
+              passed: m.verification_passed,
+              failed: m.verification_failed,
+              unknown: m.verification_unknown,
+            })}
+          >
             <strong>{m.verification_passed}</strong>/{total}
             <span
               style={{
@@ -331,28 +345,29 @@ export default function SessionListPage() {
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <h1>wimcc · Sessions</h1>
-        <button type="button" onClick={() => void load()}>refresh</button>
+        <h1>{t('sessions.title')}</h1>
+        <button type="button" onClick={() => void load()}>{t('sessions.refresh')}</button>
       </header>
-      {state.kind === 'loading' && <p>Loading…</p>}
+      {state.kind === 'loading' && <p>{t('sessions.loading')}</p>}
       {state.kind === 'error' && (
         <div role="alert">
           <p>{state.message}</p>
-          <button type="button" onClick={() => void load()}>Retry</button>
+          <button type="button" onClick={() => void load()}>{t('sessions.retry')}</button>
         </div>
       )}
       {state.kind === 'ok' && totalRows === 0 && (
         <div className={styles.empty}>
-          <p>No sessions yet.</p>
-          <p>Run <code>wimcc serve --auto-migrate</code> and let claude code talk to it, or backfill with <code>wimcc ingest --all</code>.</p>
+          <p>{t('sessions.emptyTitle')}</p>
+          <p>{renderWithCode(t('sessions.emptyHintLive'))}</p>
+          <p>{renderWithCode(t('sessions.emptyHintBackfill'))}</p>
         </div>
       )}
       {state.kind === 'ok' && totalRows > 0 && (
         <>
           <div className={styles.toolbar}>
             <p className={styles.hint}>
-              {visibleRows.length} sessions · sorted by <strong>{SORT_LABELS[sortKey]}</strong>{' '}
-              {sortDir === 'desc' ? '↓' : '↑'}
+              {t('sessions.count', { n: visibleRows.length })} · {t('sessions.sortedBy')}{' '}
+              <strong>{t(SORT_LABEL_KEYS[sortKey])}</strong> {sortDir === 'desc' ? '↓' : '↑'}
             </p>
             <input
               ref={searchRef}
@@ -368,37 +383,37 @@ export default function SessionListPage() {
             <thead>
               <tr>
                 <th onClick={() => onHeaderClick('session_id')} className={styles.sortable}>
-                  session<SortIndicator active={sortKey === 'session_id'} dir={sortDir} />
+                  {t('sessions.col.session')}<SortIndicator active={sortKey === 'session_id'} dir={sortDir} />
                 </th>
                 <th onClick={() => onHeaderClick('last_observed_at')} className={styles.sortable}>
-                  last seen<SortIndicator active={sortKey === 'last_observed_at'} dir={sortDir} />
+                  {t('sessions.col.lastSeen')}<SortIndicator active={sortKey === 'last_observed_at'} dir={sortDir} />
                 </th>
                 <th
                   onClick={() => onHeaderClick('span')}
                   className={`${styles.sortable} ${styles.numHead}`}
-                  title="세션 span — 첫 관측 → 마지막 관측 (유휴 포함)"
+                  title={t('sessions.spanTitle')}
                 >
-                  span<SortIndicator active={sortKey === 'span'} dir={sortDir} />
+                  {t('sessions.col.span')}<SortIndicator active={sortKey === 'span'} dir={sortDir} />
                 </th>
                 <th onClick={() => onHeaderClick('event_count')} className={`${styles.sortable} ${styles.numHead}`}>
-                  events<SortIndicator active={sortKey === 'event_count'} dir={sortDir} />
+                  {t('sessions.col.events')}<SortIndicator active={sortKey === 'event_count'} dir={sortDir} />
                 </th>
                 <th onClick={() => onHeaderClick('verification')} className={`${styles.sortable} ${styles.numHead}`}>
-                  verify<SortIndicator active={sortKey === 'verification'} dir={sortDir} />
+                  {t('sessions.col.verify')}<SortIndicator active={sortKey === 'verification'} dir={sortDir} />
                 </th>
                 <th onClick={() => onHeaderClick('signals')} className={`${styles.sortable} ${styles.numHead}`}>
-                  signals<SortIndicator active={sortKey === 'signals'} dir={sortDir} />
+                  {t('sessions.col.signals')}<SortIndicator active={sortKey === 'signals'} dir={sortDir} />
                 </th>
                 <th onClick={() => onHeaderClick('cost')} className={`${styles.sortable} ${styles.numHead}`}>
-                  cost<SortIndicator active={sortKey === 'cost'} dir={sortDir} />
+                  {t('sessions.col.cost')}<SortIndicator active={sortKey === 'cost'} dir={sortDir} />
                 </th>
                 <th onClick={() => onHeaderClick('rate')} className={`${styles.sortable} ${styles.numHead}`}>
-                  $/1M<SortIndicator active={sortKey === 'rate'} dir={sortDir} />
+                  {t('sessions.col.rate')}<SortIndicator active={sortKey === 'rate'} dir={sortDir} />
                 </th>
                 <th onClick={() => onHeaderClick('hit')} className={`${styles.sortable} ${styles.numHead}`}>
-                  hit<SortIndicator active={sortKey === 'hit'} dir={sortDir} />
+                  {t('sessions.col.hit')}<SortIndicator active={sortKey === 'hit'} dir={sortDir} />
                 </th>
-                <th>sources</th>
+                <th>{t('sessions.col.sources')}</th>
               </tr>
             </thead>
             <tbody>
@@ -432,7 +447,7 @@ export default function SessionListPage() {
                           <span
                             className={styles.liveBadge}
                             data-testid="live-badge"
-                            title="received an SSE envelope within 60s — claude is currently active"
+                            title={t('sessions.liveTitle')}
                           >
                             ● live
                           </span>

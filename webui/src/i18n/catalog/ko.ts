@@ -18,8 +18,47 @@ export const ko: Messages = {
   'common.loadingEarlier': '이전 메시지 불러오는 중…',
 
   // Session list
+  // Serve status chip (growth-2026-07-18)
+  'status.aria': 'wimcc 서버 상태',
+  'status.version': '실행 중',
+  'status.latest': '최신 릴리스',
+  'status.dbSize': 'DB 용량',
+  'status.freelist': '회수 대기',
+  'status.dbPath': 'DB 경로',
+  'status.retention': 'retention',
+  'status.lastSweep': '마지막 sweep',
+  'status.serve.tip':
+    '실행 중인 `wimcc serve` 버전과 로컬 SQLite 사용량이다.\n' +
+    '[blue]파란 점[/blue]은 GitHub Releases에서 관측된 새 릴리스 표시다(일 1회 확인).\n' +
+    '**DB 용량**은 데이터베이스 파일의 page 합계이고, **회수 대기**는 다음 retention sweep 때 디스크로 반환된다.',
+
   'sessions.searchPlaceholder': '⌕ 프로젝트·슬러그 검색… ( / )',
   'sessions.searchAria': '세션 검색',
+  'sessions.title': 'wimcc · 세션',
+  'sessions.refresh': '새로고침',
+  'sessions.loading': '불러오는 중…',
+  'sessions.retry': '다시 시도',
+  'sessions.emptyTitle': '아직 세션이 없습니다.',
+  'sessions.emptyHintLive':
+    '`wimcc serve --auto-migrate`가 실행 중이면 claude 세션은 live tail이 자동으로 기록합니다.',
+  'sessions.emptyHintBackfill':
+    'serve 이전의 transcript는 `wimcc ingest --all`로 한 번 백필합니다.',
+  'sessions.count': (p: { n: number }) => `${p.n}개 세션`,
+  'sessions.sortedBy': '정렬 기준',
+  'sessions.col.session': '세션',
+  'sessions.col.lastSeen': '최근 관측',
+  'sessions.col.span': 'span',
+  'sessions.col.events': 'event',
+  'sessions.col.verify': '검증',
+  'sessions.col.signals': 'signal',
+  'sessions.col.cost': '비용',
+  'sessions.col.rate': '$/1M',
+  'sessions.col.hit': 'hit',
+  'sessions.col.sources': '소스',
+  'sessions.spanTitle': '세션 span — 첫 관측 → 마지막 관측 (유휴 포함)',
+  'sessions.liveTitle': '60초 내 SSE envelope 수신 — claude가 현재 활동 중',
+  'sessions.verifyTitle': (p: { passed: number; failed: number; unknown: number }) =>
+    `통과 ${p.passed} · 실패 ${p.failed} · unknown ${p.unknown}`,
 
   // Session detail
   'detail.analysisToggle': '분석',
@@ -512,7 +551,8 @@ export const ko: Messages = {
   'dash.sessionCount': (n: number) => `세션 ${n}개`,
   'dash.truncated': (a: { n: number; m: number }) => `전체 ${a.m}개 중 최근 ${a.n}개 표시 (limit)`,
   'dash.empty': '이 기간에 세션이 없습니다.',
-  'dash.emptyHint': '먼저 transcript를 수집하세요: wimcc ingest --all',
+  'dash.emptyHint':
+    'wimcc serve가 실행 중이면 세션은 자동으로 나타납니다. 지난 transcript는 wimcc ingest --all로 백필합니다.',
   'dash.error': 'series를 불러오지 못했습니다.',
   'dash.loading': 'series 불러오는 중…',
   'dash.outcome.passed': 'passed',
