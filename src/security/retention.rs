@@ -36,9 +36,10 @@ use sqlx::SqlitePool;
 /// Retention profile.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Profile {
-    /// No deletion (default). Capability ships off by default.
+    /// No deletion — explicit archival opt-out (`--retention-profile none`).
     None,
-    /// Default profile: raw 30d, normalized 180d, insight 180d, audit 90d.
+    /// Default profile (CLI default since 2026-07-08): raw 60d,
+    /// normalized 180d, insight 180d, audit 90d.
     Default,
     /// Strict profile: raw 7d, normalized 30d, insight 30d, audit 30d.
     Strict,
@@ -117,7 +118,9 @@ pub struct RetentionPolicy {
 pub struct SweepReport {
     /// Counts per class: `raw_event` (payloads scrubbed), `session`,
     /// `observed_event`, `diff_hunk`, `verification_run`, `usage_facet`,
-    /// `signal`, `audit` (rows deleted).
+    /// `signal`, `session_summary`, `instruction_observation`,
+    /// `instruction_snapshot` (orphans), `ingest_run` (unreferenced),
+    /// `audit` (rows deleted).
     pub deletions: HashMap<String, u64>,
 }
 
@@ -205,7 +208,8 @@ pub async fn run_sweep(pool: &SqlitePool, policy: &RetentionPolicy) -> Result<Sw
             "SELECT session_id FROM (\
                  SELECT session_id, observed_at AS ts FROM observed_event \
                  UNION ALL SELECT session_id, started_at FROM verification_run \
-                 UNION ALL SELECT session_id, observed_at FROM usage_facet\
+                 UNION ALL SELECT session_id, observed_at FROM usage_facet \
+                 UNION ALL SELECT session_id, observed_at FROM instruction_observation\
              ) GROUP BY session_id HAVING MAX(ts) < ?",
         )
         .bind(&cutoff)
@@ -232,12 +236,20 @@ pub async fn run_sweep(pool: &SqlitePool, policy: &RetentionPolicy) -> Result<Sw
                 insert_tombstone_tx(&mut tx, id, "verification_run").await?;
             }
 
+            // growth-2026-07-18: session_summary (0025) and
+            // instruction_observation (0028) postdate the original sweep and
+            // were grow-only — they expire with their session like the rest
+            // of the session-granularity class. No per-row tombstones: the
+            // session tombstone already answers 410 for the session, and
+            // neither table is an individually addressable resource class.
             for table in [
                 "signal",
                 "verification_run",
                 "diff_hunk",
                 "usage_facet",
                 "observed_event",
+                "session_summary",
+                "instruction_observation",
             ] {
                 let res = sqlx::query(&format!("DELETE FROM {table} WHERE session_id = ?"))
                     .bind(sid)
@@ -253,6 +265,18 @@ pub async fn run_sweep(pool: &SqlitePool, policy: &RetentionPolicy) -> Result<Sw
         for (table, n) in counts {
             report.deletions.insert(table.to_string(), n);
         }
+
+        // Content-addressed snapshots are shared across sessions; one loses
+        // its row only when no surviving observation references it.
+        let res = sqlx::query(
+            "DELETE FROM instruction_snapshot WHERE content_sha256 NOT IN \
+             (SELECT content_sha256 FROM instruction_observation)",
+        )
+        .execute(&mut *tx)
+        .await?;
+        report
+            .deletions
+            .insert("instruction_snapshot".to_string(), res.rows_affected());
     }
 
     // ---- audit ------------------------------------------------------------
@@ -265,6 +289,23 @@ pub async fn run_sweep(pool: &SqlitePool, policy: &RetentionPolicy) -> Result<Sw
         report
             .deletions
             .insert("audit".to_string(), res.rows_affected());
+
+        // growth-2026-07-18: ingest_run is operational metadata (same class
+        // as audit). Rows referenced by a raw skeleton must stay (FK +
+        // provenance); unreferenced ones — historical accumulation from
+        // before the live path cleaned up its own empty runs — age out with
+        // the audit window.
+        let cutoff = cutoff_rfc3339(now, days);
+        let res = sqlx::query(
+            "DELETE FROM ingest_run WHERE started_at < ? \
+             AND run_id NOT IN (SELECT ingest_run_id FROM raw_event)",
+        )
+        .bind(&cutoff)
+        .execute(&mut *tx)
+        .await?;
+        report
+            .deletions
+            .insert("ingest_run".to_string(), res.rows_affected());
     }
 
     // ---- Write audit row --------------------------------------------------
@@ -279,6 +320,20 @@ pub async fn run_sweep(pool: &SqlitePool, policy: &RetentionPolicy) -> Result<Sw
     .await?;
 
     tx.commit().await?;
+
+    // ---- disk reclaim -----------------------------------------------------
+    // growth-2026-07-18: without this the main .sqlite file never shrinks —
+    // deletes only move pages to the freelist. `incremental_vacuum` releases
+    // them (no-op on DBs created before auto_vacuum=INCREMENTAL; a manual
+    // VACUUM converts those), and the TRUNCATE checkpoint folds the WAL back
+    // so the shrink is visible on disk. Outside the transaction by necessity.
+    sqlx::query("PRAGMA incremental_vacuum")
+        .execute(pool)
+        .await?;
+    sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute(pool)
+        .await?;
+
     Ok(report)
 }
 

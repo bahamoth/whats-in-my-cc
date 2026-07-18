@@ -26,6 +26,12 @@ pub async fn connect(url: &str) -> Result<SqlitePool> {
         // WAL back to ≤64MiB after each checkpoint. This is disk hygiene, not a
         // read-latency fix (reads hit the wal-index hash, not the file length).
         .pragma("journal_size_limit", "67108864")
+        // growth-2026-07-18 — the main DB file could only ever grow: deletes
+        // (retention sweep) put pages on the freelist but nothing released
+        // them. INCREMENTAL auto_vacuum takes effect on newly created DBs
+        // only (the header of an existing DB wins until a manual VACUUM);
+        // the sweep runs `PRAGMA incremental_vacuum` after each pass.
+        .auto_vacuum(sqlx::sqlite::SqliteAutoVacuum::Incremental)
         .create_if_missing(true);
     let pool = SqlitePoolOptions::new()
         .max_connections(8)

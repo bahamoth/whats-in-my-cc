@@ -531,6 +531,252 @@ async fn orphan_session_without_observed_events_is_swept() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 2026-07-18 growth sweep — tables added after slice-19 must not be grow-only
+// (dogfood DB audit: session_summary / instruction_observation / ingest_run
+// accumulated forever because the sweep predates them).
+// ---------------------------------------------------------------------------
+
+/// `session_summary` (0025) and `instruction_observation` (0028) are
+/// session-scoped derived/observation tables — they expire with the session.
+/// `instruction_snapshot` is content-addressed and shared; a snapshot loses
+/// its rows only when NO surviving observation references it.
+#[tokio::test]
+async fn expired_session_loses_summary_and_instruction_rows() {
+    let pool = test_pool().await;
+    seed_session(&pool, "sess_old", 200).await;
+    seed_session(&pool, "sess_new", 1).await;
+
+    for (sid, sha, days) in [
+        ("sess_old", "sha_only_old", 200i64),
+        ("sess_new", "sha_shared", 1),
+        ("sess_old", "sha_shared", 200),
+    ] {
+        sqlx::query(
+            "INSERT OR IGNORE INTO instruction_snapshot (content_sha256, content, first_observed_at)
+             VALUES (?, 'content', datetime('now', ?))",
+        )
+        .bind(sha)
+        .bind(format!("-{days} days"))
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO instruction_observation (observation_id, session_id, source, path, content_sha256, observed_at)
+             VALUES (?, ?, 'project', 'CLAUDE.md', ?, datetime('now', ?))",
+        )
+        .bind(format!("obs_{}", ulid::Ulid::new()))
+        .bind(sid)
+        .bind(sha)
+        .bind(format!("-{days} days"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    for (sid, days) in [("sess_old", 200i64), ("sess_new", 1)] {
+        sqlx::query(
+            "INSERT INTO session_summary (session_id, project, updated_at)
+             VALUES (?, 'proj', datetime('now', ?))",
+        )
+        .bind(sid)
+        .bind(format!("-{days} days"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    let p = RetentionPolicy {
+        profile: Profile::Default,
+    };
+    wimcc::security::retention::run_sweep(&pool, &p)
+        .await
+        .unwrap();
+
+    for table in ["session_summary", "instruction_observation"] {
+        let old: i64 = count(
+            &pool,
+            &format!("SELECT COUNT(*) FROM {table} WHERE session_id = ?"),
+            "sess_old",
+        )
+        .await;
+        assert_eq!(old, 0, "{table}: expired session rows must be deleted");
+        let new: i64 = count(
+            &pool,
+            &format!("SELECT COUNT(*) FROM {table} WHERE session_id = ?"),
+            "sess_new",
+        )
+        .await;
+        assert_eq!(new, 1, "{table}: live session rows must be kept");
+    }
+    let orphan: i64 = count(
+        &pool,
+        "SELECT COUNT(*) FROM instruction_snapshot WHERE content_sha256 = ?",
+        "sha_only_old",
+    )
+    .await;
+    assert_eq!(orphan, 0, "snapshot no observation references must be pruned");
+    let shared: i64 = count(
+        &pool,
+        "SELECT COUNT(*) FROM instruction_snapshot WHERE content_sha256 = ?",
+        "sha_shared",
+    )
+    .await;
+    assert_eq!(shared, 1, "snapshot still referenced by a live session stays");
+}
+
+/// A session whose only trace is instruction_observation rows (e.g. all its
+/// events already expired in an earlier sweep) must still expire — the
+/// candidate scan reads every table carrying a session-activity timestamp.
+#[tokio::test]
+async fn session_with_only_instruction_rows_expires() {
+    let pool = test_pool().await;
+    sqlx::query(
+        "INSERT INTO instruction_snapshot (content_sha256, content, first_observed_at)
+         VALUES ('sha_lonely', 'c', datetime('now', '-200 days'))",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO instruction_observation (observation_id, session_id, source, path, content_sha256, observed_at)
+         VALUES ('obs_lonely', 'sess_lonely', 'project', 'CLAUDE.md', 'sha_lonely', datetime('now', '-200 days'))",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let p = RetentionPolicy {
+        profile: Profile::Default,
+    };
+    wimcc::security::retention::run_sweep(&pool, &p)
+        .await
+        .unwrap();
+
+    let n: i64 = count(
+        &pool,
+        "SELECT COUNT(*) FROM instruction_observation WHERE session_id = ?",
+        "sess_lonely",
+    )
+    .await;
+    assert_eq!(n, 0, "instruction-only session must expire by observed_at");
+}
+
+/// `ingest_run` rows older than the audit window are pruned when no raw_event
+/// references them (empty live flushes, historical accumulation). Referenced
+/// rows stay — raw skeleton rows carry an FK to them.
+#[tokio::test]
+async fn old_unreferenced_ingest_run_rows_are_pruned() {
+    let pool = test_pool().await;
+    // referenced old run: seed_old_raw_event creates run + raw row (captured 200d ago
+    // scrubs the payload but keeps the skeleton + its run).
+    let raw_id = seed_old_raw_event(&pool, 200).await;
+    // unreferenced old run
+    sqlx::query(
+        "INSERT INTO ingest_run (run_id, started_at, status) VALUES ('run_empty_old', datetime('now', '-200 days'), 'ok')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    // unreferenced recent run
+    sqlx::query(
+        "INSERT INTO ingest_run (run_id, started_at, status) VALUES ('run_empty_new', datetime('now', '-1 days'), 'ok')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let p = RetentionPolicy {
+        profile: Profile::Default,
+    };
+    let report = wimcc::security::retention::run_sweep(&pool, &p)
+        .await
+        .unwrap();
+
+    let empty_old: i64 = count(
+        &pool,
+        "SELECT COUNT(*) FROM ingest_run WHERE run_id = ?",
+        "run_empty_old",
+    )
+    .await;
+    assert_eq!(empty_old, 0, "old unreferenced run must be pruned");
+    let empty_new: i64 = count(
+        &pool,
+        "SELECT COUNT(*) FROM ingest_run WHERE run_id = ?",
+        "run_empty_new",
+    )
+    .await;
+    assert_eq!(empty_new, 1, "recent unreferenced run stays");
+    let referenced: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM ingest_run WHERE run_id = (SELECT ingest_run_id FROM raw_event WHERE raw_event_id = ?)",
+    )
+    .bind(&raw_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(referenced, 1, "run referenced by a raw skeleton row stays (FK)");
+    assert!(
+        report.deletions.get("ingest_run").copied().unwrap_or(0) >= 1,
+        "report counts pruned ingest_run rows; got {:?}",
+        report.deletions
+    );
+}
+
+/// Disk reclaim: deleting rows never shrank the .sqlite file (no VACUUM
+/// anywhere — the 1.2GB dogfood file can only grow). New DBs get
+/// auto_vacuum=INCREMENTAL and the sweep releases freelist pages afterwards,
+/// so the main DB file actually shrinks on a file-backed DB.
+#[tokio::test]
+async fn sweep_reclaims_disk_on_file_backed_db() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("reclaim.sqlite");
+    let url = format!("sqlite://{}?mode=rwc", path.display());
+    let pool = wimcc::db::connect(&url).await.unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
+
+    let av: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(av, 2, "new DBs must be created with auto_vacuum=INCREMENTAL");
+
+    // ~2MB of expired payload across 100 raw rows.
+    let run_id = seed_ingest_run(&pool).await;
+    let blob = "x".repeat(20_000);
+    for i in 0..100 {
+        sqlx::query(
+            "INSERT INTO raw_event (raw_event_id, ingest_run_id, source_type, source_uri, source_line_no, source_byte_offset, payload_sha256, payload, captured_at)
+             VALUES (?, ?, 'claude_transcript', 'big.jsonl', ?, 0, ?, ?, datetime('now', '-100 days'))",
+        )
+        .bind(format!("raw_big_{i}"))
+        .bind(&run_id)
+        .bind(i as i64)
+        .bind(format!("sha_big_{i}"))
+        .bind(&blob)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    // Move WAL content into the main file so the before-size is honest.
+    sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let before = std::fs::metadata(&path).unwrap().len();
+
+    let p = RetentionPolicy {
+        profile: Profile::Default,
+    };
+    wimcc::security::retention::run_sweep(&pool, &p)
+        .await
+        .unwrap();
+
+    let after = std::fs::metadata(&path).unwrap().len();
+    assert!(
+        after < before,
+        "sweep must release freed pages back to the filesystem; before={before} after={after}"
+    );
+}
+
 #[tokio::test]
 async fn sweep_writes_audit_row() {
     let pool = test_pool().await;
