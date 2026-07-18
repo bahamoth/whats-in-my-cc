@@ -969,3 +969,76 @@ fn tagging_loop_2026_07_10_additions() {
     // 미관측 cargo 서브커맨드는 여전히 unmatched (사전 원칙).
     assert_eq!(tag(&bash("cargo bench")), None);
 }
+
+/// tagging-gate 2026-07-18 추가 (release-distribution epic 실측 후보,
+/// tagging-gate 게이트 실패: dist n=8·snap n=4·launchctl n=3). 표본은 이
+/// 세션(fd2244f2)의 실제 dist 도입·wimcc service 구현 로그.
+#[test]
+fn tagging_loop_2026_07_18_additions() {
+    // dist (opensource.axo.dev/cargo-dist, 2026-07-18 "dist"로 개명) —
+    // generate/init은 CI·Cargo.toml dist 설정 재작성(write.config), plan은
+    // 다음 릴리즈 dry-run 조회(read.config, 부작용 없음).
+    assert_eq!(
+        tag(&bash("dist generate; echo EXIT=$?")),
+        Some("write.config")
+    );
+    assert_eq!(
+        tag(&bash("dist init --yes 2>&1; echo EXIT=$?")),
+        Some("write.config")
+    );
+    assert_eq!(tag(&bash("dist plan; echo EXIT=$?")), Some("read.config"));
+    assert_eq!(
+        tag(&bash(
+            "dist plan --output-format=json 2>/dev/null | head -5"
+        )),
+        Some("read.config")
+    );
+    // 서브커맨드 없는 `--version`은 멀티플렉서 공통 규칙(read.proc)으로 처리.
+    assert_eq!(tag(&bash("dist --version")), Some("read.proc"));
+    // 미관측 dist 서브커맨드(build 등)는 unmatched (사전 원칙).
+    assert_eq!(tag(&bash("dist build")), None);
+
+    // launchctl print — macOS launchd 에이전트 상태 조회(ps/lsof 동족).
+    assert_eq!(
+        tag(&bash(
+            "launchctl print gui/$(id -u)/com.bahamoth.wimcc 2>&1; echo \"EXIT=$?\""
+        )),
+        Some("read.proc")
+    );
+    // 미관측 launchctl 서브커맨드(load/bootstrap 등)는 unmatched.
+    assert_eq!(tag(&bash("launchctl bootstrap gui/501 x.plist")), None);
+
+    // cargo install — 바이너리 크레이트 설치(npm install/cargo add 동족).
+    assert_eq!(
+        tag(&bash(
+            "cargo install cargo-dist --locked 2>&1; echo EXIT=$?"
+        )),
+        Some("write.deps")
+    );
+    // cargo package --list — 배포 전 포함 파일 조회(metadata/tree 동족).
+    assert_eq!(
+        tag(&bash(
+            "cargo package --list --allow-dirty > /dev/null; echo EXIT=$?"
+        )),
+        Some("read.deps")
+    );
+    // cargo insta accept — 보류 스냅샷을 .snap 파일에 반영(write.data).
+    assert_eq!(
+        tag(&bash("cargo insta accept 2>&1; echo EXIT=$?")),
+        Some("write.data")
+    );
+
+    // npm view — registry 메타데이터 조회(list/ls 동족).
+    assert_eq!(
+        tag(&bash("npm view wimcc version 2>&1 | head -3")),
+        Some("read.deps")
+    );
+
+    // EXT_OBJECT: .snap(cargo-insta 스냅샷)은 저장된 테스트 산출물 — data.
+    assert_eq!(
+        tag(&read(
+            "/Users/x/proj/src/snapshots/wimcc__service__tests__systemd_unit_snapshot.snap"
+        )),
+        Some("read.data")
+    );
+}

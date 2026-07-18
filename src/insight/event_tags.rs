@@ -56,6 +56,10 @@ pub static EXT_OBJECT: &[(&str, &str)] = &[
     // shell script content is code (distinct from the `sh` COMMAND below).
     ("sh", "code"),
     ("zsh", "code"),
+    // tagging loop 2026-07-18 (release-distribution epic): cargo-insta
+    // snapshot test files (`src/snapshots/*.snap`) are saved test-output —
+    // diff/patch(data) 동족(저장된 출력을 다시 읽어들이는 텍스트).
+    ("snap", "data"),
 ];
 
 /// 확장자 없는 알려진 파일명 → object. `ext_of`가 빈 문자열을 주는 dotfile·
@@ -268,6 +272,16 @@ static CARGO_SUBS: &[(&str, &str)] = &[
     ("tree", "read.deps"),
     ("clean", "delete.file"),
     ("doc", "build.docs"),
+    // tagging loop 2026-07-18 (release-distribution epic): cargo install은
+    // 바이너리 크레이트 설치 — npm install/cargo add 동족(write.deps). cargo
+    // package는 관측 표본(전부 `--list --allow-dirty`)이 배포 전 포함 파일
+    // 조회뿐이라 metadata/tree 동족(read.deps) — side-effect 있는 bare
+    // `cargo package`(tarball 생성)는 미관측, 재표면화 시 세분화. cargo-insta
+    // (snapshot testing 플러그인) accept는 관측 표본 전부 보류 스냅샷을
+    // `.snap`(EXT_OBJECT: data) 파일에 반영하는 쓰기 동작 — write.data.
+    ("install", "write.deps"),
+    ("package", "read.deps"),
+    ("insta", "write.data"),
 ];
 static NPM_SUBS: &[(&str, &str)] = &[
     ("install", "write.deps"),
@@ -281,7 +295,28 @@ static NPM_SUBS: &[(&str, &str)] = &[
     // tagging loop 2026-07-03: 의존성 조회.
     ("list", "read.deps"),
     ("ls", "read.deps"),
+    // tagging loop 2026-07-18 (release-distribution epic): view는 registry
+    // 메타데이터(버전 등) 조회 — list/ls 동족(read.deps).
+    ("view", "read.deps"),
 ];
+/// dist (구 cargo-dist, opensource.axo.dev/cargo-dist — 2026-07-18 "dist"로
+/// 개명) — 릴리즈 CI/설치 스크립트 생성기 (release-distribution epic 도입).
+/// generate/init은 `.github/workflows/*`·Cargo.toml `[workspace.metadata.dist]`
+/// 설정을 다시 씀(write.config, chezmoi apply 동족), plan은 다음 릴리즈에서
+/// 무엇이 될지 조회하는 dry-run(read.config, chezmoi diff 동족) — 부작용 없음.
+/// 서브커맨드 없이 `--version`만 쓰인 관측 표본은 멀티플렉서 공통 규칙
+/// (read.proc)으로 이미 처리된다.
+static DIST_SUBS: &[(&str, &str)] = &[
+    ("generate", "write.config"),
+    ("init", "write.config"),
+    ("plan", "read.config"),
+];
+/// launchctl — macOS launchd 제어 (release-distribution epic의 `wimcc
+/// service` 구현·디버깅 중 관측). 관측 표본(n=3)은 전부 `print`(에이전트 상태
+/// 조회) — ps/lsof 동족(read.proc). load/bootstrap/bootout 등 쓰기형 서브커맨드는
+/// 미관측(해당 동작은 Rust 소스가 std::process::Command로 직접 호출하고
+/// Bash 도구로는 나타나지 않음) — 재표면화 시 세분화.
+static LAUNCHCTL_SUBS: &[(&str, &str)] = &[("print", "read.proc")];
 /// rustup — 툴체인 관리 (tagging loop 2026-07-03). 설치·갱신은 write.deps,
 /// show는 read.deps. `default` 등 미관측 서브커맨드는 unmatched로 남긴다.
 static RUSTUP_SUBS: &[(&str, &str)] = &[
@@ -382,6 +417,8 @@ pub static TOOL_SUBCOMMAND_TAGS: &[(&str, &[(&str, &str)])] = &[
     ("wimcc", WIMCC_SUBS),
     ("docker", DOCKER_SUBS),
     ("claude", CLAUDE_SUBS),
+    ("dist", DIST_SUBS),
+    ("launchctl", LAUNCHCTL_SUBS),
 ];
 
 /// MCP 도구 태깅. 도구 이름은 `mcp__[plugin_<plugin>_]<server>__<tool>`. server→tool
