@@ -29,17 +29,16 @@ wimcc로 할 수 있는 것:
 
 ## 빠른 시작
 
-### 빌드된 바이너리
-
-[GitHub Releases](https://github.com/bahamoth/whats-in-my-cc/releases/latest)에서
-플랫폼에 맞는 아카이브를 받는다 — Linux `x86_64` 또는 macOS Apple Silicon.
-WebUI가 임베드되어 있어 단일 바이너리만 있으면 된다.
+아래 [설치](#설치) 절의 채널 중 하나를 사용한다. shell 설치 스크립트가 가장
+빠른 경로다 — 플랫폼에 맞는 dist 아카이브를 자동으로 받는다(macOS Apple
+Silicon/Intel, Linux x86_64/aarch64 musl). WebUI가 임베드되어 있어 단일
+바이너리만 있으면 된다.
 
 ```bash
-tar -xzf wimcc-v*-aarch64-apple-darwin.tar.gz   # 또는 …-x86_64-unknown-linux-gnu.tar.gz
-./wimcc init-db                # 마이그레이션 적용, .wimcc.sqlite 준비
-./wimcc serve --auto-migrate   # http://127.0.0.1:7878  (auth 기본 off)
-./wimcc doctor                 # collector 연동 점검
+curl -fsSL https://github.com/bahamoth/whats-in-my-cc/releases/latest/download/wimcc-installer.sh | sh
+wimcc init-db                # 마이그레이션 적용, .wimcc.sqlite 준비
+wimcc serve --auto-migrate   # http://127.0.0.1:7878  (auth 기본 off)
+wimcc doctor                 # collector 연동 점검
 ```
 
 ## 설치
@@ -339,9 +338,11 @@ cargo test
 - **릴리스**는 두 워크플로가 나눠 맡는다: release-please가 `main`의 conventional
   commit을 릴리스 PR에 누적하고, 머지 시 `vX.Y.Z` 태그·CHANGELOG 생성과 GitHub
   Release 생성까지 담당한다. 이어서 dist(cargo-dist)가 4개 타깃 빌드와
-  shell/Homebrew/npm installer, crates.io 퍼블리시를 수행해 같은 Release에
-  업로드한다. `Cargo.toml`과 `webui/package.json`의 버전은 함께 bump되므로 손으로
-  수정하지 말 것.
+  shell/Homebrew/npm installer를 만들어 같은 Release에 업로드한다. crates.io
+  퍼블리시는 별도의 custom job이 맡는다 — 임베드된 `webui/dist`를 게이트
+  (`scripts/check-crate-contents.sh`)한 뒤 dist 업로드와 무관하게 독립적으로
+  `cargo publish`를 실행한다. `Cargo.toml`과 `webui/package.json`의 버전은 함께
+  bump되므로 손으로 수정하지 말 것.
 
 ## 참고 문서
 

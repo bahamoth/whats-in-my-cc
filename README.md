@@ -31,18 +31,16 @@ access is read-only.
 
 ## Quick start
 
-### Prebuilt binary
-
-Grab the archive for your platform from
-[GitHub Releases](https://github.com/bahamoth/whats-in-my-cc/releases/latest)
-— Linux `x86_64` or macOS Apple Silicon. The WebUI is embedded; the single
-binary is all you need.
+Use any of the channels in [Install](#install) below. The shell installer is
+the fastest path — it downloads the right dist archive for your platform
+automatically (macOS Apple Silicon/Intel, Linux x86_64/aarch64 musl). The
+WebUI is embedded; the single binary is all you need.
 
 ```bash
-tar -xzf wimcc-v*-aarch64-apple-darwin.tar.gz   # or …-x86_64-unknown-linux-gnu.tar.gz
-./wimcc init-db                # apply migrations, prepare .wimcc.sqlite
-./wimcc serve --auto-migrate   # http://127.0.0.1:7878  (auth off by default)
-./wimcc doctor                 # verify collector wiring
+curl -fsSL https://github.com/bahamoth/whats-in-my-cc/releases/latest/download/wimcc-installer.sh | sh
+wimcc init-db                # apply migrations, prepare .wimcc.sqlite
+wimcc serve --auto-migrate   # http://127.0.0.1:7878  (auth off by default)
+wimcc doctor                 # verify collector wiring
 ```
 
 ## Install
@@ -355,11 +353,13 @@ migration, so existing events won't have them until re-ingested.
   `cargo test` against the freshly built `webui/dist`.
 - **Releases** are split across two workflows: release-please accumulates
   conventional commits on `main` into a release PR and, on merge, tags
-  `vX.Y.Z`, generates the CHANGELOG, and creates the GitHub Release; dist
-  (cargo-dist) then builds the 4 targets, the shell/Homebrew/npm installers,
-  and publishes to crates.io, uploading everything to that same Release.
-  Versions in `Cargo.toml` and `webui/package.json` are bumped together —
-  don't edit them by hand.
+  `vX.Y.Z`, generates the CHANGELOG, and creates the GitHub Release. dist
+  (cargo-dist) then builds the 4 targets and the shell/Homebrew/npm
+  installers, uploading everything to that same Release. Publishing to
+  crates.io is a separate custom job: it gates on the embedded `webui/dist`
+  (`scripts/check-crate-contents.sh`) and runs `cargo publish` independently
+  of the dist upload. Versions in `Cargo.toml` and `webui/package.json` are
+  bumped together — don't edit them by hand.
 
 ## Reference docs
 
