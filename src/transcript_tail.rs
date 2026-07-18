@@ -1,13 +1,17 @@
 //! Slice-7 — live tail for `~/.claude/projects/**/*.jsonl`.
 //!
 //! Design spec proposed an in-memory byte-offset cursor; the actual
-//! implementation re-runs `ingest::store::ingest_file` on each debounced
+//! implementation re-runs `ingest::store::ingest_file_live` on each debounced
 //! flush and lets the existing `(source_uri, source_line_no, payload_sha256)`
 //! UNIQUE constraint absorb the dedup. The trade-off is documented in
 //! `docs/implementation-notes.html` (DEV-S7-01): every flush rehashes the
 //! whole file, which is bounded by Claude Code's per-session JSONL size
 //! (typically MB-scale). In exchange we get zero cursor-management state to
 //! corrupt, and a single code path with `wimcc ingest --all`.
+//!
+//! 2026-07-18: the live path uses `RecomputePolicy::NewRowsOnly` — a flush
+//! where every line dedups skips the insight recompute (and leaves no empty
+//! ingest_run row). CLI `wimcc ingest` keeps AllTouched replay semantics.
 //!
 //! Failure semantics mirror slice-5 file watcher: fail-soft, never panic,
 //! never poison the serve process. Cancellation via `CancellationToken`.
@@ -120,7 +124,7 @@ pub async fn run(
                     if !p.exists() {
                         continue;
                     }
-                    match store::ingest_file(&pool, p, &sink).await {
+                    match store::ingest_file_live(&pool, p, &sink).await {
                         Ok(stats) => {
                             if stats.observed_inserted > 0 {
                                 tracing::debug!(
@@ -167,7 +171,7 @@ async fn scan_initial(
             continue;
         }
         files += 1;
-        match store::ingest_file(pool, p, sink).await {
+        match store::ingest_file_live(pool, p, sink).await {
             Ok(s) => total_inserted += s.observed_inserted,
             Err(e) => {
                 tracing::warn!(error = ?e, path = %p.display(), "initial transcript scan failed");

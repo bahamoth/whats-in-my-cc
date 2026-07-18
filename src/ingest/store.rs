@@ -26,6 +26,25 @@ pub struct IngestStats {
     pub observed_inserted: u64,
     pub parse_errors: u64,
     pub sessions_touched: std::collections::BTreeSet<String>,
+    /// Sessions that gained at least one new raw row in this run
+    /// (subset of `sessions_touched`).
+    pub sessions_with_new_rows: std::collections::BTreeSet<String>,
+    /// Sessions whose insight pipeline actually re-ran at the end of this run.
+    pub sessions_recomputed: std::collections::BTreeSet<String>,
+}
+
+/// Which touched sessions get an insight recompute after a batch lands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecomputePolicy {
+    /// Recompute every touched session, even when every line deduped —
+    /// `wimcc ingest` replay semantics: re-running over already-ingested
+    /// transcripts must refresh derived rows after a parser upgrade.
+    AllTouched,
+    /// Recompute only sessions with new raw rows — the live-tail flush path.
+    /// 2026-07-18 dogfood measurement: without this, every 100ms debounce
+    /// flush re-ran the full pipeline (up to 100k-row session reload) even
+    /// when every line deduped, pegging one core while a session was active.
+    NewRowsOnly,
 }
 
 pub async fn ingest_file(
@@ -34,6 +53,18 @@ pub async fn ingest_file(
     sink: &dyn LiveSink,
 ) -> Result<IngestStats> {
     ingest_paths(pool, &[path.to_path_buf()], sink).await
+}
+
+/// Live-tail variant of [`ingest_file`]: recomputes only sessions that gained
+/// new rows, and removes its own `ingest_run` row when the flush fully deduped
+/// (otherwise one row per debounce flush accumulates forever — the dogfood DB
+/// held 9k+ empty run rows after 5 weeks).
+pub async fn ingest_file_live(
+    pool: &SqlitePool,
+    path: &Path,
+    sink: &dyn LiveSink,
+) -> Result<IngestStats> {
+    ingest_paths_with(pool, &[path.to_path_buf()], sink, RecomputePolicy::NewRowsOnly).await
 }
 
 /// Ingest one or more transcript files in a single run. All raw lines land
@@ -47,15 +78,29 @@ pub async fn ingest_paths(
     paths: &[std::path::PathBuf],
     sink: &dyn LiveSink,
 ) -> Result<IngestStats> {
+    ingest_paths_with(pool, paths, sink, RecomputePolicy::AllTouched).await
+}
+
+pub async fn ingest_paths_with(
+    pool: &SqlitePool,
+    paths: &[std::path::PathBuf],
+    sink: &dyn LiveSink,
+    policy: RecomputePolicy,
+) -> Result<IngestStats> {
     let mut gen = MonotonicUlidGen::new();
     let run_id = repo_runs::start(pool).await?;
     let mut stats = IngestStats::default();
     for path in paths {
         ingest_one_file(pool, path, sink, &mut gen, &run_id, &mut stats).await?;
     }
-    for session_id in &stats.sessions_touched {
+    let recompute = match policy {
+        RecomputePolicy::AllTouched => stats.sessions_touched.clone(),
+        RecomputePolicy::NewRowsOnly => stats.sessions_with_new_rows.clone(),
+    };
+    for session_id in &recompute {
         recompute_session(pool, session_id).await?;
     }
+    stats.sessions_recomputed = recompute;
     repo_runs::finish(
         pool,
         &run_id,
@@ -63,6 +108,21 @@ pub async fn ingest_paths(
         serde_json::to_value(&stats).unwrap_or(serde_json::Value::Null),
     )
     .await?;
+    if policy == RecomputePolicy::NewRowsOnly {
+        // A fully-deduped live flush leaves an ingest_run row no raw_event
+        // references; deleting it here keeps the table from growing by one row
+        // per debounce flush. The NOT EXISTS guard keeps runs that captured
+        // anything (including parse-error skeletons) — their FK children need
+        // the row, and CLI replays never enter this branch.
+        sqlx::query(
+            "DELETE FROM ingest_run WHERE run_id = ? \
+             AND NOT EXISTS (SELECT 1 FROM raw_event WHERE ingest_run_id = ?)",
+        )
+        .bind(&run_id)
+        .bind(&run_id)
+        .execute(pool)
+        .await?;
+    }
     Ok(stats)
 }
 
@@ -146,6 +206,7 @@ async fn ingest_one_file(
                 let evs = mapping::map_record(&meta, &rec, &raw_id, gen)?;
                 for mut ev in evs {
                     stats.sessions_touched.insert(ev.session_id.clone());
+                    stats.sessions_with_new_rows.insert(ev.session_id.clone());
                     // Slice-18: redact observed_event.payload too.
                     // The payload is a JSON Value derived from the parsed record;
                     // its string representation may contain the original secrets.
@@ -334,6 +395,7 @@ async fn ingest_sidecar_file(
         ..Default::default()
     };
     stats.sessions_touched.insert(ev.session_id.clone());
+    stats.sessions_with_new_rows.insert(ev.session_id.clone());
     repo_observed::insert(pool, &ev).await?;
     stats.observed_inserted += 1;
     sink.emit(LiveEvent {
