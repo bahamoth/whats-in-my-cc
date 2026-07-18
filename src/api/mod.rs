@@ -55,6 +55,10 @@ pub struct AppState {
     pub shutdown: CancellationToken,
     /// 스펙 2026-07-17 §4 — 업데이트 체크 루프가 쓰고 health가 읽는다.
     pub update_status: crate::update_check::SharedUpdateStatus,
+    /// growth-2026-07-18 — retention sweep task가 쓰고 health가 읽는다.
+    pub sweep_stats: crate::security::retention::SharedSweepStats,
+    /// growth-2026-07-18 — 해석된 DB 파일 경로(표시용). 테스트/메모리 DB는 None.
+    pub db_path: Option<String>,
 }
 
 impl AppState {
@@ -75,6 +79,8 @@ impl AppState {
             retention_profile: "none".to_string(),
             shutdown: CancellationToken::new(),
             update_status: Default::default(),
+            sweep_stats: Default::default(),
+            db_path: None,
         }
     }
 }

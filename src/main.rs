@@ -280,6 +280,9 @@ async fn serve_cmd(
     };
 
     // Slice-19: Parse retention profile and spawn sweep if enabled.
+    // growth-2026-07-18: the sweep task reports into shared SweepStats,
+    // surfaced by /v1/health.
+    let sweep_stats: wimcc::security::retention::SharedSweepStats = Default::default();
     let profile: wimcc::security::retention::Profile = retention_profile.parse()?;
     if profile != wimcc::security::retention::Profile::None {
         let pool_cl = pool.clone();
@@ -289,6 +292,7 @@ async fn serve_cmd(
         bg_handles.push(wimcc::security::retention::spawn_sweep_task(
             pool_cl,
             policy,
+            sweep_stats.clone(),
             cancel.clone(),
         ));
         tracing::info!(profile = retention_profile, "retention sweep enabled");
@@ -324,6 +328,9 @@ async fn serve_cmd(
         shutdown: cancel.clone(),
         // 2026-07-17 §4: update-check loop writes, health handler reads.
         update_status,
+        // growth-2026-07-18: sweep task writes, health handler reads.
+        sweep_stats,
+        db_path: Some(db_path.display().to_string()),
     };
     let app = wimcc::api::router(state);
     let addr = std::net::SocketAddr::new(bind, port);

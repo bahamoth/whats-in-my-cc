@@ -340,12 +340,18 @@ pub async fn run_sweep(pool: &SqlitePool, policy: &RetentionPolicy) -> Result<Sw
 /// Spawn a background sweep task that wakes every 6 hours.
 /// No-op when `policy.profile == Profile::None`.
 ///
+/// `stats` is the shared handle the health endpoint reads — each successful
+/// sweep records its timestamp and per-class deletion counts there
+/// (growth-2026-07-18: previously `SweepStats` existed but nothing wrote it,
+/// so the only trace of a sweep was the audit row).
+///
 /// `cancel` is observed at every loop iteration AND during `run_sweep`:
 /// if cancellation fires mid-sweep the in-progress sqlx Transaction is
 /// dropped (auto rollback), no partial deletion is committed.
 pub fn spawn_sweep_task(
     pool: SqlitePool,
     policy: RetentionPolicy,
+    stats: SharedSweepStats,
     cancel: tokio_util::sync::CancellationToken,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -367,8 +373,15 @@ pub fn spawn_sweep_task(
                     return;
                 }
                 res = run_sweep(&pool, &policy) => {
-                    if let Err(e) = res {
-                        tracing::warn!(error = ?e, "retention sweep failed");
+                    match res {
+                        Ok(report) => {
+                            let mut s = stats.write().await;
+                            s.last_sweep_at = Some(chrono::Utc::now().to_rfc3339());
+                            s.last_sweep_deletions = report.deletions;
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = ?e, "retention sweep failed");
+                        }
                     }
                 }
             }
@@ -382,6 +395,9 @@ pub struct SweepStats {
     pub last_sweep_at: Option<String>,
     pub last_sweep_deletions: HashMap<String, u64>,
 }
+
+/// Written by the sweep task, read by `/v1/health`.
+pub type SharedSweepStats = std::sync::Arc<tokio::sync::RwLock<SweepStats>>;
 
 #[cfg(test)]
 mod tests {
