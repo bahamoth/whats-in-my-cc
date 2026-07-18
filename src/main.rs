@@ -65,6 +65,7 @@ fn main() -> error::Result<()> {
     rt.block_on(async move {
         match cli.command {
             cli::Command::InitDb => init_db(&db_path).await,
+            cli::Command::Vacuum => vacuum_cmd(&db_path).await,
             cli::Command::Doctor {
                 json,
                 server,
@@ -147,6 +148,17 @@ async fn init_db(path: &std::path::Path) -> error::Result<()> {
     let pool = db::connect(&url).await?;
     db::migrate(&pool).await?;
     tracing::info!(?path, "init-db complete");
+    Ok(())
+}
+
+/// growth-2026-07-18 — one-shot compaction for DBs created before
+/// auto_vacuum=INCREMENTAL became the default (their header stays NONE, so
+/// the retention sweep's incremental_vacuum is a no-op on them).
+async fn vacuum_cmd(path: &std::path::Path) -> error::Result<()> {
+    let url = format!("sqlite://{}?mode=rwc", path.display());
+    let (before, after) = db::vacuum_db(&url).await?;
+    tracing::info!(?path, before_bytes = before, after_bytes = after, "vacuum complete");
+    eprintln!("vacuum: {before} -> {after} bytes ({})", path.display());
     Ok(())
 }
 
