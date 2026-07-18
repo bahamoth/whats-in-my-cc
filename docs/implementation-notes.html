@@ -6624,6 +6624,113 @@ vitest: 69 passed
     tests/metrics_cache.rs 헤더의 낡은 가정 정정.</p>
   </section>
 
+  <section id="release-distribution">
+    <h2>배포·릴리즈·업데이트 체계 — dist 4채널 + self-update + service (2026-07-18)</h2>
+    <p><b>배경:</b> 스펙 <code>docs/specs/2026-07-17-release-distribution.md</code> ·
+    계획 <code>docs/plans/2026-07-18-release-distribution-plan.md</code>. 소스 빌드가
+    유일한 설치 경로였던 현행을 shell/Homebrew/npm/cargo 4채널 + self-update + 업데이트
+    알림 + 서비스 등록으로 일괄 확장했다.</p>
+
+    <p><b>파이프라인 역할 분담:</b> <code>release-please.yml</code>이 버전 산정·태그·
+    CHANGELOG·GitHub Release 생성을 전담(현행 유지)하고, <code>release.yml</code>
+    (dist, cargo-dist <b>0.32.0</b>)은 태그 push에서 <code>dist host --steps=upload
+    --steps=release</code>로 <b>기존 Release에 업로드만</b> 한다 —
+    <code>dist-workspace.toml</code>의 <code>create-release = false</code>가
+    release-please 산출 Release와의 이중 생성 충돌을 없앤다(스펙 §1의 "열린 검증
+    항목"을 이렇게 해소). <b>PAT 함정</b>: <code>release-please.yml</code>의 토큰이
+    <code>secrets.RELEASE_PLEASE</code> 폴백 없이 기본 <code>github.token</code>
+    (자동 <code>GITHUB_TOKEN</code>)만 쓰면, 그 토큰이 만든 태그 push는 GitHub의
+    액션 재귀 방지 규칙 때문에 다른 워크플로(<code>release.yml</code>)를
+    <b>발화시키지 않는다</b> — <code>RELEASE_PLEASE</code> repo secret에 실제 PAT를 넣어야
+    태그→release.yml 트리거가 성립한다(2026-07-18 secret 존재 확인).</p>
+
+    <p><b>github-build-setup working-directory 탈락 함정(실사고):</b> dist가 cargo
+    빌드 전 webui SPA 빌드를 주입하도록 <code>dist-workspace.toml</code>의
+    <code>github-build-setup = "../build-setup.yml"</code>로 커스텀 스텝
+    (<code>.github/build-setup.yml</code>)을 등록했는데, <code>dist generate</code>가
+    이 파일을 자기 내부 스텝 모델로 재직렬화하면서 <b><code>working-directory:</code>
+    키를 조용히 탈락</b>시켰다 — 리뷰에서 발견되어 <code>run:</code> 스크립트 안에
+    <code>cd webui</code>를 직접 넣는 우회로 정정(커밋 9104b87,
+    <code>build-setup.yml</code> + <code>release.yml</code> 양쪽). <b>재발 방지</b>:
+    <code>build-setup.yml</code>을
+    고친 뒤에는 반드시 <code>dist generate</code>를 재실행해 <code>release.yml</code>
+    diff로 재직렬화 결과를 확인한다 — dist가 임의로 떨어뜨리는 키가
+    <code>working-directory</code> 외에도 있을 수 있다.</p>
+
+    <p><b>custom publish job 인터페이스:</b> crates.io 퍼블리시는 dist의
+    <code>publish-jobs = ["homebrew", "npm", "./publish-crate"]</code>로 커스텀
+    workflow(<code>.github/workflows/publish-crate.yml</code>)를 호출한다.
+    <code>release.yml</code>의 호출부(<code>custom-publish-crate</code> job)가
+    <code>with: plan: ${{ needs.plan.outputs.val }}</code>를 넘기므로,
+    <code>publish-crate.yml</code>은 <code>on.workflow_call.inputs.plan</code>
+    (required string)을 선언해야 한다 — 미선언 시 GitHub Actions 워크플로 문법
+    검증에서 즉시 실패한다.</p>
+
+    <p><b>crates.io <code>include</code> 허용목록 전환 함정:</b>
+    <code>Cargo.toml</code>의 <code>package.include</code>는 <b>allowlist</b>로
+    동작한다 — 목록에 없는 파일은 <code>.crate</code>에서 통째로 빠진다. wimcc는
+    컴파일 타임 임베드 자산 3종(rust-embed <code>webui/dist</code>·
+    <code>include_str!</code> <code>pricing.json</code>·sqlx
+    <code>migrate!</code> <code>migrations/</code>)이 있어, 이 중 하나라도
+    include에서 빠지면 <code>cargo install</code> 사용자 쪽에서 컴파일 실패 또는
+    빈 UI로 나타난다. <b>게이트</b>: <code>scripts/check-crate-contents.sh</code>가
+    <code>cargo package --list</code> 출력에 <code>webui/dist/index.html</code>·
+    <code>pricing.json</code>·<code>migrations</code>·라이선스 2종이 있는지
+    확인하고, <code>publish-crate.yml</code>이 <code>cargo publish</code> 직전에
+    이를 실행한다. <b>앞으로 새 컴파일 타임 임베드 자산이 생기면 이 include 목록과
+    게이트 스크립트 양쪽에 추가해야 한다</b> — 잊기 쉬운 두 곳.</p>
+
+    <p><b>axoupdater 0.10 편차:</b> <code>AxoUpdater::is_update_needed()</code>는
+    내부적으로 <code>check_receipt_is_for_this_executable</code>을 호출하는데, 이는
+    <code>install_prefix</code>(shell installer receipt로만 채워짐)를 요구한다 —
+    receipt가 없는 설치본(dev 빌드, brew/npm/cargo 설치)에서 호출하면
+    <code>NotConfigured</code> 에러로 실패한다. <code>wimcc self-update --check</code>는
+    "업데이트 적격성"이 아니라 "더 새 릴리스가 있는가"만 묻는 것이므로,
+    <code>is_update_needed</code> 대신 <code>query_new_version()</code> +
+    <code>semver</code> 수동 비교로 직접 구현했다(<code>src/self_update.rs</code>).
+    receipt 유무·일치 여부에 따른 실제 업데이트 분기(<code>Plan::RunUpdate</code> vs
+    <code>Plan::ManagedElsewhere</code>)는 스펙 §3 그대로 — receipt 없는 설치본은
+    매니저 안내만 출력하고 종료(의도된 동작, 매니저가 관리하는 파일을 임의 교체하면
+    매니저 상태가 깨진다). 조회 실패(오프라인 등)는 "최신입니다"로 오표기하지 않고
+    "업데이트 확인에 실패했습니다"로 별도 분기해 정직하게 보고한다.</p>
+
+    <p><b>service 정직 보고 실사고:</b> 계획 초안의 <code>wimcc service install</code>
+    예시 코드가 <code>launchctl bootstrap</code>/<code>systemctl</code> 호출의 비-0
+    exit를 그냥 삼키고 "등록 완료"를 출력했다 — 리뷰에서 잡혀 각 등록 명령의 성공
+    여부를 확인해 실패 시 <code>bail!</code>로 원인 확인 커맨드(<code>launchctl print
+    …</code> / <code>systemctl --user status wimcc</code>)까지 안내하도록 수정했다.
+    같은 커밋(c430a3b)에서 <code>launchd_plist</code>가 argv를 이스케이프 없이
+    <code>&lt;string&gt;</code>에 그대로 넣던 것도 고쳐, <code>&amp;</code>/
+    <code>&lt;</code>/<code>&gt;</code>를 포함하는 인자(예: DB 경로에 특수문자)가
+    plist XML을 깨지 않게 했다(<code>xml_escape</code> +
+    <code>launchd_plist_escapes_xml_special_chars</code> 테스트로 잠금).</p>
+
+    <div class="callout warn">
+      <b>첫 릴리스 검증 체크리스트(스펙 §8 전사) — 2026-07-18 기준 미검증:</b>
+      <ul>
+        <li>태그 push가 <code>release.yml</code>을 트리거하는가 (PAT 필요 — 위
+        함정 참고)</li>
+        <li>4타깃(<code>aarch64-apple-darwin</code>·<code>x86_64-apple-darwin</code>·
+        <code>x86_64-unknown-linux-musl</code>·<code>aarch64-unknown-linux-musl</code>)
+        asset + <code>wimcc-installer.sh</code> + sha256 체크섬 업로드</li>
+        <li>release-please가 만든 기존 Release에 업로드됐는가
+        (<code>create-release = false</code> 동작 확인)</li>
+        <li>Homebrew formula(<code>bahamoth/homebrew-tap</code>) / npm
+        (<code>wimcc</code>) / crates.io(<code>wimcc</code>) 퍼블리시 성공 —
+        <b>2026-07-18 시점 <code>NPM_TOKEN</code>·<code>CARGO_REGISTRY_TOKEN</code>·
+        <code>HOMEBREW_TAP_TOKEN</code>(+ <code>bahamoth/homebrew-tap</code> 저장소
+        자체)이 아직 등록되지 않아 이 3개 publish job은 다음 실제 릴리스 전에
+        준비돼야 한다</b></li>
+        <li>각 채널 설치 스모크 + <code>wimcc self-update</code>(및
+        <code>--check</code>) 동작 확인</li>
+      </ul>
+      다음 릴리스 태그가 이 체크리스트의 실제 검증 이벤트다 — 실패 항목은 결과와
+      함께 이 원장에 새 섹션으로 추가한다(create-release 충돌 시 폴백:
+      release-please <code>skip-github-release: true</code> + dist
+      <code>create-release = true</code>).
+    </div>
+  </section>
+
 </main>
 </div>
 </body></html>

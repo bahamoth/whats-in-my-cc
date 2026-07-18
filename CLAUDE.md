@@ -76,9 +76,15 @@ schema-versioning·deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html` �
 ## Operations
 
 - **CI/릴리스**: 모든 PR에서 GitHub Actions CI(vitest+SPA build 후 그 dist로
-  `cargo fmt --check`·`clippy -- -D warnings`·`cargo test`). 릴리스는 release-please —
-  conventional commit이 릴리스 PR로 누적되고 머지 시 `vX.Y.Z` 태그·CHANGELOG·바이너리
-  업로드. 버전(`Cargo.toml`·`webui/package.json`·`package-lock.json`)은 자동 bump —
+  `cargo fmt --check`·`clippy -- -D warnings`·`cargo test`). 릴리스는 두 워크플로가
+  분담한다 — release-please(`release-please.yml`)는 conventional commit을 릴리스
+  PR로 누적하고 머지 시 `vX.Y.Z` 태그·CHANGELOG·GitHub Release 생성까지 전담, dist
+  (`release.yml`)는 그 태그를 받아 4타깃(mac aarch64/x86_64, linux musl x86_64/
+  aarch64) 빌드·shell/Homebrew/npm installer·crates.io publish를 수행해 **기존
+  Release에 업로드만** 한다(`create-release = false`). 태그 push가 dist를 트리거하려면
+  release-please 쪽에 `RELEASE_PLEASE` PAT secret이 필요(기본 `GITHUB_TOKEN`이 만든
+  태그는 다른 워크플로를 발화시키지 않음). 상세·함정: `docs/implementation-notes.html#release-distribution`.
+  버전(`Cargo.toml`·`webui/package.json`·`package-lock.json`)은 자동 bump —
   **손으로 수정 금지**. **PR 병합은 rebase**(merge commit 없는 linear history, squash 금지) —
   개별 conventional commit을 보존해 release-please가 type별로 버전을 산정한다.
 - **PR 단위: 관련 기능은 하나의 PR로 취합**(기능별·영역별 분할·스택 PR 지양). 한 스펙의
