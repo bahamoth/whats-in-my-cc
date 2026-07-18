@@ -3,6 +3,28 @@ use wimcc::{cli, db, doctor, error, paths, telemetry};
 
 fn main() -> error::Result<()> {
     let cli = cli::Cli::parse();
+    // 2026-07-18: default DB path moved from CWD-relative `.wimcc.sqlite` to the
+    // platform data dir; a legacy CWD file still wins so existing DBs keep
+    // working. Resolve once here so every subcommand agrees on the same path.
+    let (db_path, db_source) = paths::resolve_db_path(cli.db_path.clone());
+    // Commands that open (or record, for `service install`) the DB. The others
+    // (self-update, service uninstall/…) must not create the data dir or log a
+    // DB line for a database they never touch. Doctor reports the path in its
+    // own output instead.
+    let uses_db = matches!(
+        &cli.command,
+        cli::Command::InitDb
+            | cli::Command::Ingest { .. }
+            | cli::Command::Serve { .. }
+            | cli::Command::Service {
+                action: cli::ServiceAction::Install { .. }
+            }
+    );
+    if uses_db && db_source == paths::DbPathSource::DataDir {
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent).map_err(anyhow::Error::from)?;
+        }
+    }
     // Only a real `serve` (not the --print-token/--rotate-token short-circuits)
     // gets a rotating file log next to its DB; other commands stay console-only.
     let file_log = match &cli.command {
@@ -11,7 +33,7 @@ fn main() -> error::Result<()> {
             rotate_token: false,
             ..
         } => Some((
-            telemetry::resolve_log_dir(&cli.db_path, cli.log_dir.as_deref()),
+            telemetry::resolve_log_dir(&db_path, cli.log_dir.as_deref()),
             cli.log_retention_days,
         )),
         _ => None,
@@ -26,10 +48,23 @@ fn main() -> error::Result<()> {
         let abs = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.clone());
         tracing::info!(dir = %abs.display(), keep_days = keep, "rotating file log enabled");
     }
+    if uses_db {
+        match db_source {
+            paths::DbPathSource::LegacyCwd => tracing::info!(
+                path = %db_path.display(),
+                "legacy DB in current directory — using it (default location: <data_dir>/wimcc/wimcc.sqlite)"
+            ),
+            _ => tracing::info!(
+                path = %db_path.display(),
+                source = db_source.as_str(),
+                "db path resolved"
+            ),
+        }
+    }
     let rt = tokio::runtime::Runtime::new().map_err(anyhow::Error::from)?;
     rt.block_on(async move {
         match cli.command {
-            cli::Command::InitDb => init_db(&cli.db_path).await,
+            cli::Command::InitDb => init_db(&db_path).await,
             cli::Command::Doctor {
                 json,
                 server,
@@ -39,12 +74,14 @@ fn main() -> error::Result<()> {
                     json,
                     server,
                     project,
+                    db_path: db_path.clone(),
+                    db_path_source: db_source.as_str(),
                 })
                 .await
                 .map_err(anyhow::Error::from)?;
                 std::process::exit(code);
             }
-            cli::Command::Ingest { path, all } => ingest_cmd(&cli.db_path, path, all).await,
+            cli::Command::Ingest { path, all } => ingest_cmd(&db_path, path, all).await,
             cli::Command::Serve {
                 bind,
                 port,
@@ -72,7 +109,7 @@ fn main() -> error::Result<()> {
                     return Ok(());
                 }
                 serve_cmd(
-                    &cli.db_path,
+                    &db_path,
                     bind,
                     port,
                     auto_migrate,
@@ -95,7 +132,7 @@ fn main() -> error::Result<()> {
                     bind,
                     port,
                     auto_migrate,
-                } => wimcc::service::install(&cli.db_path, &bind.to_string(), port, auto_migrate)
+                } => wimcc::service::install(&db_path, &bind.to_string(), port, auto_migrate)
                     .map_err(Into::into),
                 cli::ServiceAction::Uninstall => wimcc::service::uninstall().map_err(Into::into),
                 cli::ServiceAction::Restart => wimcc::service::restart().map_err(Into::into),

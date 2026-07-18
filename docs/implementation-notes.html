@@ -6740,6 +6740,34 @@ vitest: 69 passed
     shell·Homebrew·crates.io(+binstall)·mise(문서만) 3+1이다.</p>
   </section>
 
+  <section id="db-default-path-2026-07-18">
+    <h2>DB 기본 경로 개편 — 플랫폼 데이터 디렉터리 + legacy CWD 폴백 (2026-07-18)</h2>
+    <p><b>배경:</b> 종전 기본값 <code>--db-path .wimcc.sqlite</code>는 <b>CWD 상대</b>였다
+    — 실행 위치마다 DB가 조용히 흩어지고, <code>service install</code>은 install 시점
+    CWD를 영구 기록하므로 사용자는 DB 위치를 모른 채 운영하게 된다. v1.4.0 다채널
+    배포 직전 dogfood 점검(기본 옵션 그대로 운용) 중 사용자가 이 함정을 지적해,
+    첫 채널 배포 전 기본값을 바꾸는 것으로 결정했다(릴리스 후엔 마이그레이션
+    문제가 된다).</p>
+    <p><b>결정(사용자 확정):</b> 기본값을 <code>dirs::data_dir()/wimcc/wimcc.sqlite</code>
+    (macOS <code>~/Library/Application Support</code>, Linux <code>~/.local/share</code>)로
+    바꾸되, <b>CWD에 legacy <code>.wimcc.sqlite</code>가 존재하면 그 파일을 계속
+    사용</b>하고 매 기동 로그로 알린다(조용한 폴백 금지). <code>--db-path</code>/
+    <code>WIMCC_DB</code> 명시가 항상 우선. <code>wimcc doctor</code>는 해석된
+    경로+출처를 리포트(<code>db_path</code>/<code>db_path_source</code> 필드)한다.</p>
+    <p><b>구현:</b> 해석은 <code>paths::resolve_db_path</code>(순수 함수
+    <code>resolve_db_path_in(explicit, cwd, data_dir)</code> + dirs wrapper) 한 곳 —
+    main.rs가 진입 시 1회 해석해 모든 서브커맨드가 같은 경로를 쓴다. clap의
+    <code>default_value</code>는 제거(<code>Option&lt;PathBuf&gt;</code>) — eager
+    default가 있으면 명시/기본을 구분할 수 없어 legacy 판정이 불가능하다.
+    데이터 디렉터리 부모 생성은 DB를 실제로 쓰는 커맨드(init-db·ingest·serve·
+    service install)에서만 수행한다. <code>service install</code>은 해석된 절대
+    경로를 plist/unit에 기록하므로 기존 절대화 로직과 자연 결합.</p>
+    <p><b>검증:</b> 단위 4종(paths) + 실바이너리 스모크 3경로(legacy 감지 로그·
+    HOME 재지향 data-dir 생성·doctor JSON 필드). macOS 데이터 디렉터리의 공백
+    포함 경로(<code>Application Support</code>)가 sqlite URL
+    (<code>sqlite://…?mode=rwc</code>)로 정상 동작함을 실측 확인.</p>
+  </section>
+
 </main>
 </div>
 </body></html>

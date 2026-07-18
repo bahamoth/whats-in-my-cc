@@ -110,8 +110,11 @@ just dev   # 백엔드 :7878 + vite :5173 (HMR); Ctrl-C로 둘 다 종료
 wimcc [--db-path <PATH>] [--log-format pretty|json] [--verbose] <command>
 ```
 
-전역 옵션은 모든 서브커맨드에 적용된다. `--db-path` 기본값은 `.wimcc.sqlite`
-(env `WIMCC_DB`).
+전역 옵션은 모든 서브커맨드에 적용된다. `--db-path` 기본값은 플랫폼 데이터
+디렉터리 아래 `wimcc/wimcc.sqlite`(macOS `~/Library/Application Support`,
+Linux `~/.local/share`)이고, 현재 디렉터리에 legacy `./.wimcc.sqlite`가 있으면
+그 파일을 대신 쓴다 — 어느 경로로 해석됐는지는 시작 로그에 찍힌다. 재정의는
+`--db-path` 또는 env `WIMCC_DB`, `wimcc doctor`도 해석된 경로를 표기한다.
 
 | 커맨드 | 역할 |
 | --- | --- |
