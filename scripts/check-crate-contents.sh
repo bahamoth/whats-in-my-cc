@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 list=$(cargo package --list --allow-dirty)
 missing=0
 for path in webui/dist/index.html pricing.json migrations LICENSE-MIT LICENSE-APACHE; do
-  if ! grep -q "$path" <<<"$list"; then
+  if ! grep -qF "$path" <<<"$list"; then
     echo "MISSING in crate: $path"
     missing=1
   fi
