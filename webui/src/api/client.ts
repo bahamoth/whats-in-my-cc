@@ -17,6 +17,7 @@ import type {
   TurnRollupResponse,
   PluginDto,
   TaskDto,
+  HealthVersion,
 } from './types';
 import type { EventFilterParams } from '../components/replay/stream/filterState';
 
@@ -154,6 +155,20 @@ export const getSessionInstructions = (id: string) =>
 
 export const getInstructionSnapshot = (sha: string) =>
   jsonGet<InstructionSnapshotDto>(`/v1/instructions/${sha}`);
+
+/** `/v1/health`의 `version` 블록만 뽑아온다. health는 Envelope을 쓰지 않는
+ *  원시 JSON(`routes.rs::health`) — `jsonGet`을 재사용하지 않는 이유. 실패/부재
+ *  시 null을 돌려줘 배너가 조용히 생략되게 한다(auth on 등 401 포함). */
+export async function getHealthVersion(): Promise<HealthVersion | null> {
+  try {
+    const resp = await fetch('/v1/health', { headers: { accept: 'application/json' } });
+    if (!resp.ok) return null;
+    const body = await resp.json();
+    return (body.version as HealthVersion | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export function getVerificationSummary(opts: {
   project?: string;

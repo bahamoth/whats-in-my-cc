@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useT } from '../../i18n';
 import { LanguageToggle } from './LanguageToggle';
+import { UpdateBanner } from './UpdateBanner';
 import styles from './AppShell.module.css';
 
 interface AppShellProps {
@@ -32,6 +33,7 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
         <LanguageToggle />
       </nav>
       <main id="wimcc-main" className={styles.main} role="main">
+        <UpdateBanner />
         {children}
       </main>
       <aside

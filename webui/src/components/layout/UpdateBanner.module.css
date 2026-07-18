@@ -1,0 +1,22 @@
+/* Task 6 — update banner. Neutral blue accent; #b07dff is reserved for
+ * cohort-boundary grammar elsewhere (charts/streams) and must not appear here. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border, #2c3140);
+  background: color-mix(in srgb, #3b82f6 12%, transparent);
+}
+.link {
+  text-decoration: underline;
+}
+.dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: inherit;
+}
