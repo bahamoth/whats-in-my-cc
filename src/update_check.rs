@@ -60,7 +60,13 @@ pub async fn run_update_check_loop(
     url: String,
     shutdown: CancellationToken,
 ) {
-    let client = reqwest::Client::new();
+    // 행 걸린 응답이 다음 tick까지 루프 전체를 막지 않도록 요청에 상한을 둔다.
+    // 계약 유지: build 실패는 "실패는 조용히 무시" 원칙에 따라 기본 Client로
+    // 폴백한다(타임아웃 없이 이전 동작과 동일 — outbound 자체를 막지 않는다).
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .unwrap_or_default();
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60 * 24));
     loop {
         tokio::select! {
