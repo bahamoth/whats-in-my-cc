@@ -45,6 +45,44 @@ tar -xzf wimcc-v*-aarch64-apple-darwin.tar.gz   # or …-x86_64-unknown-linux-gn
 ./wimcc doctor                 # verify collector wiring
 ```
 
+## Install
+
+```sh
+# shell (macOS / Linux)
+curl -fsSL https://github.com/bahamoth/whats-in-my-cc/releases/latest/download/wimcc-installer.sh | sh
+
+# Homebrew
+brew install bahamoth/tap/wimcc
+
+# npm (Claude Code users already have this)
+npm install -g wimcc
+
+# cargo
+cargo install wimcc          # or: cargo binstall wimcc
+
+# mise
+mise use -g ubi:bahamoth/whats-in-my-cc
+```
+
+## Update
+
+- shell install: `wimcc self-update` (check only: `wimcc self-update --check`)
+- brew / npm / cargo: use that manager's upgrade command
+- The running `wimcc serve` keeps the old binary until restarted — restart when
+  no live Claude Code session is being observed: `wimcc service restart`
+- `wimcc serve` checks GitHub Releases metadata once a day (its only outbound
+  call) and shows a banner in the WebUI; disable with `--update-check off`
+  or `WIMCC_UPDATE_CHECK=off`
+
+## Run as a service
+
+```sh
+wimcc service install    # start on login (launchd / systemd --user)
+wimcc service status
+wimcc service restart    # e.g. after self-update
+wimcc service uninstall
+```
+
 ### Build from source
 
 ```bash
@@ -315,11 +353,13 @@ migration, so existing events won't have them until re-ingested.
 - **CI** (GitHub Actions) runs the full gate on every PR: `vitest` + the SPA
   build, then `cargo fmt --check`, `cargo clippy -- -D warnings`, and
   `cargo test` against the freshly built `webui/dist`.
-- **Releases** are automated with release-please: conventional commits on
-  `main` accumulate into a release PR; merging it tags `vX.Y.Z`, generates the
-  CHANGELOG, and uploads `wimcc` binaries (Linux `x86_64`, macOS Apple Silicon)
-  to the GitHub Release. Versions in `Cargo.toml` and `webui/package.json` are
-  bumped together — don't edit them by hand.
+- **Releases** are split across two workflows: release-please accumulates
+  conventional commits on `main` into a release PR and, on merge, tags
+  `vX.Y.Z`, generates the CHANGELOG, and creates the GitHub Release; dist
+  (cargo-dist) then builds the 4 targets, the shell/Homebrew/npm installers,
+  and publishes to crates.io, uploading everything to that same Release.
+  Versions in `Cargo.toml` and `webui/package.json` are bumped together —
+  don't edit them by hand.
 
 ## Reference docs
 

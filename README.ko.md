@@ -42,6 +42,44 @@ tar -xzf wimcc-v*-aarch64-apple-darwin.tar.gz   # 또는 …-x86_64-unknown-linu
 ./wimcc doctor                 # collector 연동 점검
 ```
 
+## 설치
+
+```sh
+# shell (macOS / Linux)
+curl -fsSL https://github.com/bahamoth/whats-in-my-cc/releases/latest/download/wimcc-installer.sh | sh
+
+# Homebrew
+brew install bahamoth/tap/wimcc
+
+# npm (Claude Code 사용자는 이미 설치돼 있음)
+npm install -g wimcc
+
+# cargo
+cargo install wimcc          # 또는: cargo binstall wimcc
+
+# mise
+mise use -g ubi:bahamoth/whats-in-my-cc
+```
+
+## 업데이트
+
+- shell 설치: `wimcc self-update` (조회만: `wimcc self-update --check`)
+- brew / npm / cargo: 해당 매니저의 업그레이드 명령 사용
+- 실행 중인 serve는 재시작 전까지 구 바이너리로 동작 — 라이브 Claude Code 세션
+  관측이 없을 때 `wimcc service restart`
+- `wimcc serve`는 하루 한 번 GitHub Releases 메타데이터를 조회해(유일한 outbound
+  호출) WebUI에 배너로 보여준다 — `--update-check off` 또는
+  `WIMCC_UPDATE_CHECK=off`로 비활성화
+
+## 서비스로 실행
+
+```sh
+wimcc service install    # 로그인 시 자동 시작 (launchd / systemd --user)
+wimcc service status
+wimcc service restart    # 예: self-update 후
+wimcc service uninstall
+```
+
 ### 소스에서 빌드
 
 ```bash
@@ -298,11 +336,12 @@ cargo test
 - **CI** (GitHub Actions)는 모든 PR에서 전체 게이트를 돌린다: `vitest` + SPA
   빌드, 이어서 갓 빌드된 `webui/dist`를 대상으로 `cargo fmt --check`,
   `cargo clippy -- -D warnings`, `cargo test`.
-- **릴리스**는 release-please로 자동화되어 있다: `main`의 conventional commit이
-  릴리스 PR에 누적되고, 그 PR을 머지하면 `vX.Y.Z` 태그·CHANGELOG 생성과 함께
-  `wimcc` 바이너리(Linux `x86_64`, macOS Apple Silicon)가 GitHub Release에
-  업로드된다. `Cargo.toml`과 `webui/package.json`의 버전은 함께 bump되므로
-  손으로 수정하지 말 것.
+- **릴리스**는 두 워크플로가 나눠 맡는다: release-please가 `main`의 conventional
+  commit을 릴리스 PR에 누적하고, 머지 시 `vX.Y.Z` 태그·CHANGELOG 생성과 GitHub
+  Release 생성까지 담당한다. 이어서 dist(cargo-dist)가 4개 타깃 빌드와
+  shell/Homebrew/npm installer, crates.io 퍼블리시를 수행해 같은 Release에
+  업로드한다. `Cargo.toml`과 `webui/package.json`의 버전은 함께 bump되므로 손으로
+  수정하지 말 것.
 
 ## 참고 문서
 
