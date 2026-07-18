@@ -614,14 +614,20 @@ async fn expired_session_loses_summary_and_instruction_rows() {
         "sha_only_old",
     )
     .await;
-    assert_eq!(orphan, 0, "snapshot no observation references must be pruned");
+    assert_eq!(
+        orphan, 0,
+        "snapshot no observation references must be pruned"
+    );
     let shared: i64 = count(
         &pool,
         "SELECT COUNT(*) FROM instruction_snapshot WHERE content_sha256 = ?",
         "sha_shared",
     )
     .await;
-    assert_eq!(shared, 1, "snapshot still referenced by a live session stays");
+    assert_eq!(
+        shared, 1,
+        "snapshot still referenced by a live session stays"
+    );
 }
 
 /// A session whose only trace is instruction_observation rows (e.g. all its
@@ -713,7 +719,10 @@ async fn old_unreferenced_ingest_run_rows_are_pruned() {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(referenced, 1, "run referenced by a raw skeleton row stays (FK)");
+    assert_eq!(
+        referenced, 1,
+        "run referenced by a raw skeleton row stays (FK)"
+    );
     assert!(
         report.deletions.get("ingest_run").copied().unwrap_or(0) >= 1,
         "report counts pruned ingest_run rows; got {:?}",
@@ -737,7 +746,10 @@ async fn sweep_reclaims_disk_on_file_backed_db() {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(av, 2, "new DBs must be created with auto_vacuum=INCREMENTAL");
+    assert_eq!(
+        av, 2,
+        "new DBs must be created with auto_vacuum=INCREMENTAL"
+    );
 
     // ~2MB of expired payload across 100 raw rows.
     let run_id = seed_ingest_run(&pool).await;
