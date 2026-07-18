@@ -7,12 +7,20 @@ use std::process::Command as Proc;
 
 pub const SERVICE_LABEL: &str = "com.bahamoth.wimcc";
 
+/// plist(XML)의 `<string>` 내용에 안전하게 넣기 위한 최소 이스케이프.
+/// 순서 무관(각 치환 결과 문자가 나머지 두 패턴을 새로 만들지 않는다: `&`→`&amp;`엔 `<`/`>`가 없다).
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
 /// argv[0]=실행 파일 절대경로, 이후 전체 인자. 서비스는 CWD 보장이 없으므로
 /// 경로 인자는 호출부에서 절대경로로 만들어 전달한다.
 pub fn launchd_plist(argv: &[String]) -> String {
     let items: String = argv
         .iter()
-        .map(|a| format!("    <string>{a}</string>\n"))
+        .map(|a| format!("    <string>{}</string>\n", xml_escape(a)))
         .collect();
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -116,17 +124,29 @@ pub fn install(db_path: &Path, bind: &str, port: u16, auto_migrate: bool) -> any
         std::fs::create_dir_all(path.parent().unwrap())?;
         std::fs::write(&path, launchd_plist(&argv))?;
         let uid = current_uid()?;
-        run_cmd(
+        let ok = run_cmd(
             "launchctl",
             &["bootstrap", &format!("gui/{uid}"), &path.to_string_lossy()],
         )?;
+        if !ok {
+            bail!(
+                "launchctl bootstrap 실패 — plist는 기록됨: {}. `launchctl print gui/{uid}/{SERVICE_LABEL}` 또는 launchctl 출력을 확인하라(이미 등록돼 있을 수 있음)",
+                path.display()
+            );
+        }
         println!("등록 완료: {}", path.display());
     } else if cfg!(target_os = "linux") {
         let path = unit_path()?;
         std::fs::create_dir_all(path.parent().unwrap())?;
         std::fs::write(&path, systemd_unit(&argv))?;
-        run_cmd("systemctl", &["--user", "daemon-reload"])?;
-        run_cmd("systemctl", &["--user", "enable", "--now", "wimcc"])?;
+        let reload_ok = run_cmd("systemctl", &["--user", "daemon-reload"])?;
+        let enable_ok = run_cmd("systemctl", &["--user", "enable", "--now", "wimcc"])?;
+        if !reload_ok || !enable_ok {
+            bail!(
+                "systemctl 등록 실패 — unit은 기록됨: {}. `systemctl --user status wimcc` 또는 systemctl 출력을 확인하라",
+                path.display()
+            );
+        }
         println!("등록 완료: {}", path.display());
     } else {
         bail!("지원하지 않는 OS — macOS(launchd)·Linux(systemd)만");
@@ -138,16 +158,22 @@ pub fn install(db_path: &Path, bind: &str, port: u16, auto_migrate: bool) -> any
 pub fn uninstall() -> anyhow::Result<()> {
     if cfg!(target_os = "macos") {
         let uid = current_uid()?;
-        run_cmd(
+        let ok = run_cmd(
             "launchctl",
             &["bootout", &format!("gui/{uid}/{SERVICE_LABEL}")],
         )?;
+        if !ok {
+            println!("등록 해제 명령 실패(미등록이었을 수 있음)");
+        }
         let path = plist_path()?;
         if path.exists() {
             std::fs::remove_file(&path)?;
         }
     } else if cfg!(target_os = "linux") {
-        run_cmd("systemctl", &["--user", "disable", "--now", "wimcc"])?;
+        let ok = run_cmd("systemctl", &["--user", "disable", "--now", "wimcc"])?;
+        if !ok {
+            println!("등록 해제 명령 실패(미등록이었을 수 있음)");
+        }
         let path = unit_path()?;
         if path.exists() {
             std::fs::remove_file(&path)?;
@@ -229,6 +255,24 @@ mod tests {
     #[test]
     fn launchd_plist_snapshot() {
         insta::assert_snapshot!(launchd_plist(&argv()));
+    }
+
+    #[test]
+    fn launchd_plist_escapes_xml_special_chars() {
+        let argv = vec![
+            "/usr/local/bin/wimcc".to_string(),
+            "--label".to_string(),
+            "A&B<C>D".to_string(),
+        ];
+        let out = launchd_plist(&argv);
+        assert!(
+            out.contains("<string>A&amp;B&lt;C&gt;D</string>"),
+            "expected escaped form in output, got:\n{out}"
+        );
+        assert!(
+            !out.contains("A&B<C>D"),
+            "raw unescaped argv leaked into plist output:\n{out}"
+        );
     }
 
     #[test]
