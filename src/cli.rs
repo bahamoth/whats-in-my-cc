@@ -21,9 +21,12 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
 
-    /// Path to the SQLite database file.
-    #[arg(long, global = true, default_value = ".wimcc.sqlite", env = "WIMCC_DB")]
-    pub db_path: PathBuf,
+    /// Path to the SQLite database file. Default: `<data_dir>/wimcc/wimcc.sqlite`
+    /// (macOS `~/Library/Application Support`, Linux `~/.local/share`); when the
+    /// current directory has a legacy `./.wimcc.sqlite`, that file is used
+    /// instead (logged at startup). Resolution: `paths::resolve_db_path`.
+    #[arg(long, global = true, env = "WIMCC_DB")]
+    pub db_path: Option<PathBuf>,
 
     /// Log output format.
     #[arg(long, global = true, value_enum, default_value_t = LogFormat::Pretty)]
@@ -33,8 +36,9 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub verbose: bool,
 
-    /// Directory for rotating serve logs. Default: same directory as --db-path
-    /// (CWD when the default `.wimcc.sqlite` is used). Only `serve` writes files.
+    /// Directory for rotating serve logs. Default: parent directory of the
+    /// resolved --db-path (CWD for a legacy `./.wimcc.sqlite`, the wimcc data
+    /// directory for the default). Only `serve` writes files.
     #[arg(long, global = true, env = "WIMCC_LOG_DIR")]
     pub log_dir: Option<PathBuf>,
 
@@ -226,6 +230,24 @@ mod tests {
             Command::SelfUpdate { check } => assert!(check),
             other => panic!("expected SelfUpdate, got {other:?}"),
         }
+    }
+
+    /// 2026-07-18: 기본값을 clap에서 빼고 `paths::resolve_db_path`로 옮겼다 —
+    /// CWD 상대 default_value가 있으면 legacy 폴백 판정이 불가능하다.
+    #[test]
+    fn db_path_has_no_eager_default() {
+        let cli = Cli::try_parse_from(["wimcc", "serve"]).expect("parses");
+        assert!(cli.db_path.is_none());
+    }
+
+    #[test]
+    fn db_path_flag_is_explicit() {
+        let cli =
+            Cli::try_parse_from(["wimcc", "--db-path", "/x/y.sqlite", "serve"]).expect("parses");
+        assert_eq!(
+            cli.db_path.as_deref(),
+            Some(std::path::Path::new("/x/y.sqlite"))
+        );
     }
 
     #[test]

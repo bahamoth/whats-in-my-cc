@@ -115,7 +115,11 @@ wimcc [--db-path <PATH>] [--log-format pretty|json] [--verbose] <command>
 ```
 
 Global flags apply to every subcommand. `--db-path` defaults to
-`.wimcc.sqlite` (env `WIMCC_DB`).
+`wimcc/wimcc.sqlite` under the platform data directory (macOS
+`~/Library/Application Support`, Linux `~/.local/share`); when the current
+directory has a legacy `./.wimcc.sqlite`, that file is used instead — the
+startup log states which path was resolved. Override with `--db-path` or
+env `WIMCC_DB`; `wimcc doctor` also reports the resolved path.
 
 | Command | Purpose |
 | --- | --- |

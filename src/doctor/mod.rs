@@ -34,6 +34,10 @@ pub struct DoctorOpts {
     pub server: String,
     /// Slice-7: project root for `.claude/settings.json` walk. Defaults to CWD.
     pub project: Option<PathBuf>,
+    /// 2026-07-18: resolved DB path + source (`paths::resolve_db_path`) — doctor
+    /// doesn't open the DB, but reports where this invocation would look for it.
+    pub db_path: PathBuf,
+    pub db_path_source: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -74,6 +78,9 @@ struct DoctorReport {
     settings_scopes: Vec<SettingsScope>,
     effective_env: BTreeMap<String, EnvSource>,
     env_divergence: Vec<EnvDivergence>,
+    // 2026-07-18: resolved DB path this invocation would use (informational).
+    db_path: String,
+    db_path_source: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -365,6 +372,12 @@ fn compute_exit_code(report: &DoctorReport) -> i32 {
 
 fn print_pretty<W: Write>(w: &mut W, report: &DoctorReport) -> std::io::Result<()> {
     writeln!(w, "wimcc doctor — read-only diagnostic\n")?;
+    writeln!(
+        w,
+        "  DB: {} ({})\n",
+        report.db_path,
+        dim(&report.db_path_source)
+    )?;
     writeln!(w, "{}", dim("# Environment (Claude Code OTel)"))?;
     for e in &report.envs {
         let marker = match e.status {
@@ -556,6 +569,8 @@ pub async fn run(opts: DoctorOpts) -> std::io::Result<i32> {
         settings_scopes,
         effective_env: effective_env_map,
         env_divergence,
+        db_path: opts.db_path.display().to_string(),
+        db_path_source: opts.db_path_source.to_string(),
     };
     report.recommendations = build_recommendations(&report);
     report.exit_code = compute_exit_code(&report);
@@ -607,6 +622,8 @@ mod tests {
             settings_scopes: vec![],
             effective_env: Default::default(),
             env_divergence: vec![],
+            db_path: "/tmp/test.sqlite".into(),
+            db_path_source: "--db-path/WIMCC_DB".into(),
         }
     }
 

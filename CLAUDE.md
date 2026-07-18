@@ -106,8 +106,9 @@ schema-versioning·deterministic-L1)의 SSOT는 `docs/03_data_model_spec.html` �
   serve 재빌드·재기동 후에야 API에 실린다.
 - **serve 로그 관측/디버깅**: 프로세스 상태 확인·디버깅은 **재기동하지 말고 로그
   파일을 tail**한다(재기동은 라이브 상태를 초기화). 파일 위치 우선순위:
-  ①`--log-dir`/`WIMCC_LOG_DIR`(명시 시) → ②없으면 `--db-path`의 부모 디렉터리 →
-  ③그것도 비면(기본 `.wimcc.sqlite`) CWD. 파일명 `wimcc.<date>.log`, 일자 회전·
+  ①`--log-dir`/`WIMCC_LOG_DIR`(명시 시) → ②없으면 해석된 `--db-path`의 부모
+  디렉터리(legacy CWD DB면 CWD, 기본값이면 플랫폼 데이터 디렉터리 `wimcc/` —
+  2026-07-18 기본 경로 개편, `#db-default-path-2026-07-18`). 파일명 `wimcc.<date>.log`, 일자 회전·
   기본 7일 보관(`--log-retention-days`). serve 시작 로그의 `rotating file log
   enabled dir=…` 줄에 그 시점 절대 경로가 찍히니 그걸 tail한다. 파일은 항상
   Pretty·ANSI 없음(JSON은 콘솔 `--log-format json`에서만).
