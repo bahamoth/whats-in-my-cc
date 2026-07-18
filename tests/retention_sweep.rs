@@ -777,6 +777,36 @@ async fn sweep_reclaims_disk_on_file_backed_db() {
     );
 }
 
+/// growth-2026-07-18 — spawn된 sweep task가 공유 SweepStats를 갱신해야
+/// health가 마지막 sweep을 보고할 수 있다. tokio interval의 첫 tick은 즉시
+/// 발화하므로 짧은 폴링으로 관측 가능.
+#[tokio::test]
+async fn spawn_sweep_task_updates_shared_stats() {
+    let pool = test_pool().await;
+    let stats: wimcc::security::retention::SharedSweepStats = Default::default();
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let handle = wimcc::security::retention::spawn_sweep_task(
+        pool,
+        RetentionPolicy {
+            profile: Profile::Default,
+        },
+        stats.clone(),
+        cancel.clone(),
+    );
+
+    let mut swept = false;
+    for _ in 0..40 {
+        if stats.read().await.last_sweep_at.is_some() {
+            swept = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    cancel.cancel();
+    let _ = handle.await;
+    assert!(swept, "first immediate tick must record sweep stats");
+}
+
 #[tokio::test]
 async fn sweep_writes_audit_row() {
     let pool = test_pool().await;

@@ -80,8 +80,27 @@ async fn tombstone_gate(
 /// `/v1/health` is auth-gated (DEV-S19-02).
 /// 2026-07-17 §4: adds a `version` block (`current`/`latest`/`update_available`)
 /// sourced from the background update-check loop (see `update_check`).
+/// growth-2026-07-18: adds `db` (page-based size + freelist + resolved path)
+/// and `retention` (last sweep timestamp + per-class deletion counts) so
+/// operators can see DB growth and sweep activity without shelling into
+/// sqlite3 — the 1.2GB dogfood DB was only discovered on the filesystem.
 pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
     let v = state.update_status.read().await;
+    let sweep = state.sweep_stats.read().await;
+    // Page-math (page_count/freelist_count × page_size) works for file and
+    // in-memory DBs alike and needs no filesystem access.
+    let page_size: i64 = sqlx::query_scalar("PRAGMA page_size")
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or(0);
+    let page_count: i64 = sqlx::query_scalar("PRAGMA page_count")
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or(0);
+    let freelist_count: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or(0);
     Json(json!({
         "status": "ok",
         "build_sha": option_env!("GIT_SHA").unwrap_or("dev"),
@@ -90,9 +109,18 @@ pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
             "latest": v.latest,
             "update_available": v.update_available,
         },
+        "db": {
+            "path": state.db_path,
+            "size_bytes": page_count * page_size,
+            "freelist_bytes": freelist_count * page_size,
+        },
         "security": {
             "auth_required": !state.token.is_empty(),
             "retention_profile": state.retention_profile,
+        },
+        "retention": {
+            "last_sweep_at": sweep.last_sweep_at,
+            "last_sweep_deletions": sweep.last_sweep_deletions,
         }
     }))
 }
