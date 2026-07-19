@@ -20,6 +20,31 @@ pub fn decide(receipt_loaded: bool, receipt_is_for_this_exe: bool) -> Plan {
     }
 }
 
+/// serve auto-update용 채널 판별 — health `version.install_channel`의 값.
+/// "shell" = shell installer 설치본(자동 교체 대상), "managed" = 패키지
+/// 매니저/dev 빌드(안내만).
+pub fn detect_channel() -> &'static str {
+    let mut updater = AxoUpdater::new_for("wimcc");
+    let receipt_loaded = updater.load_receipt().is_ok();
+    let receipt_matches = receipt_loaded
+        && updater
+            .check_receipt_is_for_this_executable()
+            .unwrap_or(false);
+    match decide(receipt_loaded, receipt_matches) {
+        Plan::RunUpdate => "shell",
+        Plan::ManagedElsewhere => "managed",
+    }
+}
+
+/// 백그라운드 다운로드+교체(shell 채널 전용 — 호출부가 `should_download`로
+/// 게이트). 교체가 일어나면 새 버전 태그를 돌려준다. 실행 중인 프로세스는
+/// 구 바이너리(inode)로 계속 돈다.
+pub async fn download_swap() -> anyhow::Result<Option<String>> {
+    let mut updater = AxoUpdater::new_for("wimcc");
+    updater.load_receipt()?;
+    Ok(updater.run().await?.map(|r| r.new_version_tag))
+}
+
 pub async fn run(check_only: bool) -> anyhow::Result<()> {
     let mut updater = AxoUpdater::new_for("wimcc");
     let receipt_loaded = updater.load_receipt().is_ok();
@@ -54,13 +79,13 @@ pub async fn run(check_only: bool) -> anyhow::Result<()> {
         // than crashing the whole command over a status query.
         match updater.query_new_version().await {
             Ok(Some(v)) if *v > current => {
-                println!("새 버전이 있습니다 — 현재 v{current} → 최신 v{v}");
+                println!("update available — current v{current} -> latest v{v}");
             }
             Ok(_) => {
-                println!("최신입니다 — v{current}");
+                println!("up to date — v{current}");
             }
             Err(e) => {
-                println!("업데이트 확인에 실패했습니다({e}) — 현재 v{current}");
+                println!("update check failed ({e}) — current v{current}");
             }
         }
         return Ok(());
@@ -68,20 +93,18 @@ pub async fn run(check_only: bool) -> anyhow::Result<()> {
 
     match decide(receipt_loaded, receipt_matches) {
         Plan::ManagedElsewhere => {
-            println!(
-                "이 wimcc는 패키지 매니저로 설치된 것으로 보입니다. 해당 매니저로 업데이트하세요:"
-            );
+            println!("this wimcc appears to be a package-manager install; update with that manager:");
             println!("  brew upgrade wimcc | cargo install wimcc");
             Ok(())
         }
         Plan::RunUpdate => {
             match updater.run().await? {
                 Some(result) => {
-                    println!("업데이트 완료: {}", result.new_version_tag);
-                    println!("실행 중인 serve는 구 바이너리로 계속 동작합니다.");
-                    println!("라이브 CC 세션이 없을 때 재시작하세요: wimcc service restart (또는 수동 재기동)");
+                    println!("updated to {}", result.new_version_tag);
+                    println!("a running serve keeps using the old binary.");
+                    println!("restart when no live Claude Code session is being observed: wimcc service restart (or restart manually)");
                 }
-                None => println!("이미 최신입니다 — v{}", env!("CARGO_PKG_VERSION")),
+                None => println!("already up to date — v{}", env!("CARGO_PKG_VERSION")),
             }
             Ok(())
         }

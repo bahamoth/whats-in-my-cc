@@ -97,6 +97,7 @@ fn main() -> error::Result<()> {
                 retention_profile,
                 auth,
                 update_check,
+                auto_update,
             } => {
                 // Slice-19: --print-token and --rotate-token short-circuit server start.
                 if print_token {
@@ -122,6 +123,7 @@ fn main() -> error::Result<()> {
                     retention_profile,
                     auth,
                     update_check,
+                    auto_update,
                 )
                 .await
             }
@@ -181,6 +183,7 @@ async fn serve_cmd(
     retention_profile: String,
     auth: cli::AuthMode,
     update_check: String,
+    auto_update: String,
 ) -> error::Result<()> {
     // Loopback-only enforcement: accepts 127.0.0.0/8 and ::1 (is_loopback()).
     // Strict 127.0.0.1-only would use `bind == IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)`.
@@ -319,14 +322,23 @@ async fn serve_cmd(
     // zero outbound calls (spec's only outbound path is this check).
     let update_status: wimcc::update_check::SharedUpdateStatus = Default::default();
     if update_check == "on" {
+        // 채널 판별은 receipt 파일 확인 1회 — 기동 시 한 번만.
+        let channel = wimcc::self_update::detect_channel();
+        update_status.write().await.install_channel = Some(channel);
+        let auto = auto_update == "on";
         let url = std::env::var("WIMCC_UPDATE_CHECK_URL")
             .unwrap_or_else(|_| wimcc::update_check::DEFAULT_LATEST_RELEASE_URL.to_string());
         tokio::spawn(wimcc::update_check::run_update_check_loop(
             update_status.clone(),
             url,
+            auto,
             cancel.clone(),
         ));
-        tracing::info!("update check loop enabled (24h interval)");
+        tracing::info!(
+            channel,
+            auto_update = auto,
+            "update check loop enabled (24h interval)"
+        );
     } else {
         tracing::info!("update check disabled (--update-check off)");
     }

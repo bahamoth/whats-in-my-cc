@@ -70,6 +70,11 @@ mise use -g ubi:bahamoth/whats-in-my-cc
 - `wimcc serve`는 하루 한 번 GitHub Releases 메타데이터를 조회해(유일한 outbound
   호출) WebUI에 배너로 보여준다 — `--update-check off` 또는
   `WIMCC_UPDATE_CHECK=off`로 비활성화
+- `wimcc serve --auto-update on`(shell 설치본 전용)은 새 릴리스를 백그라운드로
+  내려받아 디스크의 바이너리를 미리 교체한다. 실행 중인 serve는 구 바이너리로
+  계속 돌고, 다음 재시작 때 새 버전이 적용된다 — 배너에 "다운로드 완료 — 다음
+  serve 재시작 때 적용"으로 표시된다. 패키지 매니저 설치본은 건드리지 않으며
+  배너가 `brew upgrade` 명령을 안내한다.
 
 ## 서비스로 실행
 
@@ -139,6 +144,7 @@ wimcc serve [--bind 127.0.0.1] [--port 7878]
              [--auth off|on]                      # /v1 + /mcp에 bearer-token 인증 (기본: off)
              [--retention-profile none|default|strict]   # 백그라운드 retention sweep (기본: default)
              [--update-check on|off]              # 일일 GitHub Releases 버전 확인 (기본: on)
+             [--auto-update on|off]               # 새 릴리스 사전 다운로드, 재시작 시 적용 (shell 설치본; 기본: off)
              [--print-token] [--rotate-token]     # bearer token 관리 후 종료
              [--sse-keepalive-secs N]             # WebUI live-stream keep-alive (기본: 30)
              [--sse-channel-capacity N]           # broadcast 채널 용량 (기본: 512)

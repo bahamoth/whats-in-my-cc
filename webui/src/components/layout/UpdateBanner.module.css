@@ -12,6 +12,16 @@
 .link {
   text-decoration: underline;
 }
+/* 다음 행동 명령 — 복사해서 그대로 실행할 수 있는 형태로 노출. */
+.cmd {
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border, #2c3140);
+  background: color-mix(in srgb, #0b0d12 45%, transparent);
+  font-family: var(--wimcc-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+  user-select: all;
+}
 .dismiss {
   margin-left: auto;
   background: none;

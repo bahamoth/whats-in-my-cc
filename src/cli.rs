@@ -136,18 +136,27 @@ pub enum Command {
         /// `on` activates slice-19 token middleware. DEV-S19-08.
         #[arg(long, value_enum, default_value_t = AuthMode::Off)]
         auth: AuthMode,
-        /// 새 버전 자동 확인 — GitHub Releases 메타데이터 조회(유일한 outbound).
-        /// off면 어떤 outbound도 발생하지 않는다. 스펙 2026-07-17 §4.
+        /// Daily new-release check against GitHub Releases metadata (the only
+        /// outbound call). With "off" wimcc makes no outbound calls at all.
+        // 스펙 2026-07-17 §4.
         #[arg(long, default_value = "on", value_parser = ["on", "off"], env = "WIMCC_UPDATE_CHECK")]
         update_check: String,
+        /// Download a newer release in the background when the update check
+        /// observes one (shell installs only; package-manager installs are
+        /// guided to their manager). The swapped binary takes effect on the
+        /// next restart — a running serve is never restarted automatically.
+        // 2026-07-19 사용자 결정: 다운로드까지 자동, 재시작은 수동(라이브
+        // 세션 관측 중단 방지). 채널 판별은 self_update::decide 재사용.
+        #[arg(long, default_value = "off", value_parser = ["on", "off"], env = "WIMCC_AUTO_UPDATE")]
+        auto_update: String,
     },
-    /// 바이너리를 최신 릴리스로 교체한다. 실행 중인 serve는 재시작하지 않는다.
+    /// Replace the binary with the latest release. Never restarts a running serve.
     SelfUpdate {
-        /// 조회만 하고 교체하지 않는다.
+        /// Check for a newer release without replacing anything.
         #[arg(long)]
         check: bool,
     },
-    /// serve를 OS 사용자 서비스로 등록/해제한다 (macOS launchd, Linux systemd --user).
+    /// Register/unregister serve as an OS user service (macOS launchd, Linux systemd --user).
     Service {
         #[command(subcommand)]
         action: ServiceAction,
@@ -156,13 +165,13 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum ServiceAction {
-    /// 로그인 시 자동 시작되도록 등록. --db-path(전역)는 절대경로로 기록된다.
+    /// Register serve to start on login. The global --db-path is recorded as an absolute path.
     Install {
         #[arg(long, default_value = "127.0.0.1")]
         bind: std::net::IpAddr,
         #[arg(long, default_value_t = 7878)]
         port: u16,
-        /// 서비스는 무인 기동이라 마이그레이션 프롬프트에 답할 수 없다 — 기본 on.
+        /// Services boot unattended and cannot answer a migration prompt — default on.
         #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
         auto_migrate: bool,
     },
@@ -223,6 +232,17 @@ mod tests {
         let cli = Cli::try_parse_from(["wimcc", "serve"]).expect("parses");
         match cli.command {
             Command::Serve { update_check, .. } => assert_eq!(update_check, "on"),
+            other => panic!("expected Serve, got {other:?}"),
+        }
+    }
+
+    /// 2026-07-19 사용자 결정 — auto-update는 명시적 opt-in(기본 off):
+    /// 바이너리 교체는 부수효과가 커서 관측 없이 켜지지 않는다.
+    #[test]
+    fn serve_auto_update_defaults_off() {
+        let cli = Cli::try_parse_from(["wimcc", "serve"]).expect("parses");
+        match cli.command {
+            Command::Serve { auto_update, .. } => assert_eq!(auto_update, "off"),
             other => panic!("expected Serve, got {other:?}"),
         }
     }

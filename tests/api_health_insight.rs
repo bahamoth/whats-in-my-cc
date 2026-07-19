@@ -53,6 +53,35 @@ async fn health_includes_version_block() {
     assert!(body["version"]["latest"].is_null());
 }
 
+/// 2026-07-19 auto-update — version 블록이 설치 채널과 사전 다운로드 상태를
+/// 노출한다. 배너가 채널별 안내(brew/self-update)와 "재시작 시 적용"을
+/// 구분하는 근거. 테스트 상태는 미판별 = null.
+#[tokio::test]
+async fn health_version_reports_channel_and_downloaded() {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    wimcc::db::migrate(&pool).await.unwrap();
+    let state = AppState::new_for_tests(pool);
+    let handle = state.update_status.clone();
+    let srv = TestServer::new(wimcc::api::router(state)).unwrap();
+
+    let body: serde_json::Value = srv.get("/v1/health").await.json();
+    assert!(body["version"]["install_channel"].is_null(), "{body}");
+    assert!(body["version"]["downloaded"].is_null(), "{body}");
+
+    {
+        let mut s = handle.write().await;
+        s.install_channel = Some("shell");
+        s.downloaded = Some("v9.9.9".into());
+    }
+    let body: serde_json::Value = srv.get("/v1/health").await.json();
+    assert_eq!(body["version"]["install_channel"], "shell");
+    assert_eq!(body["version"]["downloaded"], "v9.9.9");
+}
+
 /// growth-2026-07-18 — 운영자가 DB가 얼마나 큰지 볼 방법이 row count 추정뿐
 /// 이었다(1.2GB 도그푸딩 DB를 파일시스템에서야 발견). page 기반 산출이라
 /// 파일·메모리 DB 공통으로 동작한다.

@@ -72,6 +72,12 @@ mise use -g ubi:bahamoth/whats-in-my-cc
 - `wimcc serve` checks GitHub Releases metadata once a day (its only outbound
   call) and shows a banner in the WebUI; disable with `--update-check off`
   or `WIMCC_UPDATE_CHECK=off`
+- `wimcc serve --auto-update on` (shell installs only) additionally downloads
+  a newer release in the background and swaps the binary on disk; the running
+  serve keeps the old binary and the new one takes effect on the next restart.
+  The WebUI banner then reads "downloaded — applies on the next serve restart".
+  Package-manager installs are never touched — the banner shows the matching
+  `brew upgrade` command instead.
 
 ## Run as a service
 
@@ -144,6 +150,7 @@ wimcc serve [--bind 127.0.0.1] [--port 7878]
              [--auth off|on]                      # bearer-token auth on /v1 + /mcp (default: off)
              [--retention-profile none|default|strict]   # background retention sweep (default: default)
              [--update-check on|off]              # daily GitHub Releases version check (default: on)
+             [--auto-update on|off]               # pre-download newer releases, apply on restart (shell installs; default: off)
              [--print-token] [--rotate-token]     # manage the bearer token, then exit
              [--sse-keepalive-secs N]             # WebUI live-stream keep-alive (default: 30)
              [--sse-channel-capacity N]           # broadcast channel capacity (default: 512)
