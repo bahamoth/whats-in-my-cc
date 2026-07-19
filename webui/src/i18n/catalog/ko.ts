@@ -28,9 +28,9 @@ export const ko: Messages = {
   'status.retention': 'retention',
   'status.lastSweep': '마지막 sweep',
   'status.serve.tip':
-    '실행 중인 `wimcc serve` 버전과 로컬 SQLite 사용량이다.\n' +
-    '[blue]파란 점[/blue]은 GitHub Releases에서 관측된 새 릴리스 표시다(일 1회 확인).\n' +
-    '**DB 용량**은 데이터베이스 파일의 page 합계이고, **회수 대기**는 다음 retention sweep 때 디스크로 반환된다.',
+    '실행 중인 `wimcc serve` 버전과 로컬 SQLite 사용량입니다.\n' +
+    '[blue]파란 점[/blue]은 GitHub Releases에 새 릴리스가 올라왔다는 표시입니다(하루 1회 확인).\n' +
+    '**DB 용량**은 데이터베이스 파일 크기, **회수 대기**는 다음 retention sweep 때 디스크로 돌아가는 몫입니다.',
 
   'sessions.searchPlaceholder': '⌕ 프로젝트·슬러그 검색… ( / )',
   'sessions.searchAria': '세션 검색',
@@ -40,9 +40,9 @@ export const ko: Messages = {
   'sessions.retry': '다시 시도',
   'sessions.emptyTitle': '아직 세션이 없습니다.',
   'sessions.emptyHintLive':
-    '`wimcc serve --auto-migrate`가 실행 중이면 claude 세션은 live tail이 자동으로 기록합니다.',
+    '`wimcc serve --auto-migrate`가 실행 중이면 새 claude 세션이 자동으로 기록됩니다.',
   'sessions.emptyHintBackfill':
-    'serve 이전의 transcript는 `wimcc ingest --all`로 한 번 백필합니다.',
+    '지난 transcript는 `wimcc ingest --all`로 한 번에 백필합니다.',
   'sessions.count': (p: { n: number }) => `${p.n}개 세션`,
   'sessions.sortedBy': '정렬 기준',
   'sessions.col.session': '세션',
@@ -552,7 +552,7 @@ export const ko: Messages = {
   'dash.truncated': (a: { n: number; m: number }) => `전체 ${a.m}개 중 최근 ${a.n}개 표시 (limit)`,
   'dash.empty': '이 기간에 세션이 없습니다.',
   'dash.emptyHint':
-    'wimcc serve가 실행 중이면 세션은 자동으로 나타납니다. 지난 transcript는 wimcc ingest --all로 백필합니다.',
+    'wimcc serve가 실행 중이면 새 세션이 자동으로 나타납니다. 지난 transcript는 wimcc ingest --all로 백필합니다.',
   'dash.error': 'series를 불러오지 못했습니다.',
   'dash.loading': 'series 불러오는 중…',
   'dash.outcome.passed': 'passed',
@@ -561,7 +561,9 @@ export const ko: Messages = {
   'dash.cost.total': (v: string) => `합계 ≈$${v}`,
   // Update banner — 버전 숫자·사실만 (판정 문장 금지)
   'update.available': (a: { current: string; latest: string }) =>
-    `wimcc ${a.latest} 사용 가능 — 현재 v${a.current}`,
+    `wimcc ${a.latest} 공개 — 현재 v${a.current}`,
+  'update.ready': (a: { tag: string }) =>
+    `wimcc ${a.tag} 다운로드 완료 — 다음 serve 재시작 때 적용됩니다`,
   'update.releaseNotes': '릴리스 노트',
   'update.dismiss': '업데이트 알림 닫기',
 };

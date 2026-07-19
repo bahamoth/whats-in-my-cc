@@ -31,8 +31,13 @@ export function AppShell({ children, rightSlot }: AppShellProps) {
           </span>
           <span className={styles.navText}>{t('nav.dashboard')}</span>
         </Link>
-        <LanguageToggle />
-        <ServeStatus />
+        {/* 레일 푸터 — 남는 공간을 한 번만 흡수(margin-top:auto)해 토글·상태
+            칩이 함께 하단에 정착한다. auto 마진이 두 요소에 나뉘면 토글이
+            레일 중간에 뜬다(2026-07-19 사용자 지적). */}
+        <div className={styles.railFooter}>
+          <LanguageToggle />
+          <ServeStatus />
+        </div>
       </nav>
       <main id="wimcc-main" className={styles.main} role="main">
         <UpdateBanner />

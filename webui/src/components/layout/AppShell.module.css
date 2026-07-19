@@ -60,6 +60,14 @@
   line-height: 1;
 }
 
+/* 레일 하단 고정 그룹 — 언어 토글 + serve 상태 칩. */
+.railFooter {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 /* The 56px rail is an icon-only rail; the breadcrumb (TopBar) carries the
  * visible "Sessions" label. Keep the text for assistive tech but hide it
  * visually so it does not duplicate the breadcrumb. (#dup-sessions) */

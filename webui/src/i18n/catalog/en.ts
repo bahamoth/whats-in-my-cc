@@ -580,6 +580,8 @@ export const en = {
   // Update banner — 버전 숫자·사실만 (판정 문장 금지)
   'update.available': (a: { current: string; latest: string }) =>
     `wimcc ${a.latest} available — current v${a.current}`,
+  'update.ready': (a: { tag: string }) =>
+    `wimcc ${a.tag} downloaded — applies on the next serve restart`,
   'update.releaseNotes': 'Release notes',
   'update.dismiss': 'Dismiss update notice',
 };
