@@ -2,7 +2,6 @@
  * 맞춘 2줄(버전/용량) 세로 칩 + 오른쪽으로 여는 hover 패널. */
 
 .wrap {
-  margin-top: auto;
   position: relative;
 }
 

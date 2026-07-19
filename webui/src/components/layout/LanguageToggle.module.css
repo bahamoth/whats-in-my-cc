@@ -3,7 +3,6 @@
  * the navLink styles in AppShell.module.css. */
 
 .toggle {
-  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
