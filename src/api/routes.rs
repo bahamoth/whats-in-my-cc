@@ -108,6 +108,10 @@ pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
             "current": env!("CARGO_PKG_VERSION"),
             "latest": v.latest,
             "update_available": v.update_available,
+            // 2026-07-19 auto-update: 배너가 채널별 안내(brew/self-update)와
+            // "다운로드 완료 — 재시작 시 적용"을 구분하는 근거.
+            "install_channel": v.install_channel,
+            "downloaded": v.downloaded,
         },
         "db": {
             "path": state.db_path,

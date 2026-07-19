@@ -491,11 +491,16 @@ export type InstructionSnapshotDto = {
 };
 
 /** `/v1/health`의 `version` 블록 — 스펙 2026-07-17 §4. health는 Envelope 미사용
- *  (원시 JSON). `latest`는 조회 실패/미조회 시 null. */
+ *  (원시 JSON). `latest`는 조회 실패/미조회 시 null.
+ *  2026-07-19 auto-update: `install_channel`(shell=self-update 대상 /
+ *  managed=패키지 매니저 소유)과 `downloaded`(교체 완료 태그 — 다음 재시작
+ *  때 적용)가 배너의 다음 행동 안내를 결정한다. 구 서버는 두 필드 부재. */
 export interface HealthVersion {
   current: string;
   latest: string | null;
   update_available: boolean;
+  install_channel?: 'shell' | 'managed' | null;
+  downloaded?: string | null;
 }
 
 /** growth-2026-07-18 — /v1/health 전체 상태(원시 JSON). ServeStatus 칩이 소비.
