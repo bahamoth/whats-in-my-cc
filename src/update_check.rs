@@ -158,14 +158,38 @@ mod tests {
     /// 미다운로드. 하나라도 빠지면 부수효과(바이너리 교체) 금지.
     #[test]
     fn download_requires_optin_shell_newer_and_not_yet_downloaded() {
-        assert!(should_download(true, Some("shell"), "1.4.0", "v1.5.0", None));
+        assert!(should_download(
+            true,
+            Some("shell"),
+            "1.4.0",
+            "v1.5.0",
+            None
+        ));
         // opt-out
-        assert!(!should_download(false, Some("shell"), "1.4.0", "v1.5.0", None));
+        assert!(!should_download(
+            false,
+            Some("shell"),
+            "1.4.0",
+            "v1.5.0",
+            None
+        ));
         // managed 채널(brew/cargo)은 바이너리 소유권이 매니저에 있다
-        assert!(!should_download(true, Some("managed"), "1.4.0", "v1.5.0", None));
+        assert!(!should_download(
+            true,
+            Some("managed"),
+            "1.4.0",
+            "v1.5.0",
+            None
+        ));
         assert!(!should_download(true, None, "1.4.0", "v1.5.0", None));
         // 신규 아님
-        assert!(!should_download(true, Some("shell"), "1.5.0", "v1.5.0", None));
+        assert!(!should_download(
+            true,
+            Some("shell"),
+            "1.5.0",
+            "v1.5.0",
+            None
+        ));
         // 같은 태그 재다운로드 금지(24h 주기마다 반복 방지)
         assert!(!should_download(
             true,

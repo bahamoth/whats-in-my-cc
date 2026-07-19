@@ -93,7 +93,9 @@ pub async fn run(check_only: bool) -> anyhow::Result<()> {
 
     match decide(receipt_loaded, receipt_matches) {
         Plan::ManagedElsewhere => {
-            println!("this wimcc appears to be a package-manager install; update with that manager:");
+            println!(
+                "this wimcc appears to be a package-manager install; update with that manager:"
+            );
             println!("  brew upgrade wimcc | cargo install wimcc");
             Ok(())
         }
