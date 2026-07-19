@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.5.0](https://github.com/bahamoth/whats-in-my-cc/compare/v1.4.0...v1.5.0) (2026-07-19)
+
+
+### Features
+
+* **api:** /v1/health에 db 크기·retention 마지막 sweep 노출 — SweepStats 배선 ([d51e062](https://github.com/bahamoth/whats-in-my-cc/commit/d51e06200cb5e288f4c46e9ebdda5dc616c8b9b1))
+* **cli:** wimcc vacuum — 기존 DB 압축·auto_vacuum 전환 ([87b8570](https://github.com/bahamoth/whats-in-my-cc/commit/87b8570fb3cd6dfb200733929ba57f3c4024fafd))
+* **insight:** 태깅 루프 2026-07-18 — ssh 사전 추가·id 보류·cancel 테스트 시그니처 갱신 ([6ba0720](https://github.com/bahamoth/whats-in-my-cc/commit/6ba07207d878b669ad6dbac250cdb9d1fd184f82))
+* **mcp:** SessionRegistry idle-TTL eviction — 무한 증가 누수 차단 ([1a70445](https://github.com/bahamoth/whats-in-my-cc/commit/1a704455ccacdd57f75da264640fd6f4e6f8e689))
+* **retention:** grow-only 테이블 sweep 편입 + 디스크 회수 ([cf98035](https://github.com/bahamoth/whats-in-my-cc/commit/cf980356c045c35a4bc995d3d871af42f57bd933))
+* **webui:** serve 상태 칩 — 실행 버전·새 릴리스 관측·DB 용량 ([7dbd8fe](https://github.com/bahamoth/whats-in-my-cc/commit/7dbd8fe086a6d7f274b56207d1525a390f2e8f19))
+
+
+### Bug Fixes
+
+* **webui:** 세션 목록 i18n 전환 + 빈 상태 힌트 live-tail 우선 정정 ([c4ecf5d](https://github.com/bahamoth/whats-in-my-cc/commit/c4ecf5d4e9ff63e09503e5fbd76749afee6b4790))
+
+
+### Performance Improvements
+
+* **ingest:** live tail은 새 행 있는 세션만 recompute — 빈 flush의 ingest_run 잔재도 삭제 ([d42932f](https://github.com/bahamoth/whats-in-my-cc/commit/d42932f4dfdc8f5b0c344b687d63fe4e4d7924e6))
+
 ## [1.4.0](https://github.com/bahamoth/whats-in-my-cc/compare/v1.3.0...v1.4.0) (2026-07-18)
 
 
