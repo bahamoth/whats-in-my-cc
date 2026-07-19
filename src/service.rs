@@ -84,7 +84,7 @@ fn run_cmd(program: &str, args: &[&str]) -> anyhow::Result<bool> {
     let status = Proc::new(program)
         .args(args)
         .status()
-        .with_context(|| format!("{program} 실행 실패"))?;
+        .with_context(|| format!("failed to run {program}"))?;
     Ok(status.success())
 }
 
@@ -126,11 +126,11 @@ pub fn install(db_path: &Path, bind: &str, port: u16, auto_migrate: bool) -> any
     // 검증해 실패 시 아무 부수효과도 남기지 않는다.
     let ip: std::net::IpAddr = bind
         .parse()
-        .with_context(|| format!("bind 주소 파싱 실패: {bind}"))?;
+        .with_context(|| format!("failed to parse bind address: {bind}"))?;
     if !ip.is_loopback() {
         bail!(
-            "serve는 loopback bind만 허용합니다 (got {bind}) — non-loopback 등록은 \
-             기동 실패가 무한 재시작되는 crash-loop이 되므로 service 등록을 중단합니다"
+            "serve only accepts loopback binds (got {bind}) — a non-loopback service would \
+             crash-loop on start (KeepAlive/Restart), so registration is aborted"
         );
     }
     let argv = build_argv(db_path, bind, port, auto_migrate)?;
@@ -145,11 +145,11 @@ pub fn install(db_path: &Path, bind: &str, port: u16, auto_migrate: bool) -> any
         )?;
         if !ok {
             bail!(
-                "launchctl bootstrap 실패 — plist는 기록됨: {}. `launchctl print gui/{uid}/{SERVICE_LABEL}` 또는 launchctl 출력을 확인하라(이미 등록돼 있을 수 있음)",
+                "launchctl bootstrap failed — plist was written: {}. Check `launchctl print gui/{uid}/{SERVICE_LABEL}` or the launchctl output (it may already be registered)",
                 path.display()
             );
         }
-        println!("등록 완료: {}", path.display());
+        println!("registered: {}", path.display());
     } else if cfg!(target_os = "linux") {
         let path = unit_path()?;
         std::fs::create_dir_all(path.parent().unwrap())?;
@@ -158,15 +158,15 @@ pub fn install(db_path: &Path, bind: &str, port: u16, auto_migrate: bool) -> any
         let enable_ok = run_cmd("systemctl", &["--user", "enable", "--now", "wimcc"])?;
         if !reload_ok || !enable_ok {
             bail!(
-                "systemctl 등록 실패 — unit은 기록됨: {}. `systemctl --user status wimcc` 또는 systemctl 출력을 확인하라",
+                "systemctl registration failed — unit was written: {}. Check `systemctl --user status wimcc` or the systemctl output",
                 path.display()
             );
         }
-        println!("등록 완료: {}", path.display());
+        println!("registered: {}", path.display());
     } else {
-        bail!("지원하지 않는 OS — macOS(launchd)·Linux(systemd)만");
+        bail!("unsupported OS — macOS (launchd) and Linux (systemd) only");
     }
-    println!("로그인 시 serve가 자동 시작됩니다. 해제: wimcc service uninstall");
+    println!("serve will start on login. Remove with: wimcc service uninstall");
     Ok(())
 }
 
@@ -178,7 +178,7 @@ pub fn uninstall() -> anyhow::Result<()> {
             &["bootout", &format!("gui/{uid}/{SERVICE_LABEL}")],
         )?;
         if !ok {
-            println!("등록 해제 명령 실패(미등록이었을 수 있음)");
+            println!("unregister command failed (it may not have been registered)");
         }
         let path = plist_path()?;
         if path.exists() {
@@ -187,7 +187,7 @@ pub fn uninstall() -> anyhow::Result<()> {
     } else if cfg!(target_os = "linux") {
         let ok = run_cmd("systemctl", &["--user", "disable", "--now", "wimcc"])?;
         if !ok {
-            println!("등록 해제 명령 실패(미등록이었을 수 있음)");
+            println!("unregister command failed (it may not have been registered)");
         }
         let path = unit_path()?;
         if path.exists() {
@@ -195,9 +195,9 @@ pub fn uninstall() -> anyhow::Result<()> {
         }
         run_cmd("systemctl", &["--user", "daemon-reload"])?;
     } else {
-        bail!("지원하지 않는 OS");
+        bail!("unsupported OS");
     }
-    println!("해제 완료");
+    println!("unregistered");
     Ok(())
 }
 
