@@ -6857,6 +6857,37 @@ vitest: 69 passed
     통합이라 릴리스 스모크에 위임.</p>
   </section>
 
+  <section id="test-harness-merge-2026-07-21">
+    <h2>통합 테스트 하네스 통합 — 127 바이너리 → 4 (2026-07-21)</h2>
+    <p><b>배경(실측):</b> macOS에서 재빌드 후 <code>cargo test</code>가
+    ~78분 걸렸는데, 테스트 실행 합계는 ~25초였다. 원인은 Gatekeeper/XProtect
+    첫 실행 검사 — 빌드마다 해시가 바뀐 새 테스트 바이너리 127개가 각각
+    첫 exec에서 ~30초씩 검사를 받는다(검사 중 프로세스 CPU 0%로 정지,
+    <code>syspolicyd</code> 누적 CPU 134분·<code>XprotectService</code> 28.8%
+    관측). cargo는 통합 테스트 파일당 1 바이너리를 만들고 순차 실행하므로
+    127 × ~30초가 그대로 벽시계에 실렸다. 링크·컴파일이 원인이라는 초기
+    가설은 clippy 캐시 완료(출력 2줄) 후에도 정체가 지속되어 기각.</p>
+    <p><b>결정:</b> 124개 파일을 <code>tests/it/</code>(단일 하네스,
+    <code>main.rs</code> + <code>mod</code> 124줄)로 통합 — 검사·링크 각
+    1회, libtest 스레드 병렬 실행. <b>예외 3개</b>는 독립 바이너리 유지:
+    <code>auth_token</code>·<code>api_export_bundle</code>·
+    <code>detector_config_file</code>은 프로세스 전역
+    <code>WIMCC_CONFIG_DIR</code>을 변경하는데, env 판독 경로(token·doctor·
+    insight config·routes)를 쓰는 미감사 테스트들과 한 프로세스에 합치면
+    스레드 병렬에서 경쟁한다 — 기존에 문서화된 프로세스 격리 관행
+    (api_export_bundle.rs 헤더)을 보존하는 쪽을 택했다.
+    <code>serial_test</code> 도입안은 세 파일 <i>간</i> 직렬화만 해결하고
+    판독자 경쟁은 남겨 기각.</p>
+    <p><b>사전 검증(이동 안전성):</b> 전 파일에 <code>include_str!</code>/
+    <code>file!()</code>/내부 <code>mod</code>/crate 전용 inner attr/insta
+    스냅샷/고정 포트 없음 확인(fixture 접근은 CWD 상대 <code>fs</code> 경로라
+    이동 무관). <code>tests/common/mod.rs</code>는 참조 0건의 죽은 헬퍼로
+    확인 — 컴파일되지 않는 관성 파일이라 그대로 둔다.</p>
+    <p><b>머신 레벨 보완(사용자 액션):</b> 시스템 설정 → 개인정보 보호 및
+    보안 → 개발자 도구에 터미널 앱을 추가하면 로컬 빌드의 첫 실행 검사가
+    면제된다 — 저장소 수정과 독립인 시스템 설정이라 여기엔 기록만 한다.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
