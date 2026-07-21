@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.6.0](https://github.com/bahamoth/whats-in-my-cc/compare/v1.5.0...v1.6.0) (2026-07-21)
+
+
+### Features
+
+* **update:** serve --auto-update 사전 다운로드 + 채널 인지 배너 ([3646b58](https://github.com/bahamoth/whats-in-my-cc/commit/3646b5874d2966cc662529b4aa297f8931d87267))
+
+
+### Bug Fixes
+
+* **cli:** service 명령 출력 문자열을 영어로 통일 ([2becc02](https://github.com/bahamoth/whats-in-my-cc/commit/2becc0293920a365d545880619e1352e436a2a16))
+* **webui:** 언어 토글 하단 정착 + ko 카피 어투 교정 ([23d9dbb](https://github.com/bahamoth/whats-in-my-cc/commit/23d9dbb928db6b2e7e7e5264086fb9f693ca98ee))
+
 ## [1.5.0](https://github.com/bahamoth/whats-in-my-cc/compare/v1.4.0...v1.5.0) (2026-07-19)
 
 
