@@ -6823,6 +6823,40 @@ vitest: 69 passed
     유도 장치 — BACKLOG G-5~G-8 참조.</p>
   </section>
 
+  <section id="surface-polish-auto-update-2026-07-19">
+    <h2>표면 완성도 — CLI 영어 통일·ko 어투 교정·auto-update 사전 다운로드 (2026-07-19)</h2>
+    <p><b>배경(사용자 피드백 4건):</b> ①CLI 출력에 영어·한글 혼재 — "프로젝트의
+    표면 기본 언어는 영어"(주석·설계 문서는 한국어 유지, 사용자에게 보이는
+    출력·help만 영어). ②WebUI ko 카피가 기계적 — tone-fix 스킬 적용 지시.
+    ③언어 토글이 nav rail 중간에 떠 있음. ④업데이트 감지가 안내로만 끝남 —
+    자동 업데이트 요구.</p>
+    <p><b>결정:</b> (a) 표면 언어 원칙 — 사용자 가시 문자열(CLI 출력·clap
+    help·에러 컨텍스트)은 영어, 코드 주석·docs·WebUI ko 카탈로그는 한국어
+    유지. <code>service</code>·<code>self-update</code>·<code>cli</code> doc
+    comment가 대상이었다. (b) auto-update는 <b>다운로드까지만 자동</b>(사용자
+    선택, AskUserQuestion): <code>serve --auto-update on</code>(기본 off, env
+    <code>WIMCC_AUTO_UPDATE</code>) 시 24h 체크 루프가 새 릴리스를 관측하면
+    shell 채널에 한해 <code>axoupdater</code>로 바이너리를 디스크에서 교체 —
+    실행 중 프로세스는 구 inode로 계속 돌고 다음 재시작 때 적용. <b>어떤
+    경로에서도 serve 자동 재시작 금지</b>(라이브 CC 세션 관측 중단 위험 —
+    기존 불변 유지). 게이트는 순수 함수
+    <code>update_check.rs::should_download</code>(opt-in·shell 채널·신규
+    버전·미다운로드 4조건 교집합, 단위 테스트). (c) 채널 판별 — serve 기동 시
+    1회 <code>self_update::detect_channel()</code>(axoupdater receipt 기반,
+    "shell"|"managed")을 health <code>version.install_channel</code>로 노출,
+    다운로드 완료 태그는 <code>version.downloaded</code>. UpdateBanner가 채널
+    인지형으로 분기: downloaded → 재시작 안내(<code>wimcc service
+    restart</code>), managed → <code>brew upgrade</code>, shell →
+    <code>wimcc self-update</code>. (d) 언어 토글·ServeStatus를
+    <code>.railFooter</code> 래퍼로 rail 하단 고정 — <code>margin-top:auto</code>
+    를 가진 요소 2개가 여백을 분할하던 것이 부유 원인.</p>
+    <p><b>주의:</b> managed 채널(brew/cargo/dev 빌드)은 바이너리 소유권이
+    매니저에 있어 자동 교체하지 않는다 — receipt 불일치도 managed로
+    판별(foreign receipt). E2E는 <code>WIMCC_UPDATE_CHECK_URL</code> fixture
+    (v9.9.9)로 배너·health 필드까지 검증, 실제 download_swap은 axoupdater
+    통합이라 릴리스 스모크에 위임.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
