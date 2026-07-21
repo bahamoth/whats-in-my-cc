@@ -72,3 +72,12 @@ recompute 스킵과 별개로 남는 비용). G-3과 같은 기준 — **재해�
 존재를 모르는 사용자는 "그래서?"에서 이탈한다(2026-07-18 UX 감사 GAP-5).
 원칙을 깨지 않고 스킬로의 발견 가능한 연결(예: 대시보드에서 retrospect 안내
 표면)을 설계할지 사용자 논의 후 착수.
+
+## G-9. DetectorManifest intent/rule/rationale 영어 전환
+
+표면 언어 게이트(`tests/it/surface_language.rs`, 2026-07-22 신설)의 유일한
+보류 allowlist. `/v1/detectors`·MCP `list_detectors`로 노출되는 API 표면이라
+"표면 기본 언어는 영어" 원칙(2026-07-19) 대상이지만, 한글 스펙 미러 문단
+12개의 번역 품질 검토 + 참조 테스트 3파일(`detector_manifest`·
+`api_detectors`·`mcp_tools_call`) 동반 수정이 필요해 핫픽스에서 분리했다.
+전환 완료 시 게이트의 `PENDING_FILES`를 비운다.

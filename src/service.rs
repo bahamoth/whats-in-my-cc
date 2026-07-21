@@ -211,14 +211,14 @@ pub fn restart() -> anyhow::Result<()> {
     } else if cfg!(target_os = "linux") {
         run_cmd("systemctl", &["--user", "restart", "wimcc"])?
     } else {
-        bail!("지원하지 않는 OS")
+        bail!("unsupported OS")
     };
     println!(
         "{}",
         if ok {
-            "재시작 완료"
+            "restarted"
         } else {
-            "재시작 실패 — status로 확인"
+            "restart failed — check: wimcc service status"
         }
     );
     Ok(())
@@ -234,14 +234,14 @@ pub fn status() -> anyhow::Result<()> {
     } else if cfg!(target_os = "linux") {
         run_cmd("systemctl", &["--user", "is-active", "wimcc"])?
     } else {
-        bail!("지원하지 않는 OS")
+        bail!("unsupported OS")
     };
     println!(
         "{}",
         if ok {
-            "등록됨/실행 중"
+            "registered/running"
         } else {
-            "미등록 또는 정지"
+            "not registered or stopped"
         }
     );
     Ok(())
