@@ -123,6 +123,7 @@ mod sse_integration;
 mod sse_subprocess;
 mod static_serve;
 mod subagent_meta_ingest;
+mod surface_language;
 mod task_summary;
 mod tool_failure_outcome;
 mod transcript_disposition;
