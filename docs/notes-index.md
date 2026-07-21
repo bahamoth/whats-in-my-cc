@@ -24,6 +24,7 @@ CLAUDE.md의 python 스니펫.
 | MCP 표면 | `#mcp-digest-events-2026-07-04` (11종: structuredContent·events·digest) | `#mcp-parity-detector-config-2026-07-03` · `#dogfood-retrospect-2026-06-12` |
 | export·거버넌스 | `#export-bundle-2026-07-04` (POST /v1/export-bundles) + `#prd-09-decisions-2026-07-04` (§09 3건 종결) | `#full-retention` · `#slice-18-deviations` · `#slice-19-deviations` |
 | telemetry fold | `#telemetry-fold-group-a` · `#telemetry-fold-group-bc` | — |
+| 테스트 인프라 | `#test-harness-merge-2026-07-21` (통합 테스트 127→4 바이너리 — macOS Gatekeeper 바이너리당 ~30초 검사가 원인, env 변경 3파일만 프로세스 격리 유지) | — |
 | 성장·리소스 위생 | `#growth-resource-sweep-2026-07-18` (recompute 정책 분리·sweep 확장·auto_vacuum+`wimcc vacuum`·health db/retention 블록·ServeStatus 칩·MCP 세션 TTL) | `#full-retention` · `#metrics-cache-2026-07-04` |
 | 배포·릴리즈·업데이트 | `#surface-polish-auto-update-2026-07-19` (표면 언어=영어 원칙·`serve --auto-update` 다운로드까지만 자동·채널 판별 `install_channel`·채널 인지 배너) · `#db-default-path-2026-07-18` (DB 기본 경로 = 플랫폼 데이터 디렉터리 + legacy CWD 폴백·로그) · `#release-distribution` (dist 3채널 — npm 채널 2026-07-18 제외·release-please 역할분담·self-update·service — v1.4.0 파이프라인 실검증 완료 2026-07-18, 설치 스모크·self-update E2E 잔여) | — |
 
