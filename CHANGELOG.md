@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/bahamoth/whats-in-my-cc/compare/v1.6.0...v1.6.1) (2026-07-22)
+
+
+### Bug Fixes
+
+* **cli:** service restart/status 잔존 한글 출력 영어 전환 + 표면 언어 게이트 ([9e8f774](https://github.com/bahamoth/whats-in-my-cc/commit/9e8f77481760da0f42b6bebd0764fd276dd32e05))
+
 ## [1.6.0](https://github.com/bahamoth/whats-in-my-cc/compare/v1.5.0...v1.6.0) (2026-07-21)
 
 
