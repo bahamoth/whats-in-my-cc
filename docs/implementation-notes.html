@@ -6888,6 +6888,44 @@ vitest: 69 passed
     면제된다 — 저장소 수정과 독립인 시스템 설정이라 여기엔 기록만 한다.</p>
   </section>
 
+  <section id="pricing-prefix-match-2026-09-09">
+    <h2>가격표 파서 표시명 접두 충돌 + 5.1 계열·Opus 5 등록 + cron 이슈 dedupe (2026-09-09)</h2>
+    <p><b>사고:</b> 주간 <code>pricing-refresh</code>(2026-09-07 실행)가 만든 자동 PR #118이
+    <code>claude-fable-5</code>·<code>claude-mythos-5</code>의 cache read 단가를 $1 → $0.25로
+    바꿨다. 라이브 페이지 대조 결과 이는 <b>Claude Fable 5.1 / Mythos 5.1 행의 값</b>이었다
+    (페이지 각주: 0.025x 배수는 5.1 계열에만, 나머지는 0.1x). 원인은
+    <code>scripts/update-pricing.ts</code>의 별칭 매칭이 <code>table.indexOf('Claude Fable 5')</code>
+    단순 부분 문자열이어서, 표에 "Claude Fable 5.1" 행이 "Claude Fable 5" 행보다 <i>앞에</i>
+    배치되자 첫 매치가 5.1 행에 걸린 것. 2026-07-05 동결 fixture에는 5.1 행이 없어 테스트가 이
+    경로를 잡지 못했고, PR 자체는 기본 <code>github.token</code>으로 생성돼 CI가 트리거되지 않아
+    이틀간 검증 없이 mergeable로 보였다(사용자가 수동으로 CI를 돌리자 fixture 기반 테스트
+    4건이 실패해 잘못된 단가를 막았다).</p>
+    <p><b>수정 — 경계 검사 매칭:</b> <code>findAlias(table, alias)</code>가 별칭 뒤에 숫자·소수점이
+    이어지지 않는 위치(<code>(?![\d.])</code>)만 매치로 인정한다. 짧은 별칭 행이 없으면 5.1 행을
+    폴백으로 삼지 않고 기존처럼 throw(합성 테스트로 잠금). 라이브 페이지를
+    <code>tests/fixtures/pricing/real/pricing-page-2026-09-09.html</code>로 동결해 "5.1 행이 5 행보다
+    앞에 오는" 실물을 테스트가 직접 본다 — 2026-07-05 fixture는 회귀용으로 유지하되 그 표에 없는
+    3개 모델은 제외하고 대조한다. drift 주입 헬퍼는 "n번째 occurrence" 방식을 버리고
+    <code>&lt;tr&gt;</code> 단위 텍스트화로 "Claude Fable 5 $10 / MTok" 행을 고른다(같은 접두
+    취약점).</p>
+    <p><b>신규 모델 등록:</b> <code>claude-fable-5-1</code>·<code>claude-mythos-5-1</code>
+    ($10 / $12.50 / $0.25 / $50)·<code>claude-opus-5</code>($5 / $6.25 / $0.50 / $25)를
+    <code>PAGE_ALIASES</code>와 <code>pricing.json</code>에 추가하고 Rust 단가 잠금 테스트를 붙였다.
+    id 근거: <code>claude-fable-5-1</code>(73행)·<code>claude-opus-5</code>(91행)는 로컬
+    <code>usage_facet</code>에 관측된 값(2026-09-09), <code>claude-mythos-5-1</code>은 등록된
+    <code>claude-mythos-5</code>와 같은 규약을 따른 것으로 로컬 미관측 — 관측되면 확인할 것.
+    이 세 모델은 7월 27일부터 매주 "미등록 신규 모델" 이슈(#112~#119, 7건 중복)로 신호됐으나
+    6주간 방치돼 그 사이 <code>claude-fable-5-1</code> 세션의 비용 추정이 미가격(null)이었다.</p>
+    <p><b>cron 운영 수정:</b> ① PR 생성 토큰을 <code>secrets.RELEASE_PLEASE || github.token</code>
+    으로 — release-please와 같은 함정(기본 토큰이 만든 PR은 CI를 트리거하지 않음,
+    <code>#release-distribution</code>). ② 신규 모델·실패 이슈는 제목 접두로 open 이슈를 찾아 있으면
+    댓글, 없을 때만 생성(dedupe). 무변동 주간에 <code>version</code> 날짜를 bump하지 않는 원칙
+    (<code>#pricing-json-2026-07-05</code>)은 그대로다.</p>
+    <p><b>교훈:</b> 표시명 기반 매칭은 "버전 접두가 겹치는 신모델" 출현 시 조용히 오염된다 —
+    새 모델이 이슈로 신호되면 사전 등록을 미루지 말고, fixture도 그 시점 페이지로 재동결해야
+    파서 가정이 실물과 함께 움직인다.</p>
+  </section>
+
 </main>
 </div>
 </body></html>
