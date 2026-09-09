@@ -258,6 +258,50 @@ mod tests {
     }
 
     #[test]
+    fn fable_5_1_and_mythos_5_1_are_priced_from_public_rates() {
+        // platform.claude.com/docs/en/about-claude/pricing (frozen
+        // tests/fixtures/pricing/real/pricing-page-2026-09-09.html): Fable 5.1 /
+        // Mythos 5.1 input $10, 5m cache write $12.50, cache read $0.25 (page
+        // footnote: 0.025x base input on 5.1 only), output $50.
+        // 1M of each class → 10 + 12.5 + 0.25 + 50 = 72.75.
+        // Model ids: claude-fable-5-1 is observed in the local usage_facet
+        // table (73 rows, 2026-09-09); claude-mythos-5-1 follows the same
+        // id convention as the already-registered claude-mythos-5.
+        for model in ["claude-fable-5-1", "claude-mythos-5-1"] {
+            let est =
+                estimate_session_cost(&[mu(model, 1_000_000, 1_000_000, 1_000_000, 1_000_000)]);
+            assert!(
+                (est.total_usd - 72.75).abs() < 1e-9,
+                "{model}: got {}",
+                est.total_usd
+            );
+            assert!(est.per_model[0].priced, "{model} must be priced");
+            assert!(est.models_without_pricing.is_empty());
+        }
+    }
+
+    #[test]
+    fn opus_5_is_priced_from_public_rates() {
+        // Same frozen page: Claude Opus 5 input $5, 5m cache write $6.25, cache
+        // read $0.50, output $25 → 5 + 6.25 + 0.5 + 25 = 36.75. claude-opus-5 is
+        // observed in the local usage_facet table (91 rows, 2026-09-09).
+        let est = estimate_session_cost(&[mu(
+            "claude-opus-5",
+            1_000_000,
+            1_000_000,
+            1_000_000,
+            1_000_000,
+        )]);
+        assert!(
+            (est.total_usd - 36.75).abs() < 1e-9,
+            "got {}",
+            est.total_usd
+        );
+        assert!(est.per_model[0].priced);
+        assert!(est.models_without_pricing.is_empty());
+    }
+
+    #[test]
     fn pricing_loads_from_checked_in_json() {
         // 가격표 SSOT는 저장소 루트 pricing.json (스펙 §2.1).
         assert!(rates_for("claude-fable-5").is_some());

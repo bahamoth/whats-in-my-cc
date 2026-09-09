@@ -9,7 +9,7 @@
  *   node scripts/update-pricing.ts --check --markdown      # diff를 마크다운 표로(PR 본문)
  *   node scripts/update-pricing.ts --write                 # 변동 시 pricing.json 재작성, exit 0
  *   node scripts/update-pricing.ts --write --out /tmp/p.json  # 재작성 목적지 지정(테스트 격리용)
- *   node scripts/update-pricing.ts --check --source tests/fixtures/pricing/real/pricing-page-2026-07-05.html
+ *   node scripts/update-pricing.ts --check --source tests/fixtures/pricing/real/pricing-page-2026-09-09.html
  *   node scripts/update-pricing.ts --source https://example.com/pricing.html
  *
  * exit 0: 성공, (--check 미지정 시) 변동 유무 무관 · exit 1: fetch/파싱 실패(등록 모델
@@ -40,10 +40,18 @@ const PRICING_PATH = join(ROOT, 'pricing.json');
  * 2026-07-05 동결 fixture(tests/fixtures/pricing/real/pricing-page-2026-07-05.html)
  * 관측: 페이지는 원본 모델 id 문자열을 쓰지 않고 표시명만 쓴다("Claude Fable 5" 등).
  * 원본 id 후보는 향후 페이지가 id를 노출할 가능성에 대비한 폴백으로 남겨둔다.
+ * 표시명 매칭은 `findAlias`가 **경계 검사**로 한다 — 2026-09-09 동결 fixture 관측: 표에
+ * "Claude Fable 5.1" 행이 "Claude Fable 5" 행보다 앞에 있어 단순 indexOf는 5.1 행에
+ * 걸린다(2026-09-07 자동 PR #118이 그렇게 잘못된 cache read 단가를 실었다).
+ * 신규 모델 id: claude-fable-5-1·claude-opus-5는 로컬 usage_facet 관측(2026-09-09),
+ * claude-mythos-5-1은 등록된 claude-mythos-5와 같은 id 규약을 따른 것(미관측).
  */
 const PAGE_ALIASES: Record<string, string[]> = {
+  'claude-fable-5-1': ['claude-fable-5-1', 'Claude Fable 5.1'],
+  'claude-mythos-5-1': ['claude-mythos-5-1', 'Claude Mythos 5.1'],
   'claude-fable-5': ['claude-fable-5', 'Claude Fable 5'],
   'claude-mythos-5': ['claude-mythos-5', 'Claude Mythos 5'],
+  'claude-opus-5': ['claude-opus-5', 'Claude Opus 5'],
   'claude-opus-4-8': ['claude-opus-4-8', 'Claude Opus 4.8'],
   'claude-opus-4-7': ['claude-opus-4-7', 'Claude Opus 4.7'],
   'claude-opus-4-6': ['claude-opus-4-6', 'Claude Opus 4.6'],
@@ -79,6 +87,17 @@ export function htmlToText(html: string): string {
 }
 
 /**
+ * 표 텍스트에서 별칭의 **온전한** 등장 위치를 찾는다(없으면 -1). 별칭 바로 뒤에 숫자나
+ * 소수점이 이어지면("Claude Fable 5" 뒤의 ".1") 다른 모델의 행이므로 건너뛴다 —
+ * 2026-09-09 동결 fixture에서 5.1 행이 5 행보다 앞에 오는 실물을 잠근 규칙.
+ */
+export function findAlias(table: string, alias: string): number {
+  const re = new RegExp(alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\d.])', 'g');
+  const m = re.exec(table);
+  return m ? m.index : -1;
+}
+
+/**
  * 모델 표기 등장 지점 이후 창(window)에서 `$N / MTok` 값을 뽑는다. 공식 표의 열 순서는
  * [Base Input, 5m Cache Write, 1h Cache Write, Cache Hits & Refreshes, Output] 5열
  * (동결 fixture 관측, 2026-07-05) — pricing.json 스키마는 4개 rate만 가지므로
@@ -102,7 +121,7 @@ export function parsePricingPage(html: string, modelIds: string[]): Record<strin
   const out: Record<string, RatesJson> = {};
   for (const id of modelIds) {
     const aliases = PAGE_ALIASES[id] ?? [id];
-    const at = aliases.map((a) => table.indexOf(a)).find((i) => i >= 0);
+    const at = aliases.map((a) => findAlias(table, a)).find((i) => i >= 0);
     if (at === undefined) throw new Error(`model not found in pricing table: ${id} (aliases: ${aliases.join(', ')})`);
     const window = table.slice(at, at + 600);
     const dollars = [...window.matchAll(/\$\s*([0-9]+(?:\.[0-9]+)?)\s*\/\s*MTok/gi)].map((m) =>
