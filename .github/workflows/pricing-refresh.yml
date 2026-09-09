@@ -65,10 +65,13 @@ jobs:
             exit 1
           fi
 
+      # PR은 PAT(RELEASE_PLEASE)로 만든다 — 기본 github.token이 만든 PR은 다른 워크플로우
+      # (CI)를 트리거하지 않아 검증 없이 mergeable로 보인다(2026-09-07 PR #118: 잘못된
+      # 단가가 이틀간 CI 없이 열려 있었다). secret이 없으면 github.token으로 폴백.
       - name: Open PR with updated pricing.json
         if: steps.pricing.outputs.drift == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE || github.token }}
         run: |
           DATE="$(date -u +%F)"
           BRANCH="auto/pricing-refresh-${DATE}"
@@ -82,22 +85,40 @@ jobs:
             --title "fix(pricing): 공개 가격표 갱신 ${DATE}" \
             --body-file /tmp/pricing-diff.md
 
-      - name: Open issue for unregistered new models
+      # 이슈는 제목 접두로 dedupe한다 — 같은 종류의 open 이슈가 있으면 새로 만들지 않고
+      # 그 이슈에 댓글로 이번 실행을 덧붙인다(2026-07-27~09-07 매주 중복 이슈 7건 누적,
+      # #112~#119).
+      - name: Open (or comment on) issue for unregistered new models
         if: steps.pricing.outputs.new_models == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          gh issue create \
-            --title "pricing: 페이지에 미등록 신규 모델 $(date -u +%F)" \
-            --body "$(cat /tmp/pricing-new-models.txt)
+          PREFIX="pricing: 페이지에 미등록 신규 모델"
+          BODY="$(cat /tmp/pricing-new-models.txt)
 
-          공개 가격 페이지에 pricing.json 미등록 모델이 있습니다. 페이지는 표시명만 노출해 모델 id 매핑은 사람 판단이 필요하므로 자동 추가하지 않습니다. \`scripts/update-pricing.ts\`의 PAGE_ALIASES와 \`pricing.json\`에 사전 추가하세요(단가 잠금 테스트 동반). Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          공개 가격 페이지에 pricing.json 미등록 모델이 있습니다. 페이지는 표시명만 노출해 모델 id 매핑은 사람 판단이 필요하므로 자동 추가하지 않습니다. \`scripts/update-pricing.ts\`의 PAGE_ALIASES와 \`pricing.json\`에 사전 추가하세요(단가 잠금 테스트 동반). Run: ${RUN_URL}"
+          EXISTING="$(gh issue list --state open --limit 100 --json number,title \
+            --jq "[.[] | select(.title | startswith(\"${PREFIX}\"))] | sort_by(.number) | .[0].number // empty")"
+          if [ -n "$EXISTING" ]; then
+            echo "open issue #${EXISTING} already tracks new models — commenting instead of creating"
+            gh issue comment "$EXISTING" --body "$(date -u +%F) 재확인: ${BODY}"
+          else
+            gh issue create --title "${PREFIX} $(date -u +%F)" --body "$BODY"
+          fi
 
-      - name: Open issue on failure
+      - name: Open (or comment on) issue on failure
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          gh issue create \
-            --title "pricing-refresh 실패 $(date -u +%F)" \
-            --body "주간 가격표 대조가 실패했습니다 — 페이지 구조 변경/네트워크 오류 가능. 파서(scripts/update-pricing.ts)와 fixture 재동결을 검토하세요. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          PREFIX="pricing-refresh 실패"
+          BODY="주간 가격표 대조가 실패했습니다 — 페이지 구조 변경/네트워크 오류 가능. 파서(scripts/update-pricing.ts)와 fixture 재동결을 검토하세요. Run: ${RUN_URL}"
+          EXISTING="$(gh issue list --state open --limit 100 --json number,title \
+            --jq "[.[] | select(.title | startswith(\"${PREFIX}\"))] | sort_by(.number) | .[0].number // empty")"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$(date -u +%F) 재발: ${BODY}"
+          else
+            gh issue create --title "${PREFIX} $(date -u +%F)" --body "$BODY"
+          fi
