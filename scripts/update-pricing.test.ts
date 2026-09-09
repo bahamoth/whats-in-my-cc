@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   parsePricingPage,
+  htmlToText,
   diffRates,
   serializePricing,
   formatRate,
@@ -17,20 +18,35 @@ import {
 } from './update-pricing.ts';
 
 const SCRIPT = fileURLToPath(new URL('./update-pricing.ts', import.meta.url));
-const FIXTURE_URL = new URL('../tests/fixtures/pricing/real/pricing-page-2026-07-05.html', import.meta.url);
+// 현행 동결 fixture(2026-09-09): 표에 "Claude Fable 5.1"·"Claude Mythos 5.1"·"Claude Opus 5"
+// 행이 "Claude Fable 5"·"Claude Mythos 5" 행보다 앞에 있다 — 표시명 접두 충돌의 실물.
+const FIXTURE_URL = new URL('../tests/fixtures/pricing/real/pricing-page-2026-09-09.html', import.meta.url);
 const FIXTURE_PATH = fileURLToPath(FIXTURE_URL);
+// 이전 동결 fixture(2026-07-05): 5.1 계열·Opus 5 행이 없다. 회귀 방지용으로 유지.
+const LEGACY_FIXTURE_URL = new URL('../tests/fixtures/pricing/real/pricing-page-2026-07-05.html', import.meta.url);
 const PRICING_URL = new URL('../pricing.json', import.meta.url);
 const PRICING_PATH = fileURLToPath(PRICING_URL);
 
 const fixture = readFileSync(FIXTURE_URL, 'utf8');
+const legacyFixture = readFileSync(LEGACY_FIXTURE_URL, 'utf8');
 const pricing: PricingJson = JSON.parse(readFileSync(PRICING_URL, 'utf8'));
 
-/** 실 fixture에서 Claude Fable 5의 output 단가(50→99)만 바꾼 drift HTML을 임시 파일로 만든다. */
+/** 2026-09-09 fixture에 없는 모델(이전 fixture 회귀 테스트에서 제외). */
+const MODELS_ABSENT_IN_LEGACY = ['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5'];
+
+/**
+ * 실 fixture에서 "Claude Fable 5" 표 행(5.1 행이 아닌)의 output 단가(50→99)만 바꾼 drift
+ * HTML을 임시 파일로 만든다. 행은 `<tr>` 단위로 텍스트화해 "Claude Fable 5 $10 / MTok"로
+ * 시작하는 것을 고른다 — 문자열 순번(n번째 occurrence)은 페이지 개편(5.1 행 추가·nav
+ * 링크 변동)에 취약해 버렸다.
+ */
 function writeDriftFixture(): string {
-  const first = fixture.indexOf('Claude Fable 5');
-  const rowStart = fixture.indexOf('Claude Fable 5', first + 1); // 2번째 = 표 행(첫번째는 사이드바 nav)
-  const rowEnd = fixture.indexOf('</tr>', rowStart);
-  const row = fixture.slice(rowStart, rowEnd);
+  const rows = [...fixture.matchAll(/<tr[^>]*>[\s\S]*?<\/tr>/g)];
+  const hit = rows.find((m) => /^\s*Claude Fable 5 \$10 \/ MTok/.test(htmlToText(m[0])));
+  assert.ok(hit && hit.index !== undefined, 'fixture 표에 "Claude Fable 5 $10 / MTok" 행이 있어야 한다');
+  const rowStart = hit.index;
+  const rowEnd = rowStart + hit[0].length;
+  const row = hit[0];
   assert.equal(row.split('$50 / MTok').length - 1, 1, 'Fable 5 행에 $50 / MTok가 정확히 1개여야 drift 주입이 안전');
   const drifted = fixture.slice(0, rowStart) + row.replace('$50 / MTok', '$99 / MTok') + fixture.slice(rowEnd);
   const dir = mkdtempSync(join(tmpdir(), 'wimcc-pricing-'));
@@ -48,6 +64,50 @@ function run(args: string[]) {
 test('동결 페이지 파싱 결과가 체크인된 가격표와 정확히 일치한다', () => {
   const parsed = parsePricingPage(fixture, Object.keys(pricing.models));
   assert.deepEqual(diffRates(pricing, parsed), []);
+});
+
+test('이전 동결 fixture(2026-07-05)도 그 표에 있는 모델은 가격표와 일치한다(회귀)', () => {
+  const ids = Object.keys(pricing.models).filter((id) => !MODELS_ABSENT_IN_LEGACY.includes(id));
+  const subset: PricingJson = {
+    ...pricing,
+    models: Object.fromEntries(ids.map((id) => [id, pricing.models[id]])),
+  };
+  assert.deepEqual(diffRates(subset, parsePricingPage(legacyFixture, ids)), []);
+});
+
+// ── 표시명 접두 충돌 (2026-09-07 자동 PR #118 사고) ─────────────────────────
+// 페이지 표에 "Claude Fable 5.1" 행이 "Claude Fable 5" 행보다 앞에 오자 `indexOf('Claude
+// Fable 5')`가 5.1 행에 걸려, 5.1의 cache read($0.25)를 claude-fable-5 단가로 기록했다.
+// 2026-09-09 동결 fixture가 그 실물이다(각주: 0.025x는 5.1 계열에만, 나머지는 0.1x).
+
+test('접두 충돌: "Claude Fable 5"는 "Claude Fable 5.1" 행이 아니라 자기 행을 읽는다', () => {
+  const parsed = parsePricingPage(fixture, ['claude-fable-5', 'claude-mythos-5']);
+  assert.equal(parsed['claude-fable-5'].cache_read_per_mtok, 1);
+  assert.equal(parsed['claude-mythos-5'].cache_read_per_mtok, 1);
+});
+
+test('5.1 계열·Opus 5는 2026-09-09 fixture에서 자기 단가로 읽힌다', () => {
+  const parsed = parsePricingPage(fixture, ['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5']);
+  assert.deepEqual(parsed['claude-fable-5-1'], {
+    input_per_mtok: 10,
+    cache_creation_per_mtok: 12.5,
+    cache_read_per_mtok: 0.25,
+    output_per_mtok: 50,
+  });
+  assert.deepEqual(parsed['claude-mythos-5-1'], parsed['claude-fable-5-1']);
+  assert.deepEqual(parsed['claude-opus-5'], {
+    input_per_mtok: 5,
+    cache_creation_per_mtok: 6.25,
+    cache_read_per_mtok: 0.5,
+    output_per_mtok: 25,
+  });
+});
+
+test('접두 충돌: 표시명 뒤에 소수점 버전이 붙은 행은 짧은 별칭에 매칭되지 않는다(합성)', () => {
+  // 짧은 별칭 행이 아예 없으면 throw — 5.1 행을 폴백으로 삼지 않는다.
+  const html =
+    'Model pricing Claude Fable 5.1 $10 / MTok $12.50 / MTok $20 / MTok $0.25 / MTok $50 / MTok MTok = Million tokens';
+  assert.throws(() => parsePricingPage(html, ['claude-fable-5']), /model not found/);
 });
 
 test('등록 모델이 페이지에 없으면 throw (구조 변경 신호)', () => {
