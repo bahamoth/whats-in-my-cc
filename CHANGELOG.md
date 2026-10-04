@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.2](https://github.com/bahamoth/whats-in-my-cc/compare/v1.6.1...v1.6.2) (2026-10-04)
+
+
+### Bug Fixes
+
+* **pricing:** 공개 가격표 갱신 2026-09-07 ([f04c450](https://github.com/bahamoth/whats-in-my-cc/commit/f04c450909428937e25a850d0dc4d74c4ba3481b))
+* **pricing:** 파서 표시명 접두 충돌 수정 + Fable/Mythos 5.1·Opus 5 등록 ([f6e6ec8](https://github.com/bahamoth/whats-in-my-cc/commit/f6e6ec829041c32163d5e4242741c3873519f3d3))
+
 ## [1.6.1](https://github.com/bahamoth/whats-in-my-cc/compare/v1.6.0...v1.6.1) (2026-07-22)
 
 
